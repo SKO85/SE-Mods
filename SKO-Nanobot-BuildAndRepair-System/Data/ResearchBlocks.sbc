@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<Definitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+   <ResearchBlocks>
+      <ResearchBlock xsi:type="ResearchBlock">
+         <Id Type="MyObjectBuilder_ShipWelder" Subtype="SELtdLargeNanobotBuildAndRepairSystem" />
+         <UnlockedByGroups>
+            <GroupSubtype>16</GroupSubtype>
+         </UnlockedByGroups>
+      </ResearchBlock>
+      <ResearchBlock xsi:type="ResearchBlock">
+         <Id Type="MyObjectBuilder_ShipWelder" Subtype="SELtdSmallNanobotBuildAndRepairSystem" />
+         <UnlockedByGroups>
+            <GroupSubtype>16</GroupSubtype>
+         </UnlockedByGroups>
+      </ResearchBlock>
+   </ResearchBlocks>
+</Definitions>

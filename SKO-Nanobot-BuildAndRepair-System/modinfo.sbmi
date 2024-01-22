@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<MyObjectBuilder_ModInfo xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <SteamIDOwner>76561198001777579</SteamIDOwner>
+  <WorkshopId>0</WorkshopId>
+  <WorkshopIds>
+    <WorkshopId>
+      <Id>2111073562</Id>
+      <ServiceName>Steam</ServiceName>
+    </WorkshopId>
+    <WorkshopId>
+      <Id>3313448</Id>
+      <ServiceName>mod.io</ServiceName>
+    </WorkshopId>
+  </WorkshopIds>
+</MyObjectBuilder_ModInfo>
