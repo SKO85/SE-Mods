@@ -8,8 +8,8 @@
             <SubtypeId>SELtdLargeNanobotBuildAndRepairSystem</SubtypeId>
          </Id>
          <DisplayName>BuildAndRepairSystem</DisplayName>
-         <Icon>Textures\Icons\SELtdNanobotBuildAndRepairSystem.dds</Icon>
 		 <Description>A Build and Repair System that will help construct and repair your grids!</Description>
+         <Icon>Textures\Icons\SELtdNanobotBuildAndRepairSystem.dds</Icon>
          <CubeSize>Large</CubeSize>
          <BlockTopology>TriangleMesh</BlockTopology>
          <Size x="1" y="1" z="2" />
@@ -17,17 +17,17 @@
          <Center x="0" y="0" z="0" />
          <Model>Models\NanobotBuildAndRepairSystem\SELtdLargeNanobotBuildAndRepairSystem.mwm</Model>
          <Components>
-            <Component Subtype="SteelPlate" Count="400" />
-            <Component Subtype="Construction" Count="1200" />
-            <Component Subtype="InteriorPlate" Count="250" />
-            <Component Subtype="SmallTube" Count="600" />
-            <Component Subtype="LargeTube" Count="100" />
-            <Component Subtype="Computer" Count="200" />            
-            <Component Subtype="Motor" Count="400" />
-			<Component Subtype="Superconductor" Count="120" />
+            <Component Subtype="SteelPlate" Count="40" />
             <Component Subtype="Construction" Count="120" />
+            <Component Subtype="InteriorPlate" Count="25" />
+            <Component Subtype="SmallTube" Count="60" />
+            <Component Subtype="LargeTube" Count="10" />
+            <Component Subtype="Computer" Count="20" />            
+            <Component Subtype="Motor" Count="40" />
+            <Component Subtype="Construction" Count="20" />
+            <Component Subtype="SteelPlate" Count="12" />
          </Components>
-         <CriticalComponent Subtype="Superconductor" Index="0" />
+         <CriticalComponent Subtype="Motor" Index="0" />
          <MountPoints>
 				<MountPoint Side="Front" StartX="0.00" StartY="0.00" EndX="1.00" EndY="1.00" />
 				<MountPoint Side="Left" StartX="0.00" StartY="0.00" EndX="1.00" EndY="1.00" />
@@ -44,7 +44,7 @@
 				<Model BuildPercentUpperBound="0.67" File="Models\NanobotBuildAndRepairSystem\SELtdLargeNanobotBuildAndRepairSystem_Constr2.mwm" />
 				<Model BuildPercentUpperBound="1.00" File="Models\NanobotBuildAndRepairSystem\SELtdLargeNanobotBuildAndRepairSystem_Constr3.mwm" />
          </BuildProgressModels>
-         <BuildTimeSeconds>60</BuildTimeSeconds>
+         <BuildTimeSeconds>40</BuildTimeSeconds>
          <BlockPairName>SELtdNanobotBuildAndRepairSystem</BlockPairName>
          <MirroringX>None</MirroringX>
          <MirroringY>None</MirroringY>
@@ -64,25 +64,25 @@
             <SubtypeId>SELtdSmallNanobotBuildAndRepairSystem</SubtypeId>
          </Id>
          <DisplayName>BuildAndRepairSystem</DisplayName>
-         <Icon>Textures\Icons\SELtdNanobotBuildAndRepairSystem.dds</Icon>
 		 <Description>A Build and Repair System that will help construct and repair your grids!</Description>
+         <Icon>Textures\Icons\SELtdNanobotBuildAndRepairSystem.dds</Icon>
          <CubeSize>Small</CubeSize>
          <BlockTopology>TriangleMesh</BlockTopology>
          <Size x="3" y="3" z="1" />
          <ModelOffset x="0" y="0" z="0" />
          <Model>Models\NanobotBuildAndRepairSystem\SELtdSmallNanobotBuildAndRepairSystem.mwm</Model>
          <Components>
-            <Component Subtype="SteelPlate" Count="150" />
-            <Component Subtype="Construction" Count="400" />
-            <Component Subtype="InteriorPlate" Count="80" />
-            <Component Subtype="SmallTube" Count="200" />
-            <Component Subtype="LargeTube" Count="20" />
-            <Component Subtype="Computer" Count="100" />            
-            <Component Subtype="Motor" Count="120" />
-			<Component Subtype="Superconductor" Count="40" />
-            <Component Subtype="Construction" Count="100" />
+            <Component Subtype="SteelPlate" Count="15" />
+            <Component Subtype="Construction" Count="40" />
+            <Component Subtype="InteriorPlate" Count="8" />
+            <Component Subtype="SmallTube" Count="20" />
+            <Component Subtype="LargeTube" Count="2" />
+            <Component Subtype="Computer" Count="10" />            
+            <Component Subtype="Motor" Count="12" />
+            <Component Subtype="Construction" Count="10" />
+            <Component Subtype="SteelPlate" Count="4" />
          </Components>
-         <CriticalComponent Subtype="Superconductor" Index="0" />
+         <CriticalComponent Subtype="Motor" Index="0" />
          <MountPoints>
 				<MountPoint Side="Front" StartX="0.00" StartY="0.00" EndX="3.00" EndY="3.00" />
 				<MountPoint Side="Left" StartX="0.00" StartY="0.00" EndX="1.00" EndY="3.00" />

@@ -15,4 +15,4 @@ If you'd like to propose fixes or changes to the code, please follow these steps
 
 All Pull Requests will undergo a review by SKO. Once changes are merged into the main branch, a new version will be deployed on Steam.
 
-Thank you for contributing to SKO's Space Engineers Mods Repository! 🚀
+Thank you for contributing! 🚀

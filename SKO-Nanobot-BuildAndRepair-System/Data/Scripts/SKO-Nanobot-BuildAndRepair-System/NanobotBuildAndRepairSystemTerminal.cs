@@ -147,7 +147,7 @@ namespace SKONanobotBuildAndRepairSystem
                     // I add also some properties immediately and permanent to support scripting.
                     // !! As we can't subtype here they will be also available in every Shipwelder but without function !!
 
-                    if (Mod.Log.ShouldLog(Logging.Level.Event)) Mod.Log.Write(Logging.Level.Event, "InitializeControls");
+                    Logging.Instance?.Write(Logging.Level.Event, "InitializeControls");
 
                     MyAPIGateway.TerminalControls.CustomControlGetter += CustomControlGetter;
 
@@ -1490,19 +1490,19 @@ namespace SKONanobotBuildAndRepairSystem
                         Func<IMyTerminalBlock, float> getLimitOffsetMin = (block) =>
                         {
                             var system = GetSystem(block);
-                            return -system?.Settings?.MaximumOffset ?? -NanobotBuildAndRepairSystemBlock.WELDER_OFFSET_MAX_IN_M;
+                            return -system?.Settings?.MaximumOffset ?? -Constants.WELDER_OFFSET_MAX_IN_M;
                         };
                         Func<IMyTerminalBlock, float> getLimitOffsetMax = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.Settings?.MaximumOffset ?? NanobotBuildAndRepairSystemBlock.WELDER_OFFSET_MAX_IN_M;
+                            return system?.Settings?.MaximumOffset ?? Constants.WELDER_OFFSET_MAX_IN_M;
                         };
 
-                        Func<IMyTerminalBlock, float> getLimitMin = (block) => NanobotBuildAndRepairSystemBlock.WELDER_RANGE_MIN_IN_M;
+                        Func<IMyTerminalBlock, float> getLimitMin = (block) => Constants.WELDER_RANGE_MIN_IN_M;
                         Func<IMyTerminalBlock, float> getLimitMax = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.Settings?.MaximumRange ?? NanobotBuildAndRepairSystemBlock.WELDER_RANGE_MAX_IN_M;
+                            return system?.Settings?.MaximumRange ?? Constants.WELDER_RANGE_MAX_IN_M;
                         };
 
                         checkbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyShipWelder>("ShowArea");
@@ -1748,7 +1748,7 @@ namespace SKONanobotBuildAndRepairSystem
                         slider.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system != null ? 100f * system.Settings.SoundVolume / NanobotBuildAndRepairSystemBlock.WELDER_SOUND_VOLUME : 0f;
+                            return system != null ? 100f * system.Settings.SoundVolume / Constants.WELDER_SOUND_VOLUME : 0f;
                         };
                         slider.Setter = (block, val) =>
                         {
@@ -1758,7 +1758,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 var min = 0;
                                 var max = 100;
                                 val = val < min ? min : val > max ? max : val;
-                                system.Settings.SoundVolume = (float)Math.Round(val * NanobotBuildAndRepairSystemBlock.WELDER_SOUND_VOLUME) / 100f;
+                                system.Settings.SoundVolume = (float)Math.Round(val * Constants.WELDER_SOUND_VOLUME) / 100f;
                             }
                         };
                         slider.Writer = (block, val) =>
@@ -1766,7 +1766,7 @@ namespace SKONanobotBuildAndRepairSystem
                             var system = GetSystem(block);
                             if (system != null)
                             {
-                                val.Append(Math.Round(100f * system.Settings.SoundVolume / NanobotBuildAndRepairSystemBlock.WELDER_SOUND_VOLUME) + " %");
+                                val.Append(Math.Round(100f * system.Settings.SoundVolume / Constants.WELDER_SOUND_VOLUME) + " %");
                             }
                         };
                         slider.SupportsMultipleBlocks = true;
@@ -2096,7 +2096,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 catch (Exception ex)
                 {
-                    Mod.Log.Write(Logging.Level.Error, "NanobotBuildAndRepairSystemTerminal: InitializeControls exception: {0}", ex);
+                    Logging.Instance?.Write(Logging.Level.Error, "NanobotBuildAndRepairSystemTerminal: InitializeControls exception: {0}", ex);
                 }
             }
         }
@@ -2265,6 +2265,11 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
+        }
+
+        public static void Dispose()
+        {
+            MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
         }
     }
 }

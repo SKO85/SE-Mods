@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+   <EntityContainers>
+      <Container>
+         <Id>
+            <TypeId>ShipWelder</TypeId>
+            <SubtypeId>SELtdLargeNanobotBuildAndRepairSystem</SubtypeId>
+         </Id>
+         <DefaultComponents>
+            <Component BuilderType="MyObjectBuilder_ModStorageComponent" SubtypeId="NanobotBuildAndRepairSystemMod" ForceCreate="true"/>
+         </DefaultComponents>
+      </Container>
+      <Container>
+         <Id>
+            <TypeId>ShipWelder</TypeId>
+            <SubtypeId>SELtdSmallNanobotBuildAndRepairSystem</SubtypeId>
+         </Id>
+         <DefaultComponents>
+            <Component BuilderType="MyObjectBuilder_ModStorageComponent" SubtypeId="NanobotBuildAndRepairSystemMod" ForceCreate="true"/>
+         </DefaultComponents>
+      </Container>
+   </EntityContainers>
+</Definitions>

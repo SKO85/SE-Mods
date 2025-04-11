@@ -19,7 +19,11 @@ namespace SKONanobotBuildAndRepairSystem
         FunctionalBlock,
         ProductionBlock,
         Door,
-        ArmorBlock
+        ArmorBlock,
+        DisplayPanel,
+        Lighting,
+        SensorDevice,        
+        CommunicationBlock        
     }
 
     public enum ComponentClass
@@ -62,6 +66,13 @@ namespace SKONanobotBuildAndRepairSystem
             if (block is Sandbox.ModAPI.IMyProjector) return (int)BlockClass.Projector;
             if (block is Sandbox.ModAPI.IMyDoor) return (int)BlockClass.Door;
             if (block is Sandbox.ModAPI.IMyProductionBlock) return (int)BlockClass.ProductionBlock;
+
+            // Added.
+            if (block is Sandbox.ModAPI.IMyTextPanel || block is Sandbox.ModAPI.Ingame.IMyTextSurface) return (int)BlockClass.DisplayPanel;
+            if (block is Sandbox.ModAPI.IMyLightingBlock) return (int)BlockClass.Lighting;
+            if (block is Sandbox.ModAPI.IMySensorBlock || block is Sandbox.ModAPI.IMyCameraBlock) return (int)BlockClass.SensorDevice;
+            if (block is Sandbox.ModAPI.IMyRadioAntenna || block is Sandbox.ModAPI.IMyLaserAntenna) return (int)BlockClass.CommunicationBlock;
+
             if (functionalBlock != null) return (int)BlockClass.FunctionalBlock;
 
             return (int)BlockClass.ArmorBlock;
