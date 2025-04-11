@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+   <EntityComponents>
+      <EntityComponent xsi:type="MyObjectBuilder_ModStorageComponentDefinition">
+         <Id>
+            <TypeId>ModStorageComponent</TypeId>
+            <SubtypeId>NanobotBuildAndRepairSystemMod</SubtypeId>
+         </Id>
+         <RegisteredStorageGuids>
+            <guid>8B57046C-DA20-4DE1-8E35-513FD21E3B9F</guid>
+         </RegisteredStorageGuids>
+      </EntityComponent>
+   </EntityComponents>
+</Definitions>

@@ -87,15 +87,15 @@ namespace SKONanobotBuildAndRepairSystem
         {
             DisableLocalization = false;
             LogLevel = Logging.Level.Error; //Default
-            MaxBackgroundTasks = NanobotBuildAndRepairSystemMod.MaxBackgroundTasks_Default;
+            MaxBackgroundTasks = Constants.MaxBackgroundTasks_Default;
             TargetsUpdateInterval = TimeSpan.FromSeconds(10);
             SourcesUpdateInterval = TimeSpan.FromSeconds(60);
             FriendlyDamageTimeout = TimeSpan.FromSeconds(60);
             FriendlyDamageCleanup = TimeSpan.FromSeconds(10);
-            Range = NanobotBuildAndRepairSystemBlock.WELDER_RANGE_DEFAULT_IN_M;
-            MaximumOffset = NanobotBuildAndRepairSystemBlock.WELDER_OFFSET_MAX_DEFAULT_IN_M;
-            MaximumRequiredElectricPowerStandby = NanobotBuildAndRepairSystemBlock.WELDER_REQUIRED_ELECTRIC_POWER_STANDBY_DEFAULT;
-            MaximumRequiredElectricPowerTransport = NanobotBuildAndRepairSystemBlock.WELDER_REQUIRED_ELECTRIC_POWER_TRANSPORT_DEFAULT;
+            Range = Constants.WELDER_RANGE_DEFAULT_IN_M;
+            MaximumOffset = Constants.WELDER_OFFSET_MAX_DEFAULT_IN_M;
+            MaximumRequiredElectricPowerStandby = Constants.WELDER_REQUIRED_ELECTRIC_POWER_STANDBY_DEFAULT;
+            MaximumRequiredElectricPowerTransport = Constants.WELDER_REQUIRED_ELECTRIC_POWER_TRANSPORT_DEFAULT;
             Welder = new SyncModSettingsWelder();
         }
 
@@ -109,7 +109,7 @@ namespace SKONanobotBuildAndRepairSystem
                     using (var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage("ModSettings.xml", typeof(SyncModSettings)))
                     {
                         settings = MyAPIGateway.Utilities.SerializeFromXML<SyncModSettings>(reader.ReadToEnd());
-                        Mod.Log.Write("NanobotBuildAndRepairSystemSettings: Loaded from world file.");
+                        Logging.Instance?.Write("NanobotBuildAndRepairSystemSettings: Loaded from world file.");
                     }
                 }
                 else if (MyAPIGateway.Utilities.FileExistsInLocalStorage("ModSettings.xml", typeof(SyncModSettings)))
@@ -117,38 +117,38 @@ namespace SKONanobotBuildAndRepairSystem
                     using (var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage("ModSettings.xml", typeof(SyncModSettings)))
                     {
                         settings = MyAPIGateway.Utilities.SerializeFromXML<SyncModSettings>(reader.ReadToEnd());
-                        Mod.Log.Write("NanobotBuildAndRepairSystemSettings: Loaded from local storage.");
+                        Logging.Instance?.Write("NanobotBuildAndRepairSystemSettings: Loaded from local storage.");
                     }
                 }
 
                 if (settings != null)
                 {
                     var adjusted = AdjustSettings(settings);
-                    if (settings.MaxBackgroundTasks > NanobotBuildAndRepairSystemMod.MaxBackgroundTasks_Max)
+                    if (settings.MaxBackgroundTasks > Constants.MaxBackgroundTasks_Max)
                     {
-                        settings.MaxBackgroundTasks = NanobotBuildAndRepairSystemMod.MaxBackgroundTasks_Max;
+                        settings.MaxBackgroundTasks = Constants.MaxBackgroundTasks_Max;
                         adjusted = true;
                     }
-                    else if (settings.MaxBackgroundTasks < NanobotBuildAndRepairSystemMod.MaxBackgroundTasks_Min)
+                    else if (settings.MaxBackgroundTasks < Constants.MaxBackgroundTasks_Min)
                     {
-                        settings.MaxBackgroundTasks = NanobotBuildAndRepairSystemMod.MaxBackgroundTasks_Min;
-                        adjusted = true;
-                    }
-
-                    if (settings.Range > NanobotBuildAndRepairSystemBlock.WELDER_RANGE_MAX_IN_M)
-                    {
-                        settings.Range = NanobotBuildAndRepairSystemBlock.WELDER_RANGE_MAX_IN_M;
-                        adjusted = true;
-                    }
-                    else if (settings.Range < NanobotBuildAndRepairSystemBlock.WELDER_RANGE_MIN_IN_M)
-                    {
-                        settings.Range = NanobotBuildAndRepairSystemBlock.WELDER_RANGE_MIN_IN_M;
+                        settings.MaxBackgroundTasks = Constants.MaxBackgroundTasks_Min;
                         adjusted = true;
                     }
 
-                    if (settings.MaximumOffset > NanobotBuildAndRepairSystemBlock.WELDER_OFFSET_MAX_IN_M)
+                    if (settings.Range > Constants.WELDER_RANGE_MAX_IN_M)
                     {
-                        settings.MaximumOffset = NanobotBuildAndRepairSystemBlock.WELDER_OFFSET_MAX_IN_M;
+                        settings.Range = Constants.WELDER_RANGE_MAX_IN_M;
+                        adjusted = true;
+                    }
+                    else if (settings.Range < Constants.WELDER_RANGE_MIN_IN_M)
+                    {
+                        settings.Range = Constants.WELDER_RANGE_MIN_IN_M;
+                        adjusted = true;
+                    }
+
+                    if (settings.MaximumOffset > Constants.WELDER_OFFSET_MAX_IN_M)
+                    {
+                        settings.MaximumOffset = Constants.WELDER_OFFSET_MAX_IN_M;
                         adjusted = true;
                     }
                     else if (settings.MaximumOffset < 0)
@@ -157,29 +157,29 @@ namespace SKONanobotBuildAndRepairSystem
                         adjusted = true;
                     }
 
-                    if (settings.Welder.WeldingMultiplier < NanobotBuildAndRepairSystemBlock.WELDING_GRINDING_MULTIPLIER_MIN)
+                    if (settings.Welder.WeldingMultiplier < Constants.WELDING_GRINDING_MULTIPLIER_MIN)
                     {
-                        settings.Welder.WeldingMultiplier = NanobotBuildAndRepairSystemBlock.WELDING_GRINDING_MULTIPLIER_MIN;
+                        settings.Welder.WeldingMultiplier = Constants.WELDING_GRINDING_MULTIPLIER_MIN;
                         adjusted = true;
                     }
-                    else if (settings.Welder.WeldingMultiplier >= NanobotBuildAndRepairSystemBlock.WELDING_GRINDING_MULTIPLIER_MAX)
+                    else if (settings.Welder.WeldingMultiplier >= Constants.WELDING_GRINDING_MULTIPLIER_MAX)
                     {
-                        settings.Welder.WeldingMultiplier = NanobotBuildAndRepairSystemBlock.WELDING_GRINDING_MULTIPLIER_MAX;
-                        adjusted = true;
-                    }
-
-                    if (settings.Welder.GrindingMultiplier < NanobotBuildAndRepairSystemBlock.WELDING_GRINDING_MULTIPLIER_MIN)
-                    {
-                        settings.Welder.GrindingMultiplier = NanobotBuildAndRepairSystemBlock.WELDING_GRINDING_MULTIPLIER_MIN;
-                        adjusted = true;
-                    }
-                    else if (settings.Welder.GrindingMultiplier >= NanobotBuildAndRepairSystemBlock.WELDING_GRINDING_MULTIPLIER_MAX)
-                    {
-                        settings.Welder.GrindingMultiplier = NanobotBuildAndRepairSystemBlock.WELDING_GRINDING_MULTIPLIER_MAX;
+                        settings.Welder.WeldingMultiplier = Constants.WELDING_GRINDING_MULTIPLIER_MAX;
                         adjusted = true;
                     }
 
-                    Mod.Log.Write(Logging.Level.Info, "NanobotBuildAndRepairSystemSettings: Settings {0}", settings);
+                    if (settings.Welder.GrindingMultiplier < Constants.WELDING_GRINDING_MULTIPLIER_MIN)
+                    {
+                        settings.Welder.GrindingMultiplier = Constants.WELDING_GRINDING_MULTIPLIER_MIN;
+                        adjusted = true;
+                    }
+                    else if (settings.Welder.GrindingMultiplier >= Constants.WELDING_GRINDING_MULTIPLIER_MAX)
+                    {
+                        settings.Welder.GrindingMultiplier = Constants.WELDING_GRINDING_MULTIPLIER_MAX;
+                        adjusted = true;
+                    }
+
+                    Logging.Instance?.Write(Logging.Level.Info, "NanobotBuildAndRepairSystemSettings: Settings {0}", settings);
                     //if (adjusted) Save(settings, world); don't save file
                 }
                 else
@@ -190,7 +190,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
             catch (Exception ex)
             {
-                Mod.Log.Write(Logging.Level.Error, "NanobotBuildAndRepairSystemSettings: Exception while loading: {0}", ex);
+                Logging.Instance?.Write(Logging.Level.Error, "NanobotBuildAndRepairSystemSettings: Exception while loading: {0}", ex);
             }
 
             return settings;
@@ -218,7 +218,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (settings.Version >= CurrentSettingsVersion) return false;
 
-            Mod.Log.Write("NanobotBuildAndRepairSystemSettings: Settings have old version: {0} update to {1}", settings.Version, CurrentSettingsVersion);
+            Logging.Instance?.Write("NanobotBuildAndRepairSystemSettings: Settings have old version: {0} update to {1}", settings.Version, CurrentSettingsVersion);
 
             if (settings.Version <= 0) settings.LogLevel = Logging.Level.Error;
             if (settings.Version <= 4 && settings.Welder.AllowedSearchModes == 0) settings.Welder.AllowedSearchModes = SearchModes.Grids | SearchModes.BoundingBox;
@@ -348,8 +348,8 @@ namespace SKONanobotBuildAndRepairSystem
 
         public SyncModSettingsWelder()
         {
-            MaximumRequiredElectricPowerWelding = NanobotBuildAndRepairSystemBlock.WELDER_REQUIRED_ELECTRIC_POWER_WELDING_DEFAULT;
-            MaximumRequiredElectricPowerGrinding = NanobotBuildAndRepairSystemBlock.WELDER_REQUIRED_ELECTRIC_POWER_GRINDING_DEFAULT;
+            MaximumRequiredElectricPowerWelding = Constants.WELDER_REQUIRED_ELECTRIC_POWER_WELDING_DEFAULT;
+            MaximumRequiredElectricPowerGrinding = Constants.WELDER_REQUIRED_ELECTRIC_POWER_GRINDING_DEFAULT;
 
             WeldingMultiplier = 1f;
             GrindingMultiplier = 1f;
@@ -392,7 +392,7 @@ namespace SKONanobotBuildAndRepairSystem
             CollectIfIdleDefault = false;
 
             SoundVolumeFixed = false;
-            SoundVolumeDefault = NanobotBuildAndRepairSystemBlock.WELDER_SOUND_VOLUME / 2;
+            SoundVolumeDefault = Constants.WELDER_SOUND_VOLUME / 2;
 
             ScriptControllFixed = false;
             AllowedEffects = VisualAndSoundEffects.WeldingVisualEffect | VisualAndSoundEffects.WeldingSoundEffect
@@ -445,15 +445,6 @@ namespace SKONanobotBuildAndRepairSystem
         private VRage.Game.ModAPI.Ingame.IMySlimBlock _CurrentPickedGrindingBlock;
         private TimeSpan _LastStored;
         private TimeSpan _LastTransmitted;
-
-        private void SetFlags(bool set, Settings setting)
-        {
-            if (set != ((_Flags & setting) != 0))
-            {
-                _Flags = (_Flags & ~setting) | (set ? setting : 0);
-                Changed = 3u;
-            }
-        }
 
         [XmlIgnore]
         public uint Changed { get; private set; }
@@ -996,7 +987,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 catch (Exception ex)
                 {
-                    Mod.Log.Write("SyncBlockSettings: Exception: " + ex);
+                    Logging.Instance?.Write("SyncBlockSettings: Exception: " + ex);
                 }
             }
 
@@ -1116,7 +1107,7 @@ namespace SKONanobotBuildAndRepairSystem
             MaximumRequiredElectricPowerGrinding = NanobotBuildAndRepairSystemMod.Settings.Welder.MaximumRequiredElectricPowerGrinding / scale;
 
             var maxMultiplier = Math.Max(NanobotBuildAndRepairSystemMod.Settings.Welder.WeldingMultiplier, NanobotBuildAndRepairSystemMod.Settings.Welder.GrindingMultiplier);
-            TransportSpeed = maxMultiplier * NanobotBuildAndRepairSystemBlock.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT * Math.Min(NanobotBuildAndRepairSystemMod.Settings.Range / NanobotBuildAndRepairSystemBlock.WELDER_RANGE_DEFAULT_IN_M, 4.0f);
+            TransportSpeed = maxMultiplier * Constants.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT * Math.Min(NanobotBuildAndRepairSystemMod.Settings.Range / Constants.WELDER_RANGE_DEFAULT_IN_M, 4.0f);
 
             if (NanobotBuildAndRepairSystemMod.Settings.Welder.AllowBuildFixed || init)
             {

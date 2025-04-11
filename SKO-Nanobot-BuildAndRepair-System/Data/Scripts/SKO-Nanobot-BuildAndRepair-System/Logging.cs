@@ -1,7 +1,6 @@
-using System;
+﻿using System;
 using System.Text;
 using Sandbox.ModAPI;
-using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.Utils;
@@ -10,17 +9,27 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public class Logging
     {
-        private readonly string _ModName;
-        private int _WorkshopId;
-        private readonly string _LogFilename;
-        private readonly Type _TypeOfMod;
+        private static Logging _instance;
+        public static Logging Instance
+        {
+            get
+            {
+                if (_instance == null)
+                    _instance = new Logging("NanobotBuildAndRepairSystem", 0, "NanobotBuildAndRepairSystem.log", typeof(NanobotBuildAndRepairSystemMod));
+                return _instance;
+            }
+        }
 
-        private System.IO.TextWriter _Writer = null;
-        private IMyHudNotification _Notify = null;
-        private int _Indent = 0;
-        private readonly StringBuilder _Cache = new StringBuilder();
+        private readonly string _modName;
+        private readonly int _workshopId;
+        private readonly string _logFileName;
+        private readonly Type _typeOfMod;
 
-        [Flags]
+        private System.IO.TextWriter _writer = null;
+        private IMyHudNotification _notify = null;
+        private int _indent = 0;
+        private readonly StringBuilder _cache = new StringBuilder();
+
         public enum BlockNameOptions
         {
             None = 0x0000,
@@ -39,243 +48,172 @@ namespace SKONanobotBuildAndRepairSystem
             All = 0xFFFF
         }
 
-        public static string BlockName(object block)
+        public Level LogLevel { get; set; } = Level.Error;
+        public bool EnableHudNotification { get; set; } = false;
+
+        private Logging(string modName, int workshopId, string logFileName, Type typeOfMod)
         {
-            return BlockName(block, BlockNameOptions.IncludeTypename);
+            _modName = modName;
+            _workshopId = workshopId;
+            _logFileName = logFileName;
+            _typeOfMod = typeOfMod;
+
+            MyLog.Default.WriteLineAndConsole(_modName + " Logger initialized. Utilities available: " + (MyAPIGateway.Utilities != null));
         }
 
-        public static string BlockName(object block, BlockNameOptions options)
+        public static string BlockName(object block, BlockNameOptions options = BlockNameOptions.IncludeTypename, bool includeId = false)
         {
-            var inventory = block as IMyInventory;
-            if (inventory != null)
+            if (block is IMyInventory) block = ((IMyInventory)block).Owner;
+
+            var slim = block as IMySlimBlock;
+            if (slim != null)
             {
-                block = inventory.Owner;
+                if (slim.FatBlock != null) block = slim.FatBlock;
+                else return string.Format("{0}.{1}", slim.CubeGrid != null ? slim.CubeGrid.DisplayName : "Unknown Grid", slim.BlockDefinition.DisplayNameText);
             }
 
-            var slimBlock = block as IMySlimBlock;
-            if (slimBlock != null)
+            var terminal = block as IMyTerminalBlock;
+            if (terminal != null)
             {
-                if (slimBlock.FatBlock != null) block = slimBlock.FatBlock;
-                else
-                {
-                    return
-                        $"{(slimBlock.CubeGrid != null ? slimBlock.CubeGrid.DisplayName : "Unknown Grid")}.{slimBlock.BlockDefinition.DisplayNameText}";
-                }
+                if ((options & BlockNameOptions.IncludeTypename) != 0)
+                    return string.Format("{0}.{1} [{2}]", terminal.CubeGrid != null ? terminal.CubeGrid.DisplayName : "Unknown Grid", terminal.CustomName, terminal.BlockDefinition.TypeIdString);
+                return string.Format("{0}.{1}", terminal.CubeGrid != null ? terminal.CubeGrid.DisplayName : "Unknown Grid", terminal.CustomName);
             }
 
-            var terminalBlock = block as IMyTerminalBlock;
-            if (terminalBlock != null)
+            var cube = block as IMyCubeBlock;
+            if (cube != null)
             {
-                if ((options & BlockNameOptions.IncludeTypename) != 0) return
-                    $"{(terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid")}.{terminalBlock.CustomName} [{terminalBlock.BlockDefinition.TypeIdString}]";
-                return
-                    $"{(terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid")}.{terminalBlock.CustomName}";
-            }
-
-            var cubeBlock = block as IMyCubeBlock;
-            if (cubeBlock != null)
-            {
-                return
-                    $"{(cubeBlock.CubeGrid != null ? cubeBlock.CubeGrid.DisplayName : "Unknown Grid")} [{cubeBlock.BlockDefinition.TypeIdString}/{cubeBlock.BlockDefinition.SubtypeName}]";
+                return string.Format("{0} [{1}/{2}]", cube.CubeGrid != null ? cube.CubeGrid.DisplayName : "Unknown Grid", cube.BlockDefinition.TypeIdString, cube.BlockDefinition.SubtypeName);
             }
 
             var entity = block as IMyEntity;
             if (entity != null)
             {
-                if ((options & BlockNameOptions.IncludeTypename) != 0) return
-                    $"{(string.IsNullOrEmpty(entity.DisplayName) ? entity.GetFriendlyName() : entity.DisplayName)} ({entity.EntityId}) [{entity.GetType().Name}]";
-                return $"{entity.DisplayName} ({entity.EntityId})";
+                if ((options & BlockNameOptions.IncludeTypename) != 0)
+                    return string.Format("{0} ({1}) [{2}]", string.IsNullOrEmpty(entity.DisplayName) ? entity.GetFriendlyName() : entity.DisplayName, entity.EntityId, entity.GetType().Name);
+
+                if(includeId)
+                    return string.Format("{0} ({1})", entity.DisplayName, entity.EntityId);
+                else
+                    return string.Format("{0}", entity.DisplayName);
             }
 
             return block != null ? block.ToString() : "NULL";
         }
 
-        public Level LogLevel { get; set; }
-
-        public bool EnableHudNotification { get; set; }
-
-        /// <summary>
-        ///
-        /// </summary>
-        public Logging(string modName, int workshopId, string logFileName, Type typeOfMod)
-        {
-            MyLog.Default.WriteLineAndConsole(_ModName + " Create Log instance Utils=" + (MyAPIGateway.Utilities != null).ToString());
-            _ModName = modName;
-            _WorkshopId = workshopId;
-            _LogFilename = logFileName;
-            _TypeOfMod = typeOfMod;
-        }
-
-        /// <summary>
-        /// Precheckl to avoid retriveing large amout of data,
-        /// that might be not needed afterwards
-        /// </summary>
-        /// <param name="level"></param>
-        /// <returns></returns>
         public bool ShouldLog(Level level)
         {
             return (LogLevel & level) != 0;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void IncreaseIndent(Level level)
         {
-            if ((LogLevel & level) != 0) _Indent++;
+            if (ShouldLog(level)) _indent++;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void DecreaseIndent(Level level)
         {
-            if ((LogLevel & level) != 0)
-                if (_Indent > 0) _Indent--;
+            if (ShouldLog(level) && _indent > 0) _indent--;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void ResetIndent(Level level)
         {
-            if ((LogLevel & level) != 0) _Indent = 0;
+            if (ShouldLog(level)) _indent = 0;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void Error(Exception e)
         {
             Error(e.ToString());
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void Error(string msg, params object[] args)
         {
             Error(string.Format(msg, args));
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         private void Error(string msg)
         {
-            if ((LogLevel & Level.Error) == 0) return;
+            if (!ShouldLog(Level.Error)) return;
 
             Write("ERROR: " + msg);
 
             try
             {
-                MyLog.Default.WriteLineAndConsole(_ModName + " error: " + msg);
-
-                var text = _ModName + " error - open %AppData%/SpaceEngineers/Storage/" + _LogFilename + " for details";
+                MyLog.Default.WriteLineAndConsole(_modName + " error: " + msg);
 
                 if (EnableHudNotification)
                 {
-                    ShowOnHud(text);
+                    ShowOnHud(_modName + " error - see log for details");
                 }
             }
             catch (Exception e)
             {
-                Write(string.Format("ERROR: Could not send notification to local client: " + e.ToString()));
+                Write("ERROR: Could not send HUD notification: " + e);
             }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
-        public void Write(Level level, string msg, params Object[] args)
+        public void Write(Level level, string msg, params object[] args)
         {
-            if ((LogLevel & level) == 0) return;
+            if (!ShouldLog(level)) return;
             Write(string.Format(msg, args));
         }
 
-        /// <summary>
-        ///
-        /// </summary>
-        public void Write(string msg, params Object[] args)
+        public void Write(string msg, params object[] args)
         {
             Write(string.Format(msg, args));
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         private void Write(string msg)
         {
             try
             {
-                lock (_Cache)
+                lock (_cache)
                 {
-                    _Cache.Append(DateTime.Now.ToString("u") + ":");
+                    _cache.Append(DateTime.Now.ToString("u")).Append(":");
+                    for (int i = 0; i < _indent; i++) _cache.Append("   ");
+                    _cache.Append(msg).AppendLine();
 
-                    for (var i = 0; i < _Indent; i++)
+                    if (_writer == null && MyAPIGateway.Utilities != null)
                     {
-                        _Cache.Append("   ");
+                        _writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(_logFileName, _typeOfMod);
                     }
 
-                    _Cache.Append(msg).AppendLine();
-
-                    if (_Writer == null && MyAPIGateway.Utilities != null)
+                    if (_writer != null)
                     {
-                        _Writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(_LogFilename, _TypeOfMod);
-                    }
-
-                    if (_Writer != null)
-                    {
-                        _Writer.Write(_Cache);
-                        _Writer.Flush();
-                        _Cache.Clear();
+                        _writer.Write(_cache);
+                        _writer.Flush();
+                        _cache.Clear();
                     }
                 }
             }
             catch (Exception e)
             {
-                MyLog.Default.WriteLineAndConsole(_ModName + " Error while logging message='" + msg + "'\nLogger error: " + e.Message + "\n" + e.StackTrace);
+                MyLog.Default.WriteLineAndConsole(_modName + " Logging failure: " + e);
             }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
-        /// <param name="text"></param>
-        /// <param name="displayms"></param>
-        public void ShowOnHud(string text, int displayms = 10000)
+        public void ShowOnHud(string text, int displayMs = 10000)
         {
-            if (_Notify == null)
+            if (_notify == null)
             {
-                _Notify = MyAPIGateway.Utilities.CreateNotification(text, displayms, MyFontEnum.Red);
-            }
-            else
-            {
-                _Notify.Text = text;
-                _Notify.ResetAliveTime();
+                _notify = MyAPIGateway.Utilities.CreateNotification("", displayMs, "Red");
             }
 
-            _Notify.Show();
+            _notify.Text = text;
+            _notify.Show();
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void Close()
         {
-            lock (_Cache)
+            try
             {
-                if (_Writer != null)
+                if (_writer != null)
                 {
-                    _Writer.Flush();
-                    _Writer.Close();
-                    _Writer.Dispose();
-                    _Writer = null;
+                    _writer.Flush();
+                    _writer.Close();
                 }
-
-                _Indent = 0;
-                _Cache.Clear();
             }
+            catch { }
         }
     }
 }

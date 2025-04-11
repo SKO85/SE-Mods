@@ -114,10 +114,10 @@ namespace SKONanobotBuildAndRepairSystem
 
         static Texts()
         {
-            var language = Mod.DisableLocalization ? MyLanguagesEnum.English : MyAPIGateway.Session.Config.Language;
-            Mod.Log.Write(Logging.Level.Error, "Localization: Disabled={0} Language={1}", Mod.DisableLocalization, language);
+            var language = Constants.DisableLocalization ? MyLanguagesEnum.English : MyAPIGateway.Session.Config.Language;
+            Logging.Instance?.Write(Logging.Level.Error, "Localization: Disabled={0} Language={1}", Constants.DisableLocalization, language);
 
-            var texts = LocalizationHelper.GetTexts(language, GetDictionaries(), Mod.Log);
+            var texts = LocalizationHelper.GetTexts(language, GetDictionaries(), Logging.Instance);
             ModeSettings_Headline = LocalizationHelper.GetStringId(texts, "ModeSettings_Headline");
             SearchMode = LocalizationHelper.GetStringId(texts, "SearchMode");
             SearchMode_Tooltip = LocalizationHelper.GetStringId(texts, "SearchMode_Tooltip");
