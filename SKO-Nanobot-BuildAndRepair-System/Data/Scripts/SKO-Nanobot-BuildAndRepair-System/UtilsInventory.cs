@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Sandbox.Definitions;
+using Sandbox.Game.Entities.Cube;
 using Sandbox.ModAPI;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
+using static SKONanobotBuildAndRepairSystem.Logging;
 using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 using MyItemType = VRage.Game.ModAPI.Ingame.MyItemType;
 
@@ -249,7 +251,8 @@ namespace SKONanobotBuildAndRepairSystem
         {
             Create,
             Functional,
-            Complete
+            Complete,
+            Skeleton
         }
 
         /// <summary>
@@ -263,6 +266,8 @@ namespace SKONanobotBuildAndRepairSystem
             var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
             if (blockDefinition.Components == null || blockDefinition.Components.Length == 0) return;
 
+            Deb.Write($"Missing components for: {blockDefinition.DisplayNameText}");
+
             if (level == IntegrityLevel.Create)
             {
                 var component = blockDefinition.Components[0];
@@ -270,31 +275,80 @@ namespace SKONanobotBuildAndRepairSystem
             }
             else
             {
-                if (block.IsProjected())
+                if (level == IntegrityLevel.Skeleton)
                 {
-                    var maxIdx = level == IntegrityLevel.Functional ? blockDefinition.CriticalGroup + 1 : blockDefinition.Components.Length;
-                    for (var idx = 0; idx < maxIdx; idx++)
-                    {
-                        var component = blockDefinition.Components[idx];
-                        if (componentList.ContainsKey(component.Definition.Id.SubtypeName)) componentList[component.Definition.Id.SubtypeName] += component.Count;
-                        else componentList.Add(component.Definition.Id.SubtypeName, component.Count);
-                    }
+                    block.GetMissingComponentsForSkeleton(componentList);
                 }
                 else
                 {
-                    block.GetMissingComponents(componentList);
-                    if (level == IntegrityLevel.Functional)
+                    if (block.IsProjected())
                     {
-                        for (var idx = blockDefinition.CriticalGroup + 1; idx < blockDefinition.Components.Length; idx++)
+                        var maxIdx = level == IntegrityLevel.Functional ? blockDefinition.CriticalGroup + 1 : blockDefinition.Components.Length;
+                        for (var idx = 0; idx < maxIdx; idx++)
                         {
                             var component = blockDefinition.Components[idx];
-                            if (componentList.ContainsKey(component.Definition.Id.SubtypeName))
+                            if (componentList.ContainsKey(component.Definition.Id.SubtypeName)) componentList[component.Definition.Id.SubtypeName] += component.Count;
+                            else componentList.Add(component.Definition.Id.SubtypeName, component.Count);
+                        }
+                    }
+                    else
+                    {
+                        block.GetMissingComponents(componentList);
+                        if (level == IntegrityLevel.Functional)
+                        {
+                            for (var idx = blockDefinition.CriticalGroup + 1; idx < blockDefinition.Components.Length; idx++)
                             {
-                                var amount = componentList[component.Definition.Id.SubtypeName];
-                                if (amount <= component.Count) componentList.Remove(component.Definition.Id.SubtypeName);
-                                else componentList[component.Definition.Id.SubtypeName] -= component.Count;
+                                var component = blockDefinition.Components[idx];
+                                if (componentList.ContainsKey(component.Definition.Id.SubtypeName))
+                                {
+                                    var amount = componentList[component.Definition.Id.SubtypeName];
+                                    if (amount <= component.Count) componentList.Remove(component.Definition.Id.SubtypeName);
+                                    else componentList[component.Definition.Id.SubtypeName] -= component.Count;
+                                }
                             }
                         }
+                    }
+                }                
+            }
+        }
+
+        public static void GetMissingComponentsForSkeleton(this IMySlimBlock block, Dictionary<string, int> componentList)
+        {
+            var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
+            if (blockDefinition.Components == null || blockDefinition.Components.Length == 0) return;
+
+            var maxIdx = blockDefinition.Components.Length;
+            var integrity = 0f;
+            var integrityRatio = 0f;
+            var integrityReached = false;
+
+            for (var idx = 0; idx < maxIdx; idx++)
+            {
+                if(integrityReached)
+                {
+                    break;
+                }
+
+                var component = blockDefinition.Components[idx];
+
+                for (var i = 0; i < component.Count; i++)
+                {
+                    if (componentList.ContainsKey(component.Definition.Id.SubtypeName))
+                    {
+                        componentList[component.Definition.Id.SubtypeName] += 1;
+                    }
+                    else
+                    {
+                        componentList.Add(component.Definition.Id.SubtypeName, 1);
+                    };
+
+                    integrity += component.Definition.MaxIntegrity;
+                    integrityRatio = integrity / blockDefinition.MaxIntegrity;
+
+                    if(integrityRatio >= Constants.MaxCreateIntegrityRatio)
+                    {
+                        integrityReached = true;
+                        break;
                     }
                 }
             }

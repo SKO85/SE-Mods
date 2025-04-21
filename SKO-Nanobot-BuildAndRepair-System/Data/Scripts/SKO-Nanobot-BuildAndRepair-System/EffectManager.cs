@@ -1,4 +1,4 @@
-﻿using Sandbox.Definitions;
+using Sandbox.Definitions;
 using Sandbox.Game.Entities;
 using Sandbox.Game.Lights;
 using Sandbox.ModAPI;

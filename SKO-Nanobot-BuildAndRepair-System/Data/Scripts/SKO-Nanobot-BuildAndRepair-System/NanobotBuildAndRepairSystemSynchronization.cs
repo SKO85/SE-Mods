@@ -432,7 +432,6 @@ namespace SKONanobotBuildAndRepairSystem
         private uint _GrindColorPacked;
         private AutoGrindRelation _UseGrindJanitorOn;
         private AutoGrindOptions _GrindJanitorOptions;
-        private AutoWeldOptions _WeldOptions;
         private Vector3 _AreaOffset;
         private Vector3 _AreaSize;
         private string _WeldPriority;
@@ -441,6 +440,7 @@ namespace SKONanobotBuildAndRepairSystem
         private float _SoundVolume;
         private SearchModes _SearchMode;
         private WorkModes _WorkMode;
+        private WeldTo _WeldTo;
         private VRage.Game.ModAPI.Ingame.IMySlimBlock _CurrentPickedWeldingBlock;
         private VRage.Game.ModAPI.Ingame.IMySlimBlock _CurrentPickedGrindingBlock;
         private TimeSpan _LastStored;
@@ -499,6 +499,23 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
         }
+
+        [ProtoMember(201), XmlElement]
+        public WeldTo WeldTo
+        {
+            get
+            {
+                return _WeldTo;
+            }
+            set
+            {
+                if (_WeldTo != value)
+                {
+                    _WeldTo = value;
+                    Changed = 3u;
+                }
+            }
+        }       
 
         [ProtoMember(31), XmlElement]
         public Vector3 IgnoreColor
@@ -584,24 +601,7 @@ namespace SKONanobotBuildAndRepairSystem
                     Changed = 3u;
                 }
             }
-        }
-
-        [ProtoMember(49), XmlElement]
-        public AutoWeldOptions WeldOptions
-        {
-            get
-            {
-                return _WeldOptions;
-            }
-            set
-            {
-                if (_WeldOptions != value)
-                {
-                    _WeldOptions = value;
-                    Changed = 3u;
-                }
-            }
-        }
+        }      
 
         //+X = Right   -Y = Left
         //+Y = Up      -Y = Down
@@ -866,6 +866,8 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
+       
+
         [XmlIgnore]
         public int MaximumRange { get; private set; }
 
@@ -920,6 +922,8 @@ namespace SKONanobotBuildAndRepairSystem
             Changed = 0;
             _LastStored = MyAPIGateway.Session.ElapsedPlayTime.Add(TimeSpan.FromSeconds(60));
             _LastTransmitted = MyAPIGateway.Session.ElapsedPlayTime;
+
+            _WeldTo = WeldTo.WeldToFull;
 
             RecalcAreaBoundigBox();
         }
@@ -1006,7 +1010,6 @@ namespace SKONanobotBuildAndRepairSystem
             _GrindColor = newSettings.GrindColor;
             _UseGrindJanitorOn = newSettings.UseGrindJanitorOn;
             _GrindJanitorOptions = newSettings.GrindJanitorOptions;
-            _WeldOptions = newSettings.WeldOptions;
 
             _AreaOffset = newSettings.AreaOffset;
             _AreaSize = newSettings.AreaSize;
@@ -1018,6 +1021,7 @@ namespace SKONanobotBuildAndRepairSystem
             _SoundVolume = newSettings.SoundVolume;
             _SearchMode = newSettings.SearchMode;
             _WorkMode = newSettings.WorkMode;
+            _WeldTo = newSettings.WeldTo;
 
             RecalcAreaBoundigBox();
             _IgnoreColorPacked = _IgnoreColor.PackHSVToUint();

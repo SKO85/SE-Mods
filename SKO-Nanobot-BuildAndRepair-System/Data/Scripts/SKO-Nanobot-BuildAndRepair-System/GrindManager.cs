@@ -1,10 +1,76 @@
 ﻿using VRage.Game.ModAPI;
 using Sandbox.Game.Entities;
+using System.Collections.Generic;
+using System.Linq;
+using System;
 
 namespace SKONanobotBuildAndRepairSystem
 {
     public static class GrindManager
     {
+        private static readonly Dictionary<IMySlimBlock, long> _assignments = new Dictionary<IMySlimBlock, long>();
+        private static DateTime _lastCleanupTime = DateTime.MinValue;
+        private static readonly TimeSpan CleanupInterval = TimeSpan.FromSeconds(10);
+
+        public static bool TryAssign(IMySlimBlock block, long systemId)
+        {
+            CleanupIfNeeded();
+
+            lock (_assignments)
+            {
+                long existing;
+                if (_assignments.TryGetValue(block, out existing))
+                {
+                    return existing == systemId;
+                }
+                _assignments[block] = systemId;
+                return true;
+            }
+        }
+
+        public static void ReleaseAll(long systemId)
+        {
+            lock (_assignments)
+            {
+                var toRemove = _assignments.Where(x => x.Value == systemId).Select(x => x.Key).ToList();
+                foreach (var block in toRemove)
+                    _assignments.Remove(block);
+            }
+        }
+
+        public static void Cleanup(IMySlimBlock block)
+        {
+            lock (_assignments)
+            {
+                _assignments.Remove(block);
+            }
+        }
+
+        private static void CleanupIfNeeded()
+        {
+            if ((DateTime.UtcNow - _lastCleanupTime) < CleanupInterval)
+                return;
+
+            _lastCleanupTime = DateTime.UtcNow;
+
+            lock (_assignments)
+            {
+                var toRemove = new List<IMySlimBlock>();
+                foreach (var kv in _assignments)
+                {
+                    if (kv.Key == null || kv.Key.CubeGrid == null || kv.Key.IsDestroyed || kv.Key.FatBlock == null || kv.Key.FatBlock.Closed)
+                        toRemove.Add(kv.Key);
+                }
+
+                foreach (var block in toRemove)
+                {
+                    Deb.Write("Removed grinded block from dictionary.");
+                    _assignments.Remove(block);
+                }
+                    
+            }
+        }
+
         public static void TryGrinding(
             NanobotBuildAndRepairSystemBlock block,
             out bool grinding,
@@ -17,8 +83,8 @@ namespace SKONanobotBuildAndRepairSystem
             transporting = false;
             currentGrindingBlock = null;
 
-            if (!PowerManager.HasRequiredElectricPower(block))
-                return;
+            var hasRequiredPower = PowerManager.HasRequiredElectricPower(block);
+            if (!hasRequiredPower) return;
 
             lock (block.State.PossibleGrindTargets)
             {
@@ -26,6 +92,11 @@ namespace SKONanobotBuildAndRepairSystem
 
                 foreach (var targetData in block.State.PossibleGrindTargets)
                 {
+                    if (!TryAssign(targetData.Block, block.Entity.EntityId))
+                    {
+                        continue;
+                    }
+
                     if (cubeGrid == null)
                     {
                         cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;

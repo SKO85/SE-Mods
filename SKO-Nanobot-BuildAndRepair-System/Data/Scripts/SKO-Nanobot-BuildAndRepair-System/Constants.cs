@@ -35,12 +35,12 @@ namespace SKONanobotBuildAndRepairSystem
         public const float WELDER_REQUIRED_ELECTRIC_POWER_WELDING_DEFAULT = 200.0f / 1000;      // 200kW     //2kW, 2.0f
         public const float WELDER_REQUIRED_ELECTRIC_POWER_GRINDING_DEFAULT = 200.0f / 1000;     // 200kW     //1.5kW, 1.5f
         public const float WELDER_REQUIRED_ELECTRIC_POWER_TRANSPORT_DEFAULT = 100.0f / 1000;    // 100kW     //10kW, 10.0f
-        public const float WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT = 20f;                             // 20f
+        public const float WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT = 30f;                             // 20f
         public const float WELDER_TRANSPORTVOLUME_DIVISOR = 10f;
-        public const float WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER = 8f;
-        public const float WELDER_AMOUNT_PER_SECOND = 2f;                                                    // 2f
+        public const float WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER = 4f;
+        public const float WELDER_AMOUNT_PER_SECOND = 0.5f;                                                    // 2f
         public const float WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED = 0.2f;
-        public const float GRINDER_AMOUNT_PER_SECOND = 4f;                                                   // 4f
+        public const float GRINDER_AMOUNT_PER_SECOND = 0.5f;                                                   // 4f
         public const float WELDER_SOUND_VOLUME = 2f;
 
         public const string PARTICLE_EFFECT_WELDING1 = MyParticleEffectsNameEnum.WelderContactPoint;
@@ -51,6 +51,7 @@ namespace SKONanobotBuildAndRepairSystem
         public const int MaxBackgroundTasks_Default = 4;
         public const int MaxBackgroundTasks_Max = 10;
         public const int MaxBackgroundTasks_Min = 1;
+        public const float MaxCreateIntegrityRatio = 0.2f;
 
         public const bool DisableLocalization = false;
     }

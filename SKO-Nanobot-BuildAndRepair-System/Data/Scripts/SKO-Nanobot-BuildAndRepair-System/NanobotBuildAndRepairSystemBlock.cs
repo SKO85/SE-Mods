@@ -64,9 +64,7 @@ namespace SKONanobotBuildAndRepairSystem
         internal readonly HashSet<IMyInventory> _Ignore4Items = new HashSet<IMyInventory>();
         internal readonly HashSet<IMyInventory> _Ignore4Components = new HashSet<IMyInventory>();
         private readonly Dictionary<string, int> _TempMissingComponents = new Dictionary<string, int>();
-        private TimeSpan _LastFriendlyDamageCleanup;
-
-      
+        private TimeSpan _LastFriendlyDamageCleanup;      
 
         internal MyEntity3DSoundEmitter _SoundEmitter;
         internal MyEntity3DSoundEmitter _SoundEmitterWorking;
@@ -247,8 +245,16 @@ namespace SKONanobotBuildAndRepairSystem
 
             TerminalControlManager.InitControls();
 
-            _onEnabledChanged = (block) => UpdateCustomInfo(true);
-            _onIsWorkingChanged = (block) => UpdateCustomInfo(true);
+            _onEnabledChanged = (block) =>
+            {
+                UpdateCustomInfo(true);
+            };
+
+            _onIsWorkingChanged = (block) =>
+            {
+                IsWorkingChanged();
+                UpdateCustomInfo(true);
+            };
 
             _Welder.EnabledChanged += _onEnabledChanged;
             _Welder.IsWorkingChanged += _onIsWorkingChanged;
@@ -310,6 +316,9 @@ namespace SKONanobotBuildAndRepairSystem
                 State.Ready = false;
 
                 EffectManager.Unregister(this);
+
+                GrindManager.ReleaseAll(Entity.EntityId);
+                WeldManager.ReleaseAll(Entity.EntityId);
 
                 if (_onEnabledChanged != null) _Welder.EnabledChanged -= _onEnabledChanged;
                 if (_onIsWorkingChanged != null) _Welder.IsWorkingChanged -= _onIsWorkingChanged;
@@ -693,6 +702,16 @@ namespace SKONanobotBuildAndRepairSystem
                 TriggerTerminalRefresh();
                 _UpdateCustomInfoLast = playTime;
                 _UpdateCustomInfoNeeded = false;
+            }            
+        }
+
+        private void IsWorkingChanged()
+        {
+            if (!Welder.IsWorking)
+            {
+                Deb.Write($"Block has been disabled. Release blocks.");
+                GrindManager.ReleaseAll(Entity.EntityId);
+                WeldManager.ReleaseAll(Entity.EntityId);
             }
         }
 
@@ -739,7 +758,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed || !target.FatBlock.IsVisible()))
                         {
-                            ((Sandbox.ModAPI.IMyProjector)cubeGridProjected.Projector).Build(target, _Welder.OwnerId, _Welder.EntityId, true, _Welder.SlimBlock.BuiltBy);
+                            ((Sandbox.ModAPI.IMyProjector)cubeGridProjected.Projector).Build(target, _Welder.OwnerId, _Welder.EntityId, false, _Welder.SlimBlock.BuiltBy);
                         }
                         
                         //After creation we can't welding this projected block, we have to find the 'physical' block instead.
@@ -783,12 +802,12 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (welding)
                     {
-                        Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: ServerDoWeld (incomplete): {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(target));
-                        
+                        Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: ServerDoWeld (incomplete): {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(target));                        
+
                         target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * NanobotBuildAndRepairSystemMod.Settings.Welder.WeldingMultiplier * Constants.WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * NanobotBuildAndRepairSystemMod.Settings.Welder.WeldingMultiplier * Constants.WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
                     }
                     
-                    if (target.IsFullIntegrity || ((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0 && target.Integrity >= target.MaxIntegrity * ((MyCubeBlockDefinition)target.BlockDefinition).CriticalIntegrityRatio))
+                    if (IsWeldIntegrityReached(target))
                     {
                         targetData.Ignore = true;
                     }
@@ -801,7 +820,50 @@ namespace SKONanobotBuildAndRepairSystem
                     target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * NanobotBuildAndRepairSystemMod.Settings.Welder.WeldingMultiplier * Constants.WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * NanobotBuildAndRepairSystemMod.Settings.Welder.WeldingMultiplier * Constants.WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
                 }
             }
+
             return welding || created;
+        }
+
+        internal bool IsWeldIntegrityReached(IMySlimBlock target)
+        {
+            try
+            {
+                var def = ((MyCubeBlockDefinition)target.BlockDefinition);
+
+                if (Settings.WeldTo == WeldTo.WeldToFull)
+                {
+                    return target.IsFullIntegrity;
+                }
+                else if(Settings.WeldTo == WeldTo.WeldToFunctionalOnly)
+                {                    
+                    return target.Integrity >= target.MaxIntegrity * def.CriticalIntegrityRatio;
+                }
+                else if(Settings.WeldTo == WeldTo.WeldTo10Percent)
+                {
+                    return target.Integrity >= target.MaxIntegrity * Constants.MaxCreateIntegrityRatio;
+                }
+            }
+            catch 
+            {
+                // If something goes wrong, lets say its all built to avoid issues!
+                return true;
+            }
+
+            return false;
+        }
+
+        internal UtilsInventory.IntegrityLevel GetIntegrityLevel()
+        {
+            if (Settings.WeldTo == WeldTo.WeldToFunctionalOnly)
+            {
+                return UtilsInventory.IntegrityLevel.Functional;
+            }
+            else if (Settings.WeldTo == WeldTo.WeldTo10Percent)
+            {
+                return UtilsInventory.IntegrityLevel.Skeleton;
+            }
+
+            return UtilsInventory.IntegrityLevel.Complete;
         }
 
         /// <summary>
@@ -1023,7 +1085,9 @@ namespace SKONanobotBuildAndRepairSystem
                                 //Block could be created and should be welded -> so retrieve the remaining material also
                                 var keyValue = _TempMissingComponents.ElementAt(0);
                                 _TempMissingComponents.Clear();
-                                targetData.Block.GetMissingComponents(_TempMissingComponents, (Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) == 0 ? UtilsInventory.IntegrityLevel.Complete : UtilsInventory.IntegrityLevel.Functional);
+
+                                targetData.Block.GetMissingComponents(_TempMissingComponents, GetIntegrityLevel());
+
                                 if (_TempMissingComponents.ContainsKey(keyValue.Key))
                                 {
                                     if (_TempMissingComponents[keyValue.Key] <= keyValue.Value) _TempMissingComponents.Remove(keyValue.Key);
@@ -1035,7 +1099,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
-                    targetData.Block.GetMissingComponents(_TempMissingComponents, (Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) == 0 ? UtilsInventory.IntegrityLevel.Complete : UtilsInventory.IntegrityLevel.Functional);
+                    targetData.Block.GetMissingComponents(_TempMissingComponents, GetIntegrityLevel());
                 }
 
                 if (_TempMissingComponents.Count > 0)
@@ -1880,7 +1944,7 @@ namespace SKONanobotBuildAndRepairSystem
                 Logging.BlockName(block),
                 block.IsProjected(),
                 block.IsDestroyed, block.IsFullyDismounted, block.FatBlock != null, block.FatBlock != null ? block.FatBlock.Closed.ToString() : "-",
-                block.MaxDeformation, block.HasDeformation, block.IsFullIntegrity, block.Integrity, block.NeedRepair((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0), block.GetUserRelationToOwner(_Welder.OwnerId),
+                block.MaxDeformation, block.HasDeformation, block.IsFullIntegrity, block.Integrity, block.NeedRepair(GetIntegrityLevel()), block.GetUserRelationToOwner(_Welder.OwnerId),
                 useIgnoreColor, IsColorNearlyEquals(ignoreColor, block.GetColorMask()), ignoreColor, block.GetColorMask().PackHSVToUint()
             );          
 
@@ -1907,7 +1971,7 @@ namespace SKONanobotBuildAndRepairSystem
                    BlockWeldPriority.GetEnabled(block) &&
                    block.IsInRange(ref areaBox, out distance) &&
                    IsRelationAllowed4Welding(block) &&
-                   block.NeedRepair((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0))
+                   block.NeedRepair(GetIntegrityLevel()))
                 {
                     Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: Add damaged Block {1} MaxDeformation={2}, (HasDeformation={3}), IsFullIntegrity={4}, HasFatBlock={5}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block), block.MaxDeformation, block.HasDeformation, block.IsFullIntegrity, block.FatBlock != null);
                     possibleWeldTargets.Add(new TargetBlockData(block, distance, 0));

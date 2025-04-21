@@ -13,13 +13,27 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// Is the block damaged/incomplete/projected
         /// </summary>
-        public static bool NeedRepair(this IMySlimBlock target, bool functionalOnly)
+        public static bool NeedRepair(this IMySlimBlock target, UtilsInventory.IntegrityLevel integrityLevel)
         {
             //I use target.HasDeformation && target.MaxDeformation > X) as I had several times both situations, a landing gear reporting HasDeformation or a block reporting target.MaxDeformation > 0.1 both weren't repairable and caused welding this blocks forever!
             //Now I had the case that target.HasDeformation = true and target.MaxDeformation=0 and the block was deformed -> I removed the double Check
             //target.IsFullyDismounted is equals to target.IsDestroyed
-            var neededIntegrityLevel = functionalOnly ? target.MaxIntegrity * ((MyCubeBlockDefinition)target.BlockDefinition).CriticalIntegrityRatio : target.MaxIntegrity;
-            return !target.IsDestroyed && (target.FatBlock == null || !target.FatBlock.Closed) && (target.Integrity < neededIntegrityLevel || target.HasDeformation);
+            var neededIntegrityLevel = target.MaxIntegrity;
+            
+            if(integrityLevel == UtilsInventory.IntegrityLevel.Functional)
+            {
+                neededIntegrityLevel = target.MaxIntegrity * ((MyCubeBlockDefinition)target.BlockDefinition).CriticalIntegrityRatio;
+            }
+            else if(integrityLevel == UtilsInventory.IntegrityLevel.Skeleton)
+            {
+                neededIntegrityLevel = target.MaxIntegrity * Constants.MaxCreateIntegrityRatio;
+            }
+            
+            var needRepair = !target.IsDestroyed && (target.FatBlock == null || !target.FatBlock.Closed) && (target.Integrity < neededIntegrityLevel || target.HasDeformation);
+
+            // Deb.Write($"Need repair: {needRepair}");
+
+            return needRepair;
         }
 
         /// <summary>
