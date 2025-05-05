@@ -9,6 +9,7 @@ namespace SKONanobotBuildAndRepairSystem
     using VRage;
     using VRage.ModAPI;
     using VRage.Scripting.MemorySafeTypes;
+    using VRage.Utils;
     using VRageMath;
 
     [Flags]
