@@ -5,7 +5,7 @@ namespace SKONanobotBuildAndRepairSystem
 {
     internal class Deb
     {
-        private static readonly bool EnableDebug = true;
+        private static readonly bool EnableDebug = false;
 
         public static void Write(string msg)
         {

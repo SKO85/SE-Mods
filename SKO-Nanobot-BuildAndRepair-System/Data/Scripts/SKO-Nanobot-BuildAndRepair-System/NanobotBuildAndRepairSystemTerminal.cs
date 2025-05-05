@@ -8,6 +8,7 @@ namespace SKONanobotBuildAndRepairSystem
     using Sandbox.ModAPI.Interfaces.Terminal;
     using VRage;
     using VRage.ModAPI;
+    using VRage.Scripting.MemorySafeTypes;
     using VRage.Utils;
     using VRageMath;
 
@@ -1844,12 +1845,12 @@ namespace SKONanobotBuildAndRepairSystem
                         CreateProperty(checkbox);
 
                         //Scripting support for Priority and enabling Weld BlockClasses
-                        var propertyWeldPriorityList = MyAPIGateway.TerminalControls.CreateProperty<List<string>, IMyShipWelder>("BuildAndRepair.WeldPriorityList");
+                        var propertyWeldPriorityList = MyAPIGateway.TerminalControls.CreateProperty<MemorySafeList<string>, IMyShipWelder>("BuildAndRepair.WeldPriorityList");
                         propertyWeldPriorityList.SupportsMultipleBlocks = false;
                         propertyWeldPriorityList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.BlockWeldPriority.GetList();
+                            return system?.BlockWeldPriority.GetList().ToMemorySafeList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyWeldPriorityList);
 
@@ -1906,12 +1907,12 @@ namespace SKONanobotBuildAndRepairSystem
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGWE);
 
                         //Scripting support for Priority and enabling GrindWeld BlockClasses
-                        var propertyGrindPriorityList = MyAPIGateway.TerminalControls.CreateProperty<List<string>, IMyShipWelder>("BuildAndRepair.GrindPriorityList");
+                        var propertyGrindPriorityList = MyAPIGateway.TerminalControls.CreateProperty<MemorySafeList<string>, IMyShipWelder>("BuildAndRepair.GrindPriorityList");
                         propertyGrindPriorityList.SupportsMultipleBlocks = false;
                         propertyGrindPriorityList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.BlockGrindPriority.GetList();
+                            return system?.BlockGrindPriority.GetList().ToMemorySafeList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGrindPriorityList);
 
@@ -1968,12 +1969,12 @@ namespace SKONanobotBuildAndRepairSystem
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGGE);
 
                         //Scripting support for Priority and enabling ComponentClasses
-                        var propertyComponentClassList = MyAPIGateway.TerminalControls.CreateProperty<List<string>, IMyShipWelder>("BuildAndRepair.ComponentClassList");
+                        var propertyComponentClassList = MyAPIGateway.TerminalControls.CreateProperty<MemorySafeList<string>, IMyShipWelder>("BuildAndRepair.ComponentClassList");
                         propertyComponentClassList.SupportsMultipleBlocks = false;
                         propertyComponentClassList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.ComponentCollectPriority.GetList();
+                            return system?.ComponentCollectPriority.GetList().ToMemorySafeList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyComponentClassList);
 
@@ -2030,39 +2031,39 @@ namespace SKONanobotBuildAndRepairSystem
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGEC);
 
                         //Working Lists
-                        var propertyMissingComponentsDict = MyAPIGateway.TerminalControls.CreateProperty<Dictionary<VRage.Game.MyDefinitionId, int>, IMyShipWelder>("BuildAndRepair.MissingComponents");
+                        var propertyMissingComponentsDict = MyAPIGateway.TerminalControls.CreateProperty<MemorySafeDictionary<VRage.Game.MyDefinitionId, int>, IMyShipWelder>("BuildAndRepair.MissingComponents");
                         propertyMissingComponentsDict.SupportsMultipleBlocks = false;
                         propertyMissingComponentsDict.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.GetMissingComponentsDict();
+                            return system?.GetMissingComponentsDict().ToMemorySafeDictionary(c=>c.Key, c=>c.Value);
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyMissingComponentsDict);
 
-                        var propertyPossibleWeldTargetsList = MyAPIGateway.TerminalControls.CreateProperty<List<VRage.Game.ModAPI.Ingame.IMySlimBlock>, IMyShipWelder>("BuildAndRepair.PossibleTargets");
+                        var propertyPossibleWeldTargetsList = MyAPIGateway.TerminalControls.CreateProperty<MemorySafeList<VRage.Game.ModAPI.Ingame.IMySlimBlock>, IMyShipWelder>("BuildAndRepair.PossibleTargets");
                         propertyPossibleWeldTargetsList.SupportsMultipleBlocks = false;
                         propertyPossibleWeldTargetsList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.GetPossibleWeldTargetsList();
+                            return system?.GetPossibleWeldTargetsList().ToMemorySafeList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPossibleWeldTargetsList);
 
-                        var propertyPossibleGrindTargetsList = MyAPIGateway.TerminalControls.CreateProperty<List<VRage.Game.ModAPI.Ingame.IMySlimBlock>, IMyShipWelder>("BuildAndRepair.PossibleGrindTargets");
+                        var propertyPossibleGrindTargetsList = MyAPIGateway.TerminalControls.CreateProperty<MemorySafeList<VRage.Game.ModAPI.Ingame.IMySlimBlock>, IMyShipWelder>("BuildAndRepair.PossibleGrindTargets");
                         propertyPossibleGrindTargetsList.SupportsMultipleBlocks = false;
                         propertyPossibleGrindTargetsList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.GetPossibleGrindTargetsList();
+                            return system?.GetPossibleGrindTargetsList().ToMemorySafeList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPossibleGrindTargetsList);
 
-                        var propertyPossibleCollectTargetsList = MyAPIGateway.TerminalControls.CreateProperty<List<VRage.Game.ModAPI.Ingame.IMyEntity>, IMyShipWelder>("BuildAndRepair.PossibleCollectTargets");
+                        var propertyPossibleCollectTargetsList = MyAPIGateway.TerminalControls.CreateProperty<MemorySafeList<VRage.Game.ModAPI.Ingame.IMyEntity>, IMyShipWelder>("BuildAndRepair.PossibleCollectTargets");
                         propertyPossibleCollectTargetsList.SupportsMultipleBlocks = false;
                         propertyPossibleCollectTargetsList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.GetPossibleCollectingTargetsList();
+                            return system?.GetPossibleCollectingTargetsList().ToMemorySafeList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPossibleCollectTargetsList);
 
