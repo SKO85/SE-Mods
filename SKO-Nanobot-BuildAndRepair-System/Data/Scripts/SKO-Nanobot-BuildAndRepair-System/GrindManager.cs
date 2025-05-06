@@ -5,6 +5,23 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public static class GrindManager
     {
+        private static BlockSystemAssignmentHandler _assignmentHandler = new BlockSystemAssignmentHandler();
+
+        public static bool TryAssign(IMySlimBlock block, long systemId)
+        {
+            return _assignmentHandler.TryAssign(block, systemId);
+        }
+
+        public static void ReleaseAll(long systemId)
+        {
+            _assignmentHandler.ReleaseAll(systemId);
+        }
+
+        public static void Cleanup(IMySlimBlock block)
+        {
+            _assignmentHandler.Cleanup(block);
+        }
+
         public static void TryGrinding(
             NanobotBuildAndRepairSystemBlock block,
             out bool grinding,
@@ -17,8 +34,8 @@ namespace SKONanobotBuildAndRepairSystem
             transporting = false;
             currentGrindingBlock = null;
 
-            if (!PowerManager.HasRequiredElectricPower(block))
-                return;
+            var hasRequiredPower = PowerManager.HasRequiredElectricPower(block);
+            if (!hasRequiredPower) return;
 
             lock (block.State.PossibleGrindTargets)
             {
@@ -26,6 +43,16 @@ namespace SKONanobotBuildAndRepairSystem
 
                 foreach (var targetData in block.State.PossibleGrindTargets)
                 {
+                    if(targetData.Block != null && targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed)
+                    {
+                        continue;
+                    }
+
+                    if (!TryAssign(targetData.Block, block.Entity.EntityId))
+                    {
+                        continue;
+                    }
+
                     if (cubeGrid == null)
                     {
                         cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;

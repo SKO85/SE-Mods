@@ -9,6 +9,7 @@ namespace SKONanobotBuildAndRepairSystem
     using VRage;
     using VRage.ModAPI;
     using VRage.Scripting.MemorySafeTypes;
+    using VRage.Utils;
     using VRageMath;
 
     [Flags]
@@ -23,6 +24,14 @@ namespace SKONanobotBuildAndRepairSystem
         /// Search Target blocks in bounding boy independend of connection
         /// </summary>
         BoundingBox = 0x0002
+    }
+
+    [Flags]
+    public enum WeldTo
+    {
+        WeldToFull = 0x0001,
+        WeldToFunctionalOnly = 0x0002,
+        Skeleton = 0x0003
     }
 
     [Flags]
@@ -73,12 +82,6 @@ namespace SKONanobotBuildAndRepairSystem
     }
 
     [Flags]
-    public enum AutoWeldOptions
-    {
-        FunctionalOnly = 0x0001
-    }
-
-    [Flags]
     public enum VisualAndSoundEffects
     {
         WeldingVisualEffect = 0x00000001,
@@ -98,7 +101,7 @@ namespace SKONanobotBuildAndRepairSystem
         private static readonly List<IMyTerminalControl> CustomControls = new List<IMyTerminalControl>();
 
         private static IMyTerminalControl _HelpOthers;
-        private static IMyTerminalControlSeparator _SeparateWeldOptions;
+        private static IMyTerminalControlSeparator _SeparateWeldOptions;        
 
         private static IMyTerminalControlSlider _IgnoreColorHueSlider;
         private static IMyTerminalControlSlider _IgnoreColorSaturationSlider;
@@ -208,6 +211,39 @@ namespace SKONanobotBuildAndRepairSystem
                     label.Label = Texts.ModeSettings_Headline;
                     CustomControls.Add(label);
                     {
+                        // --- AutoPowerOffOnIdle
+                        checkbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyShipWelder>("AutoPowerOffOnIdle");
+                        checkbox.Title = MyStringId.GetOrCompute($"Power Off when Idle ({Constants.LastTaskTimeCheckMinutes} min)");
+                        checkbox.Tooltip = MyStringId.GetOrCompute($"Automatically disables the block when idle for more than {Constants.LastTaskTimeCheckMinutes} minutes.");
+                        checkbox.Enabled = (block) => { return true; };
+                        checkbox.Visible = (block) => { return true; };
+                        checkbox.Getter = (block) =>
+                        {
+                            var system = GetSystem(block);
+                            return system != null && system.Settings.UseAutoPowerOffWhenIdle == 1;
+                        };
+
+                        checkbox.Setter = (block, value) =>
+                        {
+                            var system = GetSystem(block);
+                            if (system != null)
+                            {
+                                if(value)
+                                {
+                                    system.Settings.UseAutoPowerOffWhenIdle = 1;
+                                }
+                                else
+                                {
+                                    system.Settings.UseAutoPowerOffWhenIdle = 0;
+                                }
+                            }
+                        };
+
+                        checkbox.SupportsMultipleBlocks = true;
+                        CreateCheckBoxAction("AutoPowerOffOnIdle", checkbox);
+                        CustomControls.Add(checkbox);
+                        CreateProperty(checkbox, true);
+
                         // --- Select search mode
                         var onlyOneAllowed = (NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedSearchModes & (NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedSearchModes - 1)) == 0;
                         comboBox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCombobox, IMyShipWelder>("Mode");
@@ -558,41 +594,76 @@ namespace SKONanobotBuildAndRepairSystem
                             CreateProperty(checkbox, NanobotBuildAndRepairSystemMod.Settings.Welder.AllowBuildFixed || !weldingAllowed);
 
                             //--Weld to functional only
-                            checkbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyShipWelder>("WeldOptionFunctionalOnly");
-                            checkbox.Title = Texts.WeldToFuncOnly;
-                            checkbox.Tooltip = Texts.WeldToFuncOnly_Tooltip;
-                            checkbox.OnText = MySpaceTexts.SwitchText_On;
-                            checkbox.OffText = MySpaceTexts.SwitchText_Off;
-                            checkbox.Enabled = !weldingAllowed ? isReadonly : isBaRSystem;
-                            checkbox.Visible = isWeldingAllowed;
-                            checkbox.Getter = (block) =>
+                            comboBox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCombobox, IMyShipWelder>("WeldToCombobox");
+                            comboBox.Title = MyStringId.GetOrCompute("Weld to");
+                            comboBox.Tooltip = Texts.WorkMode_Tooltip;
+                            comboBox.Enabled = (_) => true;
+                            comboBox.ComboBoxContent = (list) =>
                             {
-                                var system = GetSystem(block);
-                                return system != null && (system.Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0;
+                                list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WeldTo.WeldToFull, Value = MyStringId.GetOrCompute("Weld to full") });
+                                list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WeldTo.WeldToFunctionalOnly, Value = MyStringId.GetOrCompute("Weld to Functional Only") });
+                                //list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WeldTo.WeldTo10Percent, Value = MyStringId.GetOrCompute("Weld to ~20%") });
                             };
-                            checkbox.Setter = (block, value) =>
+
+                            comboBox.Getter = (block) =>
                             {
                                 var system = GetSystem(block);
-                                if (system != null && isWeldingAllowed(block))
+                                if (system == null)
+                                    return 0;
+                                else return (long)system.Settings.WeldTo;                                
+                            };
+
+                            comboBox.Setter = (block, value) =>
+                            {
+                                var system = GetSystem(block);
+                                if (system != null)
                                 {
-                                    if (value)
-                                    {
-                                        system.Settings.WeldOptions = system.Settings.WeldOptions | AutoWeldOptions.FunctionalOnly;
-                                        foreach (var ctrl in CustomControls)
-                                        {
-                                            if (ctrl.Id.Contains("WeldOption")) ctrl.UpdateVisual();
-                                        }
-                                    }
-                                    else
-                                    {
-                                        system.Settings.WeldOptions = system.Settings.WeldOptions & ~AutoWeldOptions.FunctionalOnly;
-                                    }
+                                    system.Settings.WeldTo = (WeldTo)value;                                    
                                 }
                             };
-                            checkbox.SupportsMultipleBlocks = true;
-                            CreateCheckBoxAction("WeldOptionFunctionalOnly", checkbox);
-                            CustomControls.Add(checkbox);
-                            CreateProperty(checkbox, !weldingAllowed);
+
+                            comboBox.SupportsMultipleBlocks = true;
+                            CustomControls.Add(comboBox);
+                            CreateProperty(comboBox, false);
+
+
+
+
+                            //checkbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyShipWelder>("WeldOptionFunctionalOnly");
+                            //checkbox.Title = Texts.WeldToFuncOnly;
+                            //checkbox.Tooltip = Texts.WeldToFuncOnly_Tooltip;
+                            //checkbox.OnText = MySpaceTexts.SwitchText_On;
+                            //checkbox.OffText = MySpaceTexts.SwitchText_Off;
+                            //checkbox.Enabled = !weldingAllowed ? isReadonly : isBaRSystem;
+                            //checkbox.Visible = isWeldingAllowed;
+                            //checkbox.Getter = (block) =>
+                            //{
+                            //    var system = GetSystem(block);
+                            //    return system != null && (system.Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0;
+                            //};
+                            //checkbox.Setter = (block, value) =>
+                            //{
+                            //    var system = GetSystem(block);
+                            //    if (system != null && isWeldingAllowed(block))
+                            //    {
+                            //        if (value)
+                            //        {
+                            //            system.Settings.WeldOptions = system.Settings.WeldOptions | AutoWeldOptions.FunctionalOnly;
+                            //            foreach (var ctrl in CustomControls)
+                            //            {
+                            //                if (ctrl.Id.Contains("WeldOption")) ctrl.UpdateVisual();
+                            //            }
+                            //        }
+                            //        else
+                            //        {
+                            //            system.Settings.WeldOptions = system.Settings.WeldOptions & ~AutoWeldOptions.FunctionalOnly;
+                            //        }
+                            //    }
+                            //};
+                            //checkbox.SupportsMultipleBlocks = true;
+                            //CreateCheckBoxAction("WeldOptionFunctionalOnly", checkbox);
+                            //CustomControls.Add(checkbox);
+                            //CreateProperty(checkbox, !weldingAllowed);
                         }
 
                         // -- Priority Welding

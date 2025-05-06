@@ -67,6 +67,8 @@
     <Compile Include="SafeZoneProtection.cs" />
     <Compile Include="ShieldApi.cs" />
     <Compile Include="TerminalControlManager.cs" />
+    <Compile Include="BlockSystemAssignmentHandler.cs" />
+    <Compile Include="UtilsCache.cs" />
     <Compile Include="UtilsPlayer.cs" />
     <Compile Include="UtilsFaction.cs" />
     <Compile Include="Utils.cs" />
@@ -144,6 +146,10 @@
     <Reference Include="VRage.Render, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Render.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Scripting, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Scripting.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

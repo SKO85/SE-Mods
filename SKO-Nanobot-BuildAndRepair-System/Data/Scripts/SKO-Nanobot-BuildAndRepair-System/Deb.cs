@@ -1,7 +1,4 @@
-﻿using Sandbox.ModAPI;
-using VRage.Utils;
-
-namespace SKONanobotBuildAndRepairSystem
+﻿namespace SKONanobotBuildAndRepairSystem
 {
     internal class Deb
     {
@@ -11,8 +8,9 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (EnableDebug)
             {
-                MyAPIGateway.Utilities.ShowMessage("Nanobot Debug", msg);
-                MyLog.Default.WriteLineAndConsole($"Nanobot Debug: {msg}");
+                // MyAPIGateway.Utilities.ShowMessage("Nanobot Debug", msg);
+                Logging.Instance?.Write($"Nanobot Debug: {msg}");
+                // MyLog.Default.WriteLineAndConsole($"Nanobot Debug: {msg}");
             }
         }
     }
