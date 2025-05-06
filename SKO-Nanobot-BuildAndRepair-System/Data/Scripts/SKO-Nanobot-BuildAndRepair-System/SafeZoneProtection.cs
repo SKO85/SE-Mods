@@ -11,7 +11,7 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public static class SafeZoneProtection
     {
-        private static readonly int IntervalToCacheSeconds = 10;
+        private static readonly int IntervalToCacheSeconds = 15;
 
         public struct EntityProtectedState
         {
@@ -31,13 +31,11 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(GrindingNotAllowedCache[entityId].Checked).TotalSeconds > IntervalToCacheSeconds)
                     {
-                        Deb.Write("Cache expired.");
                         EntityProtectedState state;
                         GrindingNotAllowedCache.TryRemove(entityId, out state);
                     }
                     else
                     {
-                        Deb.Write("Cached found");
                         return GrindingNotAllowedCache[entityId].IsAllowed;
                     }
                 }
@@ -59,7 +57,6 @@ namespace SKONanobotBuildAndRepairSystem
                     IsAllowed = isAllowed,
                     Checked = MyAPIGateway.Session.ElapsedPlayTime
                 };
-                Deb.Write($"Set cache: {isAllowed}");
             }
             catch
             {

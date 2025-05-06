@@ -39,6 +39,7 @@ namespace SKONanobotBuildAndRepairSystem
         public static readonly MyDefinitionId ElectricityId = new MyDefinitionId(typeof(VRage.Game.ObjectBuilders.Definitions.MyObjectBuilder_GasProperties), "Electricity");
         private static readonly MyStringId RangeGridResourceId = MyStringId.GetOrCompute("WelderGrid");
         private static readonly Random _RandomDelay = new Random();
+        private TimeSpan LastTaskTime = new TimeSpan();
 
         private Action<IMyTerminalBlock> _onEnabledChanged;
         private Action<IMyCubeBlock> _onIsWorkingChanged;
@@ -426,6 +427,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (MyAPIGateway.Session.IsServer)
                 {
                     _CreativeModeActive = MyAPIGateway.Session.CreativeMode;
+
                     if (!fast)
                     {
                         CleanupFriendlyDamage();
@@ -479,8 +481,22 @@ namespace SKONanobotBuildAndRepairSystem
             }
             catch (Exception ex)
             {
-                Logging.Instance?.Write(Logging.Level.Error, "BuildAndRepairSystemBlock {0}: UpdateBeforeSimulation10/100 Exception:{1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), ex);
+                Logging.Instance?.Write(Logging.Level.Error, "BuildAndRepairSystemBlock {0}: UpdateBeforeSimulation10/100 Exception:{1} {2}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), ex, ex.StackTrace);
             }
+        }
+
+        private bool IsIdle()
+        {
+            var ready = _Welder.Enabled && _Welder.IsWorking && _Welder.IsFunctional;
+            if(ready)
+            {
+                if(State.Welding || State.NeedWelding || State.Transporting || State.Grinding || State.NeedGrinding)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -504,6 +520,19 @@ namespace SKONanobotBuildAndRepairSystem
             
             if (ready)
             {
+                // Check if idle long time.
+                if(!IsIdle())
+                {
+                    LastTaskTime = MyAPIGateway.Session.ElapsedPlayTime;
+                }
+                else
+                {
+                    if(Settings.UseAutoPowerOffWhenIdle == 1 && MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTaskTime).TotalMinutes >= Constants.LastTaskTimeCheckMinutes)
+                    {
+                        _Welder.Enabled = false;
+                    }
+                }
+
                 Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: ServerTryWeldingGrindingCollecting Welder ready: Enabled={1}, IsWorking={2}, IsFunctional={3}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), _Welder.Enabled, _Welder.IsWorking, _Welder.IsFunctional);
 
                 InventoryManager.TryPushInventory(this);
@@ -631,7 +660,6 @@ namespace SKONanobotBuildAndRepairSystem
             UpdateCustomInfo(missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged || readyChanged || inventoryFullChanged || limitsExceededChanged);
         }
 
-
         public bool IsWelderShielded()
         {
             try
@@ -650,9 +678,6 @@ namespace SKONanobotBuildAndRepairSystem
 
             return false;
         }
-
-                  
-
 
         /// <summary>
         ///
@@ -709,10 +734,12 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (!Welder.IsWorking)
             {
-                Deb.Write($"Block has been disabled. Release blocks.");
                 GrindManager.ReleaseAll(Entity.EntityId);
-                WeldManager.ReleaseAll(Entity.EntityId);
+                WeldManager.ReleaseAll(Entity.EntityId);                
             }
+
+            InventoryManager.EmptyInventory(this);
+            LastTaskTime = MyAPIGateway.Session.ElapsedPlayTime;
         }
 
         /// <summary>
@@ -835,10 +862,10 @@ namespace SKONanobotBuildAndRepairSystem
                     return target.IsFullIntegrity;
                 }
                 else if(Settings.WeldTo == WeldTo.WeldToFunctionalOnly)
-                {                    
+                {
                     return target.Integrity >= target.MaxIntegrity * def.CriticalIntegrityRatio;
                 }
-                else if(Settings.WeldTo == WeldTo.WeldTo10Percent)
+                else if(Settings.WeldTo == WeldTo.Skeleton)
                 {
                     return target.Integrity >= target.MaxIntegrity * Constants.MaxCreateIntegrityRatio;
                 }
@@ -858,7 +885,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 return UtilsInventory.IntegrityLevel.Functional;
             }
-            else if (Settings.WeldTo == WeldTo.WeldTo10Percent)
+            else if (Settings.WeldTo == WeldTo.Skeleton)
             {
                 return UtilsInventory.IntegrityLevel.Skeleton;
             }
@@ -1740,13 +1767,19 @@ namespace SKONanobotBuildAndRepairSystem
             emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
             var areaBoundingBox = Settings.CorrectedAreaBoundingBox.TransformFast(emitterMatrix);
             List<IMyEntity> entityInRange = null;
-            lock (MyAPIGateway.Entities)
+            
+            var cacheId = $"AsyncAddBlocksOfBox-{Entity.EntityId}";
+
+            entityInRange = UtilsCache.GetOrAdd(cacheId, 10, () =>
             {
-                //API not thread save !!!
-                entityInRange = MyAPIGateway.Entities.GetElementsInBox(ref areaBoundingBox);
-                //The list contains grid, Fatblocks and Damaged blocks in range. But as I would like to use the searchfunction also for grinding,
-                //I only could use the grids and have to traverse through the grids to get all slimblocks.
-            }
+                lock (MyAPIGateway.Entities)
+                {
+                    return MyAPIGateway.Entities.GetElementsInBox(ref areaBoundingBox);
+                }
+            });
+
+            // MyGamePruningStructure.GetTopMostEntitiesInBox(ref areaBoundingBox, entityInRange, MyEntityQueryType.Both);
+
             if (entityInRange != null)
             {
                 foreach (var entity in entityInRange)
@@ -1803,6 +1836,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, List<IMyCubeGrid> grids, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
         {
+
             if (!State.Ready) return; //Block not ready
             if (grids.Contains(cubeGrid)) return; //Allready parsed
 
@@ -1810,7 +1844,15 @@ namespace SKONanobotBuildAndRepairSystem
             grids.Add(cubeGrid);
 
             var newBlocks = new List<IMySlimBlock>();
-            cubeGrid.GetBlocks(newBlocks);
+
+            // Get blocks via cache.
+            var cacheId = $"AsyncAddBlocksOfGrid-{Entity.EntityId}-grid-{cubeGrid.EntityId}";
+            newBlocks = UtilsCache.GetOrAdd(cacheId, 10, () =>
+            {
+                var tmpBlocks = new List<IMySlimBlock>();
+                cubeGrid.GetBlocks(tmpBlocks);
+                return tmpBlocks;
+            });           
 
             foreach (var slimBlock in newBlocks)
             {
@@ -1987,12 +2029,16 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private bool AsyncAddBlockIfGrindTarget(ref MyOrientedBoundingBoxD areaBox, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMySlimBlock block, List<TargetBlockData> possibleGrindTargets)
         {
+            //block.CubeGrid.BlocksDestructionEnabled is not available for modding, so at least check if general destruction is enabled
+            if ((MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode) && !MyAPIGateway.Session.SessionSettings.DestructibleBlocks) return false;
+
+            // Is being projected?
+            if (block.IsProjected())
+                return false;
+
             // Do not allow grinding if our shields are up.
             if (IsWelderShielded() && block.CubeGrid.EntityId != Welder.CubeGrid.EntityId)
                 return false;
-
-            //block.CubeGrid.BlocksDestructionEnabled is not available for modding, so at least check if general destruction is enabled
-            if ((MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode) && !MyAPIGateway.Session.SessionSettings.DestructibleBlocks) return false;
 
             //block.CubeGrid.Editable is not available for modding -> wait until it might be availabel
             //if (!block.CubeGrid.Editable) return;
@@ -2001,11 +2047,7 @@ namespace SKONanobotBuildAndRepairSystem
                 Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: Grind Check Block {1} Projected={2} AutoGrindRelation={3} Relation={4} UseGrindColor={5} HasGrindColor={6} ({7},{8})/", // ActionAllowed={10}",
                 Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block), block.IsProjected(), autoGrindRelation, block.GetUserRelationToOwner(_Welder.OwnerId), useGrindColor,
                    IsColorNearlyEquals(grindColor, block.GetColorMask()), grindColor, block.GetColorMask().PackHSVToUint());
-            }
-
-            // Is being projected?
-            if (block.IsProjected())
-                return false;
+            }            
 
             var autoGrind = autoGrindRelation != 0 && BlockGrindPriority.GetEnabled(block);
             if (autoGrind)
@@ -2040,14 +2082,12 @@ namespace SKONanobotBuildAndRepairSystem
                     // Is protected by SafeZone?
                     if (SafeZoneProtection.IsProtected(block, Welder))
                     {
-                        Deb.Write("Block {0} is protected by SafeZone");
                         return false;
                     }                        
 
                     // Is protected by shields.
                     if (GrindManager.IsShieldProtected(this, block))
                     {
-                        Deb.Write("Block {0} is protected by SafeZone");
                         return false;
                     }                        
 

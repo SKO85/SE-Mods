@@ -31,10 +31,8 @@ namespace SKONanobotBuildAndRepairSystem
             
             var needRepair = !target.IsDestroyed && (target.FatBlock == null || !target.FatBlock.Closed) && (target.Integrity < neededIntegrityLevel || target.HasDeformation);
 
-            // Deb.Write($"Need repair: {needRepair}");
-
             return needRepair;
-        }
+        }    
 
         /// <summary>
         /// Is the grid a projected grid

@@ -57,6 +57,38 @@ namespace SKONanobotBuildAndRepairSystem
             tempInventoryItems.Clear();
         }
 
+        public static void EmptyInventory(NanobotBuildAndRepairSystemBlock block)
+        {
+            var transportInventory = block._TransportInventory;
+            var welderInventory = block.Welder.GetInventory(0);
+
+            if (welderInventory != null)
+            {
+                if (!welderInventory.Empty())
+                {
+                    welderInventory.PushComponents(block._PossibleSources, null);
+                }
+
+                var tempInventoryItems = new List<MyInventoryItem>();
+                transportInventory.GetItems(tempInventoryItems);
+
+                for (var i = tempInventoryItems.Count - 1; i >= 0; i--)
+                {
+                    var item = tempInventoryItems[i];
+                    if (item == null) continue;
+
+                    var amount = item.Amount;
+                    var moveableAmount = welderInventory.MaxItemsAddable(amount, item.Type);
+
+                    if (moveableAmount > 0)
+                    {
+                        welderInventory.TransferItemFrom(transportInventory, i, null, true, moveableAmount, false);
+                    }
+                }
+                tempInventoryItems.Clear();
+            }
+        }
+
         public static bool EmptyTransportInventory(NanobotBuildAndRepairSystemBlock block, bool push)
         {
             var transportInventory = block._TransportInventory;

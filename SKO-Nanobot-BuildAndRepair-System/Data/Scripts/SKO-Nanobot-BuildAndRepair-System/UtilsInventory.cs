@@ -2,12 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Sandbox.Definitions;
-using Sandbox.Game.Entities.Cube;
 using Sandbox.ModAPI;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
-using static SKONanobotBuildAndRepairSystem.Logging;
 using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 using MyItemType = VRage.Game.ModAPI.Ingame.MyItemType;
 
@@ -265,8 +263,6 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
             if (blockDefinition.Components == null || blockDefinition.Components.Length == 0) return;
-
-            Deb.Write($"Missing components for: {blockDefinition.DisplayNameText}");
 
             if (level == IntegrityLevel.Create)
             {

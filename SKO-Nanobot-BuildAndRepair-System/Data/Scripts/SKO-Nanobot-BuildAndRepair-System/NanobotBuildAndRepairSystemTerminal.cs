@@ -31,7 +31,7 @@ namespace SKONanobotBuildAndRepairSystem
     {
         WeldToFull = 0x0001,
         WeldToFunctionalOnly = 0x0002,
-        WeldTo10Percent = 0x0003
+        Skeleton = 0x0003
     }
 
     [Flags]
@@ -101,7 +101,7 @@ namespace SKONanobotBuildAndRepairSystem
         private static readonly List<IMyTerminalControl> CustomControls = new List<IMyTerminalControl>();
 
         private static IMyTerminalControl _HelpOthers;
-        private static IMyTerminalControlSeparator _SeparateWeldOptions;
+        private static IMyTerminalControlSeparator _SeparateWeldOptions;        
 
         private static IMyTerminalControlSlider _IgnoreColorHueSlider;
         private static IMyTerminalControlSlider _IgnoreColorSaturationSlider;
@@ -211,6 +211,39 @@ namespace SKONanobotBuildAndRepairSystem
                     label.Label = Texts.ModeSettings_Headline;
                     CustomControls.Add(label);
                     {
+                        // --- AutoPowerOffOnIdle
+                        checkbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyShipWelder>("AutoPowerOffOnIdle");
+                        checkbox.Title = MyStringId.GetOrCompute($"Power Off when Idle ({Constants.LastTaskTimeCheckMinutes} min)");
+                        checkbox.Tooltip = MyStringId.GetOrCompute($"Automatically disables the block when idle for more than {Constants.LastTaskTimeCheckMinutes} minutes.");
+                        checkbox.Enabled = (block) => { return true; };
+                        checkbox.Visible = (block) => { return true; };
+                        checkbox.Getter = (block) =>
+                        {
+                            var system = GetSystem(block);
+                            return system != null && system.Settings.UseAutoPowerOffWhenIdle == 1;
+                        };
+
+                        checkbox.Setter = (block, value) =>
+                        {
+                            var system = GetSystem(block);
+                            if (system != null)
+                            {
+                                if(value)
+                                {
+                                    system.Settings.UseAutoPowerOffWhenIdle = 1;
+                                }
+                                else
+                                {
+                                    system.Settings.UseAutoPowerOffWhenIdle = 0;
+                                }
+                            }
+                        };
+
+                        checkbox.SupportsMultipleBlocks = true;
+                        CreateCheckBoxAction("AutoPowerOffOnIdle", checkbox);
+                        CustomControls.Add(checkbox);
+                        CreateProperty(checkbox, true);
+
                         // --- Select search mode
                         var onlyOneAllowed = (NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedSearchModes & (NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedSearchModes - 1)) == 0;
                         comboBox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCombobox, IMyShipWelder>("Mode");
@@ -569,7 +602,7 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WeldTo.WeldToFull, Value = MyStringId.GetOrCompute("Weld to full") });
                                 list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WeldTo.WeldToFunctionalOnly, Value = MyStringId.GetOrCompute("Weld to Functional Only") });
-                                list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WeldTo.WeldTo10Percent, Value = MyStringId.GetOrCompute("Weld to ~20%") });
+                                //list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WeldTo.WeldTo10Percent, Value = MyStringId.GetOrCompute("Weld to ~20%") });
                             };
 
                             comboBox.Getter = (block) =>

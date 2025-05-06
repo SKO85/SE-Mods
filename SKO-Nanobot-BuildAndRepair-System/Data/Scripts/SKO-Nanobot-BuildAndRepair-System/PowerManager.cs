@@ -36,6 +36,9 @@ namespace SKONanobotBuildAndRepairSystem
             if (block.Welder == null)
                 return 0f;
 
+            if (!block.Welder.Enabled || !block.Welder.IsWorking)
+                return 0f;
+
             // Standby Power.
             float required = block.Settings.MaximumRequiredElectricPowerStandby;
 

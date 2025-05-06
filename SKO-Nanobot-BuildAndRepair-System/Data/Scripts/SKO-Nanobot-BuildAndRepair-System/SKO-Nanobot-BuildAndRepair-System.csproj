@@ -67,6 +67,8 @@
     <Compile Include="SafeZoneProtection.cs" />
     <Compile Include="ShieldApi.cs" />
     <Compile Include="TerminalControlManager.cs" />
+    <Compile Include="BlockSystemAssignmentHandler.cs" />
+    <Compile Include="UtilsCache.cs" />
     <Compile Include="UtilsPlayer.cs" />
     <Compile Include="UtilsFaction.cs" />
     <Compile Include="Utils.cs" />

@@ -441,6 +441,7 @@ namespace SKONanobotBuildAndRepairSystem
         private SearchModes _SearchMode;
         private WorkModes _WorkMode;
         private WeldTo _WeldTo;
+        private uint _UseAutoPowerOffWhenIdle;
         private VRage.Game.ModAPI.Ingame.IMySlimBlock _CurrentPickedWeldingBlock;
         private VRage.Game.ModAPI.Ingame.IMySlimBlock _CurrentPickedGrindingBlock;
         private TimeSpan _LastStored;
@@ -498,24 +499,7 @@ namespace SKONanobotBuildAndRepairSystem
                     Changed = 3u;
                 }
             }
-        }
-
-        [ProtoMember(201), XmlElement]
-        public WeldTo WeldTo
-        {
-            get
-            {
-                return _WeldTo;
-            }
-            set
-            {
-                if (_WeldTo != value)
-                {
-                    _WeldTo = value;
-                    Changed = 3u;
-                }
-            }
-        }       
+        }        
 
         [ProtoMember(31), XmlElement]
         public Vector3 IgnoreColor
@@ -889,6 +873,42 @@ namespace SKONanobotBuildAndRepairSystem
         [XmlIgnore]
         public float MaximumRequiredElectricPowerTransport { get; private set; }
 
+        [ProtoMember(201), XmlElement]
+        public WeldTo WeldTo
+        {
+            get
+            {
+                return _WeldTo;
+            }
+            set
+            {
+                if (_WeldTo != value)
+                {
+                    _WeldTo = value;
+                    Changed = 3u;
+                }
+            }
+        }
+
+        [ProtoMember(202), XmlElement]
+        public uint UseAutoPowerOffWhenIdle
+        {
+            get
+            {
+                return _UseAutoPowerOffWhenIdle;
+            }
+            set
+            {
+                if (_UseAutoPowerOffWhenIdle != value)
+                {
+                    _UseAutoPowerOffWhenIdle = value;
+                    Changed = 3u;
+                }
+            }
+        }
+
+
+
         //+X = Forward -X = Backward
         //+Y = Left    -Y = Right
         //+Z = Up      -Z = Down
@@ -924,6 +944,7 @@ namespace SKONanobotBuildAndRepairSystem
             _LastTransmitted = MyAPIGateway.Session.ElapsedPlayTime;
 
             _WeldTo = WeldTo.WeldToFull;
+            _UseAutoPowerOffWhenIdle = 1;
 
             RecalcAreaBoundigBox();
         }
@@ -1021,7 +1042,9 @@ namespace SKONanobotBuildAndRepairSystem
             _SoundVolume = newSettings.SoundVolume;
             _SearchMode = newSettings.SearchMode;
             _WorkMode = newSettings.WorkMode;
+            
             _WeldTo = newSettings.WeldTo;
+            _UseAutoPowerOffWhenIdle = newSettings.UseAutoPowerOffWhenIdle;
 
             RecalcAreaBoundigBox();
             _IgnoreColorPacked = _IgnoreColor.PackHSVToUint();
