@@ -22,7 +22,8 @@ namespace SKONanobotBuildAndRepairSystem
             
             if(integrityLevel == UtilsInventory.IntegrityLevel.Functional)
             {
-                neededIntegrityLevel = target.MaxIntegrity * ((MyCubeBlockDefinition)target.BlockDefinition).CriticalIntegrityRatio;
+                var addIntegrity = target.MaxIntegrity * 0.03f;
+                neededIntegrityLevel = (target.MaxIntegrity + addIntegrity) * ((MyCubeBlockDefinition)target.BlockDefinition).CriticalIntegrityRatio;
             }
             else if(integrityLevel == UtilsInventory.IntegrityLevel.Skeleton)
             {
@@ -117,16 +118,11 @@ namespace SKONanobotBuildAndRepairSystem
                 var terminalBlock = slimBlock.FatBlock as IMyTerminalBlock;
                 if (terminalBlock != null)
                 {
-                    return
-                        $"{(terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid")}.{terminalBlock.CustomName}";
+                    return (terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid") + "." + terminalBlock.CustomName;
                 }
-                else
-                {
-                    return
-                        $"{(slimBlock.CubeGrid != null ? slimBlock.CubeGrid.DisplayName : "Unknown Grid")}.{slimBlock.BlockDefinition.DisplayNameText}";
-                }
+                return (slimBlock.CubeGrid != null ? slimBlock.CubeGrid.DisplayName : "Unknown Grid") + "." + slimBlock.BlockDefinition.DisplayNameText;
             }
-            else return "(none)";
+            return "(none)";
         }
 
         public static string BlockName(this VRage.Game.ModAPI.Ingame.IMySlimBlock slimBlock)
@@ -136,16 +132,14 @@ namespace SKONanobotBuildAndRepairSystem
                 var terminalBlock = slimBlock.FatBlock as Sandbox.ModAPI.Ingame.IMyTerminalBlock;
                 if (terminalBlock != null)
                 {
-                    return
-                        $"{(terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid")}.{terminalBlock.CustomName}";
+                    return (terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid") + "." + terminalBlock.CustomName;
                 }
                 else
                 {
-                    return
-                        $"{(slimBlock.CubeGrid != null ? slimBlock.CubeGrid.DisplayName : "Unknown Grid")}.{slimBlock.BlockDefinition.ToString()}";
+                    return (slimBlock.CubeGrid != null ? slimBlock.CubeGrid.DisplayName : "Unknown Grid") + "." + slimBlock.BlockDefinition.ToString();
                 }
             }
-            else return "(none)";
+            return "(none)";
         }
 
         /// <summary>

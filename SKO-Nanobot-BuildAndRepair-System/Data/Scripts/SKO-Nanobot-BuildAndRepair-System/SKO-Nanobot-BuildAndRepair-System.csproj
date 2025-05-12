@@ -75,6 +75,8 @@
     <Compile Include="UtilsInventory.cs" />
     <Compile Include="UtilsProductionBlock.cs" />
     <Compile Include="UtilsSynchronization.cs" />
+    <Compile Include="Voxels\OreDeposit.cs" />
+    <Compile Include="Voxels\Scanner.cs" />
     <Compile Include="WeldManager.cs" />
   </ItemGroup>
   <ItemGroup>

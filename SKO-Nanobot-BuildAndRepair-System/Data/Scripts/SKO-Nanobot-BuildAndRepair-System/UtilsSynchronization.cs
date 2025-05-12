@@ -39,6 +39,7 @@ namespace SKONanobotBuildAndRepairSystem
         public static SyncEntityId GetSyncId(object item)
         {
             if (item == null) return null;
+
             var slimBlock = item as IMySlimBlock;
             if (slimBlock != null)
             {
@@ -85,6 +86,7 @@ namespace SKONanobotBuildAndRepairSystem
                     return entity;
                 }
             }
+
             if (id.GridId != 0 && id.Position != null)
             {
                 IMyEntity entity;
@@ -94,10 +96,12 @@ namespace SKONanobotBuildAndRepairSystem
                     return grid?.GetCubeBlock(id.Position.Value);
                 }
             }
+
             if (id.Position != null)
             {
                 return id.Position;
             }
+
             if (id.Box != null)
             {
                 IMyEntity entity;
@@ -107,6 +111,7 @@ namespace SKONanobotBuildAndRepairSystem
                     return entity;
                 }
             }
+
             return null;
         }
 
@@ -116,8 +121,8 @@ namespace SKONanobotBuildAndRepairSystem
             var slimBlock = item as IMySlimBlock;
             if (slimBlock != null) return slimBlock;
 
-            var block = item as IMyCubeBlock;
-            return block?.SlimBlock;
+            var cubeBlock = item as IMyCubeBlock;
+            return cubeBlock != null ? cubeBlock.SlimBlock : null;
         }
 
         public static T GetItemAs<T>(SyncEntityId id) where T : class
