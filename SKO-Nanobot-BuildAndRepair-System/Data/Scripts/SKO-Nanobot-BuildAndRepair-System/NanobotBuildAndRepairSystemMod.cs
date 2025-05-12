@@ -39,6 +39,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     TrySyncSettings();
                 }
+                
             }
         }
 
@@ -49,7 +50,15 @@ namespace SKONanobotBuildAndRepairSystem
             Logging.Instance?.Close();
             NanobotBuildAndRepairSystemTerminal.Dispose();
             base.UnloadData();
+
+            if (_chatHandlerRegistered)
+            {
+                MyAPIGateway.Utilities.MessageEntered -= CommandProcessor.OnChatCommand;
+                _chatHandlerRegistered = false;
+            }
         }
+
+        private static bool _chatHandlerRegistered = false;
 
         private void Init()
         {
@@ -68,7 +77,14 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             DamageHandler.Register();
-            MessageSyncHelper.RegisterAll();            MyAPIGateway.Utilities.MessageEntered += CommandProcessor.OnChatCommand;
+            MessageSyncHelper.RegisterAll();
+
+
+            if (!_chatHandlerRegistered)
+            {
+                MyAPIGateway.Utilities.MessageEntered += CommandProcessor.OnChatCommand;
+                _chatHandlerRegistered = true;
+            }
 
             Logging.Instance?.Write("NanobotBuildAndRepairSystemMod: Initialized");
         }
