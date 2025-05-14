@@ -54,7 +54,6 @@
     <Compile Include="InventoryManager.cs" />
     <Compile Include="Localization.cs" />
     <Compile Include="Logging.cs" />
-    <Compile Include="MessageHandlerRegistrar.cs" />
     <Compile Include="MessageSyncHelper.cs" />
     <Compile Include="NanobotBuildAndRepairSystemBlock.cs" />
     <Compile Include="NanobotBuildAndRepairSystemLocalization.cs" />
@@ -68,7 +67,6 @@
     <Compile Include="ShieldApi.cs" />
     <Compile Include="TerminalControlManager.cs" />
     <Compile Include="BlockSystemAssignmentHandler.cs" />
-    <Compile Include="UtilsCache.cs" />
     <Compile Include="UtilsPlayer.cs" />
     <Compile Include="UtilsFaction.cs" />
     <Compile Include="Utils.cs" />

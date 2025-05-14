@@ -1883,7 +1883,7 @@ namespace SKONanobotBuildAndRepairSystem
                         propertyWeldPriorityList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.BlockWeldPriority.GetList().ToMemorySafeList();
+                            return system?.BlockWeldPriority.GetList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyWeldPriorityList);
 
@@ -1945,7 +1945,7 @@ namespace SKONanobotBuildAndRepairSystem
                         propertyGrindPriorityList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.BlockGrindPriority.GetList().ToMemorySafeList();
+                            return system?.BlockGrindPriority.GetList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGrindPriorityList);
 
@@ -2007,7 +2007,7 @@ namespace SKONanobotBuildAndRepairSystem
                         propertyComponentClassList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.ComponentCollectPriority.GetList().ToMemorySafeList();
+                            return system?.ComponentCollectPriority.GetList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyComponentClassList);
 
@@ -2069,7 +2069,7 @@ namespace SKONanobotBuildAndRepairSystem
                         propertyMissingComponentsDict.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.GetMissingComponentsDict().ToMemorySafeDictionary(c=>c.Key, c=>c.Value);
+                            return system?.GetMissingComponentsDict();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyMissingComponentsDict);
 
@@ -2078,7 +2078,7 @@ namespace SKONanobotBuildAndRepairSystem
                         propertyPossibleWeldTargetsList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.GetPossibleWeldTargetsList().ToMemorySafeList();
+                            return system?.GetPossibleWeldTargetsList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPossibleWeldTargetsList);
 
@@ -2087,7 +2087,7 @@ namespace SKONanobotBuildAndRepairSystem
                         propertyPossibleGrindTargetsList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.GetPossibleGrindTargetsList().ToMemorySafeList();
+                            return system?.GetPossibleGrindTargetsList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPossibleGrindTargetsList);
 
@@ -2096,7 +2096,7 @@ namespace SKONanobotBuildAndRepairSystem
                         propertyPossibleCollectTargetsList.Getter = (block) =>
                         {
                             var system = GetSystem(block);
-                            return system?.GetPossibleCollectingTargetsList().ToMemorySafeList();
+                            return system?.GetPossibleCollectingTargetsList();
                         };
                         MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPossibleCollectTargetsList);
 

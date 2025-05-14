@@ -18,6 +18,7 @@ namespace SKONanobotBuildAndRepairSystem
     using VRage.Game.ModAPI;
     using VRage.ModAPI;
     using VRage.ObjectBuilders;
+    using VRage.Scripting.MemorySafeTypes;
     using VRage.Utils;
     using VRageMath;
     using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
@@ -755,13 +756,18 @@ namespace SKONanobotBuildAndRepairSystem
 
         private void IsWorkingChanged()
         {
-            if (!Welder.IsWorking)
+            try
             {
-                GrindManager.ReleaseAll(Entity.EntityId);
-                WeldManager.ReleaseAll(Entity.EntityId);
-            }
+                if (!Welder.IsWorking)
+                {
+                    GrindManager.ReleaseAll(Entity.EntityId);
+                    WeldManager.ReleaseAll(Entity.EntityId);
+                }
 
-            InventoryManager.EmptyInventory(this);
+                InventoryManager.EmptyInventory(this);
+            }
+            catch { }
+            
             LastTaskTime = MyAPIGateway.Session.ElapsedPlayTime;
         }
 
@@ -808,7 +814,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed || !target.FatBlock.IsVisible()))
                         {
-                            ((Sandbox.ModAPI.IMyProjector)cubeGridProjected.Projector).Build(target, _Welder.OwnerId, _Welder.EntityId, false, _Welder.SlimBlock.BuiltBy);
+                            ((Sandbox.ModAPI.IMyProjector)cubeGridProjected.Projector).Build(target, _Welder.OwnerId, _Welder.EntityId, true, _Welder.SlimBlock.BuiltBy);
                         }
 
                         //After creation we can't welding this projected block, we have to find the 'physical' block instead.
@@ -1792,17 +1798,11 @@ namespace SKONanobotBuildAndRepairSystem
             var areaBoundingBox = Settings.CorrectedAreaBoundingBox.TransformFast(emitterMatrix);
             List<IMyEntity> entityInRange = null;
 
-            var cacheId = $"AsyncAddBlocksOfBox-{Entity.EntityId}";
-
-            entityInRange = UtilsCache.GetOrAdd(cacheId, 10, () =>
+            // TODO: Cache this?
+            lock (MyAPIGateway.Entities)
             {
-                lock (MyAPIGateway.Entities)
-                {
-                    return MyAPIGateway.Entities.GetElementsInBox(ref areaBoundingBox);
-                }
-            });
-
-            // MyGamePruningStructure.GetTopMostEntitiesInBox(ref areaBoundingBox, entityInRange, MyEntityQueryType.Both);
+                entityInRange = MyAPIGateway.Entities.GetElementsInBox(ref areaBoundingBox);
+            }
 
             if (entityInRange != null)
             {
@@ -1869,14 +1869,8 @@ namespace SKONanobotBuildAndRepairSystem
 
             var newBlocks = new List<IMySlimBlock>();
 
-            // Get blocks via cache.
-            var cacheId = $"AsyncAddBlocksOfGrid-{Entity.EntityId}-grid-{cubeGrid.EntityId}";
-            newBlocks = UtilsCache.GetOrAdd(cacheId, 10, () =>
-            {
-                var tmpBlocks = new List<IMySlimBlock>();
-                cubeGrid.GetBlocks(tmpBlocks);
-                return tmpBlocks;
-            });
+            // TODO: Cache this?
+            cubeGrid.GetBlocks(newBlocks);
 
             foreach (var slimBlock in newBlocks)
             {
@@ -2390,9 +2384,9 @@ namespace SKONanobotBuildAndRepairSystem
         /// Get a list of currently missing components (Scripting)
         /// </summary>
         /// <returns></returns>
-        internal Dictionary<VRage.Game.MyDefinitionId, int> GetMissingComponentsDict()
+        internal MemorySafeDictionary<VRage.Game.MyDefinitionId, int> GetMissingComponentsDict()
         {
-            var dict = new Dictionary<VRage.Game.MyDefinitionId, int>();
+            var dict = new MemorySafeDictionary<VRage.Game.MyDefinitionId, int>();
             lock (State.MissingComponents)
             {
                 foreach (var item in State.MissingComponents)
@@ -2407,9 +2401,9 @@ namespace SKONanobotBuildAndRepairSystem
         /// Get a list of currently build/repairable blocks (Scripting)
         /// </summary>
         /// <returns></returns>
-        internal List<VRage.Game.ModAPI.Ingame.IMySlimBlock> GetPossibleWeldTargetsList()
+        internal MemorySafeList<VRage.Game.ModAPI.Ingame.IMySlimBlock> GetPossibleWeldTargetsList()
         {
-            var list = new List<VRage.Game.ModAPI.Ingame.IMySlimBlock>();
+            var list = new MemorySafeList<VRage.Game.ModAPI.Ingame.IMySlimBlock>();
             lock (State.PossibleWeldTargets)
             {
                 foreach (var blockData in State.PossibleWeldTargets)
@@ -2424,9 +2418,9 @@ namespace SKONanobotBuildAndRepairSystem
         /// Get a list of currently grind blocks (Scripting)
         /// </summary>
         /// <returns></returns>
-        internal List<VRage.Game.ModAPI.Ingame.IMySlimBlock> GetPossibleGrindTargetsList()
+        internal MemorySafeList<VRage.Game.ModAPI.Ingame.IMySlimBlock> GetPossibleGrindTargetsList()
         {
-            var list = new List<VRage.Game.ModAPI.Ingame.IMySlimBlock>();
+            var list = new MemorySafeList<VRage.Game.ModAPI.Ingame.IMySlimBlock>();
             lock (State.PossibleGrindTargets)
             {
                 foreach (var blockData in State.PossibleGrindTargets)
@@ -2441,9 +2435,9 @@ namespace SKONanobotBuildAndRepairSystem
         /// Get a list of currently collectable floating objects (Scripting)
         /// </summary>
         /// <returns></returns>
-        internal List<VRage.Game.ModAPI.Ingame.IMyEntity> GetPossibleCollectingTargetsList()
+        internal MemorySafeList<VRage.Game.ModAPI.Ingame.IMyEntity> GetPossibleCollectingTargetsList()
         {
-            var list = new List<VRage.Game.ModAPI.Ingame.IMyEntity>();
+            var list = new MemorySafeList<VRage.Game.ModAPI.Ingame.IMyEntity>();
             lock (State.PossibleFloatingTargets)
             {
                 foreach (var floatingData in State.PossibleFloatingTargets)

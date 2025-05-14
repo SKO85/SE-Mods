@@ -15,6 +15,8 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         public static bool NeedRepair(this IMySlimBlock target, UtilsInventory.IntegrityLevel integrityLevel)
         {
+            if(target == null) return false;
+
             //I use target.HasDeformation && target.MaxDeformation > X) as I had several times both situations, a landing gear reporting HasDeformation or a block reporting target.MaxDeformation > 0.1 both weren't repairable and caused welding this blocks forever!
             //Now I had the case that target.HasDeformation = true and target.MaxDeformation=0 and the block was deformed -> I removed the double Check
             //target.IsFullyDismounted is equals to target.IsDestroyed

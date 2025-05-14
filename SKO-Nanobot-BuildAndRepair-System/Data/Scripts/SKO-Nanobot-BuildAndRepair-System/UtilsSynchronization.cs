@@ -121,8 +121,8 @@ namespace SKONanobotBuildAndRepairSystem
             var slimBlock = item as IMySlimBlock;
             if (slimBlock != null) return slimBlock;
 
-            var cubeBlock = item as IMyCubeBlock;
-            return cubeBlock != null ? cubeBlock.SlimBlock : null;
+            var block = item as IMyCubeBlock;
+            return block?.SlimBlock;
         }
 
         public static T GetItemAs<T>(SyncEntityId id) where T : class

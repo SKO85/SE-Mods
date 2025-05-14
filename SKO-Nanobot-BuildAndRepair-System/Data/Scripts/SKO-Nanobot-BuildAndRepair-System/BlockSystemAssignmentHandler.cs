@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using VRage.Game.ModAPI;
@@ -7,7 +8,7 @@ namespace SKONanobotBuildAndRepairSystem
 {
     internal class BlockSystemAssignmentHandler
     {
-        private readonly Dictionary<IMySlimBlock, BlockSystemAssignment> _assignments = new Dictionary<IMySlimBlock, BlockSystemAssignment>();
+        private readonly ConcurrentDictionary<IMySlimBlock, BlockSystemAssignment> _assignments = new ConcurrentDictionary<IMySlimBlock, BlockSystemAssignment>();
         private DateTime _lastCleanupTime = DateTime.MinValue;
         private readonly TimeSpan CleanupInterval = TimeSpan.FromSeconds(10);
         private readonly int MaxToKeepAssignedSeconds = 60;
