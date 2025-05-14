@@ -62,7 +62,7 @@ namespace SKONanobotBuildAndRepairSystem
             var transportInventory = block._TransportInventory;
             var welderInventory = block.Welder.GetInventory(0);
 
-            if (welderInventory != null)
+            if (transportInventory != null && welderInventory != null)
             {
                 if (!welderInventory.Empty())
                 {

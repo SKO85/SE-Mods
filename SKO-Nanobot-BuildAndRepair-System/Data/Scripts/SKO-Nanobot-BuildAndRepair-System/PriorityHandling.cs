@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using VRage.ModAPI;
+using VRage.Scripting.MemorySafeTypes;
 using VRage.Utils;
 
 namespace SKONanobotBuildAndRepairSystem
@@ -39,8 +40,8 @@ namespace SKONanobotBuildAndRepairSystem
     public abstract class PriorityHandling<C, I> : List<PrioItemState<C>> where C : PrioItem //where C : struct
     {
         private bool _HashDirty = true;
-        private readonly List<string> _ClassList = new List<string>();
-        private readonly Dictionary<int, int> _PrioHash = new Dictionary<int, int>();
+        private readonly MemorySafeList<string> _ClassList = new MemorySafeList<string>();
+        private readonly MemorySafeDictionary<int, int> _PrioHash = new MemorySafeDictionary<int, int>();
 
         public C Selected { get; private set; } //Visual
 
@@ -248,7 +249,7 @@ namespace SKONanobotBuildAndRepairSystem
             _HashDirty = true;
         }
 
-        internal List<string> GetList()
+        internal MemorySafeList<string> GetList()
         {
             if (_HashDirty) UpdateHash();
             return _ClassList;

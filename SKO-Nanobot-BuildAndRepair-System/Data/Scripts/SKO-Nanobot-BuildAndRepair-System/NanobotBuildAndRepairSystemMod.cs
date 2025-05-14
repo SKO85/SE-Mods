@@ -2,7 +2,6 @@
 using VRage.Game.Components;
 using System;
 using System.Collections.Generic;
-using VRage.Game.ModAPI;
 
 namespace SKONanobotBuildAndRepairSystem
 {
@@ -18,7 +17,6 @@ namespace SKONanobotBuildAndRepairSystem
         private static readonly TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);
         private static TimeSpan _lastSourcesAndTargetsUpdateTimer;
         private static TimeSpan _lastSyncModDataRequestSend;
-        internal static int TotalPCU = 0;
 
         public override void UpdateBeforeSimulation()
         {
@@ -95,53 +93,12 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (now - _lastSourcesAndTargetsUpdateTimer > SourcesAndTargetsUpdateTimerInterval)
             {
-                // Get all grids and get total PCU
-                //var gridBlocks = UtilsCache.GetOrAdd("All-Grids", 30, () =>
-                //{
-                //    var grids = GetGrids();
-                //    var blocks = new List<IMySlimBlock>();
-                //    foreach (var grid in grids)
-                //    {
-                //        var tmpBlocks = new List<IMySlimBlock>();
-                //        grid.GetBlocks(tmpBlocks);
-                //        blocks.AddRange(tmpBlocks);
-                //    }
-
-                //    return blocks;
-                //});
-
-                //TotalPCU = 0;
-                //foreach(var item in gridBlocks)
-                //{
-                //    var nonFunctional = item.FatBlock != null && !item.FatBlock.IsFunctional;
-                //    var pcu = nonFunctional ? 1 : ((MyCubeBlockDefinition)item.BlockDefinition).PCU;
-
-                //    TotalPCU += pcu;
-                //}
-
                 _lastSourcesAndTargetsUpdateTimer = now;
                 foreach (var system in BuildAndRepairSystems.Values)
                 {
                     AsyncTaskQueue.Enqueue(() => system.StartAsyncUpdateSourcesAndTargets(true));
                 }
             }
-        }
-
-        public List<IMyCubeGrid> GetGrids()
-        {
-            var items = new List<IMyCubeGrid>();
-            MyAPIGateway.Entities.GetEntities(null, (entity) =>
-            {
-                var grid = entity as IMyCubeGrid;
-                if(grid != null)
-                {
-                    items.Add(grid);
-                }
-
-                return false;
-            });
-
-            return items;
         }
 
         private void TrySyncSettings()
