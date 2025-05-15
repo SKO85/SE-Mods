@@ -19,7 +19,7 @@ namespace SKONanobotBuildAndRepairSystem.Voxels
     {
         public static bool ScanActive = false;
         public static ConcurrentQueue<MyVoxelBase> Asteroids = new ConcurrentQueue<MyVoxelBase>();
-        private static double SecondsBetweenAsteroids = 1;
+        private static double SecondsBetweenAsteroids = 2;
         private static TimeSpan LastProcessed = MyAPIGateway.Session.ElapsedPlayTime;
         private static MyVoxelBase CurrentAsteroid = null;
 
@@ -498,7 +498,7 @@ namespace SKONanobotBuildAndRepairSystem.Voxels
             return sum / count;
         }
 
-        public static List<MyVoxelBase> GetNearbyAsteroids(double range = 20000)
+        public static List<MyVoxelBase> GetNearbyAsteroids(double range = 15000)
         {
             var player = MyAPIGateway.Session.Player;
             if (player == null || player.Character == null || player.Character.IsDead) return new List<MyVoxelBase>();
