@@ -2,6 +2,7 @@
 using VRage.Game.Components;
 using System;
 using System.Collections.Generic;
+using SKONanobotBuildAndRepairSystem.Voxels;
 
 namespace SKONanobotBuildAndRepairSystem
 {
@@ -37,7 +38,11 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     TrySyncSettings();
                 }
-                
+
+                if (!MyAPIGateway.Utilities.IsDedicated)
+                {
+                    Scanner.CheckQueue();
+                }
             }
         }
 
