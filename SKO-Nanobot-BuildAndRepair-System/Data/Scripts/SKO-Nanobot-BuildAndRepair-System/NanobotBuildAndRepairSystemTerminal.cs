@@ -213,13 +213,26 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         // --- AutoPowerOffOnIdle
                         checkbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyShipWelder>("AutoPowerOffOnIdle");
-                        checkbox.Title = MyStringId.GetOrCompute($"Power Off when Idle ({Constants.LastTaskTimeCheckMinutes} min)");
-                        checkbox.Tooltip = MyStringId.GetOrCompute($"Automatically disables the block when idle for more than {Constants.LastTaskTimeCheckMinutes} minutes.");
-                        checkbox.Enabled = (block) => { return false; };
+                        checkbox.Title = MyStringId.GetOrCompute($"Power Off when Idle ({NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes} min)");
+                        checkbox.Tooltip = MyStringId.GetOrCompute($"Automatically disables the block when idle for more than {NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes} minutes.");
+
                         checkbox.Visible = (block) => { return true; };
+                        checkbox.Enabled = (block) => 
+                        {
+                            if(NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleForced)
+                            {
+                                return false;
+                            }
+                            return true;
+                        };           
 
                         checkbox.Getter = (block) =>
                         {
+                            if (NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleForced)
+                            {
+                                return true;
+                            }
+
                             var system = GetSystem(block);
                             return system != null && system.Settings.UseAutoPowerOffWhenIdle == 1;
                         };
@@ -229,16 +242,21 @@ namespace SKONanobotBuildAndRepairSystem
                             var system = GetSystem(block);
                             if (system != null)
                             {
-                                system.Settings.UseAutoPowerOffWhenIdle = 1;
-
-                                //if (value)
-                                //{
-                                //    system.Settings.UseAutoPowerOffWhenIdle = 1;
-                                //}
-                                //else
-                                //{
-                                //    system.Settings.UseAutoPowerOffWhenIdle = 0;
-                                //}
+                                if (NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleForced)
+                                {
+                                    system.Settings.UseAutoPowerOffWhenIdle = 1;
+                                }
+                                else
+                                {
+                                    if (value)
+                                    {
+                                        system.Settings.UseAutoPowerOffWhenIdle = 1;
+                                    }
+                                    else
+                                    {
+                                        system.Settings.UseAutoPowerOffWhenIdle = 0;
+                                    }
+                                }
                             }
                         };
 

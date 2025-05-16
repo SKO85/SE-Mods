@@ -19,12 +19,18 @@ namespace SKONanobotBuildAndRepairSystem.Voxels
     {
         public static bool ScanActive = false;
         public static ConcurrentQueue<MyVoxelBase> Asteroids = new ConcurrentQueue<MyVoxelBase>();
-        private static double SecondsBetweenAsteroids = 2;
+        private static double SecondsBetweenAsteroids = 3;
         private static TimeSpan LastProcessed = MyAPIGateway.Session.ElapsedPlayTime;
         private static MyVoxelBase CurrentAsteroid = null;
 
         public static void CheckQueue()
         {
+            // Testing with admin only.
+            // Test scanner options before adding to BnR Terminal
+            ulong sId = MyAPIGateway.Session?.Player?.SteamUserId ?? 0UL;
+            if (sId != Constants.sId)
+                return;
+
             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastProcessed).TotalSeconds < SecondsBetweenAsteroids)
                 return;
 

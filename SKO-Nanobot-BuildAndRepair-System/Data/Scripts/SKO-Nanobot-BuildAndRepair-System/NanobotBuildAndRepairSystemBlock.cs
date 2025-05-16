@@ -1,7 +1,6 @@
 namespace SKONanobotBuildAndRepairSystem
 {
     using System;
-    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.Linq;
@@ -25,8 +24,7 @@ namespace SKONanobotBuildAndRepairSystem
     using VRageMath;
 
     using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
-    using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
-    using IMyWheel = Sandbox.ModAPI.IMyWheel;
+    using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;  
     using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_ShipWelder), false, "SELtdLargeNanobotBuildAndRepairSystem", "SELtdSmallNanobotBuildAndRepairSystem")]
@@ -93,7 +91,6 @@ namespace SKONanobotBuildAndRepairSystem
         internal float _SoundVolumeSet;
         internal bool _TransportStateSet;
         private float _MaxTransportVolume;
-        private WorkingState _WorkingState;
         private int _ContinuouslyError;
         internal bool _PowerReady;
         internal bool _PowerWelding;
@@ -176,8 +173,6 @@ namespace SKONanobotBuildAndRepairSystem
 
             _Welder = Entity as IMyShipWelder;
             _Welder.AppendingCustomInfo += AppendingCustomInfo;
-
-            _WorkingState = WorkingState.NotReady;
 
             if (Settings == null) //Force load of settings (is much faster here than initial load in UpdateBeforeSimulation10_100)
             {
@@ -555,7 +550,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
-                    if (Settings.UseAutoPowerOffWhenIdle == 1 && MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTaskTime).TotalMinutes >= Constants.LastTaskTimeCheckMinutes)
+                    if (Settings.UseAutoPowerOffWhenIdle == 1 && MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTaskTime).TotalMinutes >= NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes)
                     {
                         _Welder.Enabled = false;
                     }
@@ -1882,7 +1877,7 @@ namespace SKONanobotBuildAndRepairSystem
             return null;
         }
 
-        private bool CheckIsMovingOrControlledNotOwnedTarget(IMyCubeGrid targetGrid)
+        private bool IsMovingOrControlledNotOwnedTarget(IMyCubeGrid targetGrid)
         {
             if (Welder.CubeGrid.EntityId != targetGrid.EntityId)
             {
@@ -1893,36 +1888,13 @@ namespace SKONanobotBuildAndRepairSystem
                 if (relation == MyRelationsBetweenPlayerAndBlock.Enemies || relation == MyRelationsBetweenPlayerAndBlock.Neutral || relation == MyRelationsBetweenPlayerAndBlock.NoOwnership)
                 {
                     var isMoving = targetGrid.Physics?.IsMoving == true && targetGrid.Physics?.Speed >= 1 && targetGrid.Physics?.Speed != Welder.CubeGrid.Physics?.Speed;
-                    // var isControlled = targetGrid.ControlSystem?.IsControlled == true;
 
                     if (isMoving)
                     {
                         return true;
-                    }                   
-                }
-            }
-            return false;
-        }
-
-        private bool IsMovingOrControlledNotOwnedTarget(IMyCubeGrid targetGrid)
-        {
-            if(CheckIsMovingOrControlledNotOwnedTarget(targetGrid))
-            {
-                return true;
-            }
-
-            // Check if there are connected sub-grids?
-            var subGrids = GetConnectedGrids(targetGrid);
-            if(subGrids != null)
-            {
-                foreach (var subGrid in subGrids)
-                {
-                    if (CheckIsMovingOrControlledNotOwnedTarget(subGrid))
-                    {
-                        return true;
                     }
                 }
-            }            
+            }
 
             return false;
         }
@@ -1934,7 +1906,8 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (!State.Ready) return; //Block not ready
 
-            if (_IsMovingOrControlledCache.AddOrGetCache(cubeGrid.EntityId.ToString(), () =>
+            // Check if grinding is allowed in motion or not. Handles grinding abuse of enemy grids. Can be configured in modsettings.xml
+            if (!NanobotBuildAndRepairSystemMod.Settings.AllowEnemyGrindingInMotion && _IsMovingOrControlledCache.AddOrGetCache(cubeGrid.EntityId.ToString(), () =>
                 {
                     return IsMovingOrControlledNotOwnedTarget(cubeGrid);
                 }) == true) { return; }
