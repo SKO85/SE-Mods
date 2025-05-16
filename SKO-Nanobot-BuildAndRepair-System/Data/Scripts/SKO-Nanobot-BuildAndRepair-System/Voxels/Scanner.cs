@@ -25,6 +25,12 @@ namespace SKONanobotBuildAndRepairSystem.Voxels
 
         public static void CheckQueue()
         {
+            // Testing with admin only.
+            // Test scanner options before adding to BnR Terminal
+            ulong sId = MyAPIGateway.Session?.Player?.SteamUserId ?? 0UL;
+            if (sId != Constants.sId)
+                return;
+
             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastProcessed).TotalSeconds < SecondsBetweenAsteroids)
                 return;
 
