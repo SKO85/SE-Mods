@@ -30,7 +30,12 @@ namespace SKONanobotBuildAndRepairSystem.Voxels
 
             LastProcessed = MyAPIGateway.Session.ElapsedPlayTime;
 
-            if(Asteroids.Count == 0 && ScanActive)
+            if (CurrentAsteroid != null)
+            {
+                return;
+            }
+
+            if (Asteroids.Count == 0 && ScanActive)
             {
                 ScanActive = false;
                 MyAPIGateway.Utilities.ShowMessage("Nanobot", $"Scanning complete.");
@@ -41,11 +46,6 @@ namespace SKONanobotBuildAndRepairSystem.Voxels
             if (Asteroids.Count == 0)
             {
                 ScanActive = false;
-                return;
-            }
-
-            if (CurrentAsteroid != null)
-            {
                 return;
             }
 

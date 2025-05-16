@@ -1,6 +1,7 @@
 namespace SKONanobotBuildAndRepairSystem
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.Linq;
@@ -12,6 +13,7 @@ namespace SKONanobotBuildAndRepairSystem
     using Sandbox.Game.Lights;
     using Sandbox.ModAPI;
     using Sandbox.ModAPI.Ingame;
+    using SKONanobotBuildAndRepairSystem.Cache;
     using VRage;
     using VRage.Game;
     using VRage.Game.Components;
@@ -21,8 +23,10 @@ namespace SKONanobotBuildAndRepairSystem
     using VRage.Scripting.MemorySafeTypes;
     using VRage.Utils;
     using VRageMath;
+
     using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
     using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
+    using IMyWheel = Sandbox.ModAPI.IMyWheel;
     using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_ShipWelder), false, "SELtdLargeNanobotBuildAndRepairSystem", "SELtdSmallNanobotBuildAndRepairSystem")]
@@ -44,7 +48,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private Action<IMyTerminalBlock> _onEnabledChanged;
         private Action<IMyCubeBlock> _onIsWorkingChanged;
-
+        private CacheHandler<bool?> _IsMovingOrControlledCache = new CacheHandler<bool?>();
 
         private readonly Stopwatch _DelayWatch = new Stopwatch();
         private int _Delay = 0;
@@ -1855,15 +1859,88 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
+        private List<IMyCubeGrid> GetConnectedGrids(IMyCubeGrid grid)
+        {
+            if (grid != null && grid.Physics != null)
+            {
+                var list = new List<IMyCubeGrid>();
+                var gridLinkType = GridLinkTypeEnum.Mechanical;
+
+                // Get sub-grids.
+                MyAPIGateway.GridGroups.GetGroup(grid, gridLinkType, list);
+
+                if (list != null)
+                    if (list.Count > 0)
+                    {
+                        var self = list.FirstOrDefault(c => c.EntityId == grid.EntityId);
+                        if (self != null) list.Remove(self);
+                    }
+
+                return list;
+            }
+
+            return null;
+        }
+
+        private bool CheckIsMovingOrControlledNotOwnedTarget(IMyCubeGrid targetGrid)
+        {
+            if (Welder.CubeGrid.EntityId != targetGrid.EntityId)
+            {
+                var relation = targetGrid.GetUserRelationToOwner(Welder.OwnerId);
+
+                // Skip welding/grinding scanning for enemy grids when in motion to avoid abuse and use BnR as defence.
+                // Grids must stay still when they are enemies to weld/grind them.
+                if (relation == MyRelationsBetweenPlayerAndBlock.Enemies || relation == MyRelationsBetweenPlayerAndBlock.Neutral || relation == MyRelationsBetweenPlayerAndBlock.NoOwnership)
+                {
+                    var isMoving = targetGrid.Physics?.IsMoving == true && targetGrid.Physics?.Speed >= 1 && targetGrid.Physics?.Speed != Welder.CubeGrid.Physics?.Speed;
+                    // var isControlled = targetGrid.ControlSystem?.IsControlled == true;
+
+                    if (isMoving)
+                    {
+                        return true;
+                    }                   
+                }
+            }
+            return false;
+        }
+
+        private bool IsMovingOrControlledNotOwnedTarget(IMyCubeGrid targetGrid)
+        {
+            if(CheckIsMovingOrControlledNotOwnedTarget(targetGrid))
+            {
+                return true;
+            }
+
+            // Check if there are connected sub-grids?
+            var subGrids = GetConnectedGrids(targetGrid);
+            if(subGrids != null)
+            {
+                foreach (var subGrid in subGrids)
+                {
+                    if (CheckIsMovingOrControlledNotOwnedTarget(subGrid))
+                    {
+                        return true;
+                    }
+                }
+            }            
+
+            return false;
+        }
+
         /// <summary>
         ///
         /// </summary>
         private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, List<IMyCubeGrid> grids, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
         {
-
             if (!State.Ready) return; //Block not ready
-            if (grids.Contains(cubeGrid)) return; //Allready parsed
 
+            if (_IsMovingOrControlledCache.AddOrGetCache(cubeGrid.EntityId.ToString(), () =>
+                {
+                    return IsMovingOrControlledNotOwnedTarget(cubeGrid);
+                }) == true) { return; }
+
+            if (grids.Contains(cubeGrid)) return; //Allready parsed
+          
             Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: AsyncAddBlocksOfGrid AddGrid {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), cubeGrid.DisplayName);
             grids.Add(cubeGrid);
 
@@ -2053,13 +2130,13 @@ namespace SKONanobotBuildAndRepairSystem
             // Is being projected?
             if (block.IsProjected())
                 return false;
-
-            // Do not allow grinding if our shields are up.
-            if (IsWelderShielded() && block.CubeGrid.EntityId != Welder.CubeGrid.EntityId)
+            
+            // If we are in motion, grinding is not allowed.
+            if(Welder.CubeGrid.EntityId != block.CubeGrid.EntityId && Welder.CubeGrid.Physics?.IsMoving == true && Welder.CubeGrid.Physics?.Speed >= 1)
+            {
                 return false;
+            }
 
-            //block.CubeGrid.Editable is not available for modding -> wait until it might be availabel
-            //if (!block.CubeGrid.Editable) return;
             if (Logging.Instance.ShouldLog(Logging.Level.Verbose))
             {
                 Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: Grind Check Block {1} Projected={2} AutoGrindRelation={3} Relation={4} UseGrindColor={5} HasGrindColor={6} ({7},{8})/", // ActionAllowed={10}",
@@ -2068,8 +2145,13 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             var autoGrind = autoGrindRelation != 0 && BlockGrindPriority.GetEnabled(block);
+
             if (autoGrind)
             {
+                // Do not allow grinding if our shields are up.
+                if (block.CubeGrid.EntityId != Welder.CubeGrid.EntityId && IsWelderShielded())
+                    return false;
+
                 var relation = block.GetUserRelationToOwner(_Welder.OwnerId);
                 autoGrind =
                    (relation == MyRelationsBetweenPlayerAndBlock.NoOwnership && (autoGrindRelation & AutoGrindRelation.NoOwnership) != 0) ||
