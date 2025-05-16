@@ -52,10 +52,13 @@ namespace SKONanobotBuildAndRepairSystem
         public const int MaxBackgroundTasks_Max = 10;
         public const int MaxBackgroundTasks_Min = 1;
         public const float MaxCreateIntegrityRatio = 0.2f;
-        public const int LastTaskTimeCheckMinutes = 15;
 
         public const bool DisableLocalization = false;
         public const ulong sId = 76561198001777579;
+
+        public const bool AutoPowerOffOnIdleForcedDefault = true;
+        public const int AutoPowerOffOnIdleMinutesDefault = 15;
+        public const bool AllowEnemyGrindingInMotionDefault = false;
 
     }
 }

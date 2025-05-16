@@ -19,7 +19,7 @@ namespace SKONanobotBuildAndRepairSystem
     {
         private const int CurrentSettingsVersion = 6;
 
-        [ProtoMember(2000), XmlElement]
+        [ProtoMember(2000), XmlElement, XmlIgnore]
         public int Version { get; set; }
 
         [XmlElement]
@@ -43,7 +43,7 @@ namespace SKONanobotBuildAndRepairSystem
         [ProtoMember(2), XmlElement]
         public int Range { get; set; }
 
-        [ProtoMember(3), XmlElement]
+        [ProtoMember(3), XmlElement, XmlIgnore]
         public long SourcesAndTargetsUpdateIntervalTicks
         {
             get { return TargetsUpdateInterval.Ticks; }
@@ -54,34 +54,43 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        [ProtoMember(4), XmlElement]
+        [ProtoMember(4), XmlElement, XmlIgnore]
         public long FriendlyDamageTimeoutTicks
         {
             get { return FriendlyDamageTimeout.Ticks; }
             set { FriendlyDamageTimeout = new TimeSpan(value); }
         }
 
-        [ProtoMember(5), XmlElement]
+        [ProtoMember(5), XmlElement, XmlIgnore]
         public long FriendlyDamageCleanupTicks
         {
             get { return FriendlyDamageCleanup.Ticks; }
             set { FriendlyDamageCleanup = new TimeSpan(value); }
         }
 
-        [ProtoMember(8), XmlElement]
+        [ProtoMember(8), XmlElement, XmlIgnore]
         public float MaximumRequiredElectricPowerTransport { get; set; }
 
-        [ProtoMember(9), XmlElement]
+        [ProtoMember(9), XmlElement, XmlIgnore]
         public float MaximumRequiredElectricPowerStandby { get; set; }
 
         [ProtoMember(10), XmlElement]
         public SyncModSettingsWelder Welder { get; set; }
 
-        [ProtoMember(20), XmlElement]
+        [ProtoMember(20), XmlElement, XmlIgnore]
         public int MaxBackgroundTasks { get; set; }
 
-        [ProtoMember(21), XmlElement]
+        [ProtoMember(21), XmlElement, XmlIgnore]
         public int MaximumOffset { get; set; }
+
+        [ProtoMember(22), XmlElement]
+        public bool AutoPowerOffOnIdleForced { get; set; }
+
+        [ProtoMember(23), XmlElement]
+        public int AutoPowerOffOnIdleMinutes { get; set; }
+
+        [ProtoMember(24), XmlElement]
+        public bool AllowEnemyGrindingInMotion { get; set; }
 
         public SyncModSettings()
         {
@@ -97,6 +106,9 @@ namespace SKONanobotBuildAndRepairSystem
             MaximumRequiredElectricPowerStandby = Constants.WELDER_REQUIRED_ELECTRIC_POWER_STANDBY_DEFAULT;
             MaximumRequiredElectricPowerTransport = Constants.WELDER_REQUIRED_ELECTRIC_POWER_TRANSPORT_DEFAULT;
             Welder = new SyncModSettingsWelder();
+            AutoPowerOffOnIdleForced = Constants.AutoPowerOffOnIdleForcedDefault;
+            AutoPowerOffOnIdleMinutes = Constants.AutoPowerOffOnIdleMinutesDefault;
+            AllowEnemyGrindingInMotion = Constants.AllowEnemyGrindingInMotionDefault;            
         }
 
         public static SyncModSettings Load()
@@ -235,10 +247,10 @@ namespace SKONanobotBuildAndRepairSystem
     [ProtoContract(SkipConstructor = true, UseProtoMembersOnly = true)]
     public class SyncModSettingsWelder
     {
-        [ProtoMember(1), XmlElement]
+        [ProtoMember(1), XmlElement, XmlIgnore]
         public float MaximumRequiredElectricPowerWelding { get; set; }
 
-        [ProtoMember(2), XmlElement]
+        [ProtoMember(2), XmlElement, XmlIgnore]
         public float MaximumRequiredElectricPowerGrinding { get; set; }
 
         [ProtoMember(10), XmlElement]
@@ -247,103 +259,103 @@ namespace SKONanobotBuildAndRepairSystem
         [ProtoMember(11), XmlElement]
         public float GrindingMultiplier { get; set; }
 
-        [ProtoMember(90), XmlElement]
+        [ProtoMember(90), XmlElement, XmlIgnore]
         public SearchModes AllowedSearchModes { get; set; }
 
-        [ProtoMember(91), XmlElement]
+        [ProtoMember(91), XmlElement, XmlIgnore]
         public SearchModes SearchModeDefault { get; set; }
 
-        [ProtoMember(101), XmlElement]
+        [ProtoMember(101), XmlElement, XmlIgnore]
         public bool AllowBuildFixed { get; set; }
 
-        [ProtoMember(102), XmlElement]
+        [ProtoMember(102), XmlElement, XmlIgnore]
         public bool AllowBuildDefault { get; set; }
 
-        [ProtoMember(105), XmlElement]
+        [ProtoMember(105), XmlElement, XmlIgnore]
         public WorkModes AllowedWorkModes { get; set; }
 
-        [ProtoMember(106), XmlElement]
+        [ProtoMember(106), XmlElement, XmlIgnore]
         public WorkModes WorkModeDefault { get; set; }
 
-        [ProtoMember(110), XmlElement]
+        [ProtoMember(110), XmlElement, XmlIgnore]
         public bool UseIgnoreColorFixed { get; set; }
 
-        [ProtoMember(111), XmlElement]
+        [ProtoMember(111), XmlElement, XmlIgnore]
         public bool UseIgnoreColorDefault { get; set; }
 
-        [ProtoMember(112), XmlArray]
+        [ProtoMember(112), XmlArray, XmlIgnore]
         public float[] IgnoreColorDefault { get; set; }
 
-        [ProtoMember(115), XmlElement]
+        [ProtoMember(115), XmlElement, XmlIgnore]
         public bool UseGrindColorFixed { get; set; }
 
-        [ProtoMember(116), XmlElement]
+        [ProtoMember(116), XmlElement, XmlIgnore]
         public bool UseGrindColorDefault { get; set; }
 
-        [ProtoMember(117), XmlArray]
+        [ProtoMember(117), XmlArray, XmlIgnore]
         public float[] GrindColorDefault { get; set; }
 
-        [ProtoMember(118), XmlElement]
+        [ProtoMember(118), XmlElement, XmlIgnore]
         public bool UseGrindJanitorFixed { get; set; }
 
-        [ProtoMember(119), XmlElement]
+        [ProtoMember(119), XmlElement, XmlIgnore]
         public AutoGrindRelation UseGrindJanitorDefault { get; set; }
 
-        [ProtoMember(120), XmlElement]
+        [ProtoMember(120), XmlElement, XmlIgnore]
         public AutoGrindOptions GrindJanitorOptionsDefault { get; set; }
 
-        [ProtoMember(121), XmlElement]
+        [ProtoMember(121), XmlElement, XmlIgnore]
         public AutoGrindRelation AllowedGrindJanitorRelations { get; set; }
 
-        [ProtoMember(125), XmlElement]
+        [ProtoMember(125), XmlElement, XmlIgnore]
         public bool ShowAreaFixed { get; set; }
 
-        [ProtoMember(130), XmlElement]
+        [ProtoMember(130), XmlElement, XmlIgnore]
         public bool AreaSizeFixed { get; set; }
 
-        [ProtoMember(131), XmlElement]
+        [ProtoMember(131), XmlElement, XmlIgnore]
         public bool AreaOffsetFixed { get; set; }
 
-        [ProtoMember(140), XmlElement]
+        [ProtoMember(140), XmlElement, XmlIgnore]
         public bool PriorityFixed { get; set; }
 
-        [ProtoMember(144), XmlElement]
+        [ProtoMember(144), XmlElement, XmlIgnore]
         public bool CollectPriorityFixed { get; set; }
 
-        [ProtoMember(145), XmlElement]
+        [ProtoMember(145), XmlElement, XmlIgnore]
         public bool PushIngotOreImmediatelyFixed { get; set; }
 
-        [ProtoMember(146), XmlElement]
+        [ProtoMember(146), XmlElement, XmlIgnore]
         public bool PushIngotOreImmediatelyDefault { get; set; }
 
-        [ProtoMember(147), XmlElement]
+        [ProtoMember(147), XmlElement, XmlIgnore]
         public bool PushComponentImmediatelyFixed { get; set; }
 
-        [ProtoMember(148), XmlElement]
+        [ProtoMember(148), XmlElement, XmlIgnore]
         public bool PushComponentImmediatelyDefault { get; set; }
 
-        [ProtoMember(149), XmlElement]
+        [ProtoMember(149), XmlElement, XmlIgnore]
         public bool PushItemsImmediatelyFixed { get; set; }
 
-        [ProtoMember(150), XmlElement]
+        [ProtoMember(150), XmlElement, XmlIgnore]
         public bool PushItemsImmediatelyDefault { get; set; }
 
-        [ProtoMember(156), XmlElement]
+        [ProtoMember(156), XmlElement, XmlIgnore]
         public bool CollectIfIdleFixed { get; set; }
 
-        [ProtoMember(157), XmlElement]
+        [ProtoMember(157), XmlElement, XmlIgnore]
         public bool CollectIfIdleDefault { get; set; }
 
-        [ProtoMember(160), XmlElement]
+        [ProtoMember(160), XmlElement, XmlIgnore]
         public bool SoundVolumeFixed { get; set; }
 
-        [ProtoMember(161), XmlElement]
+        [ProtoMember(161), XmlElement, XmlIgnore]
         public float SoundVolumeDefault { get; set; }
 
-        [ProtoMember(170), XmlElement]
+        [ProtoMember(170), XmlElement, XmlIgnore]
         public bool ScriptControllFixed { get; set; }
 
-        [ProtoMember(200), XmlElement]
+        [ProtoMember(200), XmlElement, XmlIgnore]
         public VisualAndSoundEffects AllowedEffects { get; set; }
 
         public SyncModSettingsWelder()
@@ -984,13 +996,16 @@ namespace SKONanobotBuildAndRepairSystem
             var storage = system.Entity.Storage;
             string data;
             SyncBlockSettings settings = null;
+
             if (storage != null && storage.TryGetValue(guid, out data))
             {
                 try
                 {
                     //Fix changed names
                     data = data.Replace("GrindColorNearFirst", "GrindNearFirst");
+
                     settings = MyAPIGateway.Utilities.SerializeFromXML<SyncBlockSettings>(data);
+
                     if (settings != null)
                     {
                         settings.RecalcAreaBoundigBox();
@@ -1021,6 +1036,7 @@ namespace SKONanobotBuildAndRepairSystem
             blockGrindPriority.SetEntries(settings.GrindPriority);
             componentCollectPriority.SetEntries(settings.ComponentCollectPriority);
             settings.Changed = 0;
+
             return settings;
         }
 
