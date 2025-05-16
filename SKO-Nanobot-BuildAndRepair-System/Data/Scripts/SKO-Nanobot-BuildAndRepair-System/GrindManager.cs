@@ -57,10 +57,10 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;
 
-                        if (cubeGrid != null && !cubeGrid.IsStatic)
-                        {
-                            cubeGrid.Physics.ClearSpeed();
-                        }
+                        //if (cubeGrid != null && !cubeGrid.IsStatic)
+                        //{
+                        //    cubeGrid.Physics.ClearSpeed();
+                        //}
                     }
 
                     if ((block.Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 &&

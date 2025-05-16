@@ -215,8 +215,9 @@ namespace SKONanobotBuildAndRepairSystem
                         checkbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyShipWelder>("AutoPowerOffOnIdle");
                         checkbox.Title = MyStringId.GetOrCompute($"Power Off when Idle ({Constants.LastTaskTimeCheckMinutes} min)");
                         checkbox.Tooltip = MyStringId.GetOrCompute($"Automatically disables the block when idle for more than {Constants.LastTaskTimeCheckMinutes} minutes.");
-                        checkbox.Enabled = (block) => { return true; };
+                        checkbox.Enabled = (block) => { return false; };
                         checkbox.Visible = (block) => { return true; };
+
                         checkbox.Getter = (block) =>
                         {
                             var system = GetSystem(block);
@@ -228,14 +229,16 @@ namespace SKONanobotBuildAndRepairSystem
                             var system = GetSystem(block);
                             if (system != null)
                             {
-                                if(value)
-                                {
-                                    system.Settings.UseAutoPowerOffWhenIdle = 1;
-                                }
-                                else
-                                {
-                                    system.Settings.UseAutoPowerOffWhenIdle = 0;
-                                }
+                                system.Settings.UseAutoPowerOffWhenIdle = 1;
+
+                                //if (value)
+                                //{
+                                //    system.Settings.UseAutoPowerOffWhenIdle = 1;
+                                //}
+                                //else
+                                //{
+                                //    system.Settings.UseAutoPowerOffWhenIdle = 0;
+                                //}
                             }
                         };
 

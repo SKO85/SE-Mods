@@ -15,7 +15,9 @@ namespace SKONanobotBuildAndRepairSystem
         private const string CmdLogLevel_All = "all";
         private const string CmdLogLevel_Default = "default";
         private const string CmdWriteTranslation = "-writetranslation";
-        private const string CmdScan = "-scan";
+        private const string CmdScanAround = "-scan-around";
+        private const string CmdScanView = "-scan-view";
+        private const string ClearGPS = "-cleargps";
 
         public static void OnChatCommand(string messageText, ref bool sendToOthers)
         {
@@ -35,8 +37,14 @@ namespace SKONanobotBuildAndRepairSystem
 
             switch (args[0])
             {
-                case CmdScan:
-                    Voxels.Scanner.Scan();
+                case CmdScanView:
+                    Voxels.Scanner.ScanView();
+                    break;
+                case CmdScanAround:
+                    Voxels.Scanner.ScanAround();
+                    break;
+                case ClearGPS:
+                    Voxels.Scanner.ClearGPS(3);
                     break;
                 case CmdCpsf:
                     if (MyAPIGateway.Session.IsServer)
