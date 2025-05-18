@@ -1,24 +1,21 @@
 ﻿using Sandbox.ModAPI;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace SKONanobotBuildAndRepairSystem
 {
     public static class AsyncTaskQueue
     {
-        private static readonly Queue<Action> _taskQueue = new Queue<Action>();
-        private static readonly object _lock = new object();
+        private static readonly ConcurrentQueue<Action> _taskQueue = new ConcurrentQueue<Action>();
         private static int _runningTasks = 0;
 
         public static void Enqueue(Action action)
         {
             if (action == null) return;
 
-            lock (_lock)
-            {
-                _taskQueue.Enqueue(action);
-                TryRunNext();
-            }
+            _taskQueue.Enqueue(action);
+            TryRunNext();            
         }
 
         private static void TryRunNext()
@@ -26,14 +23,18 @@ namespace SKONanobotBuildAndRepairSystem
             if (_runningTasks >= NanobotBuildAndRepairSystemMod.Settings.MaxBackgroundTasks || _taskQueue.Count == 0)
                 return;
 
-            var task = _taskQueue.Dequeue();
+            Action task = null;
+            _taskQueue.TryDequeue(out task);
             _runningTasks++;
 
             MyAPIGateway.Parallel.StartBackground(() =>
             {
                 try
                 {
-                    task();
+                    if (task != null)
+                    {
+                        task();
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -41,20 +42,21 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 finally
                 {
-                    lock (_lock)
+                    if (task != null)
                     {
                         _runningTasks--;
-                        TryRunNext();
                     }
+                    TryRunNext();
                 }
             });
         }
 
         public static void Clear()
         {
-            lock (_lock)
+            lock (_taskQueue)
             {
-                _taskQueue.Clear();
+                Action item;
+                while (_taskQueue.TryDequeue(out item)) { }
             }
         }
     }

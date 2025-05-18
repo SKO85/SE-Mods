@@ -37,13 +37,13 @@ namespace SKONanobotBuildAndRepairSystem
             var hasRequiredPower = PowerManager.HasRequiredElectricPower(block);
             if (!hasRequiredPower) return;
 
-            //if (NanobotBuildAndRepairSystemMod.TotalPCU >= MyAPIGateway.Session.SessionSettings.TotalPCU)
-            //{
-            //    return;
-            //}
-
             lock (block.State.PossibleWeldTargets)
             {
+                if (block.State.PossibleWeldTargets.Count > Constants.MaxNumberOfBlocksToSync)
+                {
+                    return;
+                }
+
                 foreach (var targetData in block.State.PossibleWeldTargets)
                 {
                     if ((block.Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 &&
@@ -58,7 +58,7 @@ namespace SKONanobotBuildAndRepairSystem
                             continue;
                         }
 
-                        if (!block._Welder.HelpOthers && !TryAssign(targetData.Block, block.Entity.EntityId))
+                        if (block.Welder.IsWorking && block.Welder.Enabled && !block._Welder.HelpOthers && !TryAssign(targetData.Block, block.Entity.EntityId))
                         {
                             continue;
                         }

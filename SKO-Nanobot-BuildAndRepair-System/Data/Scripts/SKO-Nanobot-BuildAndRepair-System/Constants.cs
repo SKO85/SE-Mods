@@ -60,5 +60,7 @@ namespace SKONanobotBuildAndRepairSystem
         public const int AutoPowerOffOnIdleMinutesDefault = 15;
         public const bool AllowEnemyGrindingInMotionDefault = false;
 
+        public const float UpdateIntervalSecondsDefault = 1.5f;
+        public static int MaxNumberOfBlocksToSync = 30;
     }
 }
