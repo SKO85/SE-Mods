@@ -50,7 +50,10 @@ namespace SKONanobotBuildAndRepairSystem
                     if (MyAPIGateway.Session.IsServer)
                     {
                         SyncModSettings.Save(NanobotBuildAndRepairSystemMod.Settings, false);
-                        console.ShowMessage(CmdKey, "Settings saved to mod folder");
+                        // console.ShowMessage(CmdKey, "Settings saved to global mod folder");
+
+                        var path = $"{MyAPIGateway.Utilities.GamePaths.UserDataPath}\\Storage\\{MyAPIGateway.Utilities.GamePaths.ModScopeName}";
+                        MyAPIGateway.Utilities.ShowMessage("BaR Mod:", $"Config file has been saved in:\n\n{path}\n\nFilename: ModSettings.xml");
                     }
                     else
                     {

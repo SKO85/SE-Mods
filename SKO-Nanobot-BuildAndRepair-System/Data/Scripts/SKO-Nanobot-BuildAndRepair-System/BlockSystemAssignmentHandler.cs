@@ -10,8 +10,8 @@ namespace SKONanobotBuildAndRepairSystem
     {
         private readonly ConcurrentDictionary<IMySlimBlock, BlockSystemAssignment> _assignments = new ConcurrentDictionary<IMySlimBlock, BlockSystemAssignment>();
         private DateTime _lastCleanupTime = DateTime.MinValue;
-        private readonly TimeSpan CleanupInterval = TimeSpan.FromSeconds(10);
-        private readonly int MaxToKeepAssignedSeconds = 60;
+        private readonly TimeSpan CleanupInterval = TimeSpan.FromSeconds(30);
+        private readonly int MaxToKeepAssignedSeconds = 10;
 
         public bool TryAssign(IMySlimBlock block, long systemId)
         {
@@ -31,7 +31,7 @@ namespace SKONanobotBuildAndRepairSystem
                     return true;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
 

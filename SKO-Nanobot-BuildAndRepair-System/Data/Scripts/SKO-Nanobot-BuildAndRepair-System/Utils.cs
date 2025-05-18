@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.Game.Entities;
@@ -178,7 +179,9 @@ namespace SKONanobotBuildAndRepairSystem
                 else if (!ignoreCubeGridList)
                 {
                     //E.G. the case if a landing gear is directly attatched to piston/rotor (with no ownable block in the same subgrid) and the gear gets connected to something
-                    var cubegridsList = MyAPIGateway.GridGroups.GetGroup(cubeGrid, GridLinkTypeEnum.Mechanical);
+                    List<IMyCubeGrid> cubegridsList = new List<IMyCubeGrid>();
+                    MyAPIGateway.GridGroups.GetGroup(cubeGrid, GridLinkTypeEnum.Mechanical, cubegridsList);
+
                     if (cubegridsList != null)
                     {
                         foreach (var cubeGrid1 in cubegridsList)

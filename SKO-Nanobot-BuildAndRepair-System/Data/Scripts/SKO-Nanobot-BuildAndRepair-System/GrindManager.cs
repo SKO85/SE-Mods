@@ -39,6 +39,11 @@ namespace SKONanobotBuildAndRepairSystem
 
             lock (block.State.PossibleGrindTargets)
             {
+                if (block.State.PossibleGrindTargets.Count > Constants.MaxNumberOfBlocksToSync)
+                {
+                    return;
+                }
+
                 MyCubeGrid cubeGrid = null;
 
                 foreach (var targetData in block.State.PossibleGrindTargets)
@@ -48,7 +53,7 @@ namespace SKONanobotBuildAndRepairSystem
                         continue;
                     }
 
-                    if (!TryAssign(targetData.Block, block.Entity.EntityId))
+                    if (block.Welder.IsWorking && block.Welder.Enabled && !TryAssign(targetData.Block, block.Entity.EntityId))
                     {
                         continue;
                     }

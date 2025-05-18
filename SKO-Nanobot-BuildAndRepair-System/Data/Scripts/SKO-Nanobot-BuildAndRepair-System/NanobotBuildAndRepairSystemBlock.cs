@@ -82,6 +82,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private TimeSpan _LastSourceUpdate = -NanobotBuildAndRepairSystemMod.Settings.SourcesUpdateInterval;
         private TimeSpan _LastTargetsUpdate;
+        private TimeSpan _LastUpdate;
 
         internal bool _CreativeModeActive;
         private int _UpdateEffectsInterval;
@@ -285,6 +286,7 @@ namespace SKONanobotBuildAndRepairSystem
             _TryAutoPushInventoryLast = _TryPushInventoryLast;
             _WorkingStateSet = WorkingState.Invalid;
             _SoundVolumeSet = -1;
+            _LastUpdate = MyAPIGateway.Session.ElapsedPlayTime;
             _IsInit = true;
             Logging.Instance?.Write(Logging.Level.Event, "BuildAndRepairSystemBlock {0}: Init -> done", Logging.BlockName(_Welder, Logging.BlockNameOptions.None));
         }
@@ -455,13 +457,17 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         CleanupFriendlyDamage();
                     }
-
-                    ServerTryWeldingGrindingCollecting();
+                    
+                    if(MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastUpdate).TotalSeconds >= Constants.UpdateIntervalSecondsDefault)
+                    {
+                        ServerTryWeldingGrindingCollecting();
+                        _LastUpdate = MyAPIGateway.Session.ElapsedPlayTime;
+                    }
 
                     if (!fast)
                     {
                         if ((State.Ready != _PowerReady || State.Welding != _PowerWelding || State.Grinding != _PowerGrinding || State.Transporting != _PowerTransporting) &&
-                            MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdatePowerSinkLast).TotalSeconds > 5)
+                            MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdatePowerSinkLast).TotalSeconds >= 6)
                         {
                             _UpdatePowerSinkLast = MyAPIGateway.Session.ElapsedPlayTime;
                             _PowerReady = State.Ready;
@@ -505,6 +511,7 @@ namespace SKONanobotBuildAndRepairSystem
             catch (Exception ex)
             {
                 Logging.Instance?.Write(Logging.Level.Error, "BuildAndRepairSystemBlock {0}: UpdateBeforeSimulation10/100 Exception:{1} {2}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), ex, ex.StackTrace);
+                _LastUpdate = MyAPIGateway.Session.ElapsedPlayTime;
             }
         }
 
@@ -757,13 +764,10 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                if (!Welder.IsWorking)
-                {
-                    GrindManager.ReleaseAll(Entity.EntityId);
-                    WeldManager.ReleaseAll(Entity.EntityId);
-                }
-
+                GrindManager.ReleaseAll(Entity.EntityId);
+                WeldManager.ReleaseAll(Entity.EntityId);
                 InventoryManager.EmptyInventory(this);
+                EffectManager.UpdateEffects(this);
             }
             catch { }
             
@@ -1853,58 +1857,29 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
         }
-
-        private List<IMyCubeGrid> GetConnectedGrids(IMyCubeGrid grid)
-        {
-            if (grid != null && grid.Physics != null)
-            {
-                var list = new List<IMyCubeGrid>();
-                var gridLinkType = GridLinkTypeEnum.Mechanical;
-
-                // Get sub-grids.
-                MyAPIGateway.GridGroups.GetGroup(grid, gridLinkType, list);
-
-                if (list != null)
-                    if (list.Count > 0)
-                    {
-                        var self = list.FirstOrDefault(c => c.EntityId == grid.EntityId);
-                        if (self != null) list.Remove(self);
-                    }
-
-                return list;
-            }
-
-            return null;
-        }
-
+       
         private bool IsMovingOrControlledNotOwnedTarget(IMyCubeGrid targetGrid)
         {
             if (Welder.CubeGrid.EntityId != targetGrid.EntityId)
             {
-                var relation = targetGrid.GetUserRelationToOwner(Welder.OwnerId);
+                var isMoving = targetGrid.Physics?.IsMoving == true && targetGrid.Physics?.Speed >= 1;
 
-                // Skip welding/grinding scanning for enemy grids when in motion to avoid abuse and use BnR as defence.
-                // Grids must stay still when they are enemies to weld/grind them.
-                if (relation == MyRelationsBetweenPlayerAndBlock.Enemies || relation == MyRelationsBetweenPlayerAndBlock.Neutral || relation == MyRelationsBetweenPlayerAndBlock.NoOwnership)
+                if (isMoving)
                 {
-                    var isMoving = targetGrid.Physics?.IsMoving == true && targetGrid.Physics?.Speed >= 1 && targetGrid.Physics?.Speed != Welder.CubeGrid.Physics?.Speed;
-
-                    if (isMoving)
-                    {
-                        return true;
-                    }
-                }
+                    return true;
+                }                
             }
 
             return false;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, List<IMyCubeGrid> grids, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
         {
             if (!State.Ready) return; //Block not ready
+
+            // If we already have enough blocks to take care off...
+            if (possibleGrindTargets.Count >= Constants.MaxNumberOfBlocksToSync && possibleWeldTargets.Count >= Constants.MaxNumberOfBlocksToSync)
+                return;
 
             // Check if grinding is allowed in motion or not. Handles grinding abuse of enemy grids. Can be configured in modsettings.xml
             if (!NanobotBuildAndRepairSystemMod.Settings.AllowEnemyGrindingInMotion && _IsMovingOrControlledCache.AddOrGetCache(cubeGrid.EntityId.ToString(), () =>
@@ -1913,7 +1888,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }) == true) { return; }
 
             if (grids.Contains(cubeGrid)) return; //Allready parsed
-          
+
             Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: AsyncAddBlocksOfGrid AddGrid {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), cubeGrid.DisplayName);
             grids.Add(cubeGrid);
 
@@ -1924,6 +1899,9 @@ namespace SKONanobotBuildAndRepairSystem
 
             foreach (var slimBlock in newBlocks)
             {
+                if (possibleGrindTargets.Count >= Constants.MaxNumberOfBlocksToSync && possibleWeldTargets.Count >= Constants.MaxNumberOfBlocksToSync)
+                    break;
+
                 AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, possibleWeldTargets, possibleGrindTargets);
 
                 var fatBlock = slimBlock.FatBlock;
@@ -1960,6 +1938,9 @@ namespace SKONanobotBuildAndRepairSystem
                     var projector = fatBlock as Sandbox.ModAPI.IMyProjector;
                     if (projector != null)
                     {
+                        if (possibleWeldTargets.Count >= Constants.MaxNumberOfBlocksToSync)
+                            break;
+
                         Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: Projector={1} IsProjecting={2} BuildableBlockCount={3} IsRelationAllowed={4} Relation={5}/{6}/{7}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(projector), projector.IsProjecting, projector.BuildableBlocksCount, IsRelationAllowed4Welding(slimBlock), slimBlock.GetUserRelationToOwner(_Welder.OwnerId), projector.GetUserRelationToOwner(_Welder.OwnerId), slimBlock.CubeGrid.GetUserRelationToOwner(_Welder.OwnerId));
                         if (projector.IsProjecting && projector.BuildableBlocksCount > 0 && IsRelationAllowed4Welding(slimBlock))
                         {
@@ -1973,6 +1954,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                                 foreach (var block in projectedBlocks)
                                 {
+                                    if (possibleWeldTargets.Count >= Constants.MaxNumberOfBlocksToSync)
+                                        break;
+
                                     double distance;
                                     Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: Projector={1} Block={2} BlockKindEnabled={3}, InRange={4}, CanBuild={5}/{6} BlockClass={7}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(projector), Logging.BlockName(block), BlockWeldPriority.GetEnabled(block), block.IsInRange(ref areaBox, out distance), block.CanBuild(false), block.Dithering, BlockWeldPriority.GetItemAlias(block, true));
                                     if (BlockWeldPriority.GetEnabled(block) && block.IsInRange(ref areaBox, out distance) && block.CanBuild(false))
@@ -2027,14 +2011,20 @@ namespace SKONanobotBuildAndRepairSystem
                 }
 
                 var added = false;
-                if (possibleGrindTargets != null && (useGrindColor || autoGrindRelation != 0))
+                if (possibleGrindTargets != null && possibleGrindTargets.Count < Constants.MaxNumberOfBlocksToSync)
                 {
-                    added = AsyncAddBlockIfGrindTarget(ref areaBox, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, block, possibleGrindTargets);
+                    if((useGrindColor || autoGrindRelation != 0))
+                    {
+                        added = AsyncAddBlockIfGrindTarget(ref areaBox, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, block, possibleGrindTargets);
+                    }
                 }
 
-                if (possibleWeldTargets != null && !added) //Do not weld if in grind list (could happen if auto grind neutrals is enabled and "HelpOthers" is active)
+                if (possibleWeldTargets != null && possibleWeldTargets.Count < Constants.MaxNumberOfBlocksToSync) //Do not weld if in grind list (could happen if auto grind neutrals is enabled and "HelpOthers" is active)
                 {
-                    AsyncAddBlockIfWeldTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, block, possibleWeldTargets);
+                    if(!added)
+                    {
+                        AsyncAddBlockIfWeldTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, block, possibleWeldTargets);
+                    }
                 }
             }
             catch (Exception ex)
@@ -2105,7 +2095,7 @@ namespace SKONanobotBuildAndRepairSystem
                 return false;
             
             // If we are in motion, grinding is not allowed.
-            if(Welder.CubeGrid.EntityId != block.CubeGrid.EntityId && Welder.CubeGrid.Physics?.IsMoving == true && Welder.CubeGrid.Physics?.Speed >= 1)
+            if(!NanobotBuildAndRepairSystemMod.Settings.AllowEnemyGrindingInMotion && Welder.CubeGrid.EntityId != block.CubeGrid.EntityId && Welder.CubeGrid.Physics?.IsMoving == true && Welder.CubeGrid.Physics?.Speed >= 1)
             {
                 return false;
             }
