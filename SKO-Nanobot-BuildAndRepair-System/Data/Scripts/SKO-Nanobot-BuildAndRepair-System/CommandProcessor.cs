@@ -1,5 +1,6 @@
 ﻿using Sandbox.ModAPI;
 using System;
+using System.Text;
 using VRage;
 
 namespace SKONanobotBuildAndRepairSystem
@@ -7,13 +8,11 @@ namespace SKONanobotBuildAndRepairSystem
     public static class CommandProcessor
     {
         private const string CmdKey = "/nanobars";
-        private const string CmdHelp1 = "-?";
-        private const string CmdHelp2 = "-help";
+        private const string CmdHelp = "-help";
         private const string CmdCwsf = "-cwsf";
         private const string CmdCpsf = "-cpsf";
         private const string CmdLogLevel = "-loglevel";
         private const string CmdLogLevel_All = "all";
-        private const string CmdLogLevel_Default = "default";
         private const string CmdWriteTranslation = "-writetranslation";
         private const string CmdScanAround = "-scan-around";
         private const string CmdScanView = "-scan-view";
@@ -29,7 +28,7 @@ namespace SKONanobotBuildAndRepairSystem
             var args = cmd.Remove(0, CmdKey.Length).Trim().Split(' ');
             var console = MyAPIGateway.Utilities;
 
-            if (args.Length == 0 || args[0] == CmdHelp1 || args[0] == CmdHelp2)
+            if (args.Length == 0 || args[0] == CmdHelp)
             {
                 ShowHelp();
                 return;
@@ -113,18 +112,39 @@ namespace SKONanobotBuildAndRepairSystem
 
         private static void ShowHelp()
         {
-            var lang = MyAPIGateway.Session.Config.Language;
-            var text = string.Format(Texts.Cmd_HelpClient.String, "V2.1.5", CmdHelp1, CmdHelp2,
-                CmdLogLevel, CmdLogLevel_All, CmdLogLevel_Default,
-                CmdWriteTranslation, string.Join(",", Enum.GetNames(typeof(MyLanguagesEnum))),
-                MyAPIGateway.Utilities.GamePaths.UserDataPath + "/Storage/" + MyAPIGateway.Utilities.GamePaths.ModScopeName);
+            var sb = new StringBuilder();
 
-            if (MyAPIGateway.Session.IsServer)
-            {
-                text += string.Format(Texts.Cmd_HelpServer.String, CmdCwsf, CmdCpsf);
-            }
+            sb.AppendLine($"Version: {Constants.Version}");
+            sb.AppendLine();
+            sb.AppendLine($"[-loglevel all;default]: Set the logging level. Warning: Setting level to 'all' could produce very large log-files.");
+            sb.AppendLine();
+            sb.AppendLine($"[-cwsf]: Creates a settings file inside your current world folder.");
+            sb.AppendLine();
+            sb.AppendLine($"[--cpsf]: Creates a settings file inside the global mod storage folder.");
+            sb.AppendLine();
+            sb.AppendLine($"> Issues / Suggestions?");
+            sb.AppendLine($"To report issues or suggestions, go to:");
+            sb.AppendLine($"https://github.com/SKO85/SE-Mods/issues");
+            sb.AppendLine();
+            sb.AppendLine($"> Documentation / WIKI");
+            sb.AppendLine($"For documentation and release notes, go to:");
+            sb.AppendLine($"https://github.com/SKO85/SE-Mods/wiki");
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.AppendLine($"Have fun!\nSKO85");
 
-            MyAPIGateway.Utilities.ShowMissionScreen("Nanobot Build and Repair System", "Help", "", text);
+            //var lang = MyAPIGateway.Session.Config.Language;
+            //var text = string.Format(Texts.Cmd_HelpClient.String, "V2.1.5", CmdHelp1, CmdHelp2,
+            //    CmdLogLevel, CmdLogLevel_All, CmdLogLevel_Default,
+            //    CmdWriteTranslation, string.Join(",", Enum.GetNames(typeof(MyLanguagesEnum))),
+            //    MyAPIGateway.Utilities.GamePaths.UserDataPath + "/Storage/" + MyAPIGateway.Utilities.GamePaths.ModScopeName);
+
+            //if (MyAPIGateway.Session.IsServer)
+            //{
+            //    text += string.Format(Texts.Cmd_HelpServer.String, CmdCwsf, CmdCpsf);
+            //}
+
+            MyAPIGateway.Utilities.ShowMissionScreen("Nanobot Build and Repair System", "Help", "", sb.ToString());
         }
     }
 }
