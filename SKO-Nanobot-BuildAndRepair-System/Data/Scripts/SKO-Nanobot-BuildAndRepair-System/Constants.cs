@@ -62,6 +62,6 @@ namespace SKONanobotBuildAndRepairSystem
 
         public const float UpdateIntervalSecondsDefault = 1.5f;
         public static int MaxNumberOfBlocksToSync = 30;
-        public static string Version = "1.6.3";
+        public static string Version = "1.6.4";
     }
 }

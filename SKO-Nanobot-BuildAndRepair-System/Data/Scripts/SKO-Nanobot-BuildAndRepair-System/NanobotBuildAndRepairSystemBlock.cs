@@ -1878,7 +1878,7 @@ namespace SKONanobotBuildAndRepairSystem
             if (!State.Ready) return; //Block not ready
 
             // If we already have enough blocks to take care off...
-            if (possibleGrindTargets.Count >= Constants.MaxNumberOfBlocksToSync && possibleWeldTargets.Count >= Constants.MaxNumberOfBlocksToSync)
+            if (possibleGrindTargets?.Count >= Constants.MaxNumberOfBlocksToSync && possibleWeldTargets?.Count >= Constants.MaxNumberOfBlocksToSync)
                 return;
 
             // Check if grinding is allowed in motion or not. Handles grinding abuse of enemy grids. Can be configured in modsettings.xml
@@ -1899,7 +1899,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             foreach (var slimBlock in newBlocks)
             {
-                if (possibleGrindTargets.Count >= Constants.MaxNumberOfBlocksToSync && possibleWeldTargets.Count >= Constants.MaxNumberOfBlocksToSync)
+                if (possibleGrindTargets?.Count >= Constants.MaxNumberOfBlocksToSync && possibleWeldTargets?.Count >= Constants.MaxNumberOfBlocksToSync)
                     break;
 
                 AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, possibleWeldTargets, possibleGrindTargets);
@@ -1938,7 +1938,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var projector = fatBlock as Sandbox.ModAPI.IMyProjector;
                     if (projector != null)
                     {
-                        if (possibleWeldTargets.Count >= Constants.MaxNumberOfBlocksToSync)
+                        if (possibleWeldTargets?.Count >= Constants.MaxNumberOfBlocksToSync)
                             break;
 
                         Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: Projector={1} IsProjecting={2} BuildableBlockCount={3} IsRelationAllowed={4} Relation={5}/{6}/{7}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(projector), projector.IsProjecting, projector.BuildableBlocksCount, IsRelationAllowed4Welding(slimBlock), slimBlock.GetUserRelationToOwner(_Welder.OwnerId), projector.GetUserRelationToOwner(_Welder.OwnerId), slimBlock.CubeGrid.GetUserRelationToOwner(_Welder.OwnerId));
@@ -1954,7 +1954,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                                 foreach (var block in projectedBlocks)
                                 {
-                                    if (possibleWeldTargets.Count >= Constants.MaxNumberOfBlocksToSync)
+                                    if (possibleWeldTargets?.Count >= Constants.MaxNumberOfBlocksToSync)
                                         break;
 
                                     double distance;
@@ -2011,7 +2011,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
 
                 var added = false;
-                if (possibleGrindTargets != null && possibleGrindTargets.Count < Constants.MaxNumberOfBlocksToSync)
+                if (possibleGrindTargets != null && possibleGrindTargets?.Count < Constants.MaxNumberOfBlocksToSync)
                 {
                     if((useGrindColor || autoGrindRelation != 0))
                     {
@@ -2019,7 +2019,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                if (possibleWeldTargets != null && possibleWeldTargets.Count < Constants.MaxNumberOfBlocksToSync) //Do not weld if in grind list (could happen if auto grind neutrals is enabled and "HelpOthers" is active)
+                if (possibleWeldTargets != null && possibleWeldTargets?.Count < Constants.MaxNumberOfBlocksToSync) //Do not weld if in grind list (could happen if auto grind neutrals is enabled and "HelpOthers" is active)
                 {
                     if(!added)
                     {
