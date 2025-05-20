@@ -1,7 +1,6 @@
 ﻿using Sandbox.ModAPI;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 
 namespace SKONanobotBuildAndRepairSystem
 {
@@ -14,7 +13,10 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (action == null) return;
 
-            _taskQueue.Enqueue(action);
+            lock(_taskQueue)
+            {
+                _taskQueue.Enqueue(action);
+            }            
             TryRunNext();            
         }
 
@@ -24,7 +26,10 @@ namespace SKONanobotBuildAndRepairSystem
                 return;
 
             Action task = null;
-            _taskQueue.TryDequeue(out task);
+            lock (_taskQueue)
+            {
+                _taskQueue.TryDequeue(out task);
+            }
             _runningTasks++;
 
             MyAPIGateway.Parallel.StartBackground(() =>

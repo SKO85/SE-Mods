@@ -61,7 +61,6 @@ namespace SKONanobotBuildAndRepairSystem
         public const bool AllowEnemyGrindingInMotionDefault = false;
 
         public const float UpdateIntervalSecondsDefault = 1.5f;
-        public static int MaxNumberOfBlocksToSync = 30;
-        public static string Version = "1.6.4";
+        public static string Version = "1.6.5";
     }
 }
