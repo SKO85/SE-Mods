@@ -407,15 +407,12 @@ namespace SKONanobotBuildAndRepairSystem
         {
             base.UpdateBeforeSimulation10();
             UpdateBeforeSimulation10_100(true);
-
-
         }
 
         public override void UpdateBeforeSimulation100()
         {
             base.UpdateBeforeSimulation100();
             UpdateBeforeSimulation10_100(false);
-
         }
 
         /// <summary>
