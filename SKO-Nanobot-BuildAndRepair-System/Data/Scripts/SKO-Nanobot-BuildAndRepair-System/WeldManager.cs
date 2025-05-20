@@ -39,11 +39,6 @@ namespace SKONanobotBuildAndRepairSystem
 
             lock (block.State.PossibleWeldTargets)
             {
-                if (block.State.PossibleWeldTargets.Count > Constants.MaxNumberOfBlocksToSync)
-                {
-                    return;
-                }
-
                 foreach (var targetData in block.State.PossibleWeldTargets)
                 {
                     if ((block.Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 &&
