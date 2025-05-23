@@ -1,12 +1,12 @@
 ﻿using Sandbox.ModAPI;
 using System;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace SKONanobotBuildAndRepairSystem
 {
     public static class AsyncTaskQueue
     {
-        private static readonly ConcurrentQueue<Action> _taskQueue = new ConcurrentQueue<Action>();
+        private static readonly Queue<Action> _taskQueue = new Queue<Action>();
         private static int _runningTasks = 0;
 
         public static void Enqueue(Action action)
@@ -28,7 +28,7 @@ namespace SKONanobotBuildAndRepairSystem
             Action task = null;
             lock (_taskQueue)
             {
-                _taskQueue.TryDequeue(out task);
+                task = _taskQueue.Dequeue();
             }
             _runningTasks++;
 
@@ -60,8 +60,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             lock (_taskQueue)
             {
-                Action item;
-                while (_taskQueue.TryDequeue(out item)) { }
+                _taskQueue.Clear();
             }
         }
     }
