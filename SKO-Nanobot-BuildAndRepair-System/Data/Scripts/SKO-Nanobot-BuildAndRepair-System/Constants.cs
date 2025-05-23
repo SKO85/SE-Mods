@@ -58,9 +58,9 @@ namespace SKONanobotBuildAndRepairSystem
 
         public const bool AutoPowerOffOnIdleForcedDefault = true;
         public const int AutoPowerOffOnIdleMinutesDefault = 15;
-        public const bool AllowEnemyGrindingInMotionDefault = false;
+        public const bool AllowEnemyGrindingInMotionDefault = true;
 
-        public const float UpdateIntervalSecondsDefault = 1.5f;
-        public static string Version = "1.6.5";
+        public const float UpdateIntervalSecondsDefault = 0.5f;
+        public static string Version = "1.6.7";
     }
 }

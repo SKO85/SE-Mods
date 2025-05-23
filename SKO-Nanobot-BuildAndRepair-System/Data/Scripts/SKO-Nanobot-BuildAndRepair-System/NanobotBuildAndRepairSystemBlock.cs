@@ -12,7 +12,6 @@ namespace SKONanobotBuildAndRepairSystem
     using Sandbox.Game.Lights;
     using Sandbox.ModAPI;
     using Sandbox.ModAPI.Ingame;
-    using SKONanobotBuildAndRepairSystem.Cache;
     using VRage;
     using VRage.Game;
     using VRage.Game.Components;
@@ -46,7 +45,6 @@ namespace SKONanobotBuildAndRepairSystem
 
         private Action<IMyTerminalBlock> _onEnabledChanged;
         private Action<IMyCubeBlock> _onIsWorkingChanged;
-        private CacheHandler<bool?> _IsMovingOrControlledCache = new CacheHandler<bool?>();
 
         private readonly Stopwatch _DelayWatch = new Stopwatch();
         private int _Delay = 0;
@@ -59,7 +57,6 @@ namespace SKONanobotBuildAndRepairSystem
         private readonly HashSet<IMyInventory> _TempIgnore4Ingot = new HashSet<IMyInventory>();
         private readonly HashSet<IMyInventory> _TempIgnore4Items = new HashSet<IMyInventory>();
         private readonly HashSet<IMyInventory> _TempIgnore4Components = new HashSet<IMyInventory>();
-
         internal IMyShipWelder _Welder;
         internal IMyInventory _TransportInventory;
         private bool _IsInit;
@@ -248,12 +245,13 @@ namespace SKONanobotBuildAndRepairSystem
 
             _onEnabledChanged = (block) =>
             {
+                OnEnabledOrWorkingChanged();
                 UpdateCustomInfo(true);
             };
 
             _onIsWorkingChanged = (block) =>
             {
-                IsWorkingChanged();
+                OnEnabledOrWorkingChanged();
                 UpdateCustomInfo(true);
             };
 
@@ -287,6 +285,7 @@ namespace SKONanobotBuildAndRepairSystem
             _WorkingStateSet = WorkingState.Invalid;
             _SoundVolumeSet = -1;
             _LastUpdate = MyAPIGateway.Session.ElapsedPlayTime;
+
             _IsInit = true;
             Logging.Instance?.Write(Logging.Level.Event, "BuildAndRepairSystemBlock {0}: Init -> done", Logging.BlockName(_Welder, Logging.BlockNameOptions.None));
         }
@@ -358,26 +357,6 @@ namespace SKONanobotBuildAndRepairSystem
             try
             {
                 base.UpdateBeforeSimulation();
-
-                //if (!Scanner.ScanActive)
-                //{
-                //    foreach (var zone in OreScannerVisuals.ScannedZones)
-                //    {
-                //        Color color = Color.Red; // Or any color you prefer
-
-                //        MySimpleObjectDraw.DrawTransparentBox(
-                //            ref zone.Matrix,
-                //            ref zone.Box,
-                //            ref color,
-                //            MySimpleObjectRasterizer.Solid,
-                //            1,
-                //            0.04f,
-                //            MyStringId.GetOrCompute("GizmoDrawLine"),
-                //            MyStringId.GetOrCompute("GizmoDraw"),
-                //            false
-                //        );
-                //    }
-                //}
 
                 if (_Welder == null || !_IsInit) return;
 
@@ -491,6 +470,7 @@ namespace SKONanobotBuildAndRepairSystem
                         State.ResetChanged();
                     }
                 }
+
                 if (Settings.IsTransmitNeeded())
                 {
                     MessageSyncHelper.SyncBlockSettingsSend(0, this);
@@ -550,13 +530,22 @@ namespace SKONanobotBuildAndRepairSystem
                 // Check if idle long time.
                 if (!IsIdle())
                 {
-                    LastTaskTime = MyAPIGateway.Session.ElapsedPlayTime;
+                    LastTaskTime = playTime;
                 }
                 else
                 {
-                    if (Settings.UseAutoPowerOffWhenIdle == 1 && MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTaskTime).TotalMinutes >= NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes)
+                    if (_Welder.Enabled && Settings.UseAutoPowerOffWhenIdle == 1)
                     {
-                        _Welder.Enabled = false;
+                        if(playTime.Subtract(LastTaskTime).TotalMinutes >= NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes)
+                        {
+                            _Welder.Enabled = false;
+                            UpdateCustomInfo(true);
+                            LastTaskTime = playTime;
+                        }
+                        else
+                        {
+                            UpdateCustomInfo(true);
+                        }
                     }
                 }
 
@@ -748,7 +737,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             _UpdateCustomInfoNeeded |= changed;
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
-            if (_UpdateCustomInfoNeeded && playTime.Subtract(_UpdateCustomInfoLast).TotalSeconds >= 2)
+            if (_UpdateCustomInfoNeeded && playTime.Subtract(_UpdateCustomInfoLast).TotalSeconds >= 1)
             {
                 _Welder.RefreshCustomInfo();
                 TriggerTerminalRefresh();
@@ -757,7 +746,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        private void IsWorkingChanged()
+        private void OnEnabledOrWorkingChanged()
         {
             try
             {
@@ -767,7 +756,7 @@ namespace SKONanobotBuildAndRepairSystem
                 EffectManager.UpdateEffects(this);
             }
             catch { }
-            
+
             LastTaskTime = MyAPIGateway.Session.ElapsedPlayTime;
         }
 
@@ -1855,9 +1844,9 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
        
-        private bool IsMovingOrControlledNotOwnedTarget(IMyCubeGrid targetGrid)
+        private bool IsMovingNotOwnedTarget(IMyCubeGrid targetGrid)
         {
-            if (Welder.CubeGrid.EntityId != targetGrid.EntityId)
+            if (targetGrid != null && targetGrid.Closed && Welder.CubeGrid?.EntityId != targetGrid.EntityId)
             {
                 var isMoving = targetGrid.Physics?.IsMoving == true && targetGrid.Physics?.Speed >= 1;
 
@@ -1873,12 +1862,6 @@ namespace SKONanobotBuildAndRepairSystem
         private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, List<IMyCubeGrid> grids, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
         {
             if (!State.Ready) return; //Block not ready
-
-            // Check if grinding is allowed in motion or not. Handles grinding abuse of enemy grids. Can be configured in modsettings.xml
-            if (!NanobotBuildAndRepairSystemMod.Settings.AllowEnemyGrindingInMotion && _IsMovingOrControlledCache.AddOrGetCache(cubeGrid.EntityId.ToString(), () =>
-                {
-                    return IsMovingOrControlledNotOwnedTarget(cubeGrid);
-                }) == true) { return; }
 
             if (grids.Contains(cubeGrid)) return; //Allready parsed
 
@@ -2071,11 +2054,20 @@ namespace SKONanobotBuildAndRepairSystem
             // Is being projected?
             if (block.IsProjected())
                 return false;
-            
-            // If we are in motion, grinding is not allowed.
-            if(!NanobotBuildAndRepairSystemMod.Settings.AllowEnemyGrindingInMotion && Welder.CubeGrid.EntityId != block.CubeGrid.EntityId && Welder.CubeGrid.Physics?.IsMoving == true && Welder.CubeGrid.Physics?.Speed >= 1)
+
+            if(!NanobotBuildAndRepairSystemMod.Settings.AllowEnemyGrindingInMotion && block.CubeGrid != null && !block.CubeGrid.Closed)
             {
-                return false;
+                // Check if grinding is allowed in motion or not. Handles grinding abuse of enemy grids. Can be configured in modsettings.xml
+                if (IsMovingNotOwnedTarget(block?.CubeGrid))
+                {
+                    return false;
+                }
+
+                // If we are in motion, grinding is not allowed.
+                if (Welder.CubeGrid.EntityId != block.CubeGrid.EntityId && Welder.CubeGrid.Physics?.IsMoving == true && Welder.CubeGrid.Physics?.Speed >= 1)
+                {
+                    return false;
+                }
             }
 
             if (Logging.Instance.ShouldLog(Logging.Level.Verbose))
@@ -2197,6 +2189,17 @@ namespace SKONanobotBuildAndRepairSystem
 
             customInfo.Append(Environment.NewLine);
 
+            // Print time until power off.
+            if(_Welder.Enabled && Settings.UseAutoPowerOffWhenIdle == 1 && IsIdle())
+            {
+                var elapsedIdleTime = MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTaskTime);
+                var timeTillPowerOff = TimeSpan.FromMinutes(NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes).Subtract(elapsedIdleTime);
+
+                customInfo.Append($"Time till Auto Power Off: {timeTillPowerOff.ToString(@"mm\:ss")}");
+                customInfo.Append(Environment.NewLine);
+            }
+
+            // Print Power details.
             var resourceSink = _Welder.Components.Get<Sandbox.Game.EntityComponents.MyResourceSinkComponent>();
             if (resourceSink != null)
             {
