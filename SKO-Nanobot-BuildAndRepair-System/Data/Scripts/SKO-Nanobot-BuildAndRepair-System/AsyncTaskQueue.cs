@@ -14,26 +14,47 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (action == null) return;
 
+            bool shouldStartTask = false;
+
             lock (_lock)
             {
                 _taskQueue.Enqueue(action);
-                TryRunNext();
+
+                // Start a task only if allowed by limit
+                if (_runningTasks < NanobotBuildAndRepairSystemMod.Settings.MaxBackgroundTasks)
+                {
+                    _runningTasks++;
+                    shouldStartTask = true;
+                }
             }
+
+            if (shouldStartTask)
+                StartNextTask();
         }
 
-        private static void TryRunNext()
+        private static void StartNextTask()
         {
-            if (_runningTasks >= NanobotBuildAndRepairSystemMod.Settings.MaxBackgroundTasks || _taskQueue.Count == 0)
-                return;
+            Action taskToRun = null;
 
-            var task = _taskQueue.Dequeue();
-            _runningTasks++;
+            lock (_lock)
+            {
+                if (_taskQueue.Count > 0)
+                {
+                    taskToRun = _taskQueue.Dequeue();
+                }
+                else
+                {
+                    // Safe decrement: never let _runningTasks go below zero
+                    _runningTasks = Math.Max(0, _runningTasks - 1);
+                    return;
+                }
+            }
 
             MyAPIGateway.Parallel.StartBackground(() =>
             {
                 try
                 {
-                    task();
+                    taskToRun();
                 }
                 catch (Exception ex)
                 {
@@ -41,11 +62,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 finally
                 {
-                    lock (_lock)
-                    {
-                        _runningTasks--;
-                        TryRunNext();
-                    }
+                    StartNextTask();
                 }
             });
         }
