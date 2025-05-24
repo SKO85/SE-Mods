@@ -476,7 +476,7 @@ namespace SKONanobotBuildAndRepairSystem
                     MessageSyncHelper.SyncBlockSettingsSend(0, this);
                 }
 
-                if (_UpdateCustomInfoNeeded) UpdateCustomInfo(false);
+                if (_UpdateCustomInfoNeeded) UpdateCustomInfo(true);
 
                 _DelayWatch.Stop();
                 if (_DelayWatch.ElapsedMilliseconds > 40)
@@ -524,6 +524,7 @@ namespace SKONanobotBuildAndRepairSystem
             IMySlimBlock currentWeldingBlock = null;
             IMySlimBlock currentGrindingBlock = null;
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
+            var idleCounterUpdated = false;
 
             if (ready)
             {
@@ -539,12 +540,12 @@ namespace SKONanobotBuildAndRepairSystem
                         if(playTime.Subtract(LastTaskTime).TotalMinutes >= NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes)
                         {
                             _Welder.Enabled = false;
-                            UpdateCustomInfo(true);
+                            idleCounterUpdated = true;
                             LastTaskTime = playTime;
                         }
                         else
                         {
-                            UpdateCustomInfo(true);
+                            idleCounterUpdated = true;
                         }
                     }
                 }
@@ -656,7 +657,7 @@ namespace SKONanobotBuildAndRepairSystem
             var possibleFloatingTargetsChanged = State.PossibleFloatingTargets.LastHash != State.PossibleFloatingTargets.CurrentHash;
             State.PossibleFloatingTargets.LastHash = State.PossibleFloatingTargets.CurrentHash;
 
-            if (missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged) State.HasChanged();
+            if (idleCounterUpdated || missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged) State.HasChanged();
 
             if (missingComponentsChanged && Logging.Instance.ShouldLog(Logging.Level.Verbose))
             {
@@ -673,7 +674,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            UpdateCustomInfo(missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged || readyChanged || inventoryFullChanged || limitsExceededChanged);
+            UpdateCustomInfo(idleCounterUpdated || missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged || readyChanged || inventoryFullChanged || limitsExceededChanged);
         }
 
         public bool IsWelderShielded()
@@ -737,7 +738,8 @@ namespace SKONanobotBuildAndRepairSystem
         {
             _UpdateCustomInfoNeeded |= changed;
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
-            if (_UpdateCustomInfoNeeded && playTime.Subtract(_UpdateCustomInfoLast).TotalSeconds >= 1)
+
+            if (_UpdateCustomInfoNeeded && playTime.Subtract(_UpdateCustomInfoLast).TotalSeconds >= 2)
             {
                 _Welder.RefreshCustomInfo();
                 TriggerTerminalRefresh();
@@ -766,7 +768,7 @@ namespace SKONanobotBuildAndRepairSystem
         public void TriggerTerminalRefresh()
         {
             //Workaround as long as RaisePropertiesChanged is not public
-            if (_Welder != null && MyAPIGateway.Gui.InteractedEntity == _Welder)
+            if (_Welder != null)
             {
                 var action = _Welder.GetActionWithName("helpOthers");
                 if (action != null)
