@@ -2021,7 +2021,8 @@ namespace SKONanobotBuildAndRepairSystem
                    BlockWeldPriority.GetEnabled(block) &&
                    block.IsInRange(ref areaBox, out distance) &&
                    IsRelationAllowed4Welding(projector.SlimBlock) &&
-                   block.CanBuild(false))
+                   block.CanBuild(false) && 
+                   !SafeZoneProtection.IsProtectedFromWelding(block, Welder, true))
                 {
                     Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: Add projected Block {1}, HasFatBlock={2}, Class={3}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block), block.FatBlock != null, BlockWeldPriority.GetItemAlias(block, true));
                     possibleWeldTargets.Add(new TargetBlockData(block, distance, TargetBlockData.AttributeFlags.Projected));
@@ -2034,7 +2035,8 @@ namespace SKONanobotBuildAndRepairSystem
                    BlockWeldPriority.GetEnabled(block) &&
                    block.IsInRange(ref areaBox, out distance) &&
                    IsRelationAllowed4Welding(block) &&
-                   block.NeedRepair(GetIntegrityLevel()))
+                   block.NeedRepair(GetIntegrityLevel()) &&
+                   !SafeZoneProtection.IsProtectedFromWelding(block, Welder))
                 {
                     Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: Add damaged Block {1} MaxDeformation={2}, (HasDeformation={3}), IsFullIntegrity={4}, HasFatBlock={5}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block), block.MaxDeformation, block.HasDeformation, block.IsFullIntegrity, block.FatBlock != null);
                     possibleWeldTargets.Add(new TargetBlockData(block, distance, 0));
@@ -2115,7 +2117,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (block.IsInRange(ref areaBox, out distance))
                 {
                     // Is protected by SafeZone?
-                    if (SafeZoneProtection.IsProtected(block, Welder))
+                    if (SafeZoneProtection.IsProtectedFromGrinding(block, Welder))
                     {
                         return false;
                     }
