@@ -61,6 +61,6 @@ namespace SKONanobotBuildAndRepairSystem
         public const bool AllowEnemyGrindingInMotionDefault = true;
 
         public const float UpdateIntervalSecondsDefault = 0.5f;
-        public static string Version = "1.6.8";
+        public static string Version = "1.6.9";
     }
 }
