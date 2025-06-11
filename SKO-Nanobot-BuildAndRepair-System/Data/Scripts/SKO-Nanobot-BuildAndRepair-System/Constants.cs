@@ -51,7 +51,7 @@ namespace SKONanobotBuildAndRepairSystem
         public const int MaxBackgroundTasks_Default = 4;
         public const int MaxBackgroundTasks_Max = 10;
         public const int MaxBackgroundTasks_Min = 1;
-        public const float MaxCreateIntegrityRatio = 0.2f;
+        public const float MaxSkeletonCreateIntegrityRatio = 0.2f;
 
         public const bool DisableLocalization = false;
         public const ulong sId = 76561198001777579;
@@ -61,6 +61,6 @@ namespace SKONanobotBuildAndRepairSystem
         public const bool AllowEnemyGrindingInMotionDefault = true;
 
         public const float UpdateIntervalSecondsDefault = 0.5f;
-        public static string Version = "1.6.9";
+        public static string Version = "1.6.10";
     }
 }

@@ -191,6 +191,12 @@ namespace SKONanobotBuildAndRepairSystem
                         adjusted = true;
                     }
 
+                    // Set back to default if someone used strange values for auto-power-off. Ignore their value.
+                    if(settings.AutoPowerOffOnIdleMinutes < 1 || settings.AutoPowerOffOnIdleMinutes >= TimeSpan.MaxValue.TotalMinutes)
+                    {
+                        settings.AutoPowerOffOnIdleMinutes = Constants.AutoPowerOffOnIdleMinutesDefault;
+                    }
+
                     Logging.Instance?.Write(Logging.Level.Info, "NanobotBuildAndRepairSystemSettings: Settings {0}", settings);
                     //if (adjusted) Save(settings, world); don't save file
                 }

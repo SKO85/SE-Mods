@@ -443,7 +443,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (!fast)
                     {
                         if ((State.Ready != _PowerReady || State.Welding != _PowerWelding || State.Grinding != _PowerGrinding || State.Transporting != _PowerTransporting) &&
-                            MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdatePowerSinkLast).TotalSeconds >= 6)
+                            MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdatePowerSinkLast).TotalSeconds >= 5)
                         {
                             _UpdatePowerSinkLast = MyAPIGateway.Session.ElapsedPlayTime;
                             _PowerReady = State.Ready;
@@ -476,7 +476,7 @@ namespace SKONanobotBuildAndRepairSystem
                     MessageSyncHelper.SyncBlockSettingsSend(0, this);
                 }
 
-                if (_UpdateCustomInfoNeeded) UpdateCustomInfo(true);
+                if (_UpdateCustomInfoNeeded) UpdateCustomInfo(false);
 
                 _DelayWatch.Stop();
                 if (_DelayWatch.ElapsedMilliseconds > 40)
@@ -537,7 +537,8 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (_Welder.Enabled && Settings.UseAutoPowerOffWhenIdle == 1)
                     {
-                        if(playTime.Subtract(LastTaskTime).TotalMinutes >= NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes)
+                        var elapsedTime = Math.Abs(playTime.Subtract(LastTaskTime).TotalMinutes);
+                        if (elapsedTime >= NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes)
                         {
                             _Welder.Enabled = false;
                             idleCounterUpdated = true;
@@ -546,7 +547,7 @@ namespace SKONanobotBuildAndRepairSystem
                         else
                         {
                             idleCounterUpdated = true;
-                        }
+                        }                        
                     }
                 }
 
@@ -875,29 +876,22 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                var def = ((MyCubeBlockDefinition)target.BlockDefinition);
+                var integrityLevel = GetIntegrityLevel();
 
-                if (Settings.WeldTo == WeldTo.WeldToFull)
+                if(Settings.WeldTo == WeldTo.WeldToFull)
                 {
                     return target.IsFullIntegrity;
                 }
-                else if (Settings.WeldTo == WeldTo.WeldToFunctionalOnly)
-                {
-                    var addIntegrity = target.MaxIntegrity * 0.03f;
-                    return target.Integrity >= (target.MaxIntegrity + addIntegrity) * def.CriticalIntegrityRatio;
-                }
-                else if (Settings.WeldTo == WeldTo.Skeleton)
-                {
-                    return target.Integrity >= target.MaxIntegrity * Constants.MaxCreateIntegrityRatio;
-                }
+
+                var requiredIntegrity = target.GetRequiredIntegrity(integrityLevel);
+
+                return target.Integrity >= requiredIntegrity;
             }
             catch
             {
                 // If something goes wrong, lets say its all built to avoid issues!
                 return true;
             }
-
-            return false;
         }
 
         internal UtilsInventory.IntegrityLevel GetIntegrityLevel()
@@ -2196,11 +2190,14 @@ namespace SKONanobotBuildAndRepairSystem
             // Print time until power off.
             if(_Welder.Enabled && Settings.UseAutoPowerOffWhenIdle == 1 && IsIdle())
             {
-                var elapsedIdleTime = MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTaskTime);
-                var timeTillPowerOff = TimeSpan.FromMinutes(NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes).Subtract(elapsedIdleTime);
+                var elapsedIdleTime= MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTaskTime);
 
-                customInfo.Append($"Time till Auto Power Off: {timeTillPowerOff.ToString(@"mm\:ss")}");
-                customInfo.Append(Environment.NewLine);
+                if(elapsedIdleTime.TotalMinutes <= NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes)
+                {
+                    var timeTillPowerOff = TimeSpan.FromMinutes(NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes).Subtract(elapsedIdleTime);
+                    customInfo.Append($"Time till Auto Power Off: {timeTillPowerOff.ToString(@"mm\:ss")}");
+                    customInfo.Append(Environment.NewLine);
+                }
             }
 
             // Print Power details.
