@@ -341,7 +341,7 @@ namespace SKONanobotBuildAndRepairSystem
                     integrity += component.Definition.MaxIntegrity;
                     integrityRatio = integrity / blockDefinition.MaxIntegrity;
 
-                    if(integrityRatio >= Constants.MaxCreateIntegrityRatio)
+                    if(integrityRatio >= Constants.MaxSkeletonCreateIntegrityRatio)
                     {
                         integrityReached = true;
                         break;

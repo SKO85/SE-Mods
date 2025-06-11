@@ -18,25 +18,43 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if(target == null) return false;
 
-            //I use target.HasDeformation && target.MaxDeformation > X) as I had several times both situations, a landing gear reporting HasDeformation or a block reporting target.MaxDeformation > 0.1 both weren't repairable and caused welding this blocks forever!
-            //Now I had the case that target.HasDeformation = true and target.MaxDeformation=0 and the block was deformed -> I removed the double Check
-            //target.IsFullyDismounted is equals to target.IsDestroyed
-            var neededIntegrityLevel = target.MaxIntegrity;
-            
-            if(integrityLevel == UtilsInventory.IntegrityLevel.Functional)
-            {
-                var addIntegrity = target.MaxIntegrity * 0.03f;
-                neededIntegrityLevel = (target.MaxIntegrity + addIntegrity) * ((MyCubeBlockDefinition)target.BlockDefinition).CriticalIntegrityRatio;
-            }
-            else if(integrityLevel == UtilsInventory.IntegrityLevel.Skeleton)
-            {
-                neededIntegrityLevel = target.MaxIntegrity * Constants.MaxCreateIntegrityRatio;
-            }
-            
+            var neededIntegrityLevel = target.GetRequiredIntegrity(integrityLevel);
             var needRepair = !target.IsDestroyed && (target.FatBlock == null || !target.FatBlock.Closed) && (target.Integrity < neededIntegrityLevel || target.HasDeformation);
 
             return needRepair;
-        }    
+        }  
+        
+        public static float GetRequiredIntegrity(this IMySlimBlock target, UtilsInventory.IntegrityLevel integrityLevel)
+        {
+            if(target == null) return 0f;
+
+            var def = target.BlockDefinition as MyCubeBlockDefinition;
+            var requiredIntegrity = target.MaxIntegrity;
+
+            if (integrityLevel == UtilsInventory.IntegrityLevel.Functional)
+            {                
+                var functionalIntegrity = target.MaxIntegrity * def.CriticalIntegrityRatio;
+                requiredIntegrity = SetMax(functionalIntegrity + 1, target.MaxIntegrity);
+            }
+            else if(integrityLevel == UtilsInventory.IntegrityLevel.Skeleton)
+            {
+                var functionalIntegrity = target.MaxIntegrity * def.CriticalIntegrityRatio;
+                var skeletonIntegrity = target.MaxIntegrity * Constants.MaxSkeletonCreateIntegrityRatio;
+
+                requiredIntegrity = skeletonIntegrity;
+            }
+
+            return requiredIntegrity;
+        }
+
+        public static float SetMax(float value, float maxValue)
+        {
+            if(value > maxValue)
+            {
+                value = maxValue;
+            }
+            return value;
+        }
 
         /// <summary>
         /// Is the grid a projected grid
