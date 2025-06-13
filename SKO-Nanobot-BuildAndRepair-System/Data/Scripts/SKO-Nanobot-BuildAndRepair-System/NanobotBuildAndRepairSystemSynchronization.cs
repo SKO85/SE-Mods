@@ -94,6 +94,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         public SyncModSettings()
         {
+            Version = CurrentSettingsVersion;
             DisableLocalization = false;
             LogLevel = Logging.Level.Error; //Default
             MaxBackgroundTasks = Constants.MaxBackgroundTasks_Default;
