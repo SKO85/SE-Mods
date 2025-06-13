@@ -497,7 +497,7 @@ namespace SKONanobotBuildAndRepairSystem
             var ready = _Welder.Enabled && _Welder.IsWorking && _Welder.IsFunctional;
             if (ready)
             {
-                if (State.Welding || State.NeedWelding || State.Transporting || State.Grinding || State.NeedGrinding)
+                if (State.Welding || State.NeedWelding || State.Grinding || State.NeedGrinding || State.Transporting)
                 {
                     return false;
                 }
@@ -1029,7 +1029,20 @@ namespace SKONanobotBuildAndRepairSystem
                 State.CurrentTransportIsPick = true;
                 State.CurrentTransportTarget = ComputePosition(target);
                 State.CurrentTransportStartTime = playTime;
-                State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.TransportSpeed);
+
+                
+                double transportSpeed = Settings.TransportSpeed;               
+                
+                if (transportSpeed <= 0.0001)
+                {
+                    transportSpeed = Constants.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT;
+                }
+
+                double transportSeconds = 2d * targetData.Distance / transportSpeed;
+                transportSeconds = Math.Min(transportSeconds, TimeSpan.MaxValue.TotalSeconds);
+
+                State.CurrentTransportTime = TimeSpan.FromSeconds(transportSeconds);
+
                 Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: ServerDoGrind: Target {1} transport started transporttime={2} CurrentVolume={3}/{4}",
                    Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(targetData.Block), State.CurrentTransportTime, _TransportInventory.CurrentVolume, _MaxTransportVolume);
                 InventoryManager.EmptyTransportInventory(this, true);
@@ -1089,7 +1102,18 @@ namespace SKONanobotBuildAndRepairSystem
                 State.CurrentTransportIsPick = true;
                 State.CurrentTransportTarget = ComputePosition(collectingFirstTarget.Entity);
                 State.CurrentTransportStartTime = playTime;
-                State.CurrentTransportTime = TimeSpan.FromSeconds(2d * collectingFirstTarget.Distance / Settings.TransportSpeed);
+
+                double transportSpeed = Settings.TransportSpeed;
+                if (transportSpeed <= 0.0001)
+                {
+                    transportSpeed = 1.0;
+                }
+
+                double transportSeconds = 2d * collectingFirstTarget.Distance / transportSpeed;
+                transportSeconds = Math.Min(transportSeconds, TimeSpan.MaxValue.TotalSeconds);
+
+                State.CurrentTransportTime = TimeSpan.FromSeconds(transportSeconds);
+
                 Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: ServerDoCollectFloating: Target {1} transport started transporttime={2} CurrentVolume={3}/{4}",
                    Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(collectingFirstTarget.Entity), State.CurrentTransportTime, _TransportInventory.CurrentVolume, _MaxTransportVolume);
                 InventoryManager.EmptyTransportInventory(this, true);
@@ -1155,7 +1179,18 @@ namespace SKONanobotBuildAndRepairSystem
                     State.CurrentTransportIsPick = false;
                     State.CurrentTransportTarget = ComputePosition(targetData.Block);
                     State.CurrentTransportStartTime = playTime;
-                    State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.TransportSpeed);
+
+                    double transportSpeed = Settings.TransportSpeed;
+                    if (transportSpeed <= 0.0001)
+                    {
+                        Logging.Instance?.Write(Logging.Level.Info, "Invalid transport speed: {0}. Using fallback value.", transportSpeed);
+                        transportSpeed = 1.0; // fallback to avoid overflow
+                    }
+
+                    double transportSeconds = 2d * targetData.Distance / transportSpeed;
+                    transportSeconds = Math.Min(transportSeconds, TimeSpan.MaxValue.TotalSeconds);
+                    State.CurrentTransportTime = TimeSpan.FromSeconds(transportSeconds);
+
                     Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: FindMissingComponents: Target {1} transport started volume={2} (max {3}) transporttime={4}",
                        Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(targetData.Block), _MaxTransportVolume - remainingVolume, _MaxTransportVolume, State.CurrentTransportTime);
                     return true;
@@ -2081,7 +2116,9 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 // Do not allow grinding if our shields are up.
                 if (block.CubeGrid.EntityId != Welder.CubeGrid.EntityId && IsWelderShielded())
+                {
                     return false;
+                }                    
 
                 var relation = block.GetUserRelationToOwner(_Welder.OwnerId);
                 autoGrind =
@@ -2198,6 +2235,13 @@ namespace SKONanobotBuildAndRepairSystem
                     customInfo.Append($"Time till Auto Power Off: {timeTillPowerOff.ToString(@"mm\:ss")}");
                     customInfo.Append(Environment.NewLine);
                 }
+            }
+
+            // Check if shiels are active when trying to grind.
+            if(IsWelderShielded())
+            {
+                customInfo.Append($"Shields Active: Grinding disabled!");
+                customInfo.Append(Environment.NewLine);
             }
 
             // Print Power details.

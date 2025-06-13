@@ -11,15 +11,16 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public static class SafeZoneProtection
     {
-        private static readonly int IntervalToCacheSeconds = 15;
+        private static readonly int IntervalToCacheSeconds = 10;
 
-        public struct EntityProtectedState
+        public struct EntitySafeZoneProtectedState
         {
-            public bool IsGrindingAllowed;
+            public bool IsAllowed;
             public TimeSpan Checked;
         }
 
-        public static ConcurrentDictionary<long, EntityProtectedState> GrindingNotAllowedCache = new ConcurrentDictionary<long, EntityProtectedState>();
+        public static ConcurrentDictionary<long, EntitySafeZoneProtectedState> GrindingCheckCache = new ConcurrentDictionary<long, EntitySafeZoneProtectedState>();
+        public static ConcurrentDictionary<long, EntitySafeZoneProtectedState> WeldingCheckCache = new ConcurrentDictionary<long, EntitySafeZoneProtectedState>();
 
         public static T CastProhibit<T>(T ptr, object val) => (T)val;
 
@@ -27,16 +28,18 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                if (GrindingNotAllowedCache.ContainsKey(entityId))
+                CleanupOldEntries();
+
+                if (GrindingCheckCache.ContainsKey(entityId))
                 {
-                    if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(GrindingNotAllowedCache[entityId].Checked).TotalSeconds > IntervalToCacheSeconds)
+                    if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(GrindingCheckCache[entityId].Checked).TotalSeconds > IntervalToCacheSeconds)
                     {
-                        EntityProtectedState state;
-                        GrindingNotAllowedCache.TryRemove(entityId, out state);
+                        EntitySafeZoneProtectedState state;
+                        GrindingCheckCache.TryRemove(entityId, out state);
                     }
                     else
                     {
-                        return GrindingNotAllowedCache[entityId].IsGrindingAllowed;
+                        return GrindingCheckCache[entityId].IsAllowed;
                     }
                 }
             }
@@ -48,13 +51,13 @@ namespace SKONanobotBuildAndRepairSystem
             return null;
         }
 
-        public static void SetIsGrindingAllowed(long entityId, bool isGrindingAllowed)
+        private static void SetIsGrindingAllowed(long entityId, bool isGrindingAllowed)
         {
             try
             {
-                GrindingNotAllowedCache[entityId] = new EntityProtectedState()
+                GrindingCheckCache[entityId] = new EntitySafeZoneProtectedState()
                 {
-                    IsGrindingAllowed = isGrindingAllowed,
+                    IsAllowed = isGrindingAllowed,
                     Checked = MyAPIGateway.Session.ElapsedPlayTime
                 };
             }
@@ -64,29 +67,48 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        //public static bool IsGridAllowedGrinding(MyCubeGrid grid)
-        //{
-        //    try
-        //    {
-        //        var isGrindingAllowed = IsGrindingAllowed(grid.EntityId);
-        //        if (isGrindingAllowed.HasValue)
-        //        {
-        //            return isGrindingAllowed.Value;
-        //        }
-        //        else
-        //        {
-        //            isGrindingAllowed = MySessionComponentSafeZones.IsActionAllowed(grid, CastProhibit(MySessionComponentSafeZones.AllowedActions, 16));
-        //            SetIsProtected(grid.EntityId, isGrindingAllowed.Value);
-        //            return isGrindingAllowed.Value;
-        //        }
-        //    }
-        //    catch
-        //    {
-        //        // ignored
-        //    }
+        private static bool? IsWeldingAllowed(long entityId)
+        {
+            try
+            {
+                CleanupOldEntries();
 
-        //    return true;
-        //}
+                if (WeldingCheckCache.ContainsKey(entityId))
+                {
+                    if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(WeldingCheckCache[entityId].Checked).TotalSeconds > IntervalToCacheSeconds)
+                    {
+                        EntitySafeZoneProtectedState state;
+                        WeldingCheckCache.TryRemove(entityId, out state);
+                    }
+                    else
+                    {
+                        return WeldingCheckCache[entityId].IsAllowed;
+                    }
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+
+            return null;
+        }
+
+        private static void SetIsWeldingAllowed(long entityId, bool isWeldingAllowed)
+        {
+            try
+            {
+                WeldingCheckCache[entityId] = new EntitySafeZoneProtectedState()
+                {
+                    IsAllowed = isWeldingAllowed,
+                    Checked = MyAPIGateway.Session.ElapsedPlayTime
+                };
+            }
+            catch
+            {
+                // ignored
+            }
+        }
 
         public static bool IsProtectedFromGrinding(IMySlimBlock targetBlock, IMyCubeBlock attackerBlock)
         {
@@ -201,7 +223,12 @@ namespace SKONanobotBuildAndRepairSystem
                     long fatBlockId = 0;
                     if (targetBlock.FatBlock != null)
                     {
-                        fatBlockId = targetBlock.FatBlock.EntityId;                       
+                        fatBlockId = targetBlock.FatBlock.EntityId;
+                        var cached = IsWeldingAllowed(fatBlockId);
+                        if (cached != null)
+                        {
+                            return !cached.Value;
+                        }
                     }
 
                     var sphere = new BoundingSphereD(attackerBlock.GetPosition(), 500);
@@ -240,13 +267,33 @@ namespace SKONanobotBuildAndRepairSystem
                                                 var isBuildingFromProjectorAllowed = safeZone.IsActionAllowed(CastProhibit(MySessionComponentSafeZones.AllowedActions, 512), 0L, targetBox);
                                                 if(isBuildingFromProjectorAllowed)
                                                 {
+                                                    if (fatBlockId > 0)
+                                                    {
+                                                        SetIsWeldingAllowed(fatBlockId, true);
+                                                    }
+
                                                     return false;
+                                                }
+
+                                                if (fatBlockId > 0)
+                                                {
+                                                    SetIsWeldingAllowed(fatBlockId, false);
                                                 }
 
                                                 return true;
                                             }
 
+                                            if (fatBlockId > 0)
+                                            {
+                                                SetIsWeldingAllowed(fatBlockId, true);
+                                            }
+
                                             return false;
+                                        }
+
+                                        if (fatBlockId > 0)
+                                        {
+                                            SetIsWeldingAllowed(fatBlockId, false);
                                         }
 
                                         return true;
@@ -270,6 +317,35 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             return false;
+        }
+
+        public static void CleanupOldEntries()
+        {
+            try
+            {
+                var now = MyAPIGateway.Session.ElapsedPlayTime;
+
+                foreach (var kvp in GrindingCheckCache)
+                {
+                    if ((now - kvp.Value.Checked).TotalMinutes > 5)
+                    {
+                        EntitySafeZoneProtectedState removed;
+                        GrindingCheckCache.TryRemove(kvp.Key, out removed);
+                    }
+                }
+
+                foreach (var kvp in WeldingCheckCache)
+                {
+                    if ((now - kvp.Value.Checked).TotalMinutes > 5)
+                    {
+                        EntitySafeZoneProtectedState removed;
+                        WeldingCheckCache.TryRemove(kvp.Key, out removed);
+                    }
+                }
+            }
+            catch(Exception)
+            {
+            }            
         }
     }
 }
