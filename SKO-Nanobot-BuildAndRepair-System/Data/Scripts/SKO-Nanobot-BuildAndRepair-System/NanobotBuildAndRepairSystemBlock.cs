@@ -34,6 +34,10 @@ namespace SKONanobotBuildAndRepairSystem
         private int _TargetScanTickCounter = 0;
         #region Fields and Properties
 
+    // Cooldown for blocks that cannot be welded
+    private readonly Dictionary<IMySlimBlock, TimeSpan> _WeldCooldowns = new Dictionary<IMySlimBlock, TimeSpan>();
+    private static readonly TimeSpan WeldFailCooldown = TimeSpan.FromSeconds(10);
+
         public static ShieldApi Shield;
 
         public enum WorkingState
@@ -832,6 +836,21 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         public bool ServerDoWeld(TargetBlockData targetData)
         {
+            // Check cooldown before attempting weld
+            TimeSpan cooldownUntil;
+            if (_WeldCooldowns.TryGetValue(targetData.Block, out cooldownUntil))
+            {
+                if (MyAPIGateway.Session.ElapsedPlayTime < cooldownUntil)
+                {
+                    // Still in cooldown, skip weld attempt
+                    return false;
+                }
+                else
+                {
+                    // Cooldown expired, remove
+                    _WeldCooldowns.Remove(targetData.Block);
+                }
+            }
             var welderInventory = _Welder.GetInventory(0);
             var welding = false;
             var created = false;
@@ -880,6 +899,8 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         State.LimitsExceeded = true;
                         targetData.Ignore = true;
+                        // Set cooldown for this block
+                        _WeldCooldowns[targetData.Block] = MyAPIGateway.Session.ElapsedPlayTime + WeldFailCooldown;
                     }
                 }
             }
@@ -900,6 +921,11 @@ namespace SKONanobotBuildAndRepairSystem
                         Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: ServerDoWeld (incomplete): {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(target));
 
                         target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * NanobotBuildAndRepairSystemMod.Settings.Welder.WeldingMultiplier * Constants.WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * NanobotBuildAndRepairSystemMod.Settings.Welder.WeldingMultiplier * Constants.WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
+                    }
+                    else
+                    {
+                        // Set cooldown for this block if weld failed
+                        _WeldCooldowns[target] = MyAPIGateway.Session.ElapsedPlayTime + WeldFailCooldown;
                     }
 
                     if (IsWeldIntegrityReached(target))
