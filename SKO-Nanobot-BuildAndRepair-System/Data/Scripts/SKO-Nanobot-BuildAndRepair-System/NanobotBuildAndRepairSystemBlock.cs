@@ -29,6 +29,9 @@ namespace SKONanobotBuildAndRepairSystem
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_ShipWelder), false, "SELtdLargeNanobotBuildAndRepairSystem", "SELtdSmallNanobotBuildAndRepairSystem")]
     public class NanobotBuildAndRepairSystemBlock : MyGameLogicComponent
     {
+        // Cache scan interval and tick counter
+        private const int TargetScanIntervalTicks = 10;
+        private int _TargetScanTickCounter = 0;
         #region Fields and Properties
 
         public static ShieldApi Shield;
@@ -444,13 +447,8 @@ namespace SKONanobotBuildAndRepairSystem
                         CleanupFriendlyDamage();
                     }
 
-                    // Main loop: Only scan and process if enough time has passed
-                    var elapsedSeconds = MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastUpdate).TotalSeconds;
-                    if (elapsedSeconds >= Constants.UpdateIntervalSecondsDefault)
-                    {
-                        ServerTryWeldingGrindingCollecting();
-                        _LastUpdate = MyAPIGateway.Session.ElapsedPlayTime;
-                    }
+                    // Main loop: Always scan and process every tick
+                    ServerTryWeldingGrindingCollecting();
 
                     if (!fast)
                     {
@@ -566,7 +564,7 @@ namespace SKONanobotBuildAndRepairSystem
                         else
                         {
                             idleCounterUpdated = true;
-                        }                        
+                        }
                     }
                 }
 
@@ -575,51 +573,74 @@ namespace SKONanobotBuildAndRepairSystem
                 InventoryManager.TryPushInventory(this);
                 transporting = IsTransportRunnning(playTime);
 
+                // Only rescan targets every N ticks
+                _TargetScanTickCounter++;
+                bool doScanTargets = (_TargetScanTickCounter >= TargetScanIntervalTicks);
+                if (doScanTargets)
+                {
+                    _TargetScanTickCounter = 0;
+                }
+
                 if (transporting && State.CurrentTransportIsPick) needgrinding = true;
-                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting) CollectManager.TryCollectingFloatingTargets(this, out collecting, out needcollecting, out transporting);
+                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
+                {
+                    if (doScanTargets)
+                    {
+                        CollectManager.TryCollectingFloatingTargets(this, out collecting, out needcollecting, out transporting);
+                    }
+                }
                 if (!transporting)
                 {
                     Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: ServerTryWeldingGrindingCollecting TryWeldGrind: Mode {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Settings.WorkMode);
                     State.MissingComponents.Clear();
                     State.LimitsExceeded = false;
 
-                    switch (Settings.WorkMode)
+                    if (doScanTargets)
                     {
-                        case WorkModes.WeldBeforeGrind:
-                            WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
-                            if (State.PossibleWeldTargets.CurrentCount == 0 || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedGrindingBlock != null))
-                            {
-                                GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                            }
-                            break;
-
-                        case WorkModes.GrindBeforeWeld:
-                            GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                            if (State.PossibleGrindTargets.CurrentCount == 0 || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedWeldingBlock != null))
-                            {
+                        switch (Settings.WorkMode)
+                        {
+                            case WorkModes.WeldBeforeGrind:
                                 WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
-                            }
-                            break;
+                                if (State.PossibleWeldTargets.CurrentCount == 0 || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedGrindingBlock != null))
+                                {
+                                    GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                }
+                                break;
 
-                        case WorkModes.GrindIfWeldGetStuck:
-                            WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
-                            if (!(welding || transporting) || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedGrindingBlock != null))
-                            {
+                            case WorkModes.GrindBeforeWeld:
                                 GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                            }
-                            break;
+                                if (State.PossibleGrindTargets.CurrentCount == 0 || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedWeldingBlock != null))
+                                {
+                                    WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                }
+                                break;
 
-                        case WorkModes.WeldOnly:
-                            WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
-                            break;
+                            case WorkModes.GrindIfWeldGetStuck:
+                                WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                if (!(welding || transporting) || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedGrindingBlock != null))
+                                {
+                                    GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                }
+                                break;
 
-                        case WorkModes.GrindOnly:
-                            GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                            break;
+                            case WorkModes.WeldOnly:
+                                WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                break;
+
+                            case WorkModes.GrindOnly:
+                                GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                break;
+                        }
+                        State.MissingComponents.RebuildHash();
                     }
-                    State.MissingComponents.RebuildHash();
                 }
-                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0 && !transporting && !welding && !grinding) CollectManager.TryCollectingFloatingTargets(this, out collecting, out needcollecting, out transporting);
+                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0 && !transporting && !welding && !grinding)
+                {
+                    if (doScanTargets)
+                    {
+                        CollectManager.TryCollectingFloatingTargets(this, out collecting, out needcollecting, out transporting);
+                    }
+                }
             }
             else
             {
@@ -676,6 +697,13 @@ namespace SKONanobotBuildAndRepairSystem
 
             var possibleFloatingTargetsChanged = State.PossibleFloatingTargets.LastHash != State.PossibleFloatingTargets.CurrentHash;
             State.PossibleFloatingTargets.LastHash = State.PossibleFloatingTargets.CurrentHash;
+
+            // If any target list or transport state changed, trigger immediate scan next tick
+            var transportStateChanged = State.Transporting != transporting;
+            if (possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged || transportStateChanged)
+            {
+                _TargetScanTickCounter = TargetScanIntervalTicks;
+            }
 
             if (idleCounterUpdated || missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged) State.HasChanged();
 
