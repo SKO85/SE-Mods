@@ -577,7 +577,7 @@ namespace SKONanobotBuildAndRepairSystem
                 InventoryManager.TryPushInventory(this);
                 transporting = IsTransportRunnning(playTime);
 
-                // Only rescan targets every N ticks
+                // Only rescan targets every N ticks (but pause scanning while busy on a valid target)
                 _TargetScanTickCounter++;
                 bool doScanTargets = (_TargetScanTickCounter >= TargetScanIntervalTicks);
                 if (doScanTargets)
@@ -586,6 +586,23 @@ namespace SKONanobotBuildAndRepairSystem
                 }
 
                 if (transporting && State.CurrentTransportIsPick) needgrinding = true;
+                // Determine if we're busy with a valid current target
+                bool hasValidCurrentWeld = State.CurrentWeldingBlock != null
+                    && !State.CurrentWeldingBlock.IsDestroyed
+                    && State.CurrentWeldingBlock.CubeGrid != null && !State.CurrentWeldingBlock.CubeGrid.Closed
+                    && (State.CurrentWeldingBlock.FatBlock == null || !State.CurrentWeldingBlock.FatBlock.Closed);
+
+                bool hasValidCurrentGrind = State.CurrentGrindingBlock != null
+                    && !State.CurrentGrindingBlock.IsDestroyed
+                    && State.CurrentGrindingBlock.CubeGrid != null && !State.CurrentGrindingBlock.CubeGrid.Closed
+                    && (State.CurrentGrindingBlock.FatBlock == null || !State.CurrentGrindingBlock.FatBlock.Closed);
+
+                // While busy, do not scan for new targets
+                if (hasValidCurrentWeld || hasValidCurrentGrind)
+                {
+                    doScanTargets = false;
+                }
+
                 if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
                 {
                     if (doScanTargets)
@@ -599,43 +616,107 @@ namespace SKONanobotBuildAndRepairSystem
                     State.MissingComponents.Clear();
                     State.LimitsExceeded = false;
 
-                    if (doScanTargets)
+                    // Continue current work every tick without scanning, respecting mode priority
+                    switch (Settings.WorkMode)
                     {
-                        switch (Settings.WorkMode)
-                        {
-                            case WorkModes.WeldBeforeGrind:
+                        case WorkModes.WeldBeforeGrind:
+                            if (hasValidCurrentWeld)
+                            {
+                                WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                break;
+                            }
+                            if (hasValidCurrentGrind)
+                            {
+                                GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                break;
+                            }
+                            if (doScanTargets)
+                            {
                                 WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
                                 if (State.PossibleWeldTargets.CurrentCount == 0 || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedGrindingBlock != null))
                                 {
                                     GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
                                 }
-                                break;
+                                State.MissingComponents.RebuildHash();
+                            }
+                            break;
 
-                            case WorkModes.GrindBeforeWeld:
+                        case WorkModes.GrindBeforeWeld:
+                            if (hasValidCurrentGrind)
+                            {
+                                GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                break;
+                            }
+                            if (hasValidCurrentWeld)
+                            {
+                                // Even if currently welding, honor grind priority by trying grind first
+                                bool g = false, ng = false; IMySlimBlock cgb = null; bool tr = false;
+                                GrindManager.TryGrinding(this, out g, out ng, out tr, out cgb);
+                                if (g || tr)
+                                {
+                                    grinding = g; needgrinding = ng; transporting = tr; currentGrindingBlock = cgb;
+                                    break; // switched to grinding or started transport
+                                }
+                                // No grinding to do, continue welding
+                                WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                break;
+                            }
+                            if (doScanTargets)
+                            {
                                 GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
                                 if (State.PossibleGrindTargets.CurrentCount == 0 || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedWeldingBlock != null))
                                 {
                                     WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
                                 }
-                                break;
+                                State.MissingComponents.RebuildHash();
+                            }
+                            break;
 
-                            case WorkModes.GrindIfWeldGetStuck:
+                        case WorkModes.GrindIfWeldGetStuck:
+                            if (hasValidCurrentWeld)
+                            {
+                                WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                break;
+                            }
+                            if (hasValidCurrentGrind)
+                            {
+                                GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                break;
+                            }
+                            if (doScanTargets)
+                            {
                                 WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
                                 if (!(welding || transporting) || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedGrindingBlock != null))
                                 {
                                     GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
                                 }
-                                break;
+                                State.MissingComponents.RebuildHash();
+                            }
+                            break;
 
-                            case WorkModes.WeldOnly:
+                        case WorkModes.WeldOnly:
+                            if (hasValidCurrentWeld)
+                            {
                                 WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
-                                break;
+                            }
+                            else if (doScanTargets)
+                            {
+                                WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                State.MissingComponents.RebuildHash();
+                            }
+                            break;
 
-                            case WorkModes.GrindOnly:
+                        case WorkModes.GrindOnly:
+                            if (hasValidCurrentGrind)
+                            {
                                 GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                                break;
-                        }
-                        State.MissingComponents.RebuildHash();
+                            }
+                            else if (doScanTargets)
+                            {
+                                GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                State.MissingComponents.RebuildHash();
+                            }
+                            break;
                     }
                 }
                 if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0 && !transporting && !welding && !grinding)
@@ -836,19 +917,22 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         public bool ServerDoWeld(TargetBlockData targetData)
         {
-            // Check cooldown before attempting weld
-            TimeSpan cooldownUntil;
-            if (_WeldCooldowns.TryGetValue(targetData.Block, out cooldownUntil))
+            // Only check cooldown if this is a new weld attempt, not the current block being welded
+            if (State.CurrentWeldingBlock != targetData.Block)
             {
-                if (MyAPIGateway.Session.ElapsedPlayTime < cooldownUntil)
+                TimeSpan cooldownUntil;
+                if (_WeldCooldowns.TryGetValue(targetData.Block, out cooldownUntil))
                 {
-                    // Still in cooldown, skip weld attempt
-                    return false;
-                }
-                else
-                {
-                    // Cooldown expired, remove
-                    _WeldCooldowns.Remove(targetData.Block);
+                    if (MyAPIGateway.Session.ElapsedPlayTime < cooldownUntil)
+                    {
+                        // Still in cooldown, skip weld attempt
+                        return false;
+                    }
+                    else
+                    {
+                        // Cooldown expired, remove
+                        _WeldCooldowns.Remove(targetData.Block);
+                    }
                 }
             }
             var welderInventory = _Welder.GetInventory(0);
