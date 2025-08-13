@@ -809,6 +809,33 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged) State.HasChanged();
 
+            // If inventory just became full, clear current target lists to avoid stale work
+            if (inventoryFullChanged && State.InventoryFull)
+            {
+                lock (State.PossibleWeldTargets)
+                {
+                    State.PossibleWeldTargets.Clear();
+                    State.PossibleWeldTargets.RebuildHash();
+                }
+                lock (State.PossibleGrindTargets)
+                {
+                    State.PossibleGrindTargets.Clear();
+                    State.PossibleGrindTargets.RebuildHash();
+                }
+                lock (State.PossibleFloatingTargets)
+                {
+                    State.PossibleFloatingTargets.Clear();
+                    State.PossibleFloatingTargets.RebuildHash();
+                }
+                State.HasChanged();
+            }
+
+            // If inventory just became available, trigger an immediate rescan next tick
+            if (inventoryFullChanged && !State.InventoryFull)
+            {
+                _TargetScanTickCounter = TargetScanIntervalTicks;
+            }
+
             if (missingComponentsChanged && Logging.Instance.ShouldLog(Logging.Level.Verbose))
             {
                 lock (Logging.Instance)
@@ -1647,6 +1674,11 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         public void UpdateSourcesAndTargetsTimer()
         {
+            // Do not schedule scans while inventory is full
+            if (State.InventoryFull)
+            {
+                return;
+            }
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             var updateTargets = playTime.Subtract(_LastTargetsUpdate) >= NanobotBuildAndRepairSystemMod.Settings.TargetsUpdateInterval;
             var updateSources = updateTargets && playTime.Subtract(_LastSourceUpdate) >= NanobotBuildAndRepairSystemMod.Settings.SourcesUpdateInterval;
