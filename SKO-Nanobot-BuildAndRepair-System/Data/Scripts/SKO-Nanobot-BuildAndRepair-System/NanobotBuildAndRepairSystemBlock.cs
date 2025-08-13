@@ -34,9 +34,9 @@ namespace SKONanobotBuildAndRepairSystem
         private int _TargetScanTickCounter = 0;
 
         // Caps to limit target scanning work per cycle
-        private const int MaxPossibleWeldTargets = 32;
-        private const int MaxPossibleGrindTargets = 32;
-        private const int MaxPossibleFloatingTargets = 32;
+        private const int MaxPossibleWeldTargets = 24;
+        private const int MaxPossibleGrindTargets = 24;
+        private const int MaxPossibleFloatingTargets = 24;
         #region Fields and Properties
 
         // Cooldown for blocks that cannot be welded
@@ -83,7 +83,6 @@ namespace SKONanobotBuildAndRepairSystem
         internal Vector3D? _SoundEmitterWorkingPosition;
         internal MyParticleEffect _ParticleEffectWorking1;
         internal MyParticleEffect _ParticleEffectTransport1;
-        internal bool _ParticleEffectTransport1Active;
         internal MyLight _LightEffect;
         internal MyFlareDefinition _LightEffectFlareWelding;
         internal MyFlareDefinition _LightEffectFlareGrinding;
@@ -298,6 +297,8 @@ namespace SKONanobotBuildAndRepairSystem
             _WorkingStateSet = WorkingState.Invalid;
             _SoundVolumeSet = -1;
             _LastUpdate = MyAPIGateway.Session.ElapsedPlayTime;
+            // Initialize idle timer reference so clients don't show an immediate timeout
+            LastTaskTime = _LastUpdate;
 
             _IsInit = true;
             Logging.Instance?.Write(Logging.Level.Event, "BuildAndRepairSystemBlock {0}: Init -> done", Logging.BlockName(_Welder, Logging.BlockNameOptions.None));
@@ -488,11 +489,21 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
+                    // Client: refresh custom info when state changes
                     if (State.Changed)
                     {
                         UpdateCustomInfo(true);
                         State.ResetChanged();
                     }
+
+                    // Keep the idle timer updated on clients so the countdown is correct in MP
+                    if (!IsIdle())
+                    {
+                        LastTaskTime = MyAPIGateway.Session.ElapsedPlayTime;
+                    }
+
+                    // Always schedule a refresh on clients; UpdateCustomInfo throttles to 1-2s
+                    UpdateCustomInfo(true);
                 }
 
                 if (Settings.IsTransmitNeeded())
@@ -796,7 +807,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _TargetScanTickCounter = TargetScanIntervalTicks;
             }
 
-            if (idleCounterUpdated || missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged) State.HasChanged();
+            if (missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged) State.HasChanged();
 
             if (missingComponentsChanged && Logging.Instance.ShouldLog(Logging.Level.Verbose))
             {
@@ -810,6 +821,15 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                     Logging.Instance?.DecreaseIndent(Logging.Level.Verbose);
                     Logging.Instance?.Write(Logging.Level.Verbose, "<--- MissingComponents");
+                }
+            }
+
+            // Network sync: send to clients only when state changed and cooldown elapsed
+            if (MyAPIGateway.Session.IsServer && MyAPIGateway.Multiplayer.MultiplayerActive)
+            {
+                if (State.IsTransmitNeeded())
+                {
+                    MessageSyncHelper.SyncBlockStateSend(0, this);
                 }
             }
 
@@ -878,7 +898,9 @@ namespace SKONanobotBuildAndRepairSystem
             _UpdateCustomInfoNeeded |= changed;
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
 
-            if (_UpdateCustomInfoNeeded && playTime.Subtract(_UpdateCustomInfoLast).TotalSeconds >= 2)
+            // Refresh cadence: 1s while actively working/transporting, else 2s
+            var refreshInterval = (State.Welding || State.Grinding || State.Transporting) ? 1 : 2;
+            if (_UpdateCustomInfoNeeded && playTime.Subtract(_UpdateCustomInfoLast).TotalSeconds >= refreshInterval)
             {
                 _Welder.RefreshCustomInfo();
                 TriggerTerminalRefresh();
