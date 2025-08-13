@@ -414,9 +414,18 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                if (_Welder == null) return;
-                if (!_IsInit) Init();
-                if (!_IsInit) return;
+                if (_Welder == null)
+                {
+                    return;
+                }
+                if (!_IsInit)
+                {
+                    Init();
+                }
+                if (!_IsInit)
+                {
+                    return;
+                }
 
                 if (_Delay > 0)
                 {
@@ -425,6 +434,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
 
                 _DelayWatch.Restart();
+
                 if (MyAPIGateway.Session.IsServer)
                 {
                     _CreativeModeActive = MyAPIGateway.Session.CreativeMode;
@@ -433,8 +443,10 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         CleanupFriendlyDamage();
                     }
-                    
-                    if(MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastUpdate).TotalSeconds >= Constants.UpdateIntervalSecondsDefault)
+
+                    // Main loop: Only scan and process if enough time has passed
+                    var elapsedSeconds = MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastUpdate).TotalSeconds;
+                    if (elapsedSeconds >= Constants.UpdateIntervalSecondsDefault)
                     {
                         ServerTryWeldingGrindingCollecting();
                         _LastUpdate = MyAPIGateway.Session.ElapsedPlayTime;
@@ -442,8 +454,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (!fast)
                     {
-                        if ((State.Ready != _PowerReady || State.Welding != _PowerWelding || State.Grinding != _PowerGrinding || State.Transporting != _PowerTransporting) &&
-                            MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdatePowerSinkLast).TotalSeconds >= 5)
+                        // Update power sink if state changed and enough time has passed
+                        if ((State.Ready != _PowerReady || State.Welding != _PowerWelding || State.Grinding != _PowerGrinding || State.Transporting != _PowerTransporting)
+                            && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdatePowerSinkLast).TotalSeconds >= 5)
                         {
                             _UpdatePowerSinkLast = MyAPIGateway.Session.ElapsedPlayTime;
                             _PowerReady = State.Ready;
@@ -452,7 +465,10 @@ namespace SKONanobotBuildAndRepairSystem
                             _PowerTransporting = State.Transporting;
 
                             var resourceSink = _Welder.Components.Get<Sandbox.Game.EntityComponents.MyResourceSinkComponent>();
-                            resourceSink?.Update();
+                            if (resourceSink != null)
+                            {
+                                resourceSink.Update();
+                            }
                         }
 
                         Settings.TrySave(Entity, NanobotBuildAndRepairSystemMod.ModGuid);
@@ -476,12 +492,15 @@ namespace SKONanobotBuildAndRepairSystem
                     MessageSyncHelper.SyncBlockSettingsSend(0, this);
                 }
 
-                if (_UpdateCustomInfoNeeded) UpdateCustomInfo(false);
+                if (_UpdateCustomInfoNeeded)
+                {
+                    UpdateCustomInfo(false);
+                }
 
                 _DelayWatch.Stop();
                 if (_DelayWatch.ElapsedMilliseconds > 40)
                 {
-                    _Delay = _RandomDelay.Next(1, 20); //Slowdown a little bit
+                    _Delay = _RandomDelay.Next(1, 20);
                     Logging.Instance?.Write(Logging.Level.Event, "BuildAndRepairSystemBlock {0}: Delay {1} ({2}ms)", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), _Delay, _DelayWatch.ElapsedMilliseconds);
                 }
             }

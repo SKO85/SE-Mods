@@ -36,6 +36,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (MyAPIGateway.Session.IsServer)
             {
+                MyAPIGateway.Multiplayer.UnregisterMessageHandler(Constants.MSGID_MOD_DATAREQUEST, SyncModCommandReceived);
                 MyAPIGateway.Multiplayer.UnregisterMessageHandler(Constants.MSGID_MOD_DATAREQUEST, SyncModDataRequestReceived);
                 MyAPIGateway.Multiplayer.UnregisterMessageHandler(Constants.MSGID_BLOCK_DATAREQUEST, SyncBlockDataRequestReceived);
                 MyAPIGateway.Multiplayer.UnregisterMessageHandler(Constants.MSGID_BLOCK_SETTINGS_FROM_CLIENT, SyncBlockSettingsReceived);
