@@ -13,9 +13,9 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public static class EffectManager
     {
-        private static readonly int MaxTransportEffects = 5;
+        private static readonly int MaxTransportEffects = 16;
         private static int _ActiveTransportEffects = 0;
-        private static readonly int MaxWorkingEffects = 10;
+        private static readonly int MaxWorkingEffects = 16;
         private static int _ActiveWorkingEffects = 0;
         internal static readonly MySoundPair[] _Sounds = new[] { null, null, null, new MySoundPair("ToolLrgWeldMetal"), new MySoundPair("BlockModuleProductivity"), new MySoundPair("BaRUnable"), new MySoundPair("ToolLrgGrindMetal"), new MySoundPair("BlockModuleProductivity"), new MySoundPair("BaRUnable"), new MySoundPair("BaRUnable") };
         private static readonly float[] _SoundLevels = new[] { 0f, 0f, 0f, 1f, 0.5f, 0.4f, 1f, 0.5f, 0.4f, 0.4f };
