@@ -1,186 +1,167 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-    <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props"
-        Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
-    <PropertyGroup>
-        <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-        <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-        <ProjectGuid>{AC9B5B5D-5CBE-4535-ACBF-BB0D6F1E6204}</ProjectGuid>
-        <OutputType>Library</OutputType>
-        <RootNamespace>SKONanobotBuildAndRepairSystem</RootNamespace>
-        <AssemblyName>SKONanobotBuildAndRepairSystem</AssemblyName>
-        <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-        <FileAlignment>512</FileAlignment>
-        <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-        <Deterministic>true</Deterministic>
-        <TargetFrameworkProfile />
-    </PropertyGroup>
-    <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-        <PlatformTarget>AnyCPU</PlatformTarget>
-        <DebugSymbols>true</DebugSymbols>
-        <DebugType>full</DebugType>
-        <Optimize>false</Optimize>
-        <OutputPath>bin\Debug\</OutputPath>
-        <DefineConstants>DEBUG;TRACE</DefineConstants>
-        <ErrorReport>prompt</ErrorReport>
-        <WarningLevel>4</WarningLevel>
-        <GenerateSerializationAssemblies>Auto</GenerateSerializationAssemblies>
-        <LangVersion>6</LangVersion>
-    </PropertyGroup>
-    <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-        <PlatformTarget>AnyCPU</PlatformTarget>
-        <DebugType>pdbonly</DebugType>
-        <Optimize>true</Optimize>
-        <OutputPath>bin\Release\</OutputPath>
-        <DefineConstants>TRACE</DefineConstants>
-        <ErrorReport>prompt</ErrorReport>
-        <WarningLevel>4</WarningLevel>
-        <LangVersion>7.0</LangVersion>
-    </PropertyGroup>
-    <PropertyGroup>
-        <StartupObject />
-    </PropertyGroup>
-    <ItemGroup>
-        <None Include="App.config" />
-    </ItemGroup>
-    <ItemGroup>
-        <Compile Include="AsyncTaskQueue.cs" />
-        <Compile Include="AreaScanCache.cs" />
-        <Compile Include="ScanCoordinator.cs" />
-        <Compile Include="Cache\CacheItem.cs" />
-        <Compile Include="Cache\CacheHandler.cs" />
-        <Compile Include="CollectManager.cs" />
-        <Compile Include="CommandProcessor.cs" />
-        <Compile Include="Constants.cs" />
-        <Compile Include="DamageHandler.cs" />
-        <Compile Include="Deb.cs" />
-        <Compile Include="EffectManager.cs" />
-        <Compile Include="GrindManager.cs" />
-        <Compile Include="InventoryManager.cs" />
-        <Compile Include="Localization.cs" />
-        <Compile Include="Logging.cs" />
-        <Compile Include="MessageSyncHelper.cs" />
-        <Compile Include="NanobotBuildAndRepairSystemBlock.cs" />
-        <Compile Include="NanobotBuildAndRepairSystemLocalization.cs" />
-        <Compile Include="NanobotBuildAndRepairSystemMod.cs" />
-        <Compile Include="NanobotBuildAndRepairSystemPriorityHandling.cs" />
-        <Compile Include="NanobotBuildAndRepairSystemSynchronization.cs" />
-        <Compile Include="NanobotBuildAndRepairSystemTerminal.cs" />
-        <Compile Include="PowerManager.cs" />
-        <Compile Include="PriorityHandling.cs" />
-        <Compile Include="SafeZoneProtection.cs" />
-        <Compile Include="ShieldApi.cs" />
-        <Compile Include="TerminalControlManager.cs" />
-        <Compile Include="BlockSystemAssignmentHandler.cs" />
-        <Compile Include="UtilsPlayer.cs" />
-        <Compile Include="UtilsFaction.cs" />
-        <Compile Include="Utils.cs" />
-        <Compile Include="UtilsInventory.cs" />
-        <Compile Include="UtilsProductionBlock.cs" />
-        <Compile Include="UtilsSynchronization.cs" />
-        <Compile Include="Voxels\OreDeposit.cs" />
-        <Compile Include="Voxels\Scanner.cs" />
-        <Compile Include="WeldManager.cs" />
-    </ItemGroup>
-    <ItemGroup>
-        <Reference Include="ProtoBuf.Net">
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\ProtoBuf.Net.dll</HintPath>
-        </Reference>
-        <Reference Include="ProtoBuf.Net.Core">
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\ProtoBuf.Net.Core.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="Sandbox.Common, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\Sandbox.Common.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="Sandbox.Game, Version=0.1.1.0, Culture=neutral, processorArchitecture=AMD64">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\Sandbox.Game.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="Sandbox.Graphics, Version=0.1.1.0, Culture=neutral, processorArchitecture=AMD64">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\Sandbox.Graphics.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="SpaceEngineers.Game, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\SpaceEngineers.Game.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="SpaceEngineers.ObjectBuilders, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>
-                E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\SpaceEngineers.ObjectBuilders.dll</HintPath>
-        </Reference>
-        <Reference Include="System" />
-        <Reference
-            Include="System.Buffers, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-            <HintPath>packages\System.Buffers.4.5.1\lib\net461\System.Buffers.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="System.Collections.Immutable, Version=7.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>
-                E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\System.Collections.Immutable.dll</HintPath>
-        </Reference>
-        <Reference Include="System.Configuration" />
-        <Reference
-            Include="System.Memory, Version=4.0.1.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-            <HintPath>packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath>
-        </Reference>
-        <Reference Include="System.Numerics" />
-        <Reference
-            Include="System.Numerics.Vectors, Version=4.1.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-            <HintPath>packages\System.Numerics.Vectors.4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
-        </Reference>
-        <Reference Include="System.Runtime.Serialization" />
-        <Reference Include="System.ServiceModel" />
-        <Reference Include="System.Xml" />
-        <Reference Include="VRage, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="VRage.Game, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Game.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="VRage.Input, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Input.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="VRage.Library, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Library.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="VRage.Math, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Math.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="VRage.Render, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Render.dll</HintPath>
-        </Reference>
-        <Reference
-            Include="VRage.Scripting, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
-            <SpecificVersion>False</SpecificVersion>
-            <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Scripting.dll</HintPath>
-        </Reference>
-    </ItemGroup>
-    <ItemGroup>
-        <WCFMetadata Include="Connected Services\" />
-    </ItemGroup>
-    <ItemGroup />
-    <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-    <PropertyGroup>
-        <PostBuildEvent>D:\Git\GitHub\SKO85\SE\SE-Mods\_Scripts\build_post.cmd $(ProjectName)
-            $(SolutionDir)$(ProjectName)</PostBuildEvent>
-    </PropertyGroup>
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{AC9B5B5D-5CBE-4535-ACBF-BB0D6F1E6204}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>SKONanobotBuildAndRepairSystem</RootNamespace>
+    <AssemblyName>SKONanobotBuildAndRepairSystem</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <GenerateSerializationAssemblies>Auto</GenerateSerializationAssemblies>
+    <LangVersion>6</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <LangVersion>7.0</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject />
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="AsyncTaskQueue.cs" />
+  <Compile Include="AreaScanCache.cs" />
+  <Compile Include="ScanCoordinator.cs" />
+    <Compile Include="Cache\CacheItem.cs" />
+    <Compile Include="Cache\CacheHandler.cs" />
+    <Compile Include="CollectManager.cs" />
+    <Compile Include="CommandProcessor.cs" />
+    <Compile Include="Constants.cs" />
+    <Compile Include="DamageHandler.cs" />
+    <Compile Include="Deb.cs" />
+    <Compile Include="EffectManager.cs" />
+    <Compile Include="GrindManager.cs" />
+    <Compile Include="InventoryManager.cs" />
+    <Compile Include="Localization.cs" />
+    <Compile Include="Logging.cs" />
+    <Compile Include="MessageSyncHelper.cs" />
+    <Compile Include="NanobotBuildAndRepairSystemBlock.cs" />
+    <Compile Include="NanobotBuildAndRepairSystemLocalization.cs" />
+    <Compile Include="NanobotBuildAndRepairSystemMod.cs" />
+    <Compile Include="NanobotBuildAndRepairSystemPriorityHandling.cs" />
+    <Compile Include="NanobotBuildAndRepairSystemSynchronization.cs" />
+    <Compile Include="NanobotBuildAndRepairSystemTerminal.cs" />
+    <Compile Include="PowerManager.cs" />
+    <Compile Include="PriorityHandling.cs" />
+    <Compile Include="SafeZoneProtection.cs" />
+    <Compile Include="ShieldApi.cs" />
+    <Compile Include="TerminalControlManager.cs" />
+    <Compile Include="BlockSystemAssignmentHandler.cs" />
+    <Compile Include="UtilsPlayer.cs" />
+    <Compile Include="UtilsFaction.cs" />
+    <Compile Include="Utils.cs" />
+    <Compile Include="UtilsInventory.cs" />
+    <Compile Include="UtilsProductionBlock.cs" />
+    <Compile Include="UtilsSynchronization.cs" />
+    <Compile Include="Voxels\OreDeposit.cs" />
+    <Compile Include="Voxels\Scanner.cs" />
+    <Compile Include="WeldManager.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="ProtoBuf.Net">
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\ProtoBuf.Net.dll</HintPath>
+    </Reference>
+    <Reference Include="ProtoBuf.Net.Core">
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\ProtoBuf.Net.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Sandbox.Common, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\Sandbox.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="Sandbox.Game, Version=0.1.1.0, Culture=neutral, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\Sandbox.Game.dll</HintPath>
+    </Reference>
+    <Reference Include="Sandbox.Graphics, Version=0.1.1.0, Culture=neutral, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\Sandbox.Graphics.dll</HintPath>
+    </Reference>
+    <Reference Include="SpaceEngineers.Game, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\SpaceEngineers.Game.dll</HintPath>
+    </Reference>
+    <Reference Include="SpaceEngineers.ObjectBuilders, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\SpaceEngineers.ObjectBuilders.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Buffers, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\System.Buffers.4.5.1\lib\net461\System.Buffers.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Collections.Immutable, Version=7.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\System.Collections.Immutable.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Memory, Version=4.0.1.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Numerics.Vectors, Version=4.1.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>packages\System.Numerics.Vectors.4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.Xml" />
+    <Reference Include="VRage, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Game, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Game.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Input, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Input.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Library, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Library.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Math, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Math.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Render, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Render.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Scripting, Version=1.0.0.0, Culture=neutral, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Scripting.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <WCFMetadata Include="Connected Services\" />
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>D:\Git\GitHub\SKO85\SE\SE-Mods\_Scripts\build_post.cmd $(ProjectName) $(SolutionDir)$(ProjectName)</PostBuildEvent>
+  </PropertyGroup>
 </Project>

@@ -1756,7 +1756,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var grindingEnabled = BlockGrindPriority.AnyEnabled && Settings.WorkMode != WorkModes.WeldOnly;
 
                 updateSource &= _Welder.UseConveyorSystem;
-                AreaScanCache.EvictOld(MyAPIGateway.Session.ElapsedPlayTime);
+                    AreaScanCache.EvictOld(MyAPIGateway.Session.ElapsedPlayTime);
                 var pos = 0;
                 try
                 {
