@@ -620,6 +620,12 @@ namespace SKONanobotBuildAndRepairSystem
                     doScanTargets = false;
                 }
 
+                // Do not scan for any targets if our inventory is full
+                if (State.InventoryFull)
+                {
+                    doScanTargets = false;
+                }
+
                 if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
                 {
                     if (doScanTargets)
@@ -1701,7 +1707,8 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false)
+            // Skip scanning when not ready or inventory is full
+            if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false || State.InventoryFull)
             {
                 Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: AsyncUpdateSourcesAndTargets Enabled={1} IsFunctional={2} ---> not ready don't search for targets",
                         Logging.BlockName(_Welder, Logging.BlockNameOptions.None),
@@ -1744,6 +1751,7 @@ namespace SKONanobotBuildAndRepairSystem
             try
             {
                 if (!State.Ready) return;
+                if (State.InventoryFull) return; // skip heavy scanning while inventory is full
                 var weldingEnabled = BlockWeldPriority.AnyEnabled && Settings.WorkMode != WorkModes.GrindOnly;
                 var grindingEnabled = BlockGrindPriority.AnyEnabled && Settings.WorkMode != WorkModes.WeldOnly;
 
