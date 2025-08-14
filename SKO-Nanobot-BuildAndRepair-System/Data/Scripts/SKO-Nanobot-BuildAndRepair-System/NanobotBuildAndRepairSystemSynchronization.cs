@@ -113,7 +113,7 @@ namespace SKONanobotBuildAndRepairSystem
             AutoPowerOffOnIdleForced = Constants.AutoPowerOffOnIdleForcedDefault;
             AutoPowerOffOnIdleMinutes = Constants.AutoPowerOffOnIdleMinutesDefault;
             AllowEnemyGrindingInMotion = Constants.AllowEnemyGrindingInMotionDefault;
-            StateSyncIntervalSeconds = 3.0;
+            StateSyncIntervalSeconds = 4.0;
         }
 
         public static SyncModSettings Load()

@@ -34,9 +34,9 @@ namespace SKONanobotBuildAndRepairSystem
         private int _TargetScanTickCounter = 0;
 
         // Caps to limit target scanning work per cycle
-        private const int MaxPossibleWeldTargets = 24;
-        private const int MaxPossibleGrindTargets = 24;
-        private const int MaxPossibleFloatingTargets = 24;
+        private const int MaxPossibleWeldTargets = 32;
+        private const int MaxPossibleGrindTargets = 32;
+        private const int MaxPossibleFloatingTargets = 32;
         #region Fields and Properties
 
         // Cooldown for blocks that cannot be welded
@@ -1756,6 +1756,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var grindingEnabled = BlockGrindPriority.AnyEnabled && Settings.WorkMode != WorkModes.WeldOnly;
 
                 updateSource &= _Welder.UseConveyorSystem;
+                    AreaScanCache.EvictOld(MyAPIGateway.Session.ElapsedPlayTime);
                 var pos = 0;
                 try
                 {
@@ -2057,12 +2058,10 @@ namespace SKONanobotBuildAndRepairSystem
             emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
             var areaBoundingBox = Settings.CorrectedAreaBoundingBox.TransformFast(emitterMatrix);
             List<IMyEntity> entityInRange = null;
-
-            // TODO: Cache this?
-            lock (MyAPIGateway.Entities)
-            {
-                entityInRange = MyAPIGateway.Entities.GetElementsInBox(ref areaBoundingBox);
-            }
+            // Central coordinator to deduplicate area scans across BAR blocks
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            entityInRange = ScanCoordinator.GetEntities(ref areaBoundingBox, now);
+            ScanCoordinator.EvictOld(now);
 
             if (entityInRange != null)
             {
@@ -2152,12 +2151,11 @@ namespace SKONanobotBuildAndRepairSystem
             Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: AsyncAddBlocksOfGrid AddGrid {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), cubeGrid.DisplayName);
             grids.Add(cubeGrid);
 
-            var newBlocks = new List<IMySlimBlock>();
+            // Use shared grid-blocks cache to avoid repeated GetBlocks on the same grid across BARs in this tick window
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            var newBlocksReadonly = AreaScanCache.GetGridBlocksCached(cubeGrid, now);
 
-            // TODO: Cache this?
-            cubeGrid.GetBlocks(newBlocks);
-
-            foreach (var slimBlock in newBlocks)
+            foreach (var slimBlock in newBlocksReadonly)
             {
                 if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
                 {
@@ -2207,10 +2205,9 @@ namespace SKONanobotBuildAndRepairSystem
                             if (projectedCubeGrid != null && !grids.Contains(projectedCubeGrid))
                             {
                                 grids.Add(projectedCubeGrid);
-                                var projectedBlocks = new List<IMySlimBlock>();
-                                projectedCubeGrid.GetBlocks(projectedBlocks);
+                                var projectedBlocksReadonly = AreaScanCache.GetGridBlocksCached(projectedCubeGrid, now);
 
-                                foreach (var block in projectedBlocks)
+                                foreach (var block in projectedBlocksReadonly)
                                 {
                                     if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
                                     {

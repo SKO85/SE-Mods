@@ -44,6 +44,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AsyncTaskQueue.cs" />
+  <Compile Include="AreaScanCache.cs" />
+  <Compile Include="ScanCoordinator.cs" />
     <Compile Include="Cache\CacheItem.cs" />
     <Compile Include="Cache\CacheHandler.cs" />
     <Compile Include="CollectManager.cs" />
