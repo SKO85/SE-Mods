@@ -81,8 +81,8 @@ namespace SKONanobotBuildAndRepairSystem
         private static readonly ConcurrentDictionary<long, GridBlocksEntry> _gridBlocks = new ConcurrentDictionary<long, GridBlocksEntry>();
 
         // Defaults tuned low to ensure freshness while still deduplicating bursts across many BARs.
-        public static readonly TimeSpan DefaultEntitiesTtl = TimeSpan.FromMilliseconds(400);
-        public static readonly TimeSpan DefaultGridBlocksTtl = TimeSpan.FromMilliseconds(800);
+        public static readonly TimeSpan DefaultEntitiesTtl = TimeSpan.FromMilliseconds(1000);
+        public static readonly TimeSpan DefaultGridBlocksTtl = TimeSpan.FromMilliseconds(2000);
 
         private const int AabbCellSizeMeters = 25; // spatial quantization cell size
 

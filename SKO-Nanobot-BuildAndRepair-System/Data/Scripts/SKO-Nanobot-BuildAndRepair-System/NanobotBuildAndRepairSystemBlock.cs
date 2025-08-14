@@ -650,13 +650,23 @@ namespace SKONanobotBuildAndRepairSystem
                             }
                             if (hasValidCurrentGrind)
                             {
+                                // Even if currently grinding, honor weld priority by trying weld first
+                                bool w = false, nw = false; IMySlimBlock cwb = null; bool tr = false;
+                                WeldManager.TryWelding(this, out w, out nw, out tr, out cwb);
+                                if (w || tr)
+                                {
+                                    welding = w; needwelding = nw; transporting = tr; currentWeldingBlock = cwb;
+                                    break; // switched to welding or started transport
+                                }
+                                // No welding to do, continue grinding
                                 GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
                                 break;
                             }
                             if (doScanTargets)
                             {
                                 WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
-                                if (State.PossibleWeldTargets.CurrentCount == 0 || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedGrindingBlock != null))
+                                // Opportunistic fallback: if we couldn't start welding right now, try grinding until a weld is available
+                                if (!(welding || transporting) || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedGrindingBlock != null))
                                 {
                                     GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
                                 }
@@ -687,7 +697,8 @@ namespace SKONanobotBuildAndRepairSystem
                             if (doScanTargets)
                             {
                                 GrindManager.TryGrinding(this, out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                                if (State.PossibleGrindTargets.CurrentCount == 0 || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedWeldingBlock != null))
+                                // Opportunistic fallback: if we couldn't start grinding right now, try welding until a grind is available
+                                if (!(grinding || transporting) || ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0 && Settings.CurrentPickedWeldingBlock != null))
                                 {
                                     WeldManager.TryWelding(this, out welding, out needwelding, out transporting, out currentWeldingBlock);
                                 }
