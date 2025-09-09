@@ -92,6 +92,12 @@ namespace SKONanobotBuildAndRepairSystem
         [ProtoMember(24), XmlElement]
         public bool AllowEnemyGrindingInMotion { get; set; }
 
+        [ProtoMember(26), XmlElement]
+        public double StateSyncIntervalSeconds { get; set; }
+
+        [ProtoMember(27), XmlElement]
+        public bool ShieldCheckEnabled { get; set; }
+
         public SyncModSettings()
         {
             Version = CurrentSettingsVersion;
@@ -109,7 +115,9 @@ namespace SKONanobotBuildAndRepairSystem
             Welder = new SyncModSettingsWelder();
             AutoPowerOffOnIdleForced = Constants.AutoPowerOffOnIdleForcedDefault;
             AutoPowerOffOnIdleMinutes = Constants.AutoPowerOffOnIdleMinutesDefault;
-            AllowEnemyGrindingInMotion = Constants.AllowEnemyGrindingInMotionDefault;            
+            AllowEnemyGrindingInMotion = Constants.AllowEnemyGrindingInMotionDefault;
+            StateSyncIntervalSeconds = 5.0;
+            ShieldCheckEnabled = true;
         }
 
         public static SyncModSettings Load()
@@ -193,7 +201,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
 
                     // Set back to default if someone used strange values for auto-power-off. Ignore their value.
-                    if(settings.AutoPowerOffOnIdleMinutes < 1 || settings.AutoPowerOffOnIdleMinutes >= TimeSpan.MaxValue.TotalMinutes)
+                    if (settings.AutoPowerOffOnIdleMinutes < 1 || settings.AutoPowerOffOnIdleMinutes >= TimeSpan.MaxValue.TotalMinutes)
                     {
                         settings.AutoPowerOffOnIdleMinutes = Constants.AutoPowerOffOnIdleMinutesDefault;
                     }
@@ -246,6 +254,10 @@ namespace SKONanobotBuildAndRepairSystem
             if (settings.Version <= 4 && settings.Welder.GrindingMultiplier == 0) settings.Welder.GrindingMultiplier = 1;
             if (settings.Version <= 5 && settings.Welder.AllowedGrindJanitorRelations == 0) settings.Welder.AllowedGrindJanitorRelations = AutoGrindRelation.NoOwnership | AutoGrindRelation.Enemies | AutoGrindRelation.Neutral;
 
+            // Clamp newly added settings with sane defaults
+            if (settings.StateSyncIntervalSeconds < 0.2) settings.StateSyncIntervalSeconds = 0.2;
+            else if (settings.StateSyncIntervalSeconds > 5.0) settings.StateSyncIntervalSeconds = 5.0;
+
             settings.Version = CurrentSettingsVersion;
             return true;
         }
@@ -281,34 +293,34 @@ namespace SKONanobotBuildAndRepairSystem
         [ProtoMember(105), XmlElement, XmlIgnore]
         public WorkModes AllowedWorkModes { get; set; }
 
-        [ProtoMember(106), XmlElement, XmlIgnore]
+        [ProtoMember(106), XmlElement]
         public WorkModes WorkModeDefault { get; set; }
 
-        [ProtoMember(110), XmlElement, XmlIgnore]
+        [ProtoMember(110), XmlElement]
         public bool UseIgnoreColorFixed { get; set; }
 
-        [ProtoMember(111), XmlElement, XmlIgnore]
+        [ProtoMember(111), XmlElement]
         public bool UseIgnoreColorDefault { get; set; }
 
-        [ProtoMember(112), XmlArray, XmlIgnore]
+        [ProtoMember(112), XmlArray]
         public float[] IgnoreColorDefault { get; set; }
 
-        [ProtoMember(115), XmlElement, XmlIgnore]
+        [ProtoMember(115), XmlElement]
         public bool UseGrindColorFixed { get; set; }
 
-        [ProtoMember(116), XmlElement, XmlIgnore]
+        [ProtoMember(116), XmlElement]
         public bool UseGrindColorDefault { get; set; }
 
-        [ProtoMember(117), XmlArray, XmlIgnore]
+        [ProtoMember(117), XmlArray]
         public float[] GrindColorDefault { get; set; }
 
-        [ProtoMember(118), XmlElement, XmlIgnore]
+        [ProtoMember(118), XmlElement]
         public bool UseGrindJanitorFixed { get; set; }
 
-        [ProtoMember(119), XmlElement, XmlIgnore]
+        [ProtoMember(119), XmlElement]
         public AutoGrindRelation UseGrindJanitorDefault { get; set; }
 
-        [ProtoMember(120), XmlElement, XmlIgnore]
+        [ProtoMember(120), XmlElement]
         public AutoGrindOptions GrindJanitorOptionsDefault { get; set; }
 
         [ProtoMember(121), XmlElement, XmlIgnore]
@@ -518,7 +530,7 @@ namespace SKONanobotBuildAndRepairSystem
                     Changed = 3u;
                 }
             }
-        }        
+        }
 
         [ProtoMember(31), XmlElement]
         public Vector3 IgnoreColor
@@ -604,7 +616,7 @@ namespace SKONanobotBuildAndRepairSystem
                     Changed = 3u;
                 }
             }
-        }      
+        }
 
         //+X = Right   -Y = Left
         //+Y = Up      -Y = Down
@@ -869,7 +881,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-       
+
 
         [XmlIgnore]
         public int MaximumRange { get; private set; }
@@ -1065,7 +1077,7 @@ namespace SKONanobotBuildAndRepairSystem
             _SoundVolume = newSettings.SoundVolume;
             _SearchMode = newSettings.SearchMode;
             _WorkMode = newSettings.WorkMode;
-            
+
             _WeldTo = newSettings.WeldTo;
             _UseAutoPowerOffWhenIdle = newSettings.UseAutoPowerOffWhenIdle;
 
@@ -1259,6 +1271,16 @@ namespace SKONanobotBuildAndRepairSystem
         private TimeSpan _CurrentTransportStartTime = TimeSpan.Zero;
 
         public bool Changed { get; private set; }
+
+        // Section hashes for selective client application
+        [ProtoMember(8)]
+        public long MissingComponentsHash { get; set; }
+        [ProtoMember(9)]
+        public long PossibleWeldTargetsHash { get; set; }
+        [ProtoMember(24)]
+        public long PossibleGrindTargetsHash { get; set; }
+        [ProtoMember(25)]
+        public long PossibleFloatingTargetsHash { get; set; }
 
         public override string ToString()
         {
@@ -1582,7 +1604,8 @@ namespace SKONanobotBuildAndRepairSystem
 
         internal bool IsTransmitNeeded()
         {
-            return Changed && MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTransmitted).TotalSeconds >= 2;
+            var interval = NanobotBuildAndRepairSystemMod.Settings?.StateSyncIntervalSeconds ?? 2.0;
+            return Changed && MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTransmitted).TotalSeconds >= interval;
         }
 
         internal SyncBlockState GetTransmit()
@@ -1591,6 +1614,11 @@ namespace SKONanobotBuildAndRepairSystem
             _PossibleWeldTargetsSync = null;
             _PossibleGrindTargetsSync = null;
             _PossibleFloatingTargetsSync = null;
+            // Populate hashes to allow clients to skip apply per section
+            MissingComponentsHash = MissingComponents?.CurrentHash ?? 0;
+            PossibleWeldTargetsHash = PossibleWeldTargets?.CurrentHash ?? 0;
+            PossibleGrindTargetsHash = PossibleGrindTargets?.CurrentHash ?? 0;
+            PossibleFloatingTargetsHash = PossibleFloatingTargets?.CurrentHash ?? 0;
             LastTransmitted = MyAPIGateway.Session.ElapsedPlayTime;
             Changed = false;
             return this;
@@ -1613,48 +1641,65 @@ namespace SKONanobotBuildAndRepairSystem
             _CurrentTransportTarget = newState.CurrentTransportTarget;
             _CurrentTransportIsPick = newState.CurrentTransportIsPick;
 
-            MissingComponents.Clear();
-            var missingComponentsSync = newState.MissingComponentsSync;
-            if (missingComponentsSync != null) foreach (var item in missingComponentsSync) MissingComponents.Add(item.Component, item.Amount);
-
-            PossibleWeldTargets.Clear();
-            var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
-            if (possibleWeldTargetsSync != null)
+            // Apply sections only if their hash changed
+            if (MissingComponents.CurrentHash != newState.MissingComponentsHash)
             {
-                foreach (var item in possibleWeldTargetsSync)
-                {
-                    if(item.Entity.EntityId == 0)
-                    {
-                        IMyEntity gridEntity;
-                        if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
-                        {
-                            var grid = gridEntity as IMyCubeGrid;
-                            var block = grid?.GetCubeBlock(item.Entity.Position.Value);
-                            if (block != null)
-                            {                                
-                                PossibleWeldTargets.Add(new TargetBlockData(SyncEntityId.GetItemAsSlimBlock(SyncEntityId.GetSyncId(block)), item.Distance, 0));
-                            }
-                        }
-                    }
-                    else
-                    {
-                        var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                        PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
-                    }                    
-                }
+                MissingComponents.Clear();
+                var missingComponentsSync = newState.MissingComponentsSync;
+                if (missingComponentsSync != null) foreach (var item in missingComponentsSync) MissingComponents.Add(item.Component, item.Amount);
+                MissingComponents.RebuildHash();
             }
 
-            PossibleGrindTargets.Clear();
-            var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
-            if (possibleGrindTargetsSync != null) foreach (var item in possibleGrindTargetsSync)
+            if (PossibleWeldTargets.CurrentHash != newState.PossibleWeldTargetsHash)
+            {
+                PossibleWeldTargets.Clear();
+                var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
+                if (possibleWeldTargetsSync != null)
                 {
-                    var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                    PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                    foreach (var item in possibleWeldTargetsSync)
+                    {
+                        if (item.Entity.EntityId == 0)
+                        {
+                            IMyEntity gridEntity;
+                            if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
+                            {
+                                var grid = gridEntity as IMyCubeGrid;
+                                var block = grid?.GetCubeBlock(item.Entity.Position.Value);
+                                if (block != null)
+                                {
+                                    PossibleWeldTargets.Add(new TargetBlockData(SyncEntityId.GetItemAsSlimBlock(SyncEntityId.GetSyncId(block)), item.Distance, 0));
+                                }
+                            }
+                        }
+                        else
+                        {
+                            var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                            PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        }
+                    }
                 }
+                PossibleWeldTargets.RebuildHash();
+            }
 
-            PossibleFloatingTargets.Clear();
-            var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
-            if (possibleFloatingTargetsSync != null) foreach (var item in possibleFloatingTargetsSync) PossibleFloatingTargets.Add(new TargetEntityData(SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity), item.Distance));
+            if (PossibleGrindTargets.CurrentHash != newState.PossibleGrindTargetsHash)
+            {
+                PossibleGrindTargets.Clear();
+                var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
+                if (possibleGrindTargetsSync != null) foreach (var item in possibleGrindTargetsSync)
+                    {
+                        var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                        PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                    }
+                PossibleGrindTargets.RebuildHash();
+            }
+
+            if (PossibleFloatingTargets.CurrentHash != newState.PossibleFloatingTargetsHash)
+            {
+                PossibleFloatingTargets.Clear();
+                var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
+                if (possibleFloatingTargetsSync != null) foreach (var item in possibleFloatingTargetsSync) PossibleFloatingTargets.Add(new TargetEntityData(SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity), item.Distance));
+                PossibleFloatingTargets.RebuildHash();
+            }
 
             Changed = true;
         }

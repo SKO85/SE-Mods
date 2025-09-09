@@ -6,6 +6,12 @@ namespace SKONanobotBuildAndRepairSystem
     public static class MessageSyncHelper
     {
         private static bool _registered = false;
+        // Secure message handler adapters (Space Engineers expects Action<ushort, byte[], ulong, bool>)
+        private static void SecureSyncModDataRequestReceived(ushort id, byte[] data, ulong sender, bool fromServer) => SyncModDataRequestReceived(data);
+        private static void SecureSyncBlockDataRequestReceived(ushort id, byte[] data, ulong sender, bool fromServer) => SyncBlockDataRequestReceived(data);
+        private static void SecureSyncBlockSettingsReceived(ushort id, byte[] data, ulong sender, bool fromServer) => SyncBlockSettingsReceived(data);
+        private static void SecureSyncModSettingsReceived(ushort id, byte[] data, ulong sender, bool fromServer) => SyncModSettingsReceived(data);
+        private static void SecureSyncBlockStateReceived(ushort id, byte[] data, ulong sender, bool fromServer) => SyncBlockStateReceived(data);
 
         public static void RegisterAll()
         {
@@ -14,16 +20,15 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (MyAPIGateway.Session.IsServer)
             {
-                MyAPIGateway.Multiplayer.RegisterMessageHandler(Constants.MSGID_MOD_DATAREQUEST, SyncModCommandReceived);
-                MyAPIGateway.Multiplayer.RegisterMessageHandler(Constants.MSGID_MOD_DATAREQUEST, SyncModDataRequestReceived);
-                MyAPIGateway.Multiplayer.RegisterMessageHandler(Constants.MSGID_BLOCK_DATAREQUEST, SyncBlockDataRequestReceived);
-                MyAPIGateway.Multiplayer.RegisterMessageHandler(Constants.MSGID_BLOCK_SETTINGS_FROM_CLIENT, SyncBlockSettingsReceived);
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(Constants.MSGID_MOD_DATAREQUEST, SecureSyncModDataRequestReceived);
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(Constants.MSGID_BLOCK_DATAREQUEST, SecureSyncBlockDataRequestReceived);
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(Constants.MSGID_BLOCK_SETTINGS_FROM_CLIENT, SecureSyncBlockSettingsReceived);
             }
             else
             {
-                MyAPIGateway.Multiplayer.RegisterMessageHandler(Constants.MSGID_MOD_SETTINGS, SyncModSettingsReceived);
-                MyAPIGateway.Multiplayer.RegisterMessageHandler(Constants.MSGID_BLOCK_SETTINGS_FROM_SERVER, SyncBlockSettingsReceived);
-                MyAPIGateway.Multiplayer.RegisterMessageHandler(Constants.MSGID_BLOCK_STATE_FROM_SERVER, SyncBlockStateReceived);
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(Constants.MSGID_MOD_SETTINGS, SecureSyncModSettingsReceived);
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(Constants.MSGID_BLOCK_SETTINGS_FROM_SERVER, SecureSyncBlockSettingsReceived);
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(Constants.MSGID_BLOCK_STATE_FROM_SERVER, SecureSyncBlockStateReceived);
             }
 
             _registered = true;
@@ -36,21 +41,18 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (MyAPIGateway.Session.IsServer)
             {
-                MyAPIGateway.Multiplayer.UnregisterMessageHandler(Constants.MSGID_MOD_DATAREQUEST, SyncModDataRequestReceived);
-                MyAPIGateway.Multiplayer.UnregisterMessageHandler(Constants.MSGID_BLOCK_DATAREQUEST, SyncBlockDataRequestReceived);
-                MyAPIGateway.Multiplayer.UnregisterMessageHandler(Constants.MSGID_BLOCK_SETTINGS_FROM_CLIENT, SyncBlockSettingsReceived);
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(Constants.MSGID_MOD_DATAREQUEST, SecureSyncModDataRequestReceived);
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(Constants.MSGID_BLOCK_DATAREQUEST, SecureSyncBlockDataRequestReceived);
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(Constants.MSGID_BLOCK_SETTINGS_FROM_CLIENT, SecureSyncBlockSettingsReceived);
             }
             else
             {
-                MyAPIGateway.Multiplayer.UnregisterMessageHandler(Constants.MSGID_MOD_SETTINGS, SyncModSettingsReceived);
-                MyAPIGateway.Multiplayer.UnregisterMessageHandler(Constants.MSGID_BLOCK_SETTINGS_FROM_SERVER, SyncBlockSettingsReceived);
-                MyAPIGateway.Multiplayer.UnregisterMessageHandler(Constants.MSGID_BLOCK_STATE_FROM_SERVER, SyncBlockStateReceived);
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(Constants.MSGID_MOD_SETTINGS, SecureSyncModSettingsReceived);
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(Constants.MSGID_BLOCK_SETTINGS_FROM_SERVER, SecureSyncBlockSettingsReceived);
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(Constants.MSGID_BLOCK_STATE_FROM_SERVER, SecureSyncBlockStateReceived);
             }
 
             _registered = false;
-        }
-        private static void SyncModCommandReceived(byte[] dataRcv)
-        {
         }
 
         private static void SyncModDataRequestReceived(byte[] dataRcv)

@@ -245,6 +245,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 if (NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleForced)
                                 {
                                     system.Settings.UseAutoPowerOffWhenIdle = 1;
+                                    system.ResetAutoPowerOffTimer();
                                 }
                                 else
                                 {
@@ -256,6 +257,7 @@ namespace SKONanobotBuildAndRepairSystem
                                     {
                                         system.Settings.UseAutoPowerOffWhenIdle = 0;
                                     }
+                                    system.ResetAutoPowerOffTimer();
                                 }
                             }
                         };

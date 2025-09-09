@@ -94,7 +94,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                if (slimBlock != null && NanobotBuildAndRepairSystemBlock.Shield != null && NanobotBuildAndRepairSystemBlock.Shield.IsReady)
+                if (NanobotBuildAndRepairSystemMod.Settings.ShieldCheckEnabled && slimBlock != null && NanobotBuildAndRepairSystemBlock.Shield != null && NanobotBuildAndRepairSystemBlock.Shield.IsReady)
                 {
                     var isProtected = NanobotBuildAndRepairSystemBlock.Shield.ProtectedByShield(slimBlock.CubeGrid);
 
