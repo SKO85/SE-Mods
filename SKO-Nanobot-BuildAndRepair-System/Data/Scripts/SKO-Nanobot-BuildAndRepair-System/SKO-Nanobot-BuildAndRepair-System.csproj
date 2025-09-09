@@ -34,7 +34,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <LangVersion>7.0</LangVersion>
+  <LangVersion>6</LangVersion>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject />
@@ -55,6 +55,7 @@
     <Compile Include="Deb.cs" />
     <Compile Include="EffectManager.cs" />
     <Compile Include="GrindManager.cs" />
+  <Compile Include="DestinationCapacityCache.cs" />
     <Compile Include="InventoryManager.cs" />
     <Compile Include="Localization.cs" />
     <Compile Include="Logging.cs" />

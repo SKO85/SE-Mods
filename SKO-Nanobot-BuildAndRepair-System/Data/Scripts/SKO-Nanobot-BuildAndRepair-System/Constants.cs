@@ -48,15 +48,15 @@ namespace SKONanobotBuildAndRepairSystem
         public const string PARTICLE_EFFECT_TRANSPORT1_PICK = "GrindNanobotTrace1";
         public const string PARTICLE_EFFECT_TRANSPORT1_DELIVER = "WeldNanobotTrace1";
 
-        public const int MaxBackgroundTasks_Default = 4;
-        public const int MaxBackgroundTasks_Max = 10;
+        public const int MaxBackgroundTasks_Default = 8;
+        public const int MaxBackgroundTasks_Max = 15;
         public const int MaxBackgroundTasks_Min = 1;
         public const float MaxSkeletonCreateIntegrityRatio = 0.2f;
 
         public const bool DisableLocalization = false;
         public const ulong sId = 76561198001777579;
 
-        public const bool AutoPowerOffOnIdleForcedDefault = true;
+        public const bool AutoPowerOffOnIdleForcedDefault = false;
         public const int AutoPowerOffOnIdleMinutesDefault = 15;
         public const bool AllowEnemyGrindingInMotionDefault = true;
 

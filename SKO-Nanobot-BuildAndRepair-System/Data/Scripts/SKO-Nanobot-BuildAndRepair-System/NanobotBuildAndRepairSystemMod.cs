@@ -52,13 +52,19 @@ namespace SKONanobotBuildAndRepairSystem
             MessageSyncHelper.UnregisterAll();
             Logging.Instance?.Close();
             NanobotBuildAndRepairSystemTerminal.Dispose();
-            base.UnloadData();
-
-            if (_chatHandlerRegistered)
+            // Best-effort cleanup of session-level event handlers
+            try
             {
-                MyAPIGateway.Utilities.MessageEntered -= CommandProcessor.OnChatCommand;
-                _chatHandlerRegistered = false;
+                if (_chatHandlerRegistered)
+                {
+                    MyAPIGateway.Utilities.MessageEntered -= CommandProcessor.OnChatCommand;
+                    _chatHandlerRegistered = false;
+                }
             }
+            catch { }
+
+            // No explicit API to unregister DamageSystem handlers; avoid re-registering on Init by using a guard
+            base.UnloadData();
         }
 
         private static bool _chatHandlerRegistered = false;

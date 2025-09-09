@@ -222,7 +222,8 @@ namespace SKONanobotBuildAndRepairSystem
                 if (block._SoundEmitterWorking == null)
                 {
                     block._SoundEmitterWorking = new MyEntity3DSoundEmitter((VRage.Game.Entity.MyEntity)block._Welder, true, 1f);
-                    block._SoundEmitterWorking.CustomMaxDistance = 30f;
+                    // Working emitter follows the active work position; allow larger effective range but we will attenuate per-frame.
+                    block._SoundEmitterWorking.CustomMaxDistance = 200f;
                     block._SoundEmitterWorking.CustomVolume = _SoundLevels[(int)workingState] * block.Settings.SoundVolume;
                     block._SoundEmitterWorkingPosition = null;
                 }
@@ -302,11 +303,42 @@ namespace SKONanobotBuildAndRepairSystem
             var sound = _Sounds[(int)workingState];
             if (block._SoundEmitterWorking != null && sound != null)
             {
-                if (!block._SoundEmitterWorking.IsPlaying || block._SoundEmitterWorkingPosition == null || Math.Abs((block._SoundEmitterWorkingPosition.Value - position).Length()) > 2)
+                // Always keep the emitter at the current work position
+                block._SoundEmitterWorking.SetPosition(position);
+                block._SoundEmitterWorkingPosition = position;
+
+                // Attenuate and stop based on camera distance to avoid hearing far-away grinding
+                try
                 {
-                    block._SoundEmitterWorking.SetPosition(position);
-                    block._SoundEmitterWorkingPosition = position;
-                    block._SoundEmitterWorking.PlaySound(sound, true);
+                    var cameraPos = MyAPIGateway.Session?.Camera?.WorldMatrix.Translation ?? position;
+                    var dist = (float)(cameraPos - position).Length();
+                    // Fade between 60m and 180m; stop beyond 180m
+                    float volumeScale;
+                    if (dist <= 60f) volumeScale = 1f;
+                    else if (dist >= 180f) volumeScale = 0f;
+                    else volumeScale = (180f - dist) / 120f;
+
+                    var baseVol = _SoundLevels[(int)workingState] * block.Settings.SoundVolume;
+                    block._SoundEmitterWorking.CustomVolume = baseVol * volumeScale;
+
+                    if (volumeScale <= 0f)
+                    {
+                        if (block._SoundEmitterWorking.IsPlaying)
+                        {
+                            block._SoundEmitterWorking.StopSound(true);
+                        }
+                    }
+                    else if (!block._SoundEmitterWorking.IsPlaying)
+                    {
+                        block._SoundEmitterWorking.PlaySound(sound, true);
+                    }
+                }
+                catch
+                {
+                    if (!block._SoundEmitterWorking.IsPlaying)
+                    {
+                        block._SoundEmitterWorking.PlaySound(sound, true);
+                    }
                 }
             }
         }

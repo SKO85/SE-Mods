@@ -41,7 +41,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         // Cooldown for blocks that cannot be welded
         private readonly Dictionary<IMySlimBlock, TimeSpan> _WeldCooldowns = new Dictionary<IMySlimBlock, TimeSpan>();
-        private static readonly TimeSpan WeldFailCooldown = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan WeldFailCooldown = TimeSpan.FromSeconds(5);
 
         public static ShieldApi Shield;
 
@@ -60,6 +60,9 @@ namespace SKONanobotBuildAndRepairSystem
 
         private readonly Stopwatch _DelayWatch = new Stopwatch();
         private int _Delay = 0;
+        private TimeSpan _EnableCooldownUntil; // throttle burst after (re)enable
+        private int _ScanJitterMs; // per-block randomness to spread scan starts
+    internal int _PushJitterMs; // per-block randomness to spread push attempts
 
         private bool _AsyncUpdateSourcesAndTargetsRunning = false;
         private readonly List<TargetBlockData> _TempPossibleWeldTargets = new List<TargetBlockData>();
@@ -91,6 +94,8 @@ namespace SKONanobotBuildAndRepairSystem
         private TimeSpan _LastSourceUpdate = -NanobotBuildAndRepairSystemMod.Settings.SourcesUpdateInterval;
         private TimeSpan _LastTargetsUpdate;
         private TimeSpan _LastUpdate;
+    // Time-based gate for collecting attempts (prevents long delays when updates run at 100th-frame cadence)
+    private TimeSpan _NextCollectAttemptAllowed;
 
         internal bool _CreativeModeActive;
         private int _UpdateEffectsInterval;
@@ -108,6 +113,12 @@ namespace SKONanobotBuildAndRepairSystem
         private TimeSpan _UpdatePowerSinkLast;
         internal TimeSpan _TryAutoPushInventoryLast;
         internal TimeSpan _TryPushInventoryLast;
+        // Adaptive backoff for failed inventory push attempts
+        internal TimeSpan _NextInventoryPushAllowed;
+        internal int _InventoryPushBackoffSeconds;
+        // Backoff while inventory is full and no valid work is active
+        internal TimeSpan _NextWorkWhenFullAllowed;
+        internal int _WorkWhenFullBackoffSeconds;
 
         private SyncBlockSettings _Settings;
         public SyncBlockSettings Settings
@@ -292,13 +303,24 @@ namespace SKONanobotBuildAndRepairSystem
             MessageSyncHelper.SyncBlockDataRequestSend(this);
 
             UpdateCustomInfo(true);
-            _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime.Add(TimeSpan.FromSeconds(10));
+            _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime.Add(TimeSpan.FromSeconds(3));
             _TryAutoPushInventoryLast = _TryPushInventoryLast;
+            _NextInventoryPushAllowed = _TryAutoPushInventoryLast;
+            _InventoryPushBackoffSeconds = 0;
+            _NextWorkWhenFullAllowed = _TryAutoPushInventoryLast;
+            _WorkWhenFullBackoffSeconds = 0;
             _WorkingStateSet = WorkingState.Invalid;
             _SoundVolumeSet = -1;
             _LastUpdate = MyAPIGateway.Session.ElapsedPlayTime;
             // Initialize idle timer reference so clients don't show an immediate timeout
             LastTaskTime = _LastUpdate;
+            // Allow immediate collect attempts after init
+            _NextCollectAttemptAllowed = _LastUpdate;
+
+            // Randomize scan jitter and set initial enable cooldown
+            _ScanJitterMs = _RandomDelay.Next(0, 200);
+            _PushJitterMs = _RandomDelay.Next(0, 200);
+            _EnableCooldownUntil = _LastUpdate + TimeSpan.FromMilliseconds(500 + _ScanJitterMs);
 
             _IsInit = true;
             Logging.Instance?.Write(Logging.Level.Event, "BuildAndRepairSystemBlock {0}: Init -> done", Logging.BlockName(_Welder, Logging.BlockNameOptions.None));
@@ -315,6 +337,17 @@ namespace SKONanobotBuildAndRepairSystem
         public override void Close()
         {
             Logging.Instance.Write(Logging.Level.Event, "BuildAndRepairSystemBlock {0}: Close", Logging.BlockName(_Welder, Logging.BlockNameOptions.None));
+            // Always detach AppendingCustomInfo to avoid leaking the handler even if _IsInit was never set
+            if (_Welder != null)
+            {
+                try
+                {
+                    _Welder.AppendingCustomInfo -= AppendingCustomInfo;
+                    if (_onEnabledChanged != null) _Welder.EnabledChanged -= _onEnabledChanged;
+                    if (_onIsWorkingChanged != null) _Welder.IsWorkingChanged -= _onIsWorkingChanged;
+                }
+                catch { }
+            }
             if (_IsInit)
             {
                 InventoryManager.EmptyTransportInventory(this, true);
@@ -335,8 +368,7 @@ namespace SKONanobotBuildAndRepairSystem
                 GrindManager.ReleaseAll(Entity.EntityId);
                 WeldManager.ReleaseAll(Entity.EntityId);
 
-                if (_onEnabledChanged != null) _Welder.EnabledChanged -= _onEnabledChanged;
-                if (_onIsWorkingChanged != null) _Welder.IsWorkingChanged -= _onIsWorkingChanged;
+                // Handlers already detached above
 
                 lock (State.PossibleWeldTargets) State.PossibleWeldTargets?.Clear();
                 lock (State.PossibleGrindTargets) State.PossibleGrindTargets?.Clear();
@@ -544,6 +576,50 @@ namespace SKONanobotBuildAndRepairSystem
             return true;
         }
 
+        // Returns true if it's reasonable to attempt welding while inventory is full.
+        // Criteria:
+        // - Welding mode is allowed (not GrindOnly)
+        // - Welder is ready
+        // - We either have items already in the internal transport inventory
+        //   or the welder inventory contains at least one component to move locally.
+        private bool AllowWeldScanWhileFull()
+        {
+            if (Settings.WorkMode == WorkModes.GrindOnly)
+            {
+                return false;
+            }
+            if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false)
+            {
+                return false;
+            }
+
+            if (_TransportInventory != null && _TransportInventory.CurrentVolume > 0)
+            {
+                return true;
+            }
+
+            var welderInventory = _Welder.GetInventory(0);
+            if (welderInventory == null || welderInventory.Empty())
+            {
+                return false;
+            }
+
+            var items = new System.Collections.Generic.List<MyInventoryItem>();
+            welderInventory.GetItems(items);
+            var result = false;
+            for (var i = items.Count - 1; i >= 0; i--)
+            {
+                var it = items[i];
+                if (it.Type.TypeId == typeof(VRage.Game.MyObjectBuilder_Component).Name)
+                {
+                    result = true;
+                    break;
+                }
+            }
+            items.Clear();
+            return result;
+        }
+
         /// <summary>
         /// Try to weld/grind/collect the possible targets
         /// </summary>
@@ -566,6 +642,38 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (ready)
             {
+                // Quick early bailout: when inventory is full and no current valid work, skip heavy work until backoff elapses.
+                // Allow welding attempts if we have components on hand (no grinding/transport when full).
+                if (State.InventoryFull)
+                {
+                    var hasValidCurrentWeldFast = State.CurrentWeldingBlock != null
+                        && !State.CurrentWeldingBlock.IsDestroyed
+                        && State.CurrentWeldingBlock.CubeGrid != null && !State.CurrentWeldingBlock.CubeGrid.Closed
+                        && (State.CurrentWeldingBlock.FatBlock == null || !State.CurrentWeldingBlock.FatBlock.Closed);
+
+                    var hasValidCurrentGrindFast = State.CurrentGrindingBlock != null
+                        && !State.CurrentGrindingBlock.IsDestroyed
+                        && State.CurrentGrindingBlock.CubeGrid != null && !State.CurrentGrindingBlock.CubeGrid.Closed
+                        && (State.CurrentGrindingBlock.FatBlock == null || !State.CurrentGrindingBlock.FatBlock.Closed);
+
+                    if (!hasValidCurrentWeldFast && !hasValidCurrentGrindFast)
+                    {
+                        var canTryWeldWhileFull = AllowWeldScanWhileFull();
+                        if (!canTryWeldWhileFull)
+                        {
+                            // No viable work and full: honor backoff window
+                            if (playTime < _NextWorkWhenFullAllowed)
+                            {
+                                return;
+                            }
+                            // Schedule next attempt using exponential backoff with jitter
+                            _WorkWhenFullBackoffSeconds = _WorkWhenFullBackoffSeconds == 0 ? _RandomDelay.Next(5, 11) : Math.Min(60, Math.Max(5, _WorkWhenFullBackoffSeconds * 2));
+                            _NextWorkWhenFullAllowed = playTime.Add(TimeSpan.FromMilliseconds(_WorkWhenFullBackoffSeconds * 1000 + _ScanJitterMs));
+                            return;
+                        }
+                    }
+                }
+
                 // Check if idle long time.
                 if (!IsIdle())
                 {
@@ -620,17 +728,19 @@ namespace SKONanobotBuildAndRepairSystem
                     doScanTargets = false;
                 }
 
-                // Do not scan for any targets if our inventory is full
-                if (State.InventoryFull)
+                // Disable scans when inventory is full, unless we allow weld scanning while full
+                if (State.InventoryFull && !AllowWeldScanWhileFull())
                 {
                     doScanTargets = false;
                 }
 
                 if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
                 {
-                    if (doScanTargets)
+                    // Try collecting on a short, time-based cadence independent of target scans
+                    if (playTime >= _NextCollectAttemptAllowed)
                     {
                         CollectManager.TryCollectingFloatingTargets(this, out collecting, out needcollecting, out transporting);
+                        _NextCollectAttemptAllowed = playTime.Add(TimeSpan.FromMilliseconds(500));
                     }
                 }
                 if (!transporting)
@@ -755,9 +865,10 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0 && !transporting && !welding && !grinding)
                 {
-                    if (doScanTargets)
+                    if (playTime >= _NextCollectAttemptAllowed)
                     {
                         CollectManager.TryCollectingFloatingTargets(this, out collecting, out needcollecting, out transporting);
+                        _NextCollectAttemptAllowed = playTime.Add(TimeSpan.FromMilliseconds(500));
                     }
                 }
             }
@@ -851,6 +962,9 @@ namespace SKONanobotBuildAndRepairSystem
             if (inventoryFullChanged && !State.InventoryFull)
             {
                 _TargetScanTickCounter = TargetScanIntervalTicks;
+                // Reset full-state backoff when capacity frees up
+                _WorkWhenFullBackoffSeconds = 0;
+                _NextWorkWhenFullAllowed = playTime;
             }
 
             if (missingComponentsChanged && Logging.Instance.ShouldLog(Logging.Level.Verbose))
@@ -959,12 +1073,19 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 GrindManager.ReleaseAll(Entity.EntityId);
                 WeldManager.ReleaseAll(Entity.EntityId);
-                InventoryManager.EmptyInventory(this);
                 EffectManager.UpdateEffects(this);
             }
             catch { }
 
             LastTaskTime = MyAPIGateway.Session.ElapsedPlayTime;
+            // Spread scan restarts after toggling enable/working
+            _ScanJitterMs = _RandomDelay.Next(0, 200);
+            _EnableCooldownUntil = LastTaskTime + TimeSpan.FromMilliseconds(300 + _ScanJitterMs);
+            // Kick inventory push quickly but avoid bulk moves in a single tick
+            _InventoryPushBackoffSeconds = 0;
+            _NextInventoryPushAllowed = LastTaskTime; // allow immediate push attempts
+            _TryAutoPushInventoryLast = LastTaskTime - TimeSpan.FromSeconds(3);
+            _TryPushInventoryLast = _TryAutoPushInventoryLast;
         }
 
         /// <summary>
@@ -1260,15 +1381,16 @@ namespace SKONanobotBuildAndRepairSystem
                 State.CurrentTransportStartTime = playTime;
 
 
-                double transportSpeed = Settings.TransportSpeed;
-
+                var transportSpeed = Settings.TransportSpeed;
                 if (transportSpeed <= 0.0001)
                 {
                     transportSpeed = Constants.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT;
                 }
 
-                double transportSeconds = 2d * targetData.Distance / transportSpeed;
-                transportSeconds = Math.Min(transportSeconds, TimeSpan.MaxValue.TotalSeconds);
+                // For grinding pickup legs, apply the same fast pickup timing and clamp
+                var transportSeconds = (2d * targetData.Distance / transportSpeed) / 4d;
+                if (transportSeconds < 0.25d) transportSeconds = 0.25d;
+                if (transportSeconds > 2.0d) transportSeconds = 2.0d;
 
                 State.CurrentTransportTime = TimeSpan.FromSeconds(transportSeconds);
 
@@ -1332,14 +1454,17 @@ namespace SKONanobotBuildAndRepairSystem
                 State.CurrentTransportTarget = ComputePosition(collectingFirstTarget.Entity);
                 State.CurrentTransportStartTime = playTime;
 
-                double transportSpeed = Settings.TransportSpeed;
+                // Make pickup transports significantly faster to avoid stalling further collecting
+                var transportSpeed = Settings.TransportSpeed;
                 if (transportSpeed <= 0.0001)
                 {
-                    transportSpeed = 1.0;
+                    transportSpeed = Constants.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT;
                 }
 
-                double transportSeconds = 2d * collectingFirstTarget.Distance / transportSpeed;
-                transportSeconds = Math.Min(transportSeconds, TimeSpan.MaxValue.TotalSeconds);
+                // Base time by distance, then speed up pickup legs and clamp to a short window
+                var transportSeconds = (2d * collectingFirstTarget.Distance / transportSpeed) / 4d; // 4x faster for pickup
+                if (transportSeconds < 0.25d) transportSeconds = 0.25d; // min visual time
+                if (transportSeconds > 2.0d) transportSeconds = 2.0d;   // cap long runs
 
                 State.CurrentTransportTime = TimeSpan.FromSeconds(transportSeconds);
 
@@ -1413,7 +1538,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (transportSpeed <= 0.0001)
                     {
                         Logging.Instance?.Write(Logging.Level.Info, "Invalid transport speed: {0}. Using fallback value.", transportSpeed);
-                        transportSpeed = 1.0; // fallback to avoid overflow
+                        transportSpeed = Constants.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT;
                     }
 
                     double transportSeconds = 2d * targetData.Distance / transportSpeed;
@@ -1452,7 +1577,14 @@ namespace SKONanobotBuildAndRepairSystem
                     var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(componentId);
                     neededAmount = keyValue.Value;
                     picked = ServerPickFromWelder(componentId, definition.Volume, ref neededAmount, ref remainingVolume) || picked;
-                    if (neededAmount > 0 && remainingVolume > 0) picked = PullComponents(componentId, definition.Volume, ref neededAmount, ref remainingVolume) || picked;
+                    // When inventory is full, avoid expensive external pulls; only use welder inventory content
+                    if (!State.InventoryFull)
+                    {
+                        if (neededAmount > 0 && remainingVolume > 0)
+                        {
+                            picked = PullComponents(componentId, definition.Volume, ref neededAmount, ref remainingVolume) || picked;
+                        }
+                    }
                 }
                 else
                 {
@@ -1691,14 +1823,20 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         public void UpdateSourcesAndTargetsTimer()
         {
-            // Do not schedule scans while inventory is full
-            if (State.InventoryFull)
+            var playTime = MyAPIGateway.Session.ElapsedPlayTime;
+            // While full and welding-on-hand is NOT possible, run a light sources-only refresh on a slower cadence
+            if (State.InventoryFull && !AllowWeldScanWhileFull())
             {
+                var updateSourcesWhenFull = playTime.Subtract(_LastSourceUpdate) >= TimeSpan.FromSeconds(5);
+                if (updateSourcesWhenFull)
+                {
+                    StartAsyncUpdateSourcesAndTargets(true); // sources only
+                }
                 return;
             }
-            var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             var updateTargets = playTime.Subtract(_LastTargetsUpdate) >= NanobotBuildAndRepairSystemMod.Settings.TargetsUpdateInterval;
-            var updateSources = updateTargets && playTime.Subtract(_LastSourceUpdate) >= NanobotBuildAndRepairSystemMod.Settings.SourcesUpdateInterval;
+            // Do not update sources while inventory is full
+            var updateSources = updateTargets && !State.InventoryFull && playTime.Subtract(_LastSourceUpdate) >= NanobotBuildAndRepairSystemMod.Settings.SourcesUpdateInterval;
             if (updateTargets)
             {
                 StartAsyncUpdateSourcesAndTargets(updateSources);
@@ -1710,6 +1848,12 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         public void StartAsyncUpdateSourcesAndTargets(bool updateSource)
         {
+            // Delay scan start right after (re)enable to avoid spikes
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            if (now < _EnableCooldownUntil)
+            {
+                return;
+            }
             if (!_Welder.UseConveyorSystem)
             {
                 lock (_PossibleSources)
@@ -1718,8 +1862,8 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            // Skip scanning when not ready or inventory is full
-            if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false || State.InventoryFull)
+            // Skip scanning when not ready, or when full and welding-while-full isn't viable
+            if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false || (State.InventoryFull && !AllowWeldScanWhileFull() && !updateSource))
             {
                 Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: AsyncUpdateSourcesAndTargets Enabled={1} IsFunctional={2} ---> not ready don't search for targets",
                         Logging.BlockName(_Welder, Logging.BlockNameOptions.None),
@@ -1748,6 +1892,8 @@ namespace SKONanobotBuildAndRepairSystem
                 return;
             }
 
+            // Allow sources-only updates even when inventory is full (to discover new cargo)
+
             lock (_Welder)
             {
                 if (_AsyncUpdateSourcesAndTargetsRunning) return;
@@ -1762,12 +1908,17 @@ namespace SKONanobotBuildAndRepairSystem
             try
             {
                 if (!State.Ready) return;
-                if (State.InventoryFull) return; // skip heavy scanning while inventory is full
+                var allowWhileFull = !State.InventoryFull || AllowWeldScanWhileFull() || updateSource;
+                if (!allowWhileFull) return; // skip heavy scanning while inventory is full, unless welding-on-hand is possible, or we're only refreshing sources
+
+                // When full, disable grinding and collecting scans; only weld targets
                 var weldingEnabled = BlockWeldPriority.AnyEnabled && Settings.WorkMode != WorkModes.GrindOnly;
-                var grindingEnabled = BlockGrindPriority.AnyEnabled && Settings.WorkMode != WorkModes.WeldOnly;
+                var grindingEnabled = !State.InventoryFull && BlockGrindPriority.AnyEnabled && Settings.WorkMode != WorkModes.WeldOnly;
+                var collectingEnabled = !State.InventoryFull && _ComponentCollectPriority.AnyEnabled;
 
                 updateSource &= _Welder.UseConveyorSystem;
-                    AreaScanCache.EvictOld(MyAPIGateway.Session.ElapsedPlayTime);
+                // Opportunistically evict old cache entries
+                AreaScanCache.EvictOld(MyAPIGateway.Session.ElapsedPlayTime);
                 var pos = 0;
                 try
                 {
@@ -1798,7 +1949,7 @@ namespace SKONanobotBuildAndRepairSystem
                             break;
 
                         case SearchModes.BoundingBox:
-                            AsyncAddBlocksOfBox(ref areaOrientedBox, (Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0, ref ignoreColor, (Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0, ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, grids, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null, _ComponentCollectPriority.AnyEnabled ? _TempPossibleFloatingTargets : null);
+                            AsyncAddBlocksOfBox(ref areaOrientedBox, (Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0, ref ignoreColor, (Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0, ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, grids, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null, collectingEnabled ? _TempPossibleFloatingTargets : null);
                             break;
                     }
 
@@ -2825,6 +2976,12 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
             return list;
+        }
+
+        internal void ResetAutoPowerOffTimer()
+        {
+            LastTaskTime = MyAPIGateway.Session.ElapsedPlayTime;
+            State.ResetChanged();
         }
     }
 }
