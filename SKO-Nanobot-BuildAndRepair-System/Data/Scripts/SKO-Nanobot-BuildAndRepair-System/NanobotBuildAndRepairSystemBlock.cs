@@ -998,7 +998,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                if (Welder != null && Shield != null && Shield.IsReady)
+                if (Welder != null && NanobotBuildAndRepairSystemMod.Settings.ShieldCheckEnabled && Shield != null && Shield.IsReady)
                 {
                     if (Shield.ProtectedByShield(Welder.CubeGrid))
                     {

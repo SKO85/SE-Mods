@@ -95,6 +95,9 @@ namespace SKONanobotBuildAndRepairSystem
         [ProtoMember(26), XmlElement]
         public double StateSyncIntervalSeconds { get; set; }
 
+        [ProtoMember(27), XmlElement]
+        public bool ShieldCheckEnabled { get; set; }
+
         public SyncModSettings()
         {
             Version = CurrentSettingsVersion;
@@ -114,6 +117,7 @@ namespace SKONanobotBuildAndRepairSystem
             AutoPowerOffOnIdleMinutes = Constants.AutoPowerOffOnIdleMinutesDefault;
             AllowEnemyGrindingInMotion = Constants.AllowEnemyGrindingInMotionDefault;
             StateSyncIntervalSeconds = 5.0;
+            ShieldCheckEnabled = true;
         }
 
         public static SyncModSettings Load()
@@ -289,34 +293,34 @@ namespace SKONanobotBuildAndRepairSystem
         [ProtoMember(105), XmlElement, XmlIgnore]
         public WorkModes AllowedWorkModes { get; set; }
 
-        [ProtoMember(106), XmlElement, XmlIgnore]
+        [ProtoMember(106), XmlElement]
         public WorkModes WorkModeDefault { get; set; }
 
-        [ProtoMember(110), XmlElement, XmlIgnore]
+        [ProtoMember(110), XmlElement]
         public bool UseIgnoreColorFixed { get; set; }
 
-        [ProtoMember(111), XmlElement, XmlIgnore]
+        [ProtoMember(111), XmlElement]
         public bool UseIgnoreColorDefault { get; set; }
 
-        [ProtoMember(112), XmlArray, XmlIgnore]
+        [ProtoMember(112), XmlArray]
         public float[] IgnoreColorDefault { get; set; }
 
-        [ProtoMember(115), XmlElement, XmlIgnore]
+        [ProtoMember(115), XmlElement]
         public bool UseGrindColorFixed { get; set; }
 
-        [ProtoMember(116), XmlElement, XmlIgnore]
+        [ProtoMember(116), XmlElement]
         public bool UseGrindColorDefault { get; set; }
 
-        [ProtoMember(117), XmlArray, XmlIgnore]
+        [ProtoMember(117), XmlArray]
         public float[] GrindColorDefault { get; set; }
 
-        [ProtoMember(118), XmlElement, XmlIgnore]
+        [ProtoMember(118), XmlElement]
         public bool UseGrindJanitorFixed { get; set; }
 
-        [ProtoMember(119), XmlElement, XmlIgnore]
+        [ProtoMember(119), XmlElement]
         public AutoGrindRelation UseGrindJanitorDefault { get; set; }
 
-        [ProtoMember(120), XmlElement, XmlIgnore]
+        [ProtoMember(120), XmlElement]
         public AutoGrindOptions GrindJanitorOptionsDefault { get; set; }
 
         [ProtoMember(121), XmlElement, XmlIgnore]
