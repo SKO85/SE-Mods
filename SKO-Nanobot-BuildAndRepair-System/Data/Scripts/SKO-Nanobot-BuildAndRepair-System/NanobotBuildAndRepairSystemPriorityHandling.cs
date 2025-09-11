@@ -22,8 +22,8 @@ namespace SKONanobotBuildAndRepairSystem
         ArmorBlock,
         DisplayPanel,
         Lighting,
-        SensorDevice,        
-        CommunicationBlock        
+        SensorDevice,
+        CommunicationBlock
     }
 
     public enum ComponentClass
@@ -37,6 +37,8 @@ namespace SKONanobotBuildAndRepairSystem
 
     public class NanobotBuildAndRepairSystemBlockPriorityHandling : PriorityHandling<PrioItem, IMySlimBlock>
     {
+        private readonly System.Collections.Generic.Dictionary<long, int> _blockClassCache = new System.Collections.Generic.Dictionary<long, int>();
+
         public NanobotBuildAndRepairSystemBlockPriorityHandling()
         {
             foreach (var item in Enum.GetValues(typeof(BlockClass)))
@@ -47,10 +49,23 @@ namespace SKONanobotBuildAndRepairSystem
 
         public override int GetItemKey(IMySlimBlock a, bool real)
         {
-            var block = a.FatBlock;
-            if (block == null) return (int)BlockClass.ArmorBlock;
+            var fb = a.FatBlock;
+            if (fb == null) return (int)BlockClass.ArmorBlock;
+            var id = fb.EntityId;
+            int cls;
+            if (_blockClassCache.TryGetValue(id, out cls))
+            {
+                if (!real)
+                {
+                    var f = fb as Sandbox.ModAPI.IMyFunctionalBlock;
+                    if (f != null && !f.Enabled) return (int)BlockClass.ArmorBlock;
+                }
+                return cls;
+            }
+
+            var block = fb;
             var functionalBlock = block as Sandbox.ModAPI.IMyFunctionalBlock;
-            if (!real && functionalBlock != null && !functionalBlock.Enabled) return (int)BlockClass.ArmorBlock; //Switched off -> handle as structural block (if logical class is asked)
+            if (!real && functionalBlock != null && !functionalBlock.Enabled) return (int)BlockClass.ArmorBlock; // logical class treats disabled functionals as armor
 
             if (block is Sandbox.ModAPI.IMyShipWelder && block.BlockDefinition.SubtypeName.Contains("NanobotBuildAndRepairSystem")) return (int)BlockClass.AutoRepairSystem;
             if (block is Sandbox.ModAPI.IMyShipController) return (int)BlockClass.ShipController;
@@ -73,9 +88,10 @@ namespace SKONanobotBuildAndRepairSystem
             if (block is Sandbox.ModAPI.IMySensorBlock || block is Sandbox.ModAPI.IMyCameraBlock) return (int)BlockClass.SensorDevice;
             if (block is Sandbox.ModAPI.IMyRadioAntenna || block is Sandbox.ModAPI.IMyLaserAntenna) return (int)BlockClass.CommunicationBlock;
 
-            if (functionalBlock != null) return (int)BlockClass.FunctionalBlock;
-
-            return (int)BlockClass.ArmorBlock;
+            if (functionalBlock != null) cls = (int)BlockClass.FunctionalBlock;
+            else cls = (int)BlockClass.ArmorBlock;
+            _blockClassCache[id] = cls;
+            return cls;
         }
 
         public override string GetItemAlias(IMySlimBlock a, bool real)
@@ -94,7 +110,7 @@ namespace SKONanobotBuildAndRepairSystem
                 Add(new PrioItemState<PrioItem>(new PrioItem((int)item, item.ToString()), true, true));
             }
         }
-        
+
         public override int GetItemKey(MyDefinitionId a, bool real)
         {
             if (a.TypeId == typeof(MyObjectBuilder_Ingot))

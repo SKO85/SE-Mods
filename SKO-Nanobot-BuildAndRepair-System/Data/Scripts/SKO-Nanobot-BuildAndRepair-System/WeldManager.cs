@@ -1,4 +1,4 @@
-﻿using VRage.Game.ModAPI;
+using VRage.Game.ModAPI;
 using Sandbox.Game.Entities;
 
 namespace SKONanobotBuildAndRepairSystem

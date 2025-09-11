@@ -41,7 +41,7 @@ namespace SKONanobotBuildAndRepairSystem
     {
         private bool _HashDirty = true;
         private readonly MemorySafeList<string> _ClassList = new MemorySafeList<string>();
-        private readonly MemorySafeDictionary<int, int> _PrioHash = new MemorySafeDictionary<int, int>();
+        private readonly Dictionary<int, int> _PrioHash = new Dictionary<int, int>();
 
         public C Selected { get; private set; } //Visual
 

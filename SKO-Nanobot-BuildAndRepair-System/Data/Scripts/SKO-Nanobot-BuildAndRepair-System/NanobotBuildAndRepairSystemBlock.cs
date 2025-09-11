@@ -34,16 +34,16 @@ namespace SKONanobotBuildAndRepairSystem
         private int _TargetScanTickCounter = 0;
 
         // Caps to limit target scanning work per cycle
-        private const int MaxPossibleWeldTargets = 24;
-        private const int MaxPossibleGrindTargets = 24;
-        private const int MaxPossibleFloatingTargets = 24;
+        private const int MaxPossibleWeldTargets = 16;
+        private const int MaxPossibleGrindTargets = 16;
+        private const int MaxPossibleFloatingTargets = 16;
         #region Fields and Properties
 
         // Cooldown for blocks that cannot be welded
         private readonly Dictionary<IMySlimBlock, TimeSpan> _WeldCooldowns = new Dictionary<IMySlimBlock, TimeSpan>();
         private static readonly TimeSpan WeldFailCooldown = TimeSpan.FromSeconds(5);
 
-    // Shield API is provided by the session component (NanobotBuildAndRepairSystemMod.Shield)
+        // Shield API is provided by the session component (NanobotBuildAndRepairSystemMod.Shield)
 
         public enum WorkingState
         {
@@ -62,7 +62,7 @@ namespace SKONanobotBuildAndRepairSystem
         private int _Delay = 0;
         private TimeSpan _EnableCooldownUntil; // throttle burst after (re)enable
         private int _ScanJitterMs; // per-block randomness to spread scan starts
-    internal int _PushJitterMs; // per-block randomness to spread push attempts
+        internal int _PushJitterMs; // per-block randomness to spread push attempts
 
         private bool _AsyncUpdateSourcesAndTargetsRunning = false;
         private readonly List<TargetBlockData> _TempPossibleWeldTargets = new List<TargetBlockData>();
@@ -94,8 +94,8 @@ namespace SKONanobotBuildAndRepairSystem
         private TimeSpan _LastSourceUpdate = -NanobotBuildAndRepairSystemMod.Settings.SourcesUpdateInterval;
         private TimeSpan _LastTargetsUpdate;
         private TimeSpan _LastUpdate;
-    // Time-based gate for collecting attempts (prevents long delays when updates run at 100th-frame cadence)
-    private TimeSpan _NextCollectAttemptAllowed;
+        // Time-based gate for collecting attempts (prevents long delays when updates run at 100th-frame cadence)
+        private TimeSpan _NextCollectAttemptAllowed;
 
         internal bool _CreativeModeActive;
         private int _UpdateEffectsInterval;
@@ -2194,18 +2194,19 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         var hasReachedMaxFloatingObjects = possibleFloatingTargets.Count >= MaxPossibleFloatingTargets;
 
-                        if(hasReachedMaxFloatingObjects) { 
-                            continue; 
+                        if (hasReachedMaxFloatingObjects)
+                        {
+                            continue;
                         }
 
                         var floating = entity as MyFloatingObject;
                         if (floating != null)
-                        {                            
+                        {
 
                             if (!floating.MarkedForClose && ComponentCollectPriority.GetEnabled(floating.Item.Content.GetObjectId()))
                             {
                                 var distance = (areaBox.Center - floating.WorldMatrix.Translation).Length();
-                                possibleFloatingTargets.Add(new TargetEntityData(floating, distance));                                
+                                possibleFloatingTargets.Add(new TargetEntityData(floating, distance));
                             }
                             continue;
                         }
@@ -2217,7 +2218,7 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 var distance = (areaBox.Center - character.WorldMatrix.Translation).Length();
                                 possibleFloatingTargets.Add(new TargetEntityData(character, distance));
-                                
+
                             }
                             continue;
                         }
@@ -2229,7 +2230,7 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 var distance = (areaBox.Center - inventoryBag.WorldMatrix.Translation).Length();
                                 possibleFloatingTargets.Add(new TargetEntityData(inventoryBag, distance));
-                                
+
                             }
                             continue;
                         }
@@ -2325,9 +2326,9 @@ namespace SKONanobotBuildAndRepairSystem
                                         break;
                                     }
                                     double distance;
-                                    
+
                                     if (BlockWeldPriority.GetEnabled(block) && block.IsInRange(ref areaBox, out distance) && block.CanBuild(false))
-                                    {                                    
+                                    {
                                         if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
                                         {
                                             possibleWeldTargets.Add(new TargetBlockData(block, distance, TargetBlockData.AttributeFlags.Projected));
@@ -2356,6 +2357,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (possibleSources != null)
                 {
+                    
+
                     //Search for sources of components (Container, Assembler, Welder, Grinder, ?)
                     var terminalBlock = block.FatBlock as IMyTerminalBlock;
                     if (terminalBlock != null && terminalBlock.EntityId != _Welder.EntityId && terminalBlock.IsFunctional) //Own inventory is no external source (handled internally)
@@ -2408,14 +2411,6 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 return false;
             }
-            Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: Weld Check Block {1} IsProjected={2} IsDestroyed={3}, IsFullyDismounted={4}, HasFatBlock={5}, FatBlockClosed={6}, MaxDeformation={7}, (HasDeformation={8}), IsFullIntegrity={9}, Integrity={10}, NeedRepair={11}, Relation={12}, useIgnorColor={13}, HasIgnoreColor={14} ({15},{16})", //, ActionAllowed={17}",
-                Logging.BlockName(_Welder, Logging.BlockNameOptions.None),
-                Logging.BlockName(block),
-                block.IsProjected(),
-                block.IsDestroyed, block.IsFullyDismounted, block.FatBlock != null, block.FatBlock != null ? block.FatBlock.Closed.ToString() : "-",
-                block.MaxDeformation, block.HasDeformation, block.IsFullIntegrity, block.Integrity, block.NeedRepair(GetIntegrityLevel()), block.GetUserRelationToOwner(_Welder.OwnerId),
-                useIgnoreColor, IsColorNearlyEquals(ignoreColor, block.GetColorMask()), ignoreColor, block.GetColorMask().PackHSVToUint()
-            );
 
             double distance;
             var colorMask = block.GetColorMask();
@@ -2427,10 +2422,9 @@ namespace SKONanobotBuildAndRepairSystem
                    BlockWeldPriority.GetEnabled(block) &&
                    block.IsInRange(ref areaBox, out distance) &&
                    IsRelationAllowed4Welding(projector.SlimBlock) &&
-                   block.CanBuild(false) &&
-                   !SafeZoneProtection.IsProtectedFromWelding(block, Welder, true))
+                   block.CanBuild(false))
+                //&& !SafeZoneProtection.IsProtectedFromWelding(block, Welder, true))
                 {
-                    Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: Add projected Block {1}, HasFatBlock={2}, Class={3}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block), block.FatBlock != null, BlockWeldPriority.GetItemAlias(block, true));
                     if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
                     {
                         possibleWeldTargets.Add(new TargetBlockData(block, distance, TargetBlockData.AttributeFlags.Projected));
@@ -2444,8 +2438,8 @@ namespace SKONanobotBuildAndRepairSystem
                    BlockWeldPriority.GetEnabled(block) &&
                    block.IsInRange(ref areaBox, out distance) &&
                    IsRelationAllowed4Welding(block) &&
-                   block.NeedRepair(GetIntegrityLevel()) &&
-                   !SafeZoneProtection.IsProtectedFromWelding(block, Welder))
+                   block.NeedRepair(GetIntegrityLevel()))
+                //&& !SafeZoneProtection.IsProtectedFromWelding(block, Welder))
                 {
                     Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: Add damaged Block {1} MaxDeformation={2}, (HasDeformation={3}), IsFullIntegrity={4}, HasFatBlock={5}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block), block.MaxDeformation, block.HasDeformation, block.IsFullIntegrity, block.FatBlock != null);
                     if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
@@ -2489,7 +2483,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     return false;
                 }
-            }           
+            }
 
             var autoGrind = autoGrindRelation != 0 && BlockGrindPriority.GetEnabled(block);
 

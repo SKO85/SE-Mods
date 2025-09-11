@@ -43,7 +43,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 foreach (var targetData in block.State.PossibleGrindTargets)
                 {
-                    if(targetData.Block != null && targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed)
+                    if (targetData.Block != null && targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed)
                     {
                         continue;
                     }

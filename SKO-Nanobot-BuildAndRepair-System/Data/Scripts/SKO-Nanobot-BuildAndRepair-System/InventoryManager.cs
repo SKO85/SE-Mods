@@ -17,12 +17,17 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         private static readonly ConcurrentDictionary<string, ConnEntry> _connectionCache = new ConcurrentDictionary<string, ConnEntry>();
-        private static readonly long _connectionTtlTicks = TimeSpan.FromSeconds(3).Ticks;
+        private static readonly long _connectionTtlTicks = TimeSpan.FromSeconds(10).Ticks;
 
         public static int AddConnectedInventories(IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources)
         {
             if (terminalBlock == null || welder == null || possibleSources == null) return 0;
             if (terminalBlock.EntityId == welder.EntityId) return 0;
+
+            // Only consider cargo containers and assemblers as valid external sources to reduce scanning cost
+            var isCargo = terminalBlock is IMyCargoContainer;
+            var isAssembler = terminalBlock is IMyAssembler;
+            if (!(isCargo || isAssembler)) return 0;
 
             var welderInventory = welder.GetInventory(0);
             if (welderInventory == null) return 0;
@@ -81,7 +86,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
             return added;
         }
-    private static readonly Random _Rng = new Random();
+        private static readonly Random _Rng = new Random();
         public static void TryPushInventory(NanobotBuildAndRepairSystemBlock block)
         {
             if ((block.Settings.Flags & (SyncBlockSettings.Settings.PushIngotOreImmediately | SyncBlockSettings.Settings.PushComponentImmediately | SyncBlockSettings.Settings.PushItemsImmediately)) == 0)

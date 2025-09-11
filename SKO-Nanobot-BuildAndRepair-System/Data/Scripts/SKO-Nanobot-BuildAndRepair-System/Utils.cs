@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.Game.Entities;
@@ -11,6 +12,15 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public static class Utils
     {
+        private class RelationCacheEntry
+        {
+            public VRage.Game.MyRelationsBetweenPlayerAndBlock Relation;
+            public long ExpireTick;
+        }
+
+        private static readonly ConcurrentDictionary<string, RelationCacheEntry> _relationCache = new ConcurrentDictionary<string, RelationCacheEntry>();
+        private static readonly long _relationCacheTtlTicks = TimeSpan.FromSeconds(10).Ticks;
+
         /// <summary>
         /// Is the block damaged/incomplete/projected
         /// </summary>
@@ -19,7 +29,7 @@ namespace SKONanobotBuildAndRepairSystem
             if(target == null) return false;
 
             var neededIntegrityLevel = target.GetRequiredIntegrity(integrityLevel);
-            var needRepair = !target.IsDestroyed && (target.FatBlock == null || !target.FatBlock.Closed) && (target.Integrity < neededIntegrityLevel || target.HasDeformation);
+            var needRepair = !target.IsDestroyed && (target.FatBlock == null || !target.FatBlock.Closed) && (target.Integrity < neededIntegrityLevel || target.MaxDeformation > 0.01f);
 
             return needRepair;
         }  
@@ -174,6 +184,21 @@ namespace SKONanobotBuildAndRepairSystem
         /// <returns></returns>
         public static VRage.Game.MyRelationsBetweenPlayerAndBlock GetUserRelationToOwner(this IMyCubeGrid cubeGrid, long userId, bool ignoreCubeGridList = false)
         {
+            if (cubeGrid == null)
+            {
+                return VRage.Game.MyRelationsBetweenPlayerAndBlock.NoOwnership;
+            }
+
+            // Short-TTL cache (10s) to avoid repeated traversal
+            var session = MyAPIGateway.Session;
+            var nowTicks = session != null ? session.ElapsedPlayTime.Ticks : DateTime.UtcNow.Ticks;
+            var cacheKey = cubeGrid.EntityId.ToString() + "|" + userId.ToString() + "|" + (ignoreCubeGridList ? "1" : "0");
+            RelationCacheEntry cached;
+            if (_relationCache.TryGetValue(cacheKey, out cached) && cached.ExpireTick > nowTicks)
+            {
+                return cached.Relation;
+            }
+
             var enemies = false;
             var neutral = false;
             try
@@ -185,6 +210,7 @@ namespace SKONanobotBuildAndRepairSystem
                         var relation = MyIDModule.GetRelationPlayerBlock(key, userId, VRage.Game.MyOwnershipShareModeEnum.Faction);
                         if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)
                         {
+                            _relationCache[cacheKey] = new RelationCacheEntry { Relation = relation, ExpireTick = nowTicks + _relationCacheTtlTicks };
                             return relation;
                         }
                         else if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Enemies)
@@ -211,6 +237,7 @@ namespace SKONanobotBuildAndRepairSystem
                             var relation = cubeGrid1.GetUserRelationToOwner(userId, true); //Do not recurse as this list is already complete
                             if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)
                             {
+                                _relationCache[cacheKey] = new RelationCacheEntry { Relation = relation, ExpireTick = nowTicks + _relationCacheTtlTicks };
                                 return relation;
                             }
                             else if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Enemies)
@@ -230,17 +257,22 @@ namespace SKONanobotBuildAndRepairSystem
                 //The list BigOwners could change while iterating -> a silent catch
             }
 
+            VRage.Game.MyRelationsBetweenPlayerAndBlock result;
             if (enemies)
             {
-                return VRage.Game.MyRelationsBetweenPlayerAndBlock.Enemies;
+                result = VRage.Game.MyRelationsBetweenPlayerAndBlock.Enemies;
             }
-
-            if (neutral)
+            else if (neutral)
             {
-                return VRage.Game.MyRelationsBetweenPlayerAndBlock.Neutral;
+                result = VRage.Game.MyRelationsBetweenPlayerAndBlock.Neutral;
+            }
+            else
+            {
+                result = VRage.Game.MyRelationsBetweenPlayerAndBlock.NoOwnership;
             }
 
-            return VRage.Game.MyRelationsBetweenPlayerAndBlock.NoOwnership;
+            _relationCache[cacheKey] = new RelationCacheEntry { Relation = result, ExpireTick = nowTicks + _relationCacheTtlTicks };
+            return result;
         }
 
         /// <summary>
