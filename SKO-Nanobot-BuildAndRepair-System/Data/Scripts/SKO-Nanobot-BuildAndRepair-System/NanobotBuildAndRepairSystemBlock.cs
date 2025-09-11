@@ -2241,7 +2241,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool IsMovingNotOwnedTarget(IMyCubeGrid targetGrid)
         {
-            if (targetGrid != null && targetGrid.Closed && Welder.CubeGrid?.EntityId != targetGrid.EntityId)
+            if (targetGrid != null && !targetGrid.Closed && Welder.CubeGrid?.EntityId != targetGrid.EntityId)
             {
                 var isMoving = targetGrid.Physics?.IsMoving == true && targetGrid.Physics?.Speed >= 1;
 
@@ -2422,8 +2422,8 @@ namespace SKONanobotBuildAndRepairSystem
                    BlockWeldPriority.GetEnabled(block) &&
                    block.IsInRange(ref areaBox, out distance) &&
                    IsRelationAllowed4Welding(projector.SlimBlock) &&
-                   block.CanBuild(false))
-                //&& !SafeZoneProtection.IsProtectedFromWelding(block, Welder, true))
+                   block.CanBuild(false) && 
+                   !SafeZoneManager.IsProtectedFromWelding(block, Welder, true))
                 {
                     if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
                     {
@@ -2438,8 +2438,8 @@ namespace SKONanobotBuildAndRepairSystem
                    BlockWeldPriority.GetEnabled(block) &&
                    block.IsInRange(ref areaBox, out distance) &&
                    IsRelationAllowed4Welding(block) &&
-                   block.NeedRepair(GetIntegrityLevel()))
-                //&& !SafeZoneProtection.IsProtectedFromWelding(block, Welder))
+                   block.NeedRepair(GetIntegrityLevel()) && 
+                   !SafeZoneManager.IsProtectedFromWelding(block, Welder))
                 {
                     Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: Add damaged Block {1} MaxDeformation={2}, (HasDeformation={3}), IsFullIntegrity={4}, HasFatBlock={5}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block), block.MaxDeformation, block.HasDeformation, block.IsFullIntegrity, block.FatBlock != null);
                     if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
@@ -2525,10 +2525,10 @@ namespace SKONanobotBuildAndRepairSystem
                 if (block.IsInRange(ref areaBox, out distance))
                 {
                     // Is protected by SafeZone?
-                    //if (SafeZoneProtection.IsProtectedFromGrinding(block, Welder))
-                    //{
-                    //    return false;
-                    //}
+                    if (SafeZoneManager.IsProtectedFromGrinding(block, Welder))
+                    {
+                        return false;
+                    }
 
                     // Is protected by shields.
                     if (GrindManager.IsShieldProtected(this, block))

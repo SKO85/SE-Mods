@@ -24,10 +24,11 @@ namespace SKONanobotBuildAndRepairSystem
             if (terminalBlock == null || welder == null || possibleSources == null) return 0;
             if (terminalBlock.EntityId == welder.EntityId) return 0;
 
-            // Only consider cargo containers and assemblers as valid external sources to reduce scanning cost
+            // Only consider cargo containers, assemblers and welders as valid external sources to reduce scanning cost
             var isCargo = terminalBlock is IMyCargoContainer;
             var isAssembler = terminalBlock is IMyAssembler;
-            if (!(isCargo || isAssembler)) return 0;
+            var isWelder = terminalBlock is IMyShipWelder;
+            if (!(isCargo || isAssembler | isWelder)) return 0;
 
             var welderInventory = welder.GetInventory(0);
             if (welderInventory == null) return 0;

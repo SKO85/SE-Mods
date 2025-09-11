@@ -34,7 +34,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-  <LangVersion>6</LangVersion>
+    <LangVersion>6</LangVersion>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject />
@@ -44,8 +44,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AsyncTaskQueue.cs" />
-  <Compile Include="AreaScanCache.cs" />
-  <Compile Include="ScanCoordinator.cs" />
+    <Compile Include="AreaScanCache.cs" />
+    <Compile Include="ScanCoordinator.cs" />
     <Compile Include="Cache\CacheItem.cs" />
     <Compile Include="Cache\CacheHandler.cs" />
     <Compile Include="CollectManager.cs" />
@@ -55,7 +55,8 @@
     <Compile Include="Deb.cs" />
     <Compile Include="EffectManager.cs" />
     <Compile Include="GrindManager.cs" />
-  <Compile Include="DestinationCapacityCache.cs" />
+    <Compile Include="DestinationCapacityCache.cs" />
+    <Compile Include="SafeZoneManager.cs" />
     <Compile Include="InventoryManager.cs" />
     <Compile Include="Localization.cs" />
     <Compile Include="Logging.cs" />
@@ -68,7 +69,6 @@
     <Compile Include="NanobotBuildAndRepairSystemTerminal.cs" />
     <Compile Include="PowerManager.cs" />
     <Compile Include="PriorityHandling.cs" />
-    <Compile Include="SafeZoneProtection.cs" />
     <Compile Include="ShieldApi.cs" />
     <Compile Include="TerminalControlManager.cs" />
     <Compile Include="BlockSystemAssignmentHandler.cs" />

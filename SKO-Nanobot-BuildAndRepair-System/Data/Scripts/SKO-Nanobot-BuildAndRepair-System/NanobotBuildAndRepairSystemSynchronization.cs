@@ -98,6 +98,9 @@ namespace SKONanobotBuildAndRepairSystem
         [ProtoMember(27), XmlElement]
         public bool ShieldCheckEnabled { get; set; }
 
+        [ProtoMember(28), XmlElement]
+        public bool SafeZoneCheckEnabled { get; set; }
+
         public SyncModSettings()
         {
             Version = CurrentSettingsVersion;
@@ -118,6 +121,7 @@ namespace SKONanobotBuildAndRepairSystem
             AllowEnemyGrindingInMotion = Constants.AllowEnemyGrindingInMotionDefault;
             StateSyncIntervalSeconds = 5.0;
             ShieldCheckEnabled = true;
+            SafeZoneCheckEnabled = true;
         }
 
         public static SyncModSettings Load()

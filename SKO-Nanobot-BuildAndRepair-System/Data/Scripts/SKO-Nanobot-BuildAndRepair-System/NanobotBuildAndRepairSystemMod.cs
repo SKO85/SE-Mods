@@ -53,6 +53,8 @@ namespace SKONanobotBuildAndRepairSystem
             // Unregister Shield API message handler
             try { Shield?.Unload(); } catch { }
             Shield = null;
+            // Unload SafeZoneManager
+            try { SafeZoneManager.Unload(); } catch { }
             AsyncTaskQueue.Clear();
             MessageSyncHelper.UnregisterAll();
             Logging.Instance?.Close();
@@ -99,6 +101,9 @@ namespace SKONanobotBuildAndRepairSystem
                 Shield = new ShieldApi();
                 Shield.Load();
             }
+
+            // Initialize SafeZoneManager once per session
+            SafeZoneManager.Init();
 
             if (!_chatHandlerRegistered)
             {
