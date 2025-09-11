@@ -34,16 +34,16 @@ namespace SKONanobotBuildAndRepairSystem
         private int _TargetScanTickCounter = 0;
 
         // Caps to limit target scanning work per cycle
-        private const int MaxPossibleWeldTargets = 32;
-        private const int MaxPossibleGrindTargets = 32;
-        private const int MaxPossibleFloatingTargets = 32;
+        private const int MaxPossibleWeldTargets = 24;
+        private const int MaxPossibleGrindTargets = 24;
+        private const int MaxPossibleFloatingTargets = 24;
         #region Fields and Properties
 
         // Cooldown for blocks that cannot be welded
         private readonly Dictionary<IMySlimBlock, TimeSpan> _WeldCooldowns = new Dictionary<IMySlimBlock, TimeSpan>();
         private static readonly TimeSpan WeldFailCooldown = TimeSpan.FromSeconds(5);
 
-        public static ShieldApi Shield;
+    // Shield API is provided by the session component (NanobotBuildAndRepairSystemMod.Shield)
 
         public enum WorkingState
         {
@@ -200,11 +200,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
             ;
 
-            if (Shield == null)
-            {
-                Shield = new ShieldApi();
-                Shield.Load();
-            }
+            // Shield API is initialized once at session scope
 
             Logging.Instance?.Write(Logging.Level.Event, "BuildAndRepairSystemBlock {0}: Initialized", Logging.BlockName(_Welder, Logging.BlockNameOptions.None));
         }
@@ -998,11 +994,11 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                if (Welder != null && NanobotBuildAndRepairSystemMod.Settings.ShieldCheckEnabled && Shield != null && Shield.IsReady)
+                if (Welder != null && NanobotBuildAndRepairSystemMod.Settings.ShieldCheckEnabled && NanobotBuildAndRepairSystemMod.Shield != null && NanobotBuildAndRepairSystemMod.Shield.IsReady)
                 {
-                    if (Shield.ProtectedByShield(Welder.CubeGrid))
+                    if (NanobotBuildAndRepairSystemMod.Shield.ProtectedByShield(Welder.CubeGrid))
                     {
-                        return Shield.IsBlockProtected(Welder.SlimBlock);
+                        return NanobotBuildAndRepairSystemMod.Shield.IsBlockProtected(Welder.SlimBlock);
                     }
                 }
             }
@@ -1865,11 +1861,6 @@ namespace SKONanobotBuildAndRepairSystem
             // Skip scanning when not ready, or when full and welding-while-full isn't viable
             if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false || (State.InventoryFull && !AllowWeldScanWhileFull() && !updateSource))
             {
-                Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: AsyncUpdateSourcesAndTargets Enabled={1} IsFunctional={2} ---> not ready don't search for targets",
-                        Logging.BlockName(_Welder, Logging.BlockNameOptions.None),
-                        _Welder.Enabled,
-                        _Welder.IsFunctional);
-
                 lock (State.PossibleWeldTargets)
                 {
                     State.PossibleWeldTargets.Clear();
@@ -1893,7 +1884,6 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // Allow sources-only updates even when inventory is full (to discover new cargo)
-
             lock (_Welder)
             {
                 if (_AsyncUpdateSourcesAndTargetsRunning) return;
@@ -1938,9 +1928,6 @@ namespace SKONanobotBuildAndRepairSystem
                     var emitterMatrix = _Welder.WorldMatrix;
                     emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
                     var areaOrientedBox = new MyOrientedBoundingBoxD(Settings.CorrectedAreaBoundingBox, emitterMatrix);
-
-                    Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: AsyncUpdateSourcesAndTargets Search: IgnoreColor={1}, GrindColor={2}, UseGrindJanitorOn={3}, Settings.WorkMode={4}, GrindJanitorOptions={5}",
-                       Logging.BlockName(_Welder, Logging.BlockNameOptions.None), ignoreColor, grindColor, Settings.UseGrindJanitorOn, Settings.WorkMode, Settings.GrindJanitorOptions);
 
                     AsyncAddBlocksOfGrid(ref areaOrientedBox, (Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0, ref ignoreColor, (Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0, ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, _Welder.CubeGrid, grids, updateSource ? _TempPossibleSources : null, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null);
                     switch (Settings.SearchMode)
@@ -1995,6 +1982,7 @@ namespace SKONanobotBuildAndRepairSystem
                             if (block != null && block.BlockDefinition.SubtypeName.Contains("NanobotBuildAndRepairSystem") && block.GameLogic != null)
                             {
                                 var bar = block.GameLogic.GetAs<NanobotBuildAndRepairSystemBlock>();
+
                                 //Don't use Bar's as destination that would push immediately
                                 if (bar != null)
                                 {
@@ -2084,50 +2072,7 @@ namespace SKONanobotBuildAndRepairSystem
                     });
 
                     pos = 5;
-                    if (Logging.Instance.ShouldLog(Logging.Level.Verbose))
-                    {
-                        lock (Logging.Instance)
-                        {
-                            Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: AsyncUpdateSourcesAndTargets Possible Build Target Blocks ---> {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), _TempPossibleWeldTargets.Count);
-                            Logging.Instance.IncreaseIndent(Logging.Level.Verbose);
-                            foreach (var blockData in _TempPossibleWeldTargets)
-                            {
-                                Logging.Instance?.Write(Logging.Level.Verbose, "Block: {0} ({1})", Logging.BlockName(blockData.Block), blockData.Distance);
-                            }
-                            Logging.Instance.DecreaseIndent(Logging.Level.Verbose);
-                            Logging.Instance?.Write(Logging.Level.Verbose, "<---");
-
-                            Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: AsyncUpdateSourcesAndTargets Possible Grind Target Blocks ---> {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), _TempPossibleGrindTargets.Count);
-                            Logging.Instance.IncreaseIndent(Logging.Level.Verbose);
-                            foreach (var blockData in _TempPossibleGrindTargets)
-                            {
-                                Logging.Instance?.Write(Logging.Level.Verbose, "Block: {0} ({1})", Logging.BlockName(blockData.Block), blockData.Distance);
-                            }
-                            Logging.Instance.DecreaseIndent(Logging.Level.Verbose);
-                            Logging.Instance?.Write(Logging.Level.Verbose, "<---");
-
-                            Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: AsyncUpdateSourcesAndTargets Possible Floating Targets ---> {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), _TempPossibleFloatingTargets.Count);
-                            Logging.Instance.IncreaseIndent(Logging.Level.Verbose);
-                            foreach (var floatingData in _TempPossibleFloatingTargets)
-                            {
-                                Logging.Instance?.Write(Logging.Level.Verbose, "Floating: {0} ({1})", Logging.BlockName(floatingData.Entity), floatingData.Distance);
-                            }
-                            Logging.Instance.DecreaseIndent(Logging.Level.Verbose);
-                            Logging.Instance?.Write(Logging.Level.Verbose, "<---");
-
-                            if (updateSource)
-                            {
-                                Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: AsyncUpdateSourcesAndTargets Possible Source Blocks ---> {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), _TempPossibleSources.Count);
-                                Logging.Instance.IncreaseIndent(Logging.Level.Verbose);
-                                foreach (var inventory in _TempPossibleSources)
-                                {
-                                    Logging.Instance?.Write(Logging.Level.Verbose, "Inventory: {0} {1}{2}{3}", Logging.BlockName(inventory), _TempIgnore4Ingot.Contains(inventory) ? string.Empty : "(Not 4 Ingot)", _TempIgnore4Components.Contains(inventory) ? string.Empty : "(Not 4 Components)", _TempIgnore4Items.Contains(inventory) ? string.Empty : "(Not 4 Items)");
-                                }
-                                Logging.Instance.DecreaseIndent(Logging.Level.Verbose);
-                                Logging.Instance?.Write(Logging.Level.Verbose, "<---");
-                            }
-                        }
-                    }
+                    // Removed unwantedlogging...
 
                     pos = 6;
                     lock (State.PossibleWeldTargets)
@@ -2135,13 +2080,16 @@ namespace SKONanobotBuildAndRepairSystem
                         State.PossibleWeldTargets.Clear();
                         // Copy up to cap
                         var maxW = _TempPossibleWeldTargets.Count < MaxPossibleWeldTargets ? _TempPossibleWeldTargets.Count : MaxPossibleWeldTargets;
+
                         for (int i = 0; i < maxW; i++)
                         {
                             State.PossibleWeldTargets.Add(_TempPossibleWeldTargets[i]);
                         }
+
                         State.PossibleWeldTargets.RebuildHash();
                     }
                     _TempPossibleWeldTargets.Clear();
+
                     pos = 7;
                     lock (State.PossibleGrindTargets)
                     {
@@ -2155,6 +2103,7 @@ namespace SKONanobotBuildAndRepairSystem
                         State.PossibleGrindTargets.RebuildHash();
                     }
                     _TempPossibleGrindTargets.Clear();
+
                     pos = 8;
                     lock (State.PossibleFloatingTargets)
                     {
@@ -2183,6 +2132,7 @@ namespace SKONanobotBuildAndRepairSystem
                             _Ignore4Items.Clear();
                             _Ignore4Items.UnionWith(_TempIgnore4Items);
                         }
+
                         _TempPossibleSources.Clear();
                         _TempIgnore4Ingot.Clear();
                         _TempIgnore4Components.Clear();
@@ -2214,12 +2164,11 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void AsyncAddBlocksOfBox(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, List<IMyCubeGrid> grids, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets, List<TargetEntityData> possibleFloatingTargets)
         {
-            Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: AsyncAddBlockOfBox", Logging.BlockName(_Welder, Logging.BlockNameOptions.None));
-
             var emitterMatrix = _Welder.WorldMatrix;
             emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
             var areaBoundingBox = Settings.CorrectedAreaBoundingBox.TransformFast(emitterMatrix);
             List<IMyEntity> entityInRange = null;
+
             // Central coordinator to deduplicate area scans across BAR blocks
             var now = MyAPIGateway.Session.ElapsedPlayTime;
             entityInRange = ScanCoordinator.GetEntities(ref areaBoundingBox, now);
@@ -2233,6 +2182,7 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         break;
                     }
+
                     var grid = entity as IMyCubeGrid;
                     if (grid != null)
                     {
@@ -2242,17 +2192,20 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (possibleFloatingTargets != null)
                     {
-                        var floating = entity as MyFloatingObject;
+                        var hasReachedMaxFloatingObjects = possibleFloatingTargets.Count >= MaxPossibleFloatingTargets;
 
+                        if(hasReachedMaxFloatingObjects) { 
+                            continue; 
+                        }
+
+                        var floating = entity as MyFloatingObject;
                         if (floating != null)
-                        {
+                        {                            
+
                             if (!floating.MarkedForClose && ComponentCollectPriority.GetEnabled(floating.Item.Content.GetObjectId()))
                             {
                                 var distance = (areaBox.Center - floating.WorldMatrix.Translation).Length();
-                                if (possibleFloatingTargets.Count < MaxPossibleFloatingTargets)
-                                {
-                                    possibleFloatingTargets.Add(new TargetEntityData(floating, distance));
-                                }
+                                possibleFloatingTargets.Add(new TargetEntityData(floating, distance));                                
                             }
                             continue;
                         }
@@ -2263,10 +2216,8 @@ namespace SKONanobotBuildAndRepairSystem
                             if (character.IsDead && !character.InventoriesEmpty() && !((MyCharacterDefinition)character.Definition).EnableSpawnInventoryAsContainer)
                             {
                                 var distance = (areaBox.Center - character.WorldMatrix.Translation).Length();
-                                if (possibleFloatingTargets.Count < MaxPossibleFloatingTargets)
-                                {
-                                    possibleFloatingTargets.Add(new TargetEntityData(character, distance));
-                                }
+                                possibleFloatingTargets.Add(new TargetEntityData(character, distance));
+                                
                             }
                             continue;
                         }
@@ -2277,10 +2228,8 @@ namespace SKONanobotBuildAndRepairSystem
                             if (!inventoryBag.InventoriesEmpty())
                             {
                                 var distance = (areaBox.Center - inventoryBag.WorldMatrix.Translation).Length();
-                                if (possibleFloatingTargets.Count < MaxPossibleFloatingTargets)
-                                {
-                                    possibleFloatingTargets.Add(new TargetEntityData(inventoryBag, distance));
-                                }
+                                possibleFloatingTargets.Add(new TargetEntityData(inventoryBag, distance));
+                                
                             }
                             continue;
                         }
@@ -2323,6 +2272,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     break;
                 }
+
                 AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, possibleWeldTargets, possibleGrindTargets);
 
                 var fatBlock = slimBlock.FatBlock;
@@ -2359,7 +2309,6 @@ namespace SKONanobotBuildAndRepairSystem
                     var projector = fatBlock as Sandbox.ModAPI.IMyProjector;
                     if (projector != null)
                     {
-                        Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: Projector={1} IsProjecting={2} BuildableBlockCount={3} IsRelationAllowed={4} Relation={5}/{6}/{7}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(projector), projector.IsProjecting, projector.BuildableBlocksCount, IsRelationAllowed4Welding(slimBlock), slimBlock.GetUserRelationToOwner(_Welder.OwnerId), projector.GetUserRelationToOwner(_Welder.OwnerId), slimBlock.CubeGrid.GetUserRelationToOwner(_Welder.OwnerId));
                         if (projector.IsProjecting && projector.BuildableBlocksCount > 0 && IsRelationAllowed4Welding(slimBlock))
                         {
                             //Add buildable blocks
@@ -2376,10 +2325,9 @@ namespace SKONanobotBuildAndRepairSystem
                                         break;
                                     }
                                     double distance;
-                                    Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: Projector={1} Block={2} BlockKindEnabled={3}, InRange={4}, CanBuild={5}/{6} BlockClass={7}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(projector), Logging.BlockName(block), BlockWeldPriority.GetEnabled(block), block.IsInRange(ref areaBox, out distance), block.CanBuild(false), block.Dithering, BlockWeldPriority.GetItemAlias(block, true));
+                                    
                                     if (BlockWeldPriority.GetEnabled(block) && block.IsInRange(ref areaBox, out distance) && block.CanBuild(false))
-                                    {
-                                        Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: Add projected Block {1}:{2}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(projector), Logging.BlockName(block));
+                                    {                                    
                                         if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
                                         {
                                             possibleWeldTargets.Add(new TargetBlockData(block, distance, TargetBlockData.AttributeFlags.Projected));
@@ -2405,6 +2353,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     return;
                 }
+
                 if (possibleSources != null)
                 {
                     //Search for sources of components (Container, Assembler, Welder, Grinder, ?)
@@ -2416,16 +2365,7 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             try
                             {
-                                var welderInventory = _Welder.GetInventory(0);
-                                var maxInv = terminalBlock.InventoryCount;
-                                for (var idx = 0; idx < maxInv; idx++)
-                                {
-                                    var inventory = terminalBlock.GetInventory(idx);
-                                    if (!possibleSources.Contains(inventory) && inventory.IsConnectedTo(welderInventory))
-                                    {
-                                        possibleSources.Add(inventory);
-                                    }
-                                }
+                                InventoryManager.AddConnectedInventories(terminalBlock, _Welder, possibleSources);
                             }
                             catch (Exception ex)
                             {
@@ -2528,6 +2468,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 return false;
             }
+
             //block.CubeGrid.BlocksDestructionEnabled is not available for modding, so at least check if general destruction is enabled
             if ((MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode) && !MyAPIGateway.Session.SessionSettings.DestructibleBlocks) return false;
 
@@ -2548,14 +2489,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     return false;
                 }
-            }
-
-            if (Logging.Instance.ShouldLog(Logging.Level.Verbose))
-            {
-                Logging.Instance?.Write(Logging.Level.Verbose, "BuildAndRepairSystemBlock {0}: Grind Check Block {1} Projected={2} AutoGrindRelation={3} Relation={4} UseGrindColor={5} HasGrindColor={6} ({7},{8})/", // ActionAllowed={10}",
-                Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block), block.IsProjected(), autoGrindRelation, block.GetUserRelationToOwner(_Welder.OwnerId), useGrindColor,
-                   IsColorNearlyEquals(grindColor, block.GetColorMask()), grindColor, block.GetColorMask().PackHSVToUint());
-            }
+            }           
 
             var autoGrind = autoGrindRelation != 0 && BlockGrindPriority.GetEnabled(block);
 
@@ -2579,10 +2513,12 @@ namespace SKONanobotBuildAndRepairSystem
                 var criticalIntegrityRatio = ((MyCubeBlockDefinition)block.BlockDefinition).CriticalIntegrityRatio;
                 var ownershipIntegrityRatio = ((MyCubeBlockDefinition)block.BlockDefinition).OwnershipIntegrityRatio > 0 ? ((MyCubeBlockDefinition)block.BlockDefinition).OwnershipIntegrityRatio : criticalIntegrityRatio;
                 var integrityRation = block.Integrity / block.MaxIntegrity;
+
                 if (autoGrind && (autoGrindOptions & AutoGrindOptions.DisableOnly) != 0)
                 {
                     autoGrind = block.FatBlock != null && integrityRation > criticalIntegrityRatio;
                 }
+
                 if (autoGrind && (autoGrindOptions & AutoGrindOptions.HackOnly) != 0)
                 {
                     autoGrind = block.FatBlock != null && integrityRation > ownershipIntegrityRatio;
@@ -2595,10 +2531,10 @@ namespace SKONanobotBuildAndRepairSystem
                 if (block.IsInRange(ref areaBox, out distance))
                 {
                     // Is protected by SafeZone?
-                    if (SafeZoneProtection.IsProtectedFromGrinding(block, Welder))
-                    {
-                        return false;
-                    }
+                    //if (SafeZoneProtection.IsProtectedFromGrinding(block, Welder))
+                    //{
+                    //    return false;
+                    //}
 
                     // Is protected by shields.
                     if (GrindManager.IsShieldProtected(this, block))
@@ -2606,7 +2542,6 @@ namespace SKONanobotBuildAndRepairSystem
                         return false;
                     }
 
-                    Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: Add grind Block {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block));
                     if (possibleGrindTargets.Count < MaxPossibleGrindTargets)
                     {
                         possibleGrindTargets.Add(new TargetBlockData(block, distance, autoGrind ? TargetBlockData.AttributeFlags.Autogrind : 0));

@@ -1,4 +1,5 @@
 ﻿using Sandbox.ModAPI;
+using DefenseShields;
 using VRage.Game.Components;
 using System;
 using System.Collections.Generic;
@@ -13,9 +14,10 @@ namespace SKONanobotBuildAndRepairSystem
         public static SyncModSettings Settings { get; set; } = new SyncModSettings();
         public static bool SettingsValid { get; set; } = false;
         public static readonly Dictionary<long, NanobotBuildAndRepairSystemBlock> BuildAndRepairSystems = new Dictionary<long, NanobotBuildAndRepairSystemBlock>();
+        public static ShieldApi Shield; // Centralized DefenseShields API instance
 
         private bool _initialized = false;
-        private static readonly TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(3);
         private static TimeSpan _lastSourcesAndTargetsUpdateTimer;
         private static TimeSpan _lastSyncModDataRequestSend;
 
@@ -48,6 +50,9 @@ namespace SKONanobotBuildAndRepairSystem
 
         protected override void UnloadData()
         {
+            // Unregister Shield API message handler
+            try { Shield?.Unload(); } catch { }
+            Shield = null;
             AsyncTaskQueue.Clear();
             MessageSyncHelper.UnregisterAll();
             Logging.Instance?.Close();
@@ -88,6 +93,12 @@ namespace SKONanobotBuildAndRepairSystem
             DamageHandler.Register();
             MessageSyncHelper.RegisterAll();
 
+            // Initialize Shield API once per session
+            if (Shield == null && Settings.ShieldCheckEnabled)
+            {
+                Shield = new ShieldApi();
+                Shield.Load();
+            }
 
             if (!_chatHandlerRegistered)
             {

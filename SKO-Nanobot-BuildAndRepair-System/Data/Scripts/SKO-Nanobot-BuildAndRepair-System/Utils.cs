@@ -119,10 +119,13 @@ namespace SKONanobotBuildAndRepairSystem
         {
             Vector3 halfExtents;
             block.ComputeScaledHalfExtents(out halfExtents);
+
             var matrix = block.CubeGrid.WorldMatrix;
             matrix.Translation = block.CubeGrid.GridIntegerToWorld(block.Position);
+
             var box = new MyOrientedBoundingBoxD(new BoundingBoxD(-halfExtents, halfExtents), matrix);
             var inRange = areaBox.Intersects(ref box);
+
             distance = inRange ? (areaBox.Center - box.Center).Length() : 0;
             return inRange;
         }

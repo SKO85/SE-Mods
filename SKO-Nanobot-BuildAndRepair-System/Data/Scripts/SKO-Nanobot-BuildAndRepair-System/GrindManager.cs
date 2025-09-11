@@ -94,9 +94,9 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                if (NanobotBuildAndRepairSystemMod.Settings.ShieldCheckEnabled && slimBlock != null && NanobotBuildAndRepairSystemBlock.Shield != null && NanobotBuildAndRepairSystemBlock.Shield.IsReady)
+                if (NanobotBuildAndRepairSystemMod.Settings.ShieldCheckEnabled && slimBlock != null && NanobotBuildAndRepairSystemMod.Shield != null && NanobotBuildAndRepairSystemMod.Shield.IsReady)
                 {
-                    var isProtected = NanobotBuildAndRepairSystemBlock.Shield.ProtectedByShield(slimBlock.CubeGrid);
+                    var isProtected = NanobotBuildAndRepairSystemMod.Shield.ProtectedByShield(slimBlock.CubeGrid);
 
                     if (!isProtected)
                         return false;
@@ -104,7 +104,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (slimBlock.CubeGrid.EntityId == block.Welder.CubeGrid.EntityId)
                         return false;
 
-                    return NanobotBuildAndRepairSystemBlock.Shield.IsBlockProtected(slimBlock);
+                    return NanobotBuildAndRepairSystemMod.Shield.IsBlockProtected(slimBlock);
                 }
             }
             catch { }

@@ -1,6 +1,7 @@
 ﻿using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
@@ -9,6 +10,77 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public static class InventoryManager
     {
+        private class ConnEntry
+        {
+            public bool Connected;
+            public long ExpireTick;
+        }
+
+        private static readonly ConcurrentDictionary<string, ConnEntry> _connectionCache = new ConcurrentDictionary<string, ConnEntry>();
+        private static readonly long _connectionTtlTicks = TimeSpan.FromSeconds(3).Ticks;
+
+        public static int AddConnectedInventories(IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources)
+        {
+            if (terminalBlock == null || welder == null || possibleSources == null) return 0;
+            if (terminalBlock.EntityId == welder.EntityId) return 0;
+
+            var welderInventory = welder.GetInventory(0);
+            if (welderInventory == null) return 0;
+
+            var session = MyAPIGateway.Session;
+            var nowTicks = session != null ? session.ElapsedPlayTime.Ticks : DateTime.UtcNow.Ticks;
+            var key = terminalBlock.EntityId.ToString() + "|" + welder.EntityId.ToString();
+
+            ConnEntry entry;
+            if (_connectionCache.TryGetValue(key, out entry) && entry.ExpireTick > nowTicks)
+            {
+                if (!entry.Connected) return 0;
+                var maxInvCached = terminalBlock.InventoryCount;
+                var addedCached = 0;
+                for (var i = 0; i < maxInvCached; i++)
+                {
+                    var inv = terminalBlock.GetInventory(i);
+                    if (inv != null && !possibleSources.Contains(inv))
+                    {
+                        possibleSources.Add(inv);
+                        addedCached++;
+                    }
+                }
+                return addedCached;
+            }
+
+            var connected = false;
+            try
+            {
+                var maxInv = terminalBlock.InventoryCount;
+                for (var i = 0; i < maxInv; i++)
+                {
+                    var inv = terminalBlock.GetInventory(i);
+                    if (inv != null && inv.IsConnectedTo(welderInventory))
+                    {
+                        connected = true;
+                        break;
+                    }
+                }
+            }
+            catch { }
+
+            _connectionCache[key] = new ConnEntry { Connected = connected, ExpireTick = nowTicks + _connectionTtlTicks };
+            if (!connected) return 0;
+
+            var added = 0;
+            var maxInv2 = terminalBlock.InventoryCount;
+            for (var idx = 0; idx < maxInv2; idx++)
+            {
+                var inventory = terminalBlock.GetInventory(idx);
+                if (inventory != null && !possibleSources.Contains(inventory))
+                {
+                    possibleSources.Add(inventory);
+                    added++;
+                }
+            }
+            return added;
+        }
     private static readonly Random _Rng = new Random();
         public static void TryPushInventory(NanobotBuildAndRepairSystemBlock block)
         {
