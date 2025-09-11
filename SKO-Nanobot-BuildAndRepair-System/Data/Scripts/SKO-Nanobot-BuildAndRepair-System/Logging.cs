@@ -92,7 +92,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if ((options & BlockNameOptions.IncludeTypename) != 0)
                     return string.Format("{0} ({1}) [{2}]", string.IsNullOrEmpty(entity.DisplayName) ? entity.GetFriendlyName() : entity.DisplayName, entity.EntityId, entity.GetType().Name);
 
-                if(includeId)
+                if (includeId)
                     return string.Format("{0} ({1})", entity.DisplayName, entity.EntityId);
                 else
                     return string.Format("{0}", entity.DisplayName);

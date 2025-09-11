@@ -68,7 +68,7 @@ namespace SKONanobotBuildAndRepairSystem
             _initialized = false;
         }
 
-    private static void OnEntityAdd(IMyEntity ent)
+        private static void OnEntityAdd(IMyEntity ent)
         {
             try
             {
@@ -81,7 +81,7 @@ namespace SKONanobotBuildAndRepairSystem
             catch { }
         }
 
-    private static void OnEntityRemove(IMyEntity ent)
+        private static void OnEntityRemove(IMyEntity ent)
         {
             try
             {
@@ -175,11 +175,11 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (targetBlock == null) return false;
                 if (attackerBlock == null) return false;
-                if(!NanobotBuildAndRepairSystemMod.Settings.SafeZoneCheckEnabled) return false;
+                if (!NanobotBuildAndRepairSystemMod.Settings.SafeZoneCheckEnabled) return false;
 
                 // Try get a safe-zone intersecting with the blocks grid.
                 var safeZone = GetIntersectingSafeZone(targetBlock.CubeGrid);
-                if(safeZone != null && safeZone.Enabled)
+                if (safeZone != null && safeZone.Enabled)
                 {
                     BoundingBoxD targetBox;
                     targetBlock.GetWorldBoundingBox(out targetBox, true);
@@ -199,7 +199,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                         if (isAllowed)
                         {
-                            if(safeZone.SafeZoneBlockId > 0)
+                            if (safeZone.SafeZoneBlockId > 0)
                             {
                                 var safeZoneBlock = MyEntities.GetEntityByName(safeZone.SafeZoneBlockId.ToString()) as IMySafeZoneBlock;
                                 if (safeZoneBlock != null && safeZoneBlock.Enabled && safeZoneBlock.IsSafeZoneEnabled())
@@ -232,7 +232,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
             catch { }
             return false;
-            
+
         }
 
         public static bool IsProtectedFromWelding(IMySlimBlock targetBlock, IMyCubeBlock attackerBlock, bool needForProjector = false)

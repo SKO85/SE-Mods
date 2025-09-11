@@ -2357,7 +2357,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (possibleSources != null)
                 {
-                    
+
 
                     //Search for sources of components (Container, Assembler, Welder, Grinder, ?)
                     var terminalBlock = block.FatBlock as IMyTerminalBlock;
@@ -2422,7 +2422,7 @@ namespace SKONanobotBuildAndRepairSystem
                    BlockWeldPriority.GetEnabled(block) &&
                    block.IsInRange(ref areaBox, out distance) &&
                    IsRelationAllowed4Welding(projector.SlimBlock) &&
-                   block.CanBuild(false) && 
+                   block.CanBuild(false) &&
                    !SafeZoneManager.IsProtectedFromWelding(block, Welder, true))
                 {
                     if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
@@ -2438,7 +2438,7 @@ namespace SKONanobotBuildAndRepairSystem
                    BlockWeldPriority.GetEnabled(block) &&
                    block.IsInRange(ref areaBox, out distance) &&
                    IsRelationAllowed4Welding(block) &&
-                   block.NeedRepair(GetIntegrityLevel()) && 
+                   block.NeedRepair(GetIntegrityLevel()) &&
                    !SafeZoneManager.IsProtectedFromWelding(block, Welder))
                 {
                     Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: Add damaged Block {1} MaxDeformation={2}, (HasDeformation={3}), IsFullIntegrity={4}, HasFatBlock={5}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block), block.MaxDeformation, block.HasDeformation, block.IsFullIntegrity, block.FatBlock != null);

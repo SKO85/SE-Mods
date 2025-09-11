@@ -101,7 +101,7 @@ namespace SKONanobotBuildAndRepairSystem
         private static readonly List<IMyTerminalControl> CustomControls = new List<IMyTerminalControl>();
 
         private static IMyTerminalControl _HelpOthers;
-        private static IMyTerminalControlSeparator _SeparateWeldOptions;        
+        private static IMyTerminalControlSeparator _SeparateWeldOptions;
 
         private static IMyTerminalControlSlider _IgnoreColorHueSlider;
         private static IMyTerminalControlSlider _IgnoreColorSaturationSlider;
@@ -217,14 +217,14 @@ namespace SKONanobotBuildAndRepairSystem
                         checkbox.Tooltip = MyStringId.GetOrCompute($"Automatically disables the block when idle for more than {NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes} minutes.");
 
                         checkbox.Visible = (block) => { return true; };
-                        checkbox.Enabled = (block) => 
+                        checkbox.Enabled = (block) =>
                         {
-                            if(NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleForced)
+                            if (NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleForced)
                             {
                                 return false;
                             }
                             return true;
-                        };           
+                        };
 
                         checkbox.Getter = (block) =>
                         {
@@ -633,7 +633,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 var system = GetSystem(block);
                                 if (system == null)
                                     return 0;
-                                else return (long)system.Settings.WeldTo;                                
+                                else return (long)system.Settings.WeldTo;
                             };
 
                             comboBox.Setter = (block, value) =>
@@ -641,7 +641,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 var system = GetSystem(block);
                                 if (system != null)
                                 {
-                                    system.Settings.WeldTo = (WeldTo)value;                                    
+                                    system.Settings.WeldTo = (WeldTo)value;
                                 }
                             };
 

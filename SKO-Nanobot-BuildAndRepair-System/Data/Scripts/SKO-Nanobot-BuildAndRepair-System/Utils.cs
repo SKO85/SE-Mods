@@ -26,27 +26,27 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         public static bool NeedRepair(this IMySlimBlock target, UtilsInventory.IntegrityLevel integrityLevel)
         {
-            if(target == null) return false;
+            if (target == null) return false;
 
             var neededIntegrityLevel = target.GetRequiredIntegrity(integrityLevel);
             var needRepair = !target.IsDestroyed && (target.FatBlock == null || !target.FatBlock.Closed) && (target.Integrity < neededIntegrityLevel || target.MaxDeformation > 0.01f);
 
             return needRepair;
-        }  
-        
+        }
+
         public static float GetRequiredIntegrity(this IMySlimBlock target, UtilsInventory.IntegrityLevel integrityLevel)
         {
-            if(target == null) return 0f;
+            if (target == null) return 0f;
 
             var def = target.BlockDefinition as MyCubeBlockDefinition;
             var requiredIntegrity = target.MaxIntegrity;
 
             if (integrityLevel == UtilsInventory.IntegrityLevel.Functional)
-            {                
+            {
                 var functionalIntegrity = target.MaxIntegrity * def.CriticalIntegrityRatio;
                 requiredIntegrity = SetMax(functionalIntegrity + 1, target.MaxIntegrity);
             }
-            else if(integrityLevel == UtilsInventory.IntegrityLevel.Skeleton)
+            else if (integrityLevel == UtilsInventory.IntegrityLevel.Skeleton)
             {
                 var functionalIntegrity = target.MaxIntegrity * def.CriticalIntegrityRatio;
                 var skeletonIntegrity = target.MaxIntegrity * Constants.MaxSkeletonCreateIntegrityRatio;
@@ -59,7 +59,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         public static float SetMax(float value, float maxValue)
         {
-            if(value > maxValue)
+            if (value > maxValue)
             {
                 value = maxValue;
             }

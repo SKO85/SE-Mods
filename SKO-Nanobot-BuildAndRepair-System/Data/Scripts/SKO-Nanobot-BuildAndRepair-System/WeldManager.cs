@@ -5,7 +5,7 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public static class WeldManager
     {
-        private static BlockSystemAssignmentHandler _assignmentHandler = new BlockSystemAssignmentHandler();       
+        private static BlockSystemAssignmentHandler _assignmentHandler = new BlockSystemAssignmentHandler();
 
         public static bool TryAssign(IMySlimBlock block, long systemId)
         {
@@ -90,7 +90,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (target.CanBuild(true))
                 {
                     return true;
-                }                
+                }
 
                 var cubeGridProjected = target.CubeGrid as MyCubeGrid;
                 if (cubeGridProjected != null && cubeGridProjected.Projector != null)
