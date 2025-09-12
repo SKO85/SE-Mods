@@ -17,7 +17,7 @@ namespace SKONanobotBuildAndRepairSystem
         public static ShieldApi Shield; // Centralized DefenseShields API instance
 
         private bool _initialized = false;
-        private static readonly TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(3);
+        private static readonly TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);
         private static TimeSpan _lastSourcesAndTargetsUpdateTimer;
         private static TimeSpan _lastSyncModDataRequestSend;
 
@@ -45,6 +45,9 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     Scanner.CheckQueue();
                 }
+
+                // Periodic ownership cache refresh
+                GridOwnershipManager.UpdateTick();
             }
         }
 
@@ -53,8 +56,11 @@ namespace SKONanobotBuildAndRepairSystem
             // Unregister Shield API message handler
             try { Shield?.Unload(); } catch { }
             Shield = null;
-            // Unload SafeZoneManager
+
+            // Unload Managers.
             try { SafeZoneManager.Unload(); } catch { }
+            try { GridOwnershipManager.Unload(); } catch { }
+
             AsyncTaskQueue.Clear();
             MessageSyncHelper.UnregisterAll();
             Logging.Instance?.Close();
@@ -90,6 +96,7 @@ namespace SKONanobotBuildAndRepairSystem
                 Logging.Instance.LogLevel = Settings.LogLevel;
                 ApplySettingsToSystems();
                 TerminalControlManager.InitControls();
+                GridOwnershipManager.Init();
             }
 
             DamageHandler.Register();

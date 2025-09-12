@@ -2,7 +2,6 @@ using Sandbox.Definitions;
 using Sandbox.Game.Entities;
 using Sandbox.Game.Lights;
 using Sandbox.ModAPI;
-using System;
 using System.Threading;
 using VRage.Game;
 using VRage.Utils;

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.Concurrent;
 using Sandbox.Definitions;
 using Sandbox.Game;
@@ -18,7 +17,9 @@ namespace SKONanobotBuildAndRepairSystem
             public long ExpireTick;
         }
 
-        private static readonly ConcurrentDictionary<string, RelationCacheEntry> _relationCache = new ConcurrentDictionary<string, RelationCacheEntry>();
+        // Per-grid cache to reduce key allocations and contention
+        private static readonly ConcurrentDictionary<long, ConcurrentDictionary<long, RelationCacheEntry>> _relationCache =
+            new ConcurrentDictionary<long, ConcurrentDictionary<long, RelationCacheEntry>>();
         private static readonly long _relationCacheTtlTicks = TimeSpan.FromSeconds(10).Ticks;
 
         /// <summary>
@@ -177,105 +178,6 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Check the ownership of the grid
-        /// </summary>
-        /// <param name="cubeGrid"></param>
-        /// <param name="userId"></param>
-        /// <returns></returns>
-        public static VRage.Game.MyRelationsBetweenPlayerAndBlock GetUserRelationToOwner(this IMyCubeGrid cubeGrid, long userId, bool ignoreCubeGridList = false)
-        {
-            if (cubeGrid == null)
-            {
-                return VRage.Game.MyRelationsBetweenPlayerAndBlock.NoOwnership;
-            }
-
-            // Short-TTL cache (10s) to avoid repeated traversal
-            var session = MyAPIGateway.Session;
-            var nowTicks = session != null ? session.ElapsedPlayTime.Ticks : DateTime.UtcNow.Ticks;
-            var cacheKey = cubeGrid.EntityId.ToString() + "|" + userId.ToString() + "|" + (ignoreCubeGridList ? "1" : "0");
-            RelationCacheEntry cached;
-            if (_relationCache.TryGetValue(cacheKey, out cached) && cached.ExpireTick > nowTicks)
-            {
-                return cached.Relation;
-            }
-
-            var enemies = false;
-            var neutral = false;
-            try
-            {
-                if (cubeGrid.BigOwners != null && cubeGrid.BigOwners.Count != 0)
-                {
-                    foreach (var key in cubeGrid.BigOwners)
-                    {
-                        var relation = MyIDModule.GetRelationPlayerBlock(key, userId, VRage.Game.MyOwnershipShareModeEnum.Faction);
-                        if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)
-                        {
-                            _relationCache[cacheKey] = new RelationCacheEntry { Relation = relation, ExpireTick = nowTicks + _relationCacheTtlTicks };
-                            return relation;
-                        }
-                        else if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Enemies)
-                        {
-                            enemies = true;
-                        }
-                        else if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Neutral)
-                        {
-                            neutral = true;
-                        }
-                    }
-                }
-                else if (!ignoreCubeGridList)
-                {
-                    //E.G. the case if a landing gear is directly attatched to piston/rotor (with no ownable block in the same subgrid) and the gear gets connected to something
-                    List<IMyCubeGrid> cubegridsList = new List<IMyCubeGrid>();
-                    MyAPIGateway.GridGroups.GetGroup(cubeGrid, GridLinkTypeEnum.Mechanical, cubegridsList);
-
-                    if (cubegridsList != null)
-                    {
-                        foreach (var cubeGrid1 in cubegridsList)
-                        {
-                            if (cubeGrid1 == cubeGrid) continue;
-                            var relation = cubeGrid1.GetUserRelationToOwner(userId, true); //Do not recurse as this list is already complete
-                            if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)
-                            {
-                                _relationCache[cacheKey] = new RelationCacheEntry { Relation = relation, ExpireTick = nowTicks + _relationCacheTtlTicks };
-                                return relation;
-                            }
-                            else if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Enemies)
-                            {
-                                enemies = true;
-                            }
-                            else if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Neutral)
-                            {
-                                neutral = true;
-                            }
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                //The list BigOwners could change while iterating -> a silent catch
-            }
-
-            VRage.Game.MyRelationsBetweenPlayerAndBlock result;
-            if (enemies)
-            {
-                result = VRage.Game.MyRelationsBetweenPlayerAndBlock.Enemies;
-            }
-            else if (neutral)
-            {
-                result = VRage.Game.MyRelationsBetweenPlayerAndBlock.Neutral;
-            }
-            else
-            {
-                result = VRage.Game.MyRelationsBetweenPlayerAndBlock.NoOwnership;
-            }
-
-            _relationCache[cacheKey] = new RelationCacheEntry { Relation = result, ExpireTick = nowTicks + _relationCacheTtlTicks };
-            return result;
-        }
-
-        /// <summary>
         /// Return relation between player and grid, in case of 'NoOwnership' check the grid owner.
         /// </summary>
         /// <param name="slimBlock"></param>
@@ -293,7 +195,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var relation = fatBlock.GetUserRelationToOwner(userId);
                 if (relation == VRage.Game.MyRelationsBetweenPlayerAndBlock.NoOwnership)
                 {
-                    relation = GetUserRelationToOwner(slimBlock.CubeGrid, userId);
+                    relation = GridOwnershipManager.GetRelationBetweenGridAndPlayer(slimBlock.CubeGrid, userId);
                     return relation;
                 }
                 else
@@ -303,7 +205,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
             else
             {
-                var relation = GetUserRelationToOwner(slimBlock.CubeGrid, userId);
+                var relation = GridOwnershipManager.GetRelationBetweenGridAndPlayer(slimBlock.CubeGrid, userId);
                 return relation;
             }
         }

@@ -8,6 +8,7 @@ namespace SKONanobotBuildAndRepairSystem.Cache
     internal class CacheHandler<T>
     {
         public ConcurrentDictionary<string, CacheItem<T>> CachedItems = new ConcurrentDictionary<string, CacheItem<T>>();
+
         public int CacheSeconds = 5;
         private TimeSpan LastCleanupTime;
 

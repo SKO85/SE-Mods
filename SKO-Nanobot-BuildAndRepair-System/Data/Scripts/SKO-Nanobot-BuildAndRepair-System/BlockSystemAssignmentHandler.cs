@@ -82,7 +82,6 @@ namespace SKONanobotBuildAndRepairSystem
                 foreach (var block in toRemove)
                 {
                     _assignments.Remove(block);
-                    Deb.Write("Removed from assignment.");
                 }
             }
         }

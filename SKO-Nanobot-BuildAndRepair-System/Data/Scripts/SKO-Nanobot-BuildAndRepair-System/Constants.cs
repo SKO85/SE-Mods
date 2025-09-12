@@ -48,8 +48,8 @@ namespace SKONanobotBuildAndRepairSystem
         public const string PARTICLE_EFFECT_TRANSPORT1_PICK = "GrindNanobotTrace1";
         public const string PARTICLE_EFFECT_TRANSPORT1_DELIVER = "WeldNanobotTrace1";
 
-        public const int MaxBackgroundTasks_Default = 8;
-        public const int MaxBackgroundTasks_Max = 15;
+        public const int MaxBackgroundTasks_Default = 4;
+        public const int MaxBackgroundTasks_Max = 8;
         public const int MaxBackgroundTasks_Min = 1;
         public const float MaxSkeletonCreateIntegrityRatio = 0.2f;
 

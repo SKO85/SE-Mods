@@ -5,7 +5,6 @@ namespace SKONanobotBuildAndRepairSystem
     using System.Diagnostics;
     using System.Linq;
     using System.Text;
-    using DefenseShields;
     using Sandbox.Common.ObjectBuilders;
     using Sandbox.Definitions;
     using Sandbox.Game.Entities;
