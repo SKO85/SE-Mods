@@ -33,9 +33,11 @@ namespace SKONanobotBuildAndRepairSystem
         private int _TargetScanTickCounter = 0;
 
         // Caps to limit target scanning work per cycle
-        private const int MaxPossibleWeldTargets = 16;
-        private const int MaxPossibleGrindTargets = 16;
-        private const int MaxPossibleFloatingTargets = 16;
+        private const int MaxPossibleWeldTargets = 24;
+        // Allow overscanning for weld targets so we can skip temporarily unbuildable ones while still filling the sync cap
+        private const int MaxTempWeldTargets = MaxPossibleWeldTargets * 4;
+        private const int MaxPossibleGrindTargets = 24;
+        private const int MaxPossibleFloatingTargets = 24;
         #region Fields and Properties
 
         // Cooldown for blocks that cannot be welded
@@ -71,6 +73,8 @@ namespace SKONanobotBuildAndRepairSystem
         private readonly HashSet<IMyInventory> _TempIgnore4Ingot = new HashSet<IMyInventory>();
         private readonly HashSet<IMyInventory> _TempIgnore4Items = new HashSet<IMyInventory>();
         private readonly HashSet<IMyInventory> _TempIgnore4Components = new HashSet<IMyInventory>();
+    // temp list to avoid allocations when pruning cooldown dictionary
+    private readonly List<IMySlimBlock> _TempBlockList = new List<IMySlimBlock>();
         internal IMyShipWelder _Welder;
         internal IMyInventory _TransportInventory;
         private bool _IsInit;
@@ -2077,12 +2081,48 @@ namespace SKONanobotBuildAndRepairSystem
                     lock (State.PossibleWeldTargets)
                     {
                         State.PossibleWeldTargets.Clear();
-                        // Copy up to cap
-                        var maxW = _TempPossibleWeldTargets.Count < MaxPossibleWeldTargets ? _TempPossibleWeldTargets.Count : MaxPossibleWeldTargets;
-
-                        for (int i = 0; i < maxW; i++)
+                        // Fill up to sync cap, preferring targets that are not ignored and not in cooldown
+                        var now = MyAPIGateway.Session.ElapsedPlayTime;
+                        // Prune expired cooldowns
+                        if (_WeldCooldowns.Count > 0)
                         {
-                            State.PossibleWeldTargets.Add(_TempPossibleWeldTargets[i]);
+                            _TempBlockList.Clear();
+                            foreach (var kv in _WeldCooldowns)
+                            {
+                                if (now >= kv.Value)
+                                {
+                                    _TempBlockList.Add(kv.Key);
+                                }
+                            }
+                            if (_TempBlockList.Count > 0)
+                            {
+                                foreach (var b in _TempBlockList) _WeldCooldowns.Remove(b);
+                                _TempBlockList.Clear();
+                            }
+                        }
+
+                        var added = 0;
+                        for (int i = 0; i < _TempPossibleWeldTargets.Count && added < MaxPossibleWeldTargets; i++)
+                        {
+                            var td = _TempPossibleWeldTargets[i];
+                            if (td == null || td.Block == null) continue;
+                            // skip if currently marked ignored or in cooldown window
+                            TimeSpan until;
+                            if (td.Ignore) continue;
+                            if (_WeldCooldowns.TryGetValue(td.Block, out until) && now < until) continue;
+
+                            State.PossibleWeldTargets.Add(td);
+                            added++;
+                        }
+
+                        // If not filled to cap, and overscan produced only ignored/cooldown entries, we still try to backfill with remaining to avoid empty lists
+                        for (int i = 0; i < _TempPossibleWeldTargets.Count && added < MaxPossibleWeldTargets; i++)
+                        {
+                            var td = _TempPossibleWeldTargets[i];
+                            if (td == null || td.Block == null) continue;
+                            if (State.PossibleWeldTargets.Contains(td)) continue;
+                            State.PossibleWeldTargets.Add(td);
+                            added++;
                         }
 
                         State.PossibleWeldTargets.RebuildHash();
@@ -2328,7 +2368,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                                     if (BlockWeldPriority.GetEnabled(block) && block.IsInRange(ref areaBox, out distance) && block.CanBuild(false))
                                     {
-                                        if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
+                                        if (possibleWeldTargets.Count < MaxTempWeldTargets)
                                         {
                                             possibleWeldTargets.Add(new TargetBlockData(block, distance, TargetBlockData.AttributeFlags.Projected));
                                         }
@@ -2388,7 +2428,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (possibleWeldTargets != null && !added) //Do not weld if in grind list (could happen if auto grind neutrals is enabled and "HelpOthers" is active)
                 {
-                    if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
+                    if (possibleWeldTargets.Count < MaxTempWeldTargets)
                     {
                         AsyncAddBlockIfWeldTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, block, possibleWeldTargets);
                     }
@@ -2406,7 +2446,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private bool AsyncAddBlockIfWeldTarget(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, IMySlimBlock block, List<TargetBlockData> possibleWeldTargets)
         {
-            if (possibleWeldTargets != null && possibleWeldTargets.Count >= MaxPossibleWeldTargets)
+            if (possibleWeldTargets != null && possibleWeldTargets.Count >= MaxTempWeldTargets)
             {
                 return false;
             }
@@ -2424,7 +2464,7 @@ namespace SKONanobotBuildAndRepairSystem
                    block.CanBuild(false) &&
                    !SafeZoneManager.IsProtectedFromWelding(block, Welder, true))
                 {
-                    if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
+                    if (possibleWeldTargets.Count < MaxTempWeldTargets)
                     {
                         possibleWeldTargets.Add(new TargetBlockData(block, distance, TargetBlockData.AttributeFlags.Projected));
                     }
@@ -2441,7 +2481,7 @@ namespace SKONanobotBuildAndRepairSystem
                    !SafeZoneManager.IsProtectedFromWelding(block, Welder))
                 {
                     Logging.Instance?.Write(Logging.Level.Info, "BuildAndRepairSystemBlock {0}: Add damaged Block {1} MaxDeformation={2}, (HasDeformation={3}), IsFullIntegrity={4}, HasFatBlock={5}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), Logging.BlockName(block), block.MaxDeformation, block.HasDeformation, block.IsFullIntegrity, block.FatBlock != null);
-                    if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
+                    if (possibleWeldTargets.Count < MaxTempWeldTargets)
                     {
                         possibleWeldTargets.Add(new TargetBlockData(block, distance, 0));
                     }
@@ -2571,7 +2611,7 @@ namespace SKONanobotBuildAndRepairSystem
         // Stop scanning when all requested lists (non-null) reached their caps
         private bool ShouldStopScan(List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets, List<TargetEntityData> possibleFloatingTargets)
         {
-            var weldFull = possibleWeldTargets == null || possibleWeldTargets.Count >= MaxPossibleWeldTargets;
+            var weldFull = possibleWeldTargets == null || possibleWeldTargets.Count >= MaxTempWeldTargets;
             var grindFull = possibleGrindTargets == null || possibleGrindTargets.Count >= MaxPossibleGrindTargets;
             var floatingFull = possibleFloatingTargets == null || possibleFloatingTargets.Count >= MaxPossibleFloatingTargets;
             return weldFull && grindFull && floatingFull;
