@@ -34,54 +34,11 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-  <LangVersion>6</LangVersion>
+    <LangVersion>6</LangVersion>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject />
   </PropertyGroup>
-  <ItemGroup>
-    <None Include="App.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="AsyncTaskQueue.cs" />
-  <Compile Include="AreaScanCache.cs" />
-  <Compile Include="ScanCoordinator.cs" />
-    <Compile Include="Cache\CacheItem.cs" />
-    <Compile Include="Cache\CacheHandler.cs" />
-    <Compile Include="CollectManager.cs" />
-    <Compile Include="CommandProcessor.cs" />
-    <Compile Include="Constants.cs" />
-    <Compile Include="DamageHandler.cs" />
-    <Compile Include="Deb.cs" />
-    <Compile Include="EffectManager.cs" />
-    <Compile Include="GrindManager.cs" />
-  <Compile Include="DestinationCapacityCache.cs" />
-    <Compile Include="InventoryManager.cs" />
-    <Compile Include="Localization.cs" />
-    <Compile Include="Logging.cs" />
-    <Compile Include="MessageSyncHelper.cs" />
-    <Compile Include="NanobotBuildAndRepairSystemBlock.cs" />
-    <Compile Include="NanobotBuildAndRepairSystemLocalization.cs" />
-    <Compile Include="NanobotBuildAndRepairSystemMod.cs" />
-    <Compile Include="NanobotBuildAndRepairSystemPriorityHandling.cs" />
-    <Compile Include="NanobotBuildAndRepairSystemSynchronization.cs" />
-    <Compile Include="NanobotBuildAndRepairSystemTerminal.cs" />
-    <Compile Include="PowerManager.cs" />
-    <Compile Include="PriorityHandling.cs" />
-    <Compile Include="SafeZoneProtection.cs" />
-    <Compile Include="ShieldApi.cs" />
-    <Compile Include="TerminalControlManager.cs" />
-    <Compile Include="BlockSystemAssignmentHandler.cs" />
-    <Compile Include="UtilsPlayer.cs" />
-    <Compile Include="UtilsFaction.cs" />
-    <Compile Include="Utils.cs" />
-    <Compile Include="UtilsInventory.cs" />
-    <Compile Include="UtilsProductionBlock.cs" />
-    <Compile Include="UtilsSynchronization.cs" />
-    <Compile Include="Voxels\OreDeposit.cs" />
-    <Compile Include="Voxels\Scanner.cs" />
-    <Compile Include="WeldManager.cs" />
-  </ItemGroup>
   <ItemGroup>
     <Reference Include="ProtoBuf.Net">
       <HintPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\ProtoBuf.Net.dll</HintPath>
@@ -160,7 +117,55 @@
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Compile Include="Constants.cs" />
+    <Compile Include="Handlers\ChatHandler.cs" />
+    <Compile Include="Handlers\ComponentPriorityHandling.cs" />
+    <Compile Include="Handlers\DamageHandler.cs" />
+    <Compile Include="Handlers\NetworkMessagingHandler.cs" />
+    <Compile Include="Helpers\CubeGridHelper.cs" />
+    <Compile Include="Helpers\PowerHelper.cs" />
+    <Compile Include="Helpers\SlimBlockHelper.cs" />
+    <Compile Include="Helpers\MathHelper.cs" />
+    <Compile Include="Localization\LocalizationHelper.cs" />
+    <Compile Include="Collections\DefinitionIdHashDictionary.cs" />
+    <Compile Include="Collections\TargetBlockDataHashList.cs" />
+    <Compile Include="Collections\TargetEntityDataHasList.cs" />
+    <Compile Include="Collections\HashDictionary.cs" />
+    <Compile Include="Collections\HashList.cs" />
+    <Compile Include="Models\MsgBlockDataRequest.cs" />
+    <Compile Include="Models\MsgBlockSettings.cs" />
+    <Compile Include="Models\MsgBlockState.cs" />
+    <Compile Include="Models\MsgDataRequest.cs" />
+    <Compile Include="Models\MsgModCommand.cs" />
+    <Compile Include="Models\MsgModSettings.cs" />
+    <Compile Include="Models\SyncBlockSettings.cs" />
+    <Compile Include="Models\SyncBlockState.cs" />
+    <Compile Include="Models\SyncComponents.cs" />
+    <Compile Include="Models\SyncEntityId.cs" />
+    <Compile Include="Models\SyncModSettings.cs" />
+    <Compile Include="Models\SyncModSettingsWelder.cs" />
+    <Compile Include="Models\SyncTargetEntityData.cs" />
+    <Compile Include="Models\TargetBlockData.cs" />
+    <Compile Include="Models\TargetEntityData.cs" />
+    <Compile Include="Mods\ShieldApi.cs" />
+    <Compile Include="NanobotSystemEffects.cs" />
+    <Compile Include="Utils\Logging.cs" />
+    <Compile Include="NanobotSystem.cs" />
+    <Compile Include="Localization\Texts.cs" />
+    <Compile Include="Mod.cs" />
+    <Compile Include="Handlers\BlockPriorityHandling.cs" />
+    <Compile Include="NanobotTerminal.cs" />
+    <Compile Include="Handlers\PriorityHandling.cs" />
+    <Compile Include="Utils\Utils.cs" />
+    <Compile Include="Utils\UtilsInventory.cs" />
+    <Compile Include="Utils\UtilsProductionBlock.cs" />
+    <Compile Include="Utils\UtilsSynchronization.cs" />
+    <Compile Include="Utils\SlimBlockUtils.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Managers\" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>D:\Git\GitHub\SKO85\SE\SE-Mods\_Scripts\build_post.cmd $(ProjectName) $(SolutionDir)$(ProjectName)</PostBuildEvent>
