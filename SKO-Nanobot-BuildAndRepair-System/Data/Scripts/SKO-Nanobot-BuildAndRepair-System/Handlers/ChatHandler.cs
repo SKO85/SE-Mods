@@ -21,6 +21,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         #region Registration
 
         private static bool _registered = false;
+        private static bool _chatHandlerRegistered = false;
 
         public static void Register()
         {
@@ -28,7 +29,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 return;
 
             // Register event for messages entered in the chat.
-            MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
+            if(!_chatHandlerRegistered)
+            {
+                MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
+                _chatHandlerRegistered = true;
+            }            
 
             _registered = true;
         }
@@ -41,7 +46,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             try
             {
                 // Unregister event for handling messages entered in the chat.
-                MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
+                if(_chatHandlerRegistered)
+                {
+                    MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
+                    _chatHandlerRegistered = false;
+                }                
             }
             catch (Exception)
             {

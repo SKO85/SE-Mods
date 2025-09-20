@@ -107,9 +107,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             if (slimBlock != null) return slimBlock;
 
             var block = item as IMyCubeBlock;
-            if (block != null) return block.SlimBlock;
-
-            return null;
+            return block?.SlimBlock;
         }
 
         public static T GetItemAs<T>(SyncEntityId id) where T : class

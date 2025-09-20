@@ -4,7 +4,6 @@ using SKONanobotBuildAndRepairSystem.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRageMath;
@@ -44,10 +43,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
-                HashSet<IMyEntity> safeZones = new HashSet<IMyEntity>();
-                MyAPIGateway.Entities.GetEntities(safeZones, e => e is MySafeZone);
-
-                foreach (MySafeZone entity in safeZones)
+                var safeZones = MySessionComponentSafeZones.SafeZones;
+                foreach (var entity in safeZones)
                 {
                     Zones[entity.EntityId] = entity;
                 }                
@@ -133,6 +130,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 }
             }
 
+
             foreach (var kv in Zones)
             {
                 var zone = kv.Value;
@@ -153,7 +151,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 else
                 {
                     SetSubgridCache(targetGrid, 0);
-                    return null;
                 }
             }
 
@@ -198,8 +195,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     var safeZone = GetIntersectingSafeZone(system.Welder.CubeGrid);
                     if (safeZone != null && safeZone.Enabled)
                     {
-                        return false;
-
                         var isAllowed = safeZone.IsActionAllowed(CastProhibit(MySessionComponentSafeZones.AllowedActions, action), 0L);
                         return isAllowed;
                     }

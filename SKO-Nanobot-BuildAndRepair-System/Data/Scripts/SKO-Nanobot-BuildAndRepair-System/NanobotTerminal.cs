@@ -11,6 +11,7 @@ using System.Text;
 using VRage;
 using VRage.ModAPI;
 using VRage.Scripting.MemorySafeTypes;
+using VRage.Utils;
 using VRageMath;
 
 namespace SKONanobotBuildAndRepairSystem
@@ -211,6 +212,62 @@ namespace SKONanobotBuildAndRepairSystem
                     label.Label = Texts.ModeSettings_Headline;
                     CustomControls.Add(label);
                     {
+                        // --- AutoPowerOffOnIdle
+                        //checkbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyShipWelder>("AutoPowerOffOnIdle");
+                        //checkbox.Title = MyStringId.GetOrCompute($"Power Off when Idle ({NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes} min)");
+                        //checkbox.Tooltip = MyStringId.GetOrCompute($"Automatically disables the block when idle for more than {NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleMinutes} minutes.");
+
+                        //checkbox.Visible = (block) => { return true; };
+                        //checkbox.Enabled = (block) =>
+                        //{
+                        //    if (NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleForced)
+                        //    {
+                        //        return false;
+                        //    }
+                        //    return true;
+                        //};
+
+                        //checkbox.Getter = (block) =>
+                        //{
+                        //    if (NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleForced)
+                        //    {
+                        //        return true;
+                        //    }
+
+                        //    var system = GetSystem(block);
+                        //    return system != null && system.Settings.UseAutoPowerOffWhenIdle == 1;
+                        //};
+
+                        //checkbox.Setter = (block, value) =>
+                        //{
+                        //    var system = GetSystem(block);
+                        //    if (system != null)
+                        //    {
+                        //        if (NanobotBuildAndRepairSystemMod.Settings.AutoPowerOffOnIdleForced)
+                        //        {
+                        //            system.Settings.UseAutoPowerOffWhenIdle = 1;
+                        //            system.ResetAutoPowerOffTimer();
+                        //        }
+                        //        else
+                        //        {
+                        //            if (value)
+                        //            {
+                        //                system.Settings.UseAutoPowerOffWhenIdle = 1;
+                        //            }
+                        //            else
+                        //            {
+                        //                system.Settings.UseAutoPowerOffWhenIdle = 0;
+                        //            }
+                        //            system.ResetAutoPowerOffTimer();
+                        //        }
+                        //    }
+                        //};
+
+                        //checkbox.SupportsMultipleBlocks = true;
+                        //CreateCheckBoxAction("AutoPowerOffOnIdle", checkbox);
+                        //CustomControls.Add(checkbox);
+                        //CreateProperty(checkbox, true);
+
                         // --- Select search mode
                         var onlyOneAllowed = (Mod.Settings.Welder.AllowedSearchModes & (Mod.Settings.Welder.AllowedSearchModes - 1)) == 0;
                         comboBox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCombobox, IMyShipWelder>("Mode");

@@ -61,8 +61,8 @@ namespace SKONanobotBuildAndRepairSystem
         public const float WELDER_SOUND_VOLUME = 2f;
 
         private const int MaxPossibleWeldTargets = 256;
-        private const int MaxPossibleGrindTargets = 256;
-        private const int MaxPossibleFloatingTargets = 256;
+        private const int MaxPossibleGrindTargets = 32;
+        private const int MaxPossibleFloatingTargets = 32;
 
         public static readonly int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
 
@@ -104,8 +104,8 @@ namespace SKONanobotBuildAndRepairSystem
         private TimeSpan _LastTargetsUpdate;
         private TimeSpan _UpdateCustomInfoLast;
         private TimeSpan _UpdatePowerSinkLast;
+        private TimeSpan _LastTaskTime;
 
-        private TimeSpan _CustomInfoUpdateLast;
         private TimeSpan _PeriodicExtraChecksLast;
 
         public TimeSpan _TryAutoPushInventoryLast;
@@ -298,6 +298,7 @@ namespace SKONanobotBuildAndRepairSystem
             _TryAutoPushInventoryLast = _TryPushInventoryLast;
             _Effects.WorkingStateSet = WorkingState.Invalid;
             _Effects.SoundVolumeSet = -1;
+            _LastTaskTime = MyAPIGateway.Session.ElapsedPlayTime;
             _IsInit = true;
         }
 
@@ -468,10 +469,21 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (!fast)
                     {
-                        CleanupFriendlyDamage();                       
+                        CleanupFriendlyDamage();                        
                     }
 
                     ServerTryWeldingGrindingCollecting();
+
+                    if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PeriodicExtraChecksLast).TotalSeconds >= 3)
+                    {
+                        _PeriodicExtraChecksLast = MyAPIGateway.Session.ElapsedPlayTime;
+                        try
+                        {
+                            SetSafeZoneAndShieldStates();
+                                                        
+                        }
+                        catch { }
+                    }
 
                     if (!fast)
                     {
@@ -500,14 +512,6 @@ namespace SKONanobotBuildAndRepairSystem
                         UpdateCustomInfo(true);
                         State.ResetChanged();
                     }
-                    else
-                    {
-                        if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_CustomInfoUpdateLast).TotalSeconds >= 5)
-                        {
-                            _CustomInfoUpdateLast = MyAPIGateway.Session.ElapsedPlayTime;
-                            UpdateCustomInfo(true);
-                        }
-                    }
                 }                
 
                 if (Settings.IsTransmitNeeded())
@@ -520,7 +524,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _DelayWatch.Stop();
                 if (_DelayWatch.ElapsedMilliseconds > 40)
                 {
-                    _Delay = _RandomDelay.Next(10, 40); //Slowdown a little bit
+                    _Delay = _RandomDelay.Next(1, 20); //Slowdown a little bit
                 }
             }
             catch (Exception ex)
@@ -574,6 +578,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var inventoryFull = State.InventoryFull;
             var limitsExceeded = State.LimitsExceeded;
+
             var welding = false;
             var needwelding = false;
             var grinding = false;
@@ -581,7 +586,6 @@ namespace SKONanobotBuildAndRepairSystem
             var collecting = false;
             var needcollecting = false;
             var transporting = false;
-            var safeZoneStateChanged = false;
 
             var ready = _Welder.Enabled && _Welder.IsWorking && _Welder.IsFunctional;
 
@@ -593,18 +597,6 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (ready)
             {
-                if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PeriodicExtraChecksLast).TotalSeconds >= 3)
-                {
-                    _PeriodicExtraChecksLast = MyAPIGateway.Session.ElapsedPlayTime;
-                    try {
-
-                        if (SetSafeZoneAndShieldStates())
-                        {
-                            safeZoneStateChanged = true;
-                        } 
-                    } catch { };                    
-                }
-
                 ServerTryPushInventory();
 
                 if (isFullInventoryAndPicking)
@@ -619,7 +611,9 @@ namespace SKONanobotBuildAndRepairSystem
                 }
 
                 if (transporting && State.CurrentTransportIsPick) needgrinding = true;
-                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting) ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
+
+                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting) 
+                    ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
 
                 if (!transporting)
                 {
@@ -734,7 +728,7 @@ namespace SKONanobotBuildAndRepairSystem
             var possibleFloatingTargetsChanged = State.PossibleFloatingTargets.LastHash != State.PossibleFloatingTargets.CurrentHash;
             State.PossibleFloatingTargets.LastHash = State.PossibleFloatingTargets.CurrentHash;
 
-            if (missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged || transportChanged || safeZoneStateChanged) State.HasChanged();
+            if (missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged || transportChanged) State.HasChanged();
 
             if (MyAPIGateway.Session.IsServer)
             {
@@ -752,8 +746,7 @@ namespace SKONanobotBuildAndRepairSystem
                 readyChanged ||
                 inventoryFullChanged ||
                 limitsExceededChanged ||
-                transportChanged ||
-                safeZoneStateChanged);
+                transportChanged);
         }
 
         /// <summary>
@@ -1282,7 +1275,9 @@ namespace SKONanobotBuildAndRepairSystem
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             transporting = IsTransportRunnning(playTime);
 
-            if (transporting) return false;
+            if (transporting)
+                return false;
+
             if (targetData != null)
             {
                 var target = targetData.Entity;
@@ -1313,6 +1308,7 @@ namespace SKONanobotBuildAndRepairSystem
                     targetData.Ignore = isEmpty;
                 }
             }
+
             if (collectingFirstTarget != null && ((float)_TransportInventory.CurrentVolume >= _MaxTransportVolume || (!canAdd && _TransportInventory.CurrentVolume > 0)))
             {
                 //Transport started
@@ -2503,10 +2499,17 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0)
                 {
-                    customInfo.Append(Texts.Info_CurentWeldEntity + Environment.NewLine);
-                    customInfo.Append(string.Format(" -{0}" + Environment.NewLine, Settings.CurrentPickedWeldingBlock.BlockName()));
-                    customInfo.Append(Texts.Info_CurentGrindEntity + Environment.NewLine);
-                    customInfo.Append(string.Format(" -{0}" + Environment.NewLine, Settings.CurrentPickedGrindingBlock.BlockName()));
+                    if(Settings.CurrentPickedWeldingBlock != null)
+                    {
+                        customInfo.Append(Texts.Info_CurentWeldEntity + Environment.NewLine);
+                        customInfo.Append(string.Format(" -{0}" + Environment.NewLine, Settings.CurrentPickedWeldingBlock.BlockName()));
+                    }
+
+                    if(Settings.CurrentPickedGrindingBlock != null)
+                    {
+                        customInfo.Append(Texts.Info_CurentGrindEntity + Environment.NewLine);
+                        customInfo.Append(string.Format(" -{0}" + Environment.NewLine, Settings.CurrentPickedGrindingBlock.BlockName()));
+                    }                    
                 }
 
                 if (State.InventoryFull) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_InventoryFull}[/color]{Environment.NewLine + Environment.NewLine}");

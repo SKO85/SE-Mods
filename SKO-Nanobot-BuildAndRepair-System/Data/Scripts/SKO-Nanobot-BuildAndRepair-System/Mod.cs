@@ -171,7 +171,7 @@ namespace SKONanobotBuildAndRepairSystem
                             });
                         }
 
-                        if (now.Subtract(_LastTtlCacheCleanerCheck) >= TimeSpan.FromSeconds(30))
+                        if (now.Subtract(_LastTtlCacheCleanerCheck) >= TimeSpan.FromMinutes(2))
                         {
                             _LastTtlCacheCleanerCheck = now;
                             MyAPIGateway.Parallel.StartBackground(() =>
