@@ -1,9 +1,4 @@
 ﻿using Sandbox.Game.EntityComponents;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SKONanobotBuildAndRepairSystem.Helpers
 {
@@ -23,7 +18,6 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
         public static bool HasRequiredElectricPower(this NanobotSystem system)
         {
             if (system.Welder == null) return false;
-            if (system.CreativeModeActive) return true;
 
             var required = ComputeRequiredElectricPower(system);
             var maxAvailable = GetAvailablePower(system); ;

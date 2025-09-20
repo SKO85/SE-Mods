@@ -37,7 +37,7 @@ namespace SKONanobotBuildAndRepairSystem
         private MyParticleEffect _ParticleEffectTransport1;
         private MyLight _LightEffect;
         private MyFlareDefinition _LightEffectFlareWelding;
-        private MyFlareDefinition _LightEffectFlareGrinding;        
+        private MyFlareDefinition _LightEffectFlareGrinding;
         private bool _TransportStateSet;
 
         public void StopSoundEffects()
@@ -83,8 +83,6 @@ namespace SKONanobotBuildAndRepairSystem
                 UpdateWorkingEffectPosition(system, workingState);
             }
         }
-
-
 
         /// <summary>
         /// Start visual effects for welding/grinding
@@ -355,9 +353,9 @@ namespace SKONanobotBuildAndRepairSystem
 
         public void Close(NanobotSystem system)
         {
-            if(system == null) return;
+            if (system == null) return;
 
-            StopSoundEffects();            
+            StopSoundEffects();
 
             _SoundEmitter?.Cleanup();
             _SoundEmitter = null;
@@ -374,7 +372,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             if (_ParticleEffectTransport1 != null)
-            {                
+            {
                 _ParticleEffectTransport1.Stop();
                 _ParticleEffectTransport1.Clear();
                 _ParticleEffectTransport1 = null;

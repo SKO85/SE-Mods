@@ -15,6 +15,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static ushort MSGID_BLOCK_STATE_FROM_SERVER = 40104;
 
         #region Registration
+
         private static bool _registered = false;
 
         public static void Register()
@@ -22,7 +23,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             if (_registered || MyAPIGateway.Multiplayer == null || MyAPIGateway.Utilities == null)
                 return;
 
-            if(MyAPIGateway.Session.IsServer)
+            if (MyAPIGateway.Session.IsServer)
             {
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_MOD_DATAREQUEST, ServerMsgDataRequestReceived);
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_BLOCK_DATAREQUEST, ServerMsgBlockDataRequestReceived);
@@ -41,7 +42,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             _registered = true;
         }
 
-        public static void Unregister() 
+        public static void Unregister()
         {
             if (!_registered || MyAPIGateway.Multiplayer == null || MyAPIGateway.Utilities == null)
                 return;
@@ -62,10 +63,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             _registered = false;
         }
 
-       
-        #endregion
+        #endregion Registration
 
-        #region Server Message Received Handlers       
+        #region Server Message Received Handlers
 
         private static void ServerMsgDataRequestReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
@@ -80,7 +80,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             NanobotSystem system;
             if (Mod.NanobotSystems.TryGetValue(msgRcv.EntityId, out system))
             {
-                if (Logging.Instance.ShouldLog(Logging.Level.Communication)) Logging.Instance.Write(Logging.Level.Communication, "BuildAndRepairSystemMod: SyncBlockDataRequestReceived SteamId={0} EntityId={1}/{2}", msgRcv.SteamId, msgRcv.EntityId, Logging.BlockName(system.Entity, Logging.BlockNameOptions.None));
                 MsgBlockSettingsSend(msgRcv.SteamId, system);
                 MsgBlockStateSend(msgRcv.SteamId, system);
             }
@@ -90,7 +89,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
         }
 
-        #endregion
+        #endregion Server Message Received Handlers
 
         #region Client Message Received Handlers
 
@@ -136,7 +135,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
         }
 
-        #endregion
+        #endregion Client Message Received Handlers
 
         #region General Received
 
@@ -170,9 +169,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockSettingsReceived Exception:{0}", ex);
             }
         }
-        #endregion
+
+        #endregion General Received
 
         #region Send Handlers
+
         private static void MsgModSettingsSend(ulong steamId)
         {
             if (!MyAPIGateway.Session.IsServer)
@@ -278,6 +279,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
         }
-        #endregion
+
+        #endregion Send Handlers
     }
 }

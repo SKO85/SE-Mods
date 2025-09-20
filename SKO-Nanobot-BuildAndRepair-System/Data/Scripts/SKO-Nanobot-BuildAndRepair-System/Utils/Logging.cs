@@ -77,7 +77,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var terminalBlock = block as IMyTerminalBlock;
             if (terminalBlock != null)
             {
-                if ((options & BlockNameOptions.IncludeTypename) != 0) 
+                if ((options & BlockNameOptions.IncludeTypename) != 0)
                     return string.Format("{0}.{1} ({2})", terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid", terminalBlock.CustomName, terminalBlock.BlockDefinition.TypeIdString);
 
                 return string.Format("{0}.{1}", terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid", terminalBlock.CustomName);
@@ -92,10 +92,10 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var entity = block as IMyEntity;
             if (entity != null)
             {
-                if ((options & BlockNameOptions.IncludeTypename) != 0) 
-                    return string.Format("{0} ({1}) ({2})", string.IsNullOrEmpty(entity.DisplayName) ? entity.GetFriendlyName() : entity.DisplayName, entity.EntityId, entity.GetType().Name);
+                if ((options & BlockNameOptions.IncludeTypename) != 0)
+                    return string.Format("{0} ({1})", string.IsNullOrEmpty(entity.DisplayName) ? entity.GetFriendlyName() : entity.DisplayName, entity.GetType().Name);
 
-                return string.Format("{0} ({1})", entity.DisplayName, entity.EntityId);
+                return string.Format("{0}", entity.DisplayName);
             }
 
             return block != null ? block.ToString() : "NULL";

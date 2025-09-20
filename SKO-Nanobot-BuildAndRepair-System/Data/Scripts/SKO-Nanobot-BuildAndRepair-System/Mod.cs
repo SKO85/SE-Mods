@@ -1,7 +1,9 @@
 namespace SKONanobotBuildAndRepairSystem
 {
+    using DefenseShields;
     using Sandbox.ModAPI;
     using SKONanobotBuildAndRepairSystem.Handlers;
+    using SKONanobotBuildAndRepairSystem.Helpers;
     using SKONanobotBuildAndRepairSystem.Models;
     using SKONanobotBuildAndRepairSystem.Utils;
     using System;
@@ -16,13 +18,17 @@ namespace SKONanobotBuildAndRepairSystem
         public static bool SettingsValid = false;
         public static SyncModSettings Settings = new SyncModSettings();
         public static readonly Dictionary<long, NanobotSystem> NanobotSystems = new Dictionary<long, NanobotSystem>();
+        public static ShieldApi Shield; // Centralized DefenseShields API instance
 
         private bool _initialized = false;
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
         private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);
         private static TimeSpan _LastSyncModDataRequestSend;
+        private static TimeSpan _LastGeneralPeriodicCheck;
+        private static TimeSpan _LastTtlCacheCleanerCheck;
+        private static TimeSpan _LastSafeZoneUpdateCheck;
 
-        public const int MaxBackgroundTasks_Default = 4;
+        public const int MaxBackgroundTasks_Default = 2;
         public const int MaxBackgroundTasks_Max = 10;
         public const int MaxBackgroundTasks_Min = 1;
         public static List<Action> AsynActions = new List<Action>();
@@ -36,12 +42,22 @@ namespace SKONanobotBuildAndRepairSystem
             // Load the settings.
             Settings = SyncModSettings.Load();
             SettingsValid = MyAPIGateway.Session.IsServer;
-            
+
             // Set default log level from settings.
             Logging.Instance.LogLevel = Settings.LogLevel;
 
             // Trigger settings changed for the first time.
             SettingsChanged();
+
+            // Initialize Shield API once per session
+            if (Shield == null && Settings.ShieldCheckEnabled)
+            {
+                Shield = new ShieldApi();
+                Shield.Load();
+            }
+
+            // Register Safe-Zone Handler.
+            SafeZoneHandler.Register();
 
             // Register Damage Handler.
             DamageHandler.Register();
@@ -54,7 +70,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             Logging.Instance.Write("BuildAndRepairSystemMod: Initialized.");
         }
-        
+
         public static void SettingsChanged()
         {
             if (SettingsValid)
@@ -92,19 +108,26 @@ namespace SKONanobotBuildAndRepairSystem
                 if (actualBackgroundTaskCount <= 0) break;
             }
 
-            _initialized = false;
+            // Unregister Shield API message handler
+            try { Shield?.Unload(); } catch { }
+            Shield = null;
 
             // Unregister Chat Handler.
-            ChatHandler.Unregister();
+            try { ChatHandler.Unregister(); } catch { }
+
+            // Unregister Safe-Zone Handler.
+            try { SafeZoneHandler.Unregister(); } catch { }            
 
             // Unregister Network Messaging Handler.
-            NetworkMessagingHandler.Unregister();
+            try { NetworkMessagingHandler.Unregister(); } catch { }
 
             // Unregister Datamage Handler.
-            DamageHandler.Unregister();           
+            try { DamageHandler.Unregister(); } catch { }
 
             // Call base unload.
             base.UnloadData();
+
+            _initialized = false;
         }
 
         public override void UpdateBeforeSimulation()
@@ -123,21 +146,53 @@ namespace SKONanobotBuildAndRepairSystem
                 // If initialized, process calls.
                 else
                 {
+                    var now = MyAPIGateway.Session.ElapsedPlayTime;
+
                     // Start processing.
                     if (MyAPIGateway.Session.IsServer)
                     {
+                        // Periodic ownership cache refresh
+                        if (now.Subtract(_LastGeneralPeriodicCheck) >= TimeSpan.FromSeconds(10))
+                        {
+                            _LastGeneralPeriodicCheck = now;
+                            MyAPIGateway.Parallel.StartBackground(() =>
+                            {
+                                try { GridOwnershipCacheHandler.Update(); } catch { }                                
+                            });
+                        }
+
+                        if (now.Subtract(_LastSafeZoneUpdateCheck) >= TimeSpan.FromSeconds(10))
+                        {
+                            _LastSafeZoneUpdateCheck = now;
+                            MyAPIGateway.Parallel.StartBackground(() =>
+                            {
+                                try { SafeZoneHandler.GetSafeZones(); } catch { }
+                                try { SafeZoneHandler.Cleanup(); } catch { }
+                            });
+                        }
+
+                        if (now.Subtract(_LastTtlCacheCleanerCheck) >= TimeSpan.FromSeconds(30))
+                        {
+                            _LastTtlCacheCleanerCheck = now;
+                            MyAPIGateway.Parallel.StartBackground(() =>
+                            {                                
+                                try { InventoryHelper.Cleanup(); } catch { }
+                                try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
+                            });
+                        }
+
                         RebuildSourcesAndTargetsTimer();
                     }
 
                     // If the Settings is not yet valid, sync the settings between clients and server.
                     else if (!SettingsValid)
                     {
-                        if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastSyncModDataRequestSend) >= TimeSpan.FromSeconds(10))
+                        if (now.Subtract(_LastSyncModDataRequestSend) >= TimeSpan.FromSeconds(10))
                         {
                             NetworkMessagingHandler.MsgDataRequestSend();
                             _LastSyncModDataRequestSend = MyAPIGateway.Session.ElapsedPlayTime;
                         }
-                    }
+                    }                   
                 }
             }
             catch (Exception e)

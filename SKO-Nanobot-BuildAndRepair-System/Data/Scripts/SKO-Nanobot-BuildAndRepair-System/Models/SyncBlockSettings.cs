@@ -678,7 +678,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
         public void CheckLimits(NanobotSystem system, bool init)
         {
-            var scale = (system != null && system.Welder != null ? (system.Welder.BlockDefinition.SubtypeName.Contains("Large") ? 1f : 3f) : 1f);
+            var scale = (system != null && system.Welder != null ? (system.Welder.BlockDefinition.SubtypeName.Contains("Large") ? 1f : 2f) : 1f);
 
             if (Mod.Settings.Welder.AreaOffsetFixed || init)
             {

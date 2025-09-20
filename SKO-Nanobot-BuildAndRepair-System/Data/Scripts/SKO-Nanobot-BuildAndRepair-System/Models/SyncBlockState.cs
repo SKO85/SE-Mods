@@ -15,7 +15,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
     [ProtoContract(SkipConstructor = true, UseProtoMembersOnly = true)]
     public class SyncBlockState
     {
-        public const int MaxSyncItems = 20;
+        public const int MaxSyncItems = 16;
         private bool _Ready;
         private bool _Welding;
         private bool _NeedWelding;
@@ -24,6 +24,11 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private bool _Transporting;
         private bool _InventoryFull;
         private bool _LimitsExceeded;
+        private bool _SafeZoneAllowsWelding;
+        private bool _SafeZoneAllowsBuildingProjections;
+        private bool _SafeZoneAllowsGrinding;
+        private bool _IsShielded;
+
         private List<SyncComponents> _MissingComponentsSync;
         private List<SyncTargetEntityData> _PossibleWeldTargetsSync;
         private List<SyncTargetEntityData> _PossibleGrindTargetsSync;
@@ -347,6 +352,62 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
         }
 
+        [ProtoMember(40)]
+        public bool SafeZoneAllowsWelding
+        {
+            get { return _SafeZoneAllowsWelding; }
+            set
+            {
+                if (value != _SafeZoneAllowsWelding)
+                {
+                    _SafeZoneAllowsWelding = value;
+                    Changed = true;
+                }
+            }
+        }
+
+        [ProtoMember(41)]
+        public bool SafeZoneAllowsGrinding
+        {
+            get { return _SafeZoneAllowsGrinding; }
+            set
+            {
+                if (value != _SafeZoneAllowsGrinding)
+                {
+                    _SafeZoneAllowsGrinding = value;
+                    Changed = true;
+                }
+            }
+        }
+
+        [ProtoMember(42)]
+        public bool SafeZoneAllowsBuildingProjections
+        {
+            get { return _SafeZoneAllowsBuildingProjections; }
+            set
+            {
+                if (value != _SafeZoneAllowsBuildingProjections)
+                {
+                    _SafeZoneAllowsBuildingProjections = value;
+                    Changed = true;
+                }
+            }
+        }
+
+        [ProtoMember(43)]
+        public bool IsShielded
+        {
+            get { return _IsShielded; }
+            set
+            {
+                if (value != _IsShielded)
+                {
+                    _IsShielded = value;
+                    Changed = true;
+                }
+            }
+        }
+
         public SyncBlockState()
         {
             MissingComponents = new DefinitionIdHashDictionary();
@@ -408,6 +469,11 @@ namespace SKONanobotBuildAndRepairSystem.Models
             PossibleFloatingTargets.Clear();
             var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
             if (possibleFloatingTargetsSync != null) foreach (var item in possibleFloatingTargetsSync) PossibleFloatingTargets.Add(new TargetEntityData(SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity), item.Distance));
+
+            _IsShielded = newState.IsShielded;
+            _SafeZoneAllowsGrinding = newState.SafeZoneAllowsGrinding;
+            _SafeZoneAllowsBuildingProjections = newState.SafeZoneAllowsBuildingProjections;
+            _SafeZoneAllowsWelding = newState.SafeZoneAllowsWelding;
 
             Changed = true;
         }

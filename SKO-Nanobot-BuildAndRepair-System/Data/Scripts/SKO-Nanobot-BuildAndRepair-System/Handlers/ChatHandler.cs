@@ -3,7 +3,7 @@ using SKONanobotBuildAndRepairSystem.Localization;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.IO;
+using System.Text;
 using VRage;
 
 namespace SKONanobotBuildAndRepairSystem.Handlers
@@ -11,16 +11,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
     public class ChatHandler
     {
         private const string CmdKey = "/nanobars";
-        private const string CmdHelp1 = "-?";
-        private const string CmdHelp2 = "-help";
+        private const string CmdHelp = "-help";
         private const string CmdCwsf = "-cwsf";
         private const string CmdCpsf = "-cpsf";
         private const string CmdLogLevel = "-loglevel";
-        private const string CmdWriteTranslation = "-writetranslation";
         private const string CmdLogLevel_All = "all";
-        private const string CmdLogLevel_Default = "default";
+        private const string CmdWriteTranslation = "-writetranslation";
 
         #region Registration
+
         private static bool _registered = false;
 
         public static void Register()
@@ -38,7 +37,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             if (!_registered)
                 return;
-            
+
             try
             {
                 // Unregister event for handling messages entered in the chat.
@@ -50,115 +49,127 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             _registered = false;
         }
-        #endregion
+
+        #endregion Registration
 
         private static void OnMessageEntered(string messageText, ref bool sendToOthers)
         {
-            if (string.IsNullOrEmpty(messageText)) return;
+            if (string.IsNullOrWhiteSpace(messageText)) return;
             var cmd = messageText.ToLower();
-            if (cmd.StartsWith(CmdKey))
+            if (!cmd.StartsWith(CmdKey)) return;
+
+            sendToOthers = false;
+            var args = cmd.Remove(0, CmdKey.Length).Trim().Split(' ');
+            var console = MyAPIGateway.Utilities;
+
+            if (args.Length == 0 || args[0] == CmdHelp)
             {
-                if (Logging.Instance.ShouldLog(Logging.Level.Verbose)) Logging.Instance.Write(Logging.Level.Verbose, "BuildAndRepairSystemMod: Cmd: {0}", messageText);
-                var args = cmd.Remove(0, CmdKey.Length).Trim().Split(' ');
-                if (args.Length > 0)
-                {
-                    if (Logging.Instance.ShouldLog(Logging.Level.Verbose)) Logging.Instance.Write(Logging.Level.Verbose, "BuildAndRepairSystemMod: Cmd args[0]: {0}", args[0]);
-                    switch (args[0].Trim())
+                ShowHelp();
+                return;
+            }
+
+            switch (args[0])
+            {
+                case CmdCpsf:
+                    if (MyAPIGateway.Session.IsServer)
                     {
-                        case CmdCpsf:
-                            if (MyAPIGateway.Session.IsServer)
-                            {
-                                SyncModSettings.Save(Mod.Settings, false);
-                                MyAPIGateway.Utilities.ShowMessage(CmdKey, "Settings file created inside mod folder");
-                            }
-                            else
-                            {
-                                MyAPIGateway.Utilities.ShowMessage(CmdKey, "command not allowed on client");
-                            }
-                            break;
+                        SyncModSettings.Save(Mod.Settings, false);
+                        // console.ShowMessage(CmdKey, "Settings saved to global mod folder");
 
-                        case CmdCwsf:
-                            if (MyAPIGateway.Session.IsServer)
-                            {
-                                SyncModSettings.Save(Mod.Settings, true);
-                                MyAPIGateway.Utilities.ShowMessage(CmdKey, "Settings file created inside world folder");
-                            }
-                            else
-                            {
-                                MyAPIGateway.Utilities.ShowMessage(CmdKey, "command not allowed on client");
-                            }
-                            break;
-
-                        case CmdLogLevel:
-                            if (args.Length > 1)
-                            {
-                                switch (args[1].Trim())
-                                {
-                                    case CmdLogLevel_All:
-                                        MyAPIGateway.Utilities.ShowMessage(CmdKey, string.Format("Logging level switched to All [{0:X}]", Logging.Instance.LogLevel));                                        
-                                        break;
-
-                                    case CmdLogLevel_Default:
-                                    default:
-                                        Logging.Instance.LogLevel = Mod.Settings.LogLevel;
-                                        MyAPIGateway.Utilities.ShowMessage(CmdKey, string.Format("Logging level switched to Default [{0:X}]", Logging.Instance.LogLevel));
-                                        break;
-                                }
-                            }
-                            break;
-
-                        case CmdWriteTranslation:
-                            if (Logging.Instance.ShouldLog(Logging.Level.Verbose)) Logging.Instance.Write(Logging.Level.Verbose, "BuildAndRepairSystemMod: CmdWriteTranslation");
-                            if (args.Length > 1)
-                            {
-                                MyLanguagesEnum lang;
-                                if (Enum.TryParse(args[1], true, out lang))
-                                {
-                                    LocalizationHelper.ExportDictionary(lang.ToString() + ".txt", Texts.GetDictionary(lang));
-                                    MyAPIGateway.Utilities.ShowMessage(CmdKey, string.Format(lang.ToString() + ".txt writtenwa."));
-                                }
-                                else
-                                {
-                                    MyAPIGateway.Utilities.ShowMessage(CmdKey, string.Format("'{0}' is not a valid language name {1}", args[1], string.Join(",", Enum.GetNames(typeof(MyLanguagesEnum)))));
-                                }
-                            }
-                            break;
-
-                        case CmdHelp1:
-                        case CmdHelp2:
-                        default:
-                            MyAPIGateway.Utilities.ShowMissionScreen("NanobotBuildAndRepairSystem", "Help", "", GetHelpText());
-                            break;
+                        var path = $"{MyAPIGateway.Utilities.GamePaths.UserDataPath}\\Storage\\{MyAPIGateway.Utilities.GamePaths.ModScopeName}";
+                        MyAPIGateway.Utilities.ShowMessage("BaR Mod:", $"Config file has been saved in:\n\n{path}\n\nFilename: ModSettings.xml");
                     }
-                }
-                else
-                {
-                    MyAPIGateway.Utilities.ShowMissionScreen("NanobotBuildAndRepairSystem", "Help", "", GetHelpText());
-                }
-                sendToOthers = false;
+                    else
+                    {
+                        console.ShowMessage(CmdKey, "Command not allowed on client");
+                    }
+                    break;
+
+                case CmdCwsf:
+                    if (MyAPIGateway.Session.IsServer)
+                    {
+                        SyncModSettings.Save(Mod.Settings, true);
+                        console.ShowMessage(CmdKey, "Settings saved to world folder");
+                    }
+                    else
+                    {
+                        console.ShowMessage(CmdKey, "Command not allowed on client");
+                    }
+                    break;
+
+                case CmdLogLevel:
+                    if (args.Length > 1)
+                    {
+                        if (args[1] == CmdLogLevel_All)
+                        {
+                            Logging.Instance.LogLevel = Logging.Level.All;
+                            console.ShowMessage(CmdKey, string.Format("Log level set to ALL [{0:X}]", (int)Logging.Instance.LogLevel));
+                        }
+                        else
+                        {
+                            Logging.Instance.LogLevel = Mod.Settings.LogLevel;
+                            console.ShowMessage(CmdKey, string.Format("Log level set to DEFAULT [{0:X}]", (int)Logging.Instance.LogLevel));
+                        }
+                    }
+                    break;
+
+                case CmdWriteTranslation:
+                    if (args.Length > 1)
+                    {
+                        MyLanguagesEnum lang;
+                        if (Enum.TryParse(args[1], true, out lang))
+                        {
+                            LocalizationHelper.ExportDictionary(string.Format("{0}.txt", lang), Texts.GetDictionary(lang));
+                            console.ShowMessage(CmdKey, string.Format("{0}.txt written.", lang));
+                        }
+                        else
+                        {
+                            console.ShowMessage(CmdKey, "Invalid language name.");
+                        }
+                    }
+                    break;
+
+                default:
+                    ShowHelp();
+                    break;
             }
         }
 
-        private static string GetHelpText()
+        private static void ShowHelp()
         {
-            var text = string.Format(
-                Texts.Cmd_HelpClient.String, 
-                Constants.ModVersion, 
-                CmdHelp1, 
-                CmdHelp2, 
-                CmdLogLevel, 
-                CmdLogLevel_All, 
-                CmdLogLevel_Default, 
-                CmdWriteTranslation, 
-                string.Join(",", Enum.GetNames(typeof(MyLanguagesEnum))), 
-                MyAPIGateway.Utilities.GamePaths.UserDataPath + Path.DirectorySeparatorChar + "Storage" + Path.DirectorySeparatorChar + MyAPIGateway.Utilities.GamePaths.ModScopeName);
+            var sb = new StringBuilder();
 
-            if (MyAPIGateway.Session.IsServer)
-            {
-                text += string.Format(Texts.Cmd_HelpServer.String, CmdCwsf, CmdCpsf);
-            }
+            sb.AppendLine($"Version: {Constants.ModVersion}");
+            sb.AppendLine();
+            sb.AppendLine($"[-loglevel all;default]: Set the logging level. Warning: Setting level to 'all' could produce very large log-files.");
+            sb.AppendLine();
+            sb.AppendLine($"[-cwsf]: Creates a settings file inside your current world folder.");
+            sb.AppendLine();
+            sb.AppendLine($"[--cpsf]: Creates a settings file inside the global mod storage folder.");
+            sb.AppendLine();
+            sb.AppendLine($"> Issues / Suggestions?");
+            sb.AppendLine($"To report issues or suggestions, go to:");
+            sb.AppendLine($"https://github.com/SKO85/SE-Mods/issues");
+            sb.AppendLine();
+            sb.AppendLine($"> Documentation / WIKI");
+            sb.AppendLine($"For documentation and release notes, go to:");
+            sb.AppendLine($"https://github.com/SKO85/SE-Mods/wiki");
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.AppendLine($"Have fun!\nSKO85");
 
-            return text;
+            //var lang = MyAPIGateway.Session.Config.Language;
+            //var text = string.Format(Texts.Cmd_HelpClient.String, "V2.1.5", CmdHelp1, CmdHelp2,
+            //    CmdLogLevel, CmdLogLevel_All, CmdLogLevel_Default,
+            //    CmdWriteTranslation, string.Join(",", Enum.GetNames(typeof(MyLanguagesEnum))),
+            //    MyAPIGateway.Utilities.GamePaths.UserDataPath + "/Storage/" + MyAPIGateway.Utilities.GamePaths.ModScopeName);
+
+            //if (MyAPIGateway.Session.IsServer)
+            //{
+            //    text += string.Format(Texts.Cmd_HelpServer.String, CmdCwsf, CmdCpsf);
+            //}
+
+            MyAPIGateway.Utilities.ShowMissionScreen("Nanobot Build and Repair System", "Help", "", sb.ToString());
         }
     }
 }

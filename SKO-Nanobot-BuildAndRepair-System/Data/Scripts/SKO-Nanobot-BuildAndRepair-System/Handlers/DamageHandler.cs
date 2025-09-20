@@ -12,6 +12,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
     public static class DamageHandler
     {
         #region Registration
+
         private static bool _registered = false;
 
         public static void Register()
@@ -41,7 +42,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             _registered = false;
         }
-        #endregion
+
+        #endregion Registration
 
         /// <summary>
         /// Damage Handler: Prevent Damage from BuildAndRepairSystem

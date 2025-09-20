@@ -78,6 +78,12 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(21), XmlElement]
         public int MaximumOffset { get; set; }
 
+        [ProtoMember(22), XmlElement]
+        public bool SafeZoneCheckEnabled { get; set; }
+
+        [ProtoMember(23), XmlElement]
+        public bool ShieldCheckEnabled { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -92,6 +98,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
             MaximumRequiredElectricPowerStandby = NanobotSystem.WELDER_REQUIRED_ELECTRIC_POWER_STANDBY_DEFAULT;
             MaximumRequiredElectricPowerTransport = NanobotSystem.WELDER_REQUIRED_ELECTRIC_POWER_TRANSPORT_DEFAULT;
             Welder = new SyncModSettingsWelder();
+            SafeZoneCheckEnabled = true;
+            ShieldCheckEnabled = true;
         }
 
         public static SyncModSettings Load()

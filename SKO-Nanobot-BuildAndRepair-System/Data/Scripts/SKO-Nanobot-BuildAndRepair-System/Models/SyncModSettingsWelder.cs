@@ -158,7 +158,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             PushItemsImmediatelyFixed = false;
             PushItemsImmediatelyDefault = true;
             PushComponentImmediatelyFixed = false;
-            PushComponentImmediatelyDefault = false;
+            PushComponentImmediatelyDefault = true;
 
             CollectIfIdleDefault = false;
 

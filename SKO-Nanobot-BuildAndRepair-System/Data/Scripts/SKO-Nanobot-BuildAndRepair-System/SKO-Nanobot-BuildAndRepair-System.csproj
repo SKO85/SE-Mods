@@ -118,12 +118,19 @@
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Handlers\SafeZoneHandler.cs" />
+    <Compile Include="Helpers\InventoryHelper.cs" />
+    <Compile Include="Localization\TextsPolish.cs" />
+    <Compile Include="Localization\TextsRussian.cs" />
+    <Compile Include="Localization\TextsGerman.cs" />
+    <Compile Include="Localization\TextsEnglish.cs" />
+    <Compile Include="Models\TtlCache.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="Handlers\ChatHandler.cs" />
     <Compile Include="Handlers\ComponentPriorityHandling.cs" />
     <Compile Include="Handlers\DamageHandler.cs" />
+    <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />
     <Compile Include="Handlers\NetworkMessagingHandler.cs" />
-    <Compile Include="Helpers\CubeGridHelper.cs" />
     <Compile Include="Helpers\PowerHelper.cs" />
     <Compile Include="Helpers\SlimBlockHelper.cs" />
     <Compile Include="Helpers\MathHelper.cs" />
@@ -158,7 +165,9 @@
     <Compile Include="NanobotTerminal.cs" />
     <Compile Include="Handlers\PriorityHandling.cs" />
     <Compile Include="Utils\Utils.cs" />
+    <Compile Include="Utils\UtilsFaction.cs" />
     <Compile Include="Utils\UtilsInventory.cs" />
+    <Compile Include="Utils\UtilsPlayer.cs" />
     <Compile Include="Utils\UtilsProductionBlock.cs" />
     <Compile Include="Utils\UtilsSynchronization.cs" />
     <Compile Include="Utils\SlimBlockUtils.cs" />
