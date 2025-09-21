@@ -283,14 +283,14 @@ namespace SKONanobotBuildAndRepairSystem
                     break;
                 }
             }
-            
+
             NetworkMessagingHandler.MsgBlockDataRequestSend(this);
 
-            if(MyAPIGateway.Session.IsServer)
+            if (MyAPIGateway.Session.IsServer)
             {
                 SetSafeZoneAndShieldStates();
                 NetworkMessagingHandler.MsgBlockStateSend(0, this);
-            }            
+            }
 
             UpdateCustomInfo(true);
 
@@ -345,7 +345,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _TempIgnore4Components?.Clear();
 
                 _DelayWatch?.Stop();
-                
+
                 // Remove system from list.
                 lock (Mod.NanobotSystems)
                 {
@@ -469,7 +469,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (!fast)
                     {
-                        CleanupFriendlyDamage();                        
+                        CleanupFriendlyDamage();
                     }
 
                     ServerTryWeldingGrindingCollecting();
@@ -480,7 +480,6 @@ namespace SKONanobotBuildAndRepairSystem
                         try
                         {
                             SetSafeZoneAndShieldStates();
-                                                        
                         }
                         catch { }
                     }
@@ -512,7 +511,7 @@ namespace SKONanobotBuildAndRepairSystem
                         UpdateCustomInfo(true);
                         State.ResetChanged();
                     }
-                }                
+                }
 
                 if (Settings.IsTransmitNeeded())
                 {
@@ -612,7 +611,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (transporting && State.CurrentTransportIsPick) needgrinding = true;
 
-                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting) 
+                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
                     ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
 
                 if (!transporting)
@@ -2497,17 +2496,17 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if ((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0)
                 {
-                    if(Settings.CurrentPickedWeldingBlock != null)
+                    if (Settings.CurrentPickedWeldingBlock != null)
                     {
                         customInfo.Append(Texts.Info_CurentWeldEntity + Environment.NewLine);
                         customInfo.Append(string.Format(" -{0}" + Environment.NewLine, Settings.CurrentPickedWeldingBlock.BlockName()));
                     }
 
-                    if(Settings.CurrentPickedGrindingBlock != null)
+                    if (Settings.CurrentPickedGrindingBlock != null)
                     {
                         customInfo.Append(Texts.Info_CurentGrindEntity + Environment.NewLine);
                         customInfo.Append(string.Format(" -{0}" + Environment.NewLine, Settings.CurrentPickedGrindingBlock.BlockName()));
-                    }                    
+                    }
                 }
 
                 if (State.InventoryFull) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_InventoryFull}[/color]{Environment.NewLine + Environment.NewLine}");

@@ -116,7 +116,7 @@ namespace SKONanobotBuildAndRepairSystem
             try { ChatHandler.Unregister(); } catch { }
 
             // Unregister Safe-Zone Handler.
-            try { SafeZoneHandler.Unregister(); } catch { }            
+            try { SafeZoneHandler.Unregister(); } catch { }
 
             // Unregister Network Messaging Handler.
             try { NetworkMessagingHandler.Unregister(); } catch { }
@@ -157,7 +157,7 @@ namespace SKONanobotBuildAndRepairSystem
                             _LastGeneralPeriodicCheck = now;
                             MyAPIGateway.Parallel.StartBackground(() =>
                             {
-                                try { GridOwnershipCacheHandler.Update(); } catch { }                                
+                                try { GridOwnershipCacheHandler.Update(); } catch { }
                             });
                         }
 
@@ -174,7 +174,7 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             _LastTtlCacheCleanerCheck = now;
                             MyAPIGateway.Parallel.StartBackground(() =>
-                            {                                
+                            {
                                 try { InventoryHelper.Cleanup(); } catch { }
                                 try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
                             });
@@ -191,7 +191,7 @@ namespace SKONanobotBuildAndRepairSystem
                             NetworkMessagingHandler.MsgDataRequestSend();
                             _LastSyncModDataRequestSend = MyAPIGateway.Session.ElapsedPlayTime;
                         }
-                    }                   
+                    }
                 }
             }
             catch (Exception e)

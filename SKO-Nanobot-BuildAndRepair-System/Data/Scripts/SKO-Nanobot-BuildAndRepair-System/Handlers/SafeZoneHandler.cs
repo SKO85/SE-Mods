@@ -28,8 +28,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             if (_registered || MyAPIGateway.Session == null)
                 return;
-            
-            if(MyAPIGateway.Session.IsServer)
+
+            if (MyAPIGateway.Session.IsServer)
             {
                 // Seed from existing entities
                 GetSafeZones();
@@ -195,7 +195,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     return true;
 
                 if (system != null && system.Welder != null)
-                {                    
+                {
                     var safeZone = GetIntersectingSafeZone(system.Welder.CubeGrid);
                     if (safeZone != null && safeZone.Enabled)
                     {

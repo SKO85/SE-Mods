@@ -34,7 +34,6 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             {
                 return isConnected;
             }
-            ;
 
             var welderInventory = welder.GetInventory(0);
             var maxInv = terminalBlock.InventoryCount;
