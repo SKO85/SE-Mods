@@ -21,7 +21,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var needRepair =
                 !target.IsDestroyed &&
                 (target.FatBlock == null || !target.FatBlock.Closed) &&
-                (target.Integrity < neededIntegrityLevel || target.MaxDeformation >= 0.0001f);
+                (target.Integrity < neededIntegrityLevel || target.MaxDeformation >= 0.0005f || target.HasDeformation);
 
             return needRepair;
         }
