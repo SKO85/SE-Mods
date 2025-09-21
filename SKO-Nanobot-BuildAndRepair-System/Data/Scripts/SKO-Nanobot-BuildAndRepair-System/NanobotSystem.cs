@@ -2453,8 +2453,6 @@ namespace SKONanobotBuildAndRepairSystem
         private void AppendingCustomInfo(IMyTerminalBlock terminalBlock, StringBuilder customInfo)
         {
             customInfo.Clear();
-
-            customInfo.Append($"SZ: {SafeZoneHandler.Zones.Count}{Environment.NewLine}");
             customInfo.Append($"State: {GetStateString()}{Environment.NewLine}");
 
             var resourceSink = _Welder.ResourceSink as Sandbox.Game.EntityComponents.MyResourceSinkComponent;

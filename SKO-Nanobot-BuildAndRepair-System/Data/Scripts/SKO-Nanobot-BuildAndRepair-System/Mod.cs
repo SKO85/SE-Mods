@@ -167,7 +167,6 @@ namespace SKONanobotBuildAndRepairSystem
                             MyAPIGateway.Parallel.StartBackground(() =>
                             {
                                 try { SafeZoneHandler.GetSafeZones(); } catch { }
-                                try { SafeZoneHandler.Cleanup(); } catch { }
                             });
                         }
 
