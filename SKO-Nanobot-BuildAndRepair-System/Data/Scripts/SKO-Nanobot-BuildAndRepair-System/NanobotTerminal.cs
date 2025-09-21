@@ -11,7 +11,6 @@ using System.Text;
 using VRage;
 using VRage.ModAPI;
 using VRage.Scripting.MemorySafeTypes;
-using VRage.Utils;
 using VRageMath;
 
 namespace SKONanobotBuildAndRepairSystem

@@ -29,11 +29,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 return;
 
             // Register event for messages entered in the chat.
-            if(!_chatHandlerRegistered)
+            if (!_chatHandlerRegistered)
             {
                 MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
                 _chatHandlerRegistered = true;
-            }            
+            }
 
             _registered = true;
         }
@@ -46,11 +46,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             try
             {
                 // Unregister event for handling messages entered in the chat.
-                if(_chatHandlerRegistered)
+                if (_chatHandlerRegistered)
                 {
                     MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
                     _chatHandlerRegistered = false;
-                }                
+                }
             }
             catch (Exception)
             {
