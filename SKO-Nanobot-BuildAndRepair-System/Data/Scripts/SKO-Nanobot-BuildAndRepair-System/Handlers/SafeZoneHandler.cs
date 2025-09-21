@@ -29,12 +29,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             if (_registered || MyAPIGateway.Session == null)
                 return;
             
-            // Seed from existing entities
-            GetSafeZones();
+            if(MyAPIGateway.Session.IsServer)
+            {
+                // Seed from existing entities
+                GetSafeZones();
 
-            // Register event listeners
-            MyAPIGateway.Entities.OnEntityAdd += OnEntityAdd;
-            MyAPIGateway.Entities.OnEntityRemove += OnEntityRemove;
+                // Register event listeners
+                MyAPIGateway.Entities.OnEntityAdd += OnEntityAdd;
+                MyAPIGateway.Entities.OnEntityRemove += OnEntityRemove;
+            }
 
             _registered = true;
         }
@@ -43,11 +46,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
-                var safeZones = MySessionComponentSafeZones.SafeZones;
+                HashSet<IMyEntity> safeZones = new HashSet<IMyEntity>();
+                MyAPIGateway.Entities.GetEntities(safeZones, e => e is MySafeZone);
+
                 foreach (var entity in safeZones)
                 {
-                    Zones[entity.EntityId] = entity;
-                }                
+                    Zones[entity.EntityId] = entity as MySafeZone;
+                }
+
+                GridIntersectingZones.CleanupExpired();
             }
             catch { }
         }
@@ -56,9 +63,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             if (!_registered || MyAPIGateway.Session == null)
                 return;
-            
-            MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd;
-            MyAPIGateway.Entities.OnEntityRemove -= OnEntityRemove;           
+
+            if (MyAPIGateway.Session.IsServer)
+            {
+                MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd;
+                MyAPIGateway.Entities.OnEntityRemove -= OnEntityRemove;
+            }
 
             Zones?.Clear();
             GridIntersectingZones?.Entries?.Clear();
@@ -98,11 +108,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             catch { }
         }
 
-        public static void Cleanup()
-        {
-            GridIntersectingZones.CleanupExpired();
-        }
-
         /// <summary>
         /// Returns the first safe zone intersecting the grid's world AABB, or null if none.
         /// Uses a fast radius-distance precheck before the precise sphere vs AABB test.
@@ -110,7 +115,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static MySafeZone GetIntersectingSafeZone(IMyCubeGrid targetGrid)
         {
-            if (targetGrid == null || Zones.IsEmpty)
+            if (targetGrid == null || Zones.Count == 0)
             {
                 return null;
             }
@@ -129,7 +134,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     return zone;
                 }
             }
-
 
             foreach (var kv in Zones)
             {
@@ -187,10 +191,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
-                if (!Mod.Settings.SafeZoneCheckEnabled)
+                if (!Mod.Settings.SafeZoneCheckEnabled || Zones.Count == 0)
                     return true;
 
-                if (system != null && system.Welder != null && Zones.Count > 0)
+                if (system != null && system.Welder != null)
                 {                    
                     var safeZone = GetIntersectingSafeZone(system.Welder.CubeGrid);
                     if (safeZone != null && safeZone.Enabled)
