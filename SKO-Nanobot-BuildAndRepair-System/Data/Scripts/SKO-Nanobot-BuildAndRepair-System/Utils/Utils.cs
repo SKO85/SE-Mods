@@ -10,20 +10,52 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 {
     public static class Utils
     {
+        public static float MinDeformation = 0.01f;
+
         /// <summary>
-        /// Is the block damaged/incomplete/projected
+        /// Is the block damaged/incomplete
         /// </summary>
         public static bool NeedRepair(this IMySlimBlock target, bool functionalOnly)
         {
             if (target == null) return false;
+            if (target.IsDestroyed) return false;
+            if (target.FatBlock != null && (target.FatBlock.Closed || target.FatBlock.MarkedForClose)) return false;
 
+            // Integrity check first.
             var neededIntegrityLevel = GetRequiredIntegrity(target, functionalOnly);
-            var needRepair =
-                !target.IsDestroyed &&
-                (target.FatBlock == null || !target.FatBlock.Closed) &&
-                (target.Integrity < neededIntegrityLevel || target.MaxDeformation >= 0.0005f || target.HasDeformation);
+            var hasReachedIntegrity = target.Integrity >= neededIntegrityLevel;
 
-            return needRepair;
+            // Integrty is lower, so we can say it needs a repair without checking deformations.
+            if (!hasReachedIntegrity) return true;
+
+            // If deformation detected via MaxDeformation, just fix the bones and do not tell the BnR system to weld anything.
+            if (target.MaxDeformation > MinDeformation)
+            {
+                // Keep trackign the minimal deformation.
+                if (target.MaxDeformation < MinDeformation)
+                {
+                    MinDeformation = target.MaxDeformation;
+                }
+
+                // Just try fix the bones structure for defromations.
+                target.FixBones(0, 100f);
+
+                // Report it as target not to weld in this case as MaxDeformation is bugged in game and not resetting.
+                // It resets after restart of the game or after block is fully removed.
+                return false;
+            }
+
+            // If deformation detected via HasDeformation, also fix the bones.
+            if (target.HasDeformation)
+            {
+                // try fix the bones as integrity is already on required level.
+                target.FixBones(0, 100f);
+
+                // Tell it to weld in this case as this property seems to be reliable, but heavy.
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -64,8 +96,10 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         {
             var cubeGrid = target.CubeGrid as MyCubeGrid;
             if (cubeGrid == null || cubeGrid.Projector == null) return false;
+
             //Doesn't work reliable as projector does not update Dithering
             //return gui ? ((IMyProjector)cubeGrid.Projector).CanBuild(target, true) == BuildCheckResult.OK : target.Dithering >= -MyGridConstants.BUILDER_TRANSPARENCY;
+
             return ((IMyProjector)cubeGrid.Projector).CanBuild(target, gui) == BuildCheckResult.OK;
         }
 

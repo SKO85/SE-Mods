@@ -5,6 +5,7 @@ using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
 using VRage.Game.ModAPI;
+using VRage.ModAPI;
 using VRageMath;
 
 namespace SKONanobotBuildAndRepairSystem.Models
@@ -460,11 +461,44 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
             PossibleWeldTargets.Clear();
             var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
-            if (possibleWeldTargetsSync != null) foreach (var item in possibleWeldTargetsSync) PossibleWeldTargets.Add(new TargetBlockData(SyncEntityId.GetItemAsSlimBlock(item.Entity), item.Distance, 0));
+            if (possibleWeldTargetsSync != null)
+            {
+                foreach (var item in possibleWeldTargetsSync)
+                {
+                    if (item.Entity == null)
+                        continue;
+
+                    if (item.Entity.EntityId == 0)
+                    {
+                        IMyEntity gridEntity;
+                        if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
+                        {
+                            var grid = gridEntity as IMyCubeGrid;
+                            var block = grid?.GetCubeBlock(item.Entity.Position.Value);
+                            if (block != null)
+                            {
+                                PossibleWeldTargets.Add(new TargetBlockData(SyncEntityId.GetItemAsSlimBlock(SyncEntityId.GetSyncId(block)), item.Distance, 0));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                        PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                    }
+                }
+            }
 
             PossibleGrindTargets.Clear();
             var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
-            if (possibleGrindTargetsSync != null) foreach (var item in possibleGrindTargetsSync) PossibleGrindTargets.Add(new TargetBlockData(SyncEntityId.GetItemAsSlimBlock(item.Entity), item.Distance, 0));
+            if (possibleGrindTargetsSync != null)
+            {
+                foreach (var item in possibleGrindTargetsSync)
+                {
+                    var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                    PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                }
+            }
 
             PossibleFloatingTargets.Clear();
             var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;

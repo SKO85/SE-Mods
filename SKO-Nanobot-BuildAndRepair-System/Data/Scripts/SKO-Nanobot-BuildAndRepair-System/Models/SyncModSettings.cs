@@ -84,6 +84,9 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(23), XmlElement]
         public bool ShieldCheckEnabled { get; set; }
 
+        [ProtoMember(24), XmlElement]
+        public bool DecreaseFactionReputationOnGrinding { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -100,6 +103,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             Welder = new SyncModSettingsWelder();
             SafeZoneCheckEnabled = true;
             ShieldCheckEnabled = true;
+            DecreaseFactionReputationOnGrinding = true;
         }
 
         public static SyncModSettings Load()
