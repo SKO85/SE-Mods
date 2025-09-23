@@ -118,6 +118,7 @@
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Handlers\BlockSystemAssigningHandler.cs" />
     <Compile Include="Handlers\SafeZoneHandler.cs" />
     <Compile Include="Helpers\InventoryHelper.cs" />
     <Compile Include="Localization\TextsPolish.cs" />

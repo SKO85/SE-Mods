@@ -29,12 +29,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
         public static SyncEntityId GetSyncId(object item)
         {
             if (item == null) return null;
+
             var slimBlock = item as IMySlimBlock;
             if (slimBlock != null)
             {
                 if (slimBlock.FatBlock != null)
                 {
-                    return new SyncEntityId() { EntityId = slimBlock.FatBlock.EntityId, GridId = slimBlock.CubeGrid != null ? slimBlock.CubeGrid.EntityId : 0, Position = slimBlock.Position };
+                    return new SyncEntityId() { EntityId = slimBlock.FatBlock.EntityId, GridId = slimBlock.CubeGrid?.EntityId ?? 0, Position = slimBlock.Position };
                 }
                 else if (slimBlock.CubeGrid != null)
                 {
@@ -75,6 +76,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     return entity;
                 }
             }
+
             if (id.GridId != 0 && id.Position != null)
             {
                 IMyEntity entity;
@@ -84,10 +86,12 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     return grid != null ? grid.GetCubeBlock(id.Position.Value) : null;
                 }
             }
+
             if (id.Position != null)
             {
                 return id.Position;
             }
+
             if (id.Box != null)
             {
                 IMyEntity entity;
@@ -118,10 +122,12 @@ namespace SKONanobotBuildAndRepairSystem.Models
         public override bool Equals(object obj)
         {
             var syncObj = obj as SyncEntityId;
+
             if (obj == null || syncObj == null)
             {
                 return false;
             }
+
             return EntityId == syncObj.EntityId && GridId == syncObj.GridId && Position.Equals(syncObj.Position) && Box.Equals(syncObj.Box);
         }
 

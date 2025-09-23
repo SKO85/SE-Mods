@@ -84,7 +84,7 @@ namespace SKONanobotBuildAndRepairSystem
         private HashSet<IMyInventory> _TempIgnore4Components = new HashSet<IMyInventory>();
 
         private IMyShipWelder _Welder;
-        private IMyInventory _TransportInventory;
+        public IMyInventory _TransportInventory;
         private NanobotSystemEffects _Effects = new NanobotSystemEffects();
 
         private bool _IsInit;
@@ -852,31 +852,52 @@ namespace SKONanobotBuildAndRepairSystem
 
             lock (State.PossibleGrindTargets)
             {
-                foreach (var targetData in State.PossibleGrindTargets)
-                {
-                    var cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;
-                    if (!cubeGrid.IsPowered && !cubeGrid.IsStatic) cubeGrid.Physics.ClearSpeed();
-                }
+                //foreach (var targetData in State.PossibleGrindTargets)
+                //{
+                //    var cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;
+                //    if (!cubeGrid.IsPowered && !cubeGrid.IsStatic) cubeGrid.Physics.ClearSpeed();
+                //}
 
                 foreach (var targetData in State.PossibleGrindTargets)
                 {
-                    if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && targetData.Block != Settings.CurrentPickedGrindingBlock) continue;
+                    if (targetData.Block != null && targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed)
+                    {
+                        continue;
+                    }
+
+                    //if (_Welder.IsWorking && _Welder.Enabled && !targetData.Block.AssignToSystem(_Welder.EntityId))
+                    //{
+                    //    continue;
+                    //}
+
+                    if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && targetData.Block != Settings.CurrentPickedGrindingBlock)
+                    {
+                        continue;
+                    }
 
                     if (!targetData.Block.IsDestroyed)
                     {
                         needgrinding = true;
+
                         grinding = ServerDoGrind(targetData, out transporting);
-                        if (grinding)
+
+                        if (grinding || transporting)
                         {
                             currentGrindingBlock = targetData.Block;
                             break; //Only grind one block at once
+                        }
+
+                        if (targetData.Ignore || targetData.Block.IsFullyDismounted)
+                        {
+                            // Release the block from this system.
+                            targetData.Block.ReleaseFromSystem();
                         }
                     }
                 }
             }
 
             // Faction reputation when grinding for not owned grids.
-            if (currentGrindingBlock != null)
+            if (Mod.Settings.DecreaseFactionReputationOnGrinding && currentGrindingBlock != null)
             {
                 if (currentGrindingBlock.OwnerId != Welder.OwnerId && currentGrindingBlock.CubeGrid.EntityId != Welder.CubeGrid.EntityId)
                 {
@@ -906,9 +927,24 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 foreach (var targetData in State.PossibleWeldTargets)
                 {
+                    if (State.CurrentWeldingBlock != null && State.CurrentWeldingBlock != targetData.Block)
+                    {
+                        continue;
+                    }
+
                     if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && targetData.Block != Settings.CurrentPickedWeldingBlock) continue;
                     if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) || (!targetData.Ignore && Weldable(targetData)))
                     {
+                        if (targetData.Block != null && targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed)
+                        {
+                            continue;
+                        }
+
+                        //if (_Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers && !targetData.Block.AssignToSystem(_Welder.EntityId))
+                        //{
+                        //    continue;
+                        //}
+
                         needwelding = true;
 
                         if (!transporting) //Transport needs to be weld afterwards
@@ -921,13 +957,21 @@ namespace SKONanobotBuildAndRepairSystem
                         ServerEmptyTranportInventory(false);
 
                         if (targetData.Ignore)
+                        {
+                            targetData.Block.ReleaseFromSystem();
                             State.PossibleWeldTargets.ChangeHash();
+                        }
 
-                        if (welding)
+                        // TODO, other version did... if (welding || transporting)
+                        if (welding || transporting)
                         {
                             currentWeldingBlock = targetData.Block;
                             break; //Only weld one block at once (do not split over all blocks as the base shipwelder does)
                         }
+                    }
+                    else
+                    {
+                        // TODO: Cooldown as the block is not weldable...
                     }
                 }
             }
@@ -941,34 +985,38 @@ namespace SKONanobotBuildAndRepairSystem
         private bool Weldable(TargetBlockData targetData)
         {
             var target = targetData.Block;
+
             if ((targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0)
             {
                 if (target.CanBuild(true))
+                {
+                    targetData.Ignore = false;
                     return true;
+                }
 
                 // Is the block already created (maybe by user or an other BaR block) ->
                 // After creation we can't welding this projected block, we have to find the 'physical' block instead.
-                var cubeGridProjected = target.CubeGrid as MyCubeGrid;
-                if (cubeGridProjected != null && cubeGridProjected.Projector != null)
-                {
-                    var cubeGrid = cubeGridProjected.Projector.CubeGrid;
-                    var blockPos = cubeGrid.WorldToGridInteger(cubeGridProjected.GridIntegerToWorld(target.Position));
-                    target = cubeGrid.GetCubeBlock(blockPos);
+                //var cubeGridProjected = target.CubeGrid as MyCubeGrid;
+                //if (cubeGridProjected != null && cubeGridProjected.Projector != null)
+                //{
+                //    var cubeGrid = cubeGridProjected.Projector.CubeGrid;
+                //    var blockPos = cubeGrid.WorldToGridInteger(cubeGridProjected.GridIntegerToWorld(target.Position));
+                //    target = cubeGrid.GetCubeBlock(blockPos);
 
-                    if (target != null)
-                    {
-                        targetData.Block = target;
-                        targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
-                        return Weldable(targetData);
-                    }
-                }
+                //    if (target != null)
+                //    {
+                //        targetData.Block = target;
+                //        targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
+                //        return Weldable(targetData);
+                //    }
+                //}
+
                 targetData.Ignore = true;
                 return false;
             }
 
-            var needRepair = target.NeedRepair((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0);
-            var integrityReached = IsWeldIntegrityReached(target);
-            var weld = (!integrityReached || needRepair) && !IsFriendlyDamage(target);
+            var isFunctionalOnly = (Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0;
+            var weld = (!IsWeldIntegrityReached(target) || target.NeedRepair(isFunctionalOnly)) && !IsFriendlyDamage(target);
 
             targetData.Ignore = !weld;
             return weld;
@@ -985,7 +1033,6 @@ namespace SKONanobotBuildAndRepairSystem
                 }
 
                 var requiredIntegrity = target.GetRequiredIntegrity(isFunctionalOnly);
-
                 return target.Integrity >= requiredIntegrity;
             }
             catch
@@ -1076,6 +1123,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var cubeGridProjected = target.CubeGrid as MyCubeGrid;
                 var blockDefinition = target.BlockDefinition as MyCubeBlockDefinition;
                 var item = _TransportInventory.FindItem(blockDefinition.Components[0].Definition.Id);
+
                 if (item != null && item.Amount >= 1 && cubeGridProjected != null && cubeGridProjected.Projector != null)
                 {
                     if (_Welder.IsWithinWorldLimits(cubeGridProjected.Projector, blockDefinition.BlockPairName, blockDefinition.PCU))
@@ -1085,15 +1133,25 @@ namespace SKONanobotBuildAndRepairSystem
                             ((Sandbox.ModAPI.IMyProjector)cubeGridProjected.Projector).Build(target, _Welder.OwnerId, _Welder.EntityId, true, _Welder.SlimBlock.BuiltBy);
                         }
 
-                        _TransportInventory.RemoveItems(item.ItemId, 1);
+                        // TODO Check this again.
+                        // _TransportInventory.RemoveItems(item.ItemId, 1);
 
                         //After creation we can't welding this projected block, we have to find the 'physical' block instead.
                         var cubeGrid = cubeGridProjected.Projector.CubeGrid;
-                        Vector3I blockPos = cubeGrid.WorldToGridInteger(cubeGridProjected.GridIntegerToWorld(target.Position));
+                        var blockPos = cubeGrid.WorldToGridInteger(cubeGridProjected.GridIntegerToWorld(target.Position));
+
                         target = cubeGrid.GetCubeBlock(blockPos);
-                        if (target != null) targetData.Block = target;
-                        targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
-                        created = true;
+
+                        if (target != null)
+                        {
+                            targetData.Block = target;
+                            targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
+                            created = true;
+                        }
+                        else
+                        {
+                            targetData.Ignore = true;
+                        }
                     }
                     else
                     {
@@ -1118,7 +1176,8 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
                     }
-                    if (target.IsFullIntegrity || (((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0) && target.Integrity >= target.MaxIntegrity * ((MyCubeBlockDefinition)target.BlockDefinition).CriticalIntegrityRatio))
+
+                    if (IsWeldIntegrityReached(target))
                     {
                         targetData.Ignore = true;
                     }
@@ -1130,6 +1189,7 @@ namespace SKONanobotBuildAndRepairSystem
                     target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
                 }
             }
+
             return welding || created;
         }
 

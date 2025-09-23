@@ -1,6 +1,7 @@
 namespace SKONanobotBuildAndRepairSystem
 {
     using DefenseShields;
+    using Sandbox.Game.EntityComponents;
     using Sandbox.ModAPI;
     using SKONanobotBuildAndRepairSystem.Handlers;
     using SKONanobotBuildAndRepairSystem.Helpers;
@@ -8,7 +9,9 @@ namespace SKONanobotBuildAndRepairSystem
     using SKONanobotBuildAndRepairSystem.Utils;
     using System;
     using System.Collections.Generic;
+    using System.Text;
     using VRage.Game.Components;
+    using VRage.Game.ModAPI;
 
     [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
     public class Mod : MySessionComponentBase
@@ -177,6 +180,7 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 try { InventoryHelper.Cleanup(); } catch { }
                                 try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
+                                try { BlockSystemAssigningHandler.Cleanup(); } catch { }
                             });
                         }
 
@@ -192,6 +196,9 @@ namespace SKONanobotBuildAndRepairSystem
                             _LastSyncModDataRequestSend = MyAPIGateway.Session.ElapsedPlayTime;
                         }
                     }
+
+                    // Show some debug info on blocks we point to:
+                    // BlockDebugInfo();
                 }
             }
             catch (Exception e)
@@ -212,6 +219,31 @@ namespace SKONanobotBuildAndRepairSystem
                     buildAndRepairSystem.UpdateSourcesAndTargetsTimer();
                 }
                 _LastSourcesAndTargetsUpdateTimer = MyAPIGateway.Session.ElapsedPlayTime;
+            }
+        }
+
+        private void BlockDebugInfo()
+        {
+            try
+            {
+                var tool = MyAPIGateway.Session.Player.Character.EquippedTool;
+                if (tool != null)
+                {
+                    var target = tool.Components.Get<MyCasterComponent>()?.HitBlock as IMySlimBlock;
+                    if (target != null)
+                    {
+                        var sb = new StringBuilder();
+                        sb.AppendLine($"Target: {target.BlockName()}");
+                        sb.AppendLine($"Integrity: {target.Integrity}/{target.MaxIntegrity}");
+                        sb.AppendLine($"MaxDeformation: {target.MaxDeformation}");
+                        sb.AppendLine($"HasDeformation: {target.HasDeformation}");
+                        sb.AppendLine($"MinDeformation: {Utils.Utils.MinDeformation}");
+                        MyAPIGateway.Utilities.ShowNotification(sb.ToString(), 500);
+                    }
+                }
+            }
+            catch
+            {
             }
         }
 
