@@ -22,7 +22,6 @@ using VRage.ObjectBuilders;
 using VRage.Scripting.MemorySafeTypes;
 using VRage.Utils;
 using VRageMath;
-using static SKONanobotBuildAndRepairSystem.Handlers.SafeZoneHandler;
 using static SKONanobotBuildAndRepairSystem.Utils.UtilsInventory;
 using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
 using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
@@ -321,7 +320,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (_onIsWorkingChanged != null) _Welder.IsWorkingChanged -= _onIsWorkingChanged;
                 }
 
-                ServerEmptyTranportInventory(true);
+                // ServerEmptyTranportInventory(true);
 
                 // Stop effects
                 State.CurrentTransportTarget = null;
@@ -474,12 +473,15 @@ namespace SKONanobotBuildAndRepairSystem
 
                     ServerTryWeldingGrindingCollecting();
 
-                    if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PeriodicExtraChecksLast).TotalSeconds >= 3)
+                    if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PeriodicExtraChecksLast).TotalSeconds >= 4)
                     {
                         _PeriodicExtraChecksLast = MyAPIGateway.Session.ElapsedPlayTime;
                         try
                         {
-                            SetSafeZoneAndShieldStates();
+                            if (SetSafeZoneAndShieldStates())
+                            {
+                                UpdateCustomInfo(true);
+                            }
                         }
                         catch { }
                     }
@@ -537,9 +539,11 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool SetSafeZoneAndShieldStates()
         {
-            var safezoneAllowsWelding = SafeZoneHandler.IsActionAllowedForSystem(this, SafeZoneAction.Welding);
-            var safeZoneAllowsBuildingProjections = SafeZoneHandler.IsActionAllowedForSystem(this, SafeZoneAction.BuildingProjections);
-            var safeZoneAllowsGrinding = SafeZoneHandler.IsActionAllowedForSystem(this, SafeZoneAction.Grinding);
+            var safeZoneActionsState = SafeZoneHandler.GetActionsAllowedForSystem(this);
+
+            var safezoneAllowsWelding = safeZoneActionsState.IsWeldingAllowed;
+            var safeZoneAllowsBuildingProjections = safeZoneActionsState.IsBuildingProjectionsAllowed;
+            var safeZoneAllowsGrinding = safeZoneActionsState.IsGrindingAllowed;
             var welderIsShielded = IsWelderShielded();
             var changed = false;
 
@@ -585,6 +589,9 @@ namespace SKONanobotBuildAndRepairSystem
             var collecting = false;
             var needcollecting = false;
             var transporting = false;
+
+            if (_Welder.Closed || _Welder.MarkedForClose)
+                return;
 
             var ready = _Welder.Enabled && _Welder.IsWorking && _Welder.IsFunctional;
 

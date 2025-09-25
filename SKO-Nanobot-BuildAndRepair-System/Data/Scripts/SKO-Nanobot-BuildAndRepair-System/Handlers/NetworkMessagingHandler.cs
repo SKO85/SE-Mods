@@ -69,24 +69,32 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ServerMsgDataRequestReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
-            var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModDataRequest>(data);
-            MsgModSettingsSend(msgRcv.SteamId);
+            try
+            {
+                var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModDataRequest>(data);
+                MsgModSettingsSend(msgRcv.SteamId);
+            }
+            catch { }
         }
 
         private static void ServerMsgBlockDataRequestReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
-            var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgBlockDataRequest>(data);
+            try
+            {
+                var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgBlockDataRequest>(data);
 
-            NanobotSystem system;
-            if (Mod.NanobotSystems.TryGetValue(msgRcv.EntityId, out system))
-            {
-                MsgBlockSettingsSend(msgRcv.SteamId, system);
-                MsgBlockStateSend(msgRcv.SteamId, system);
+                NanobotSystem system;
+                if (Mod.NanobotSystems.TryGetValue(msgRcv.EntityId, out system))
+                {
+                    MsgBlockSettingsSend(msgRcv.SteamId, system);
+                    MsgBlockStateSend(msgRcv.SteamId, system);
+                }
+                else
+                {
+                    if (Logging.Instance.ShouldLog(Logging.Level.Error)) Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockDataRequestReceived for unknown system SteamId{0} EntityId={1}", msgRcv.SteamId, msgRcv.EntityId);
+                }
             }
-            else
-            {
-                if (Logging.Instance.ShouldLog(Logging.Level.Error)) Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockDataRequestReceived for unknown system SteamId{0} EntityId={1}", msgRcv.SteamId, msgRcv.EntityId);
-            }
+            catch { }
         }
 
         #endregion Server Message Received Handlers
@@ -176,108 +184,131 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void MsgModSettingsSend(ulong steamId)
         {
-            if (!MyAPIGateway.Session.IsServer)
-                return;
-
-            var msgSnd = new MsgModSettings()
+            try
             {
-                Settings = Mod.Settings
-            };
+                if (!MyAPIGateway.Session.IsServer)
+                    return;
 
-            if (!MyAPIGateway.Multiplayer.SendMessageTo(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true))
-            {
-                Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncModSettingsSend failed");
+                var msgSnd = new MsgModSettings()
+                {
+                    Settings = Mod.Settings
+                };
+
+                if (!MyAPIGateway.Multiplayer.SendMessageTo(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true))
+                {
+                    Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncModSettingsSend failed");
+                }
             }
+            catch { }
         }
 
         public static void MsgDataRequestSend()
         {
-            if (MyAPIGateway.Session.IsServer)
-                return;
+            try
+            {
+                if (MyAPIGateway.Session.IsServer)
+                    return;
 
-            var msgSnd = new MsgModDataRequest();
+                var msgSnd = new MsgModDataRequest();
 
-            if (MyAPIGateway.Session.Player != null)
-                msgSnd.SteamId = MyAPIGateway.Session.Player.SteamUserId;
-            else
-                msgSnd.SteamId = 0;
+                if (MyAPIGateway.Session.Player != null)
+                    msgSnd.SteamId = MyAPIGateway.Session.Player.SteamUserId;
+                else
+                    msgSnd.SteamId = 0;
 
-            MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_MOD_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_MOD_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+            }
+            catch { }
         }
 
         public static void MsgBlockSettingsSend(ulong steamId, NanobotSystem block)
         {
-            var msgSnd = new MsgBlockSettings();
-            msgSnd.EntityId = block.Entity.EntityId;
-            msgSnd.Settings = block.Settings.GetTransmit();
-
-            var res = false;
-
-            if (MyAPIGateway.Session.IsServer)
+            try
             {
-                if (steamId == 0)
+                if (block == null || block.Closed || block.MarkedForClose || block.Welder == null || block.Welder.Closed || block.Welder.MarkedForClose)
+                    return;
+
+                var msgSnd = new MsgBlockSettings();
+                msgSnd.EntityId = block.Entity.EntityId;
+                msgSnd.Settings = block.Settings.GetTransmit();
+
+                var res = false;
+
+                if (MyAPIGateway.Session.IsServer)
                 {
-                    res = MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                    if (steamId == 0)
+                    {
+                        res = MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                    }
+                    else
+                    {
+                        res = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true);
+                    }
                 }
                 else
                 {
-                    res = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true);
+                    res = MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_SETTINGS_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                }
+
+                if (!res && Logging.Instance.ShouldLog(Logging.Level.Error))
+                {
+                    Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockSettingsSend failed", Logging.BlockName(block.Entity, Logging.BlockNameOptions.None));
                 }
             }
-            else
-            {
-                res = MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_SETTINGS_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
-            }
-
-            if (!res && Logging.Instance.ShouldLog(Logging.Level.Error))
-            {
-                Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockSettingsSend failed", Logging.BlockName(block.Entity, Logging.BlockNameOptions.None));
-            }
+            catch { }
         }
 
         public static void MsgBlockStateSend(ulong steamId, NanobotSystem system)
         {
-            if (!MyAPIGateway.Session.IsServer)
-                return;
-
-            if (!MyAPIGateway.Multiplayer.MultiplayerActive)
-                return;
-
-            var msgSnd = new MsgBlockState();
-            msgSnd.EntityId = system.Entity.EntityId;
-            msgSnd.State = system.State.GetTransmit();
-
-            var res = false;
-            if (steamId == 0)
+            try
             {
-                res = MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_BLOCK_STATE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
-            }
-            else
-            {
-                res = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_STATE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true);
-            }
+                if (!MyAPIGateway.Session.IsServer)
+                    return;
 
-            if (!res && Logging.Instance.ShouldLog(Logging.Level.Error))
-            {
-                Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockStateSend Failed");
+                if (!MyAPIGateway.Multiplayer.MultiplayerActive)
+                    return;
+
+                var msgSnd = new MsgBlockState();
+                msgSnd.EntityId = system.Entity.EntityId;
+                msgSnd.State = system.State.GetTransmit();
+
+                var res = false;
+                if (steamId == 0)
+                {
+                    res = MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_BLOCK_STATE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                }
+                else
+                {
+                    res = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_STATE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true);
+                }
+
+                if (!res && Logging.Instance.ShouldLog(Logging.Level.Error))
+                {
+                    Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockStateSend Failed");
+                }
             }
+            catch { }
         }
 
         public static void MsgBlockDataRequestSend(NanobotSystem block)
         {
-            if (MyAPIGateway.Session.IsServer)
-                return;
+            try
+            {
+                if (MyAPIGateway.Session.IsServer)
+                    return;
 
-            var msgSnd = new MsgBlockDataRequest();
+                var msgSnd = new MsgBlockDataRequest();
 
-            if (MyAPIGateway.Session.Player != null)
-                msgSnd.SteamId = MyAPIGateway.Session.Player.SteamUserId;
-            else
-                msgSnd.SteamId = 0;
+                if (MyAPIGateway.Session.Player != null)
+                    msgSnd.SteamId = MyAPIGateway.Session.Player.SteamUserId;
+                else
+                    msgSnd.SteamId = 0;
 
-            msgSnd.EntityId = block.Entity.EntityId;
+                msgSnd.EntityId = block.Entity.EntityId;
 
-            MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+            }
+            catch { }
         }
 
         #endregion Send Handlers

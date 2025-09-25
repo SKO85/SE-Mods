@@ -164,7 +164,7 @@ namespace SKONanobotBuildAndRepairSystem
                             });
                         }
 
-                        if (now.Subtract(_LastSafeZoneUpdateCheck) >= TimeSpan.FromSeconds(10))
+                        if (now.Subtract(_LastSafeZoneUpdateCheck) >= TimeSpan.FromSeconds(6))
                         {
                             _LastSafeZoneUpdateCheck = now;
                             MyAPIGateway.Parallel.StartBackground(() =>
@@ -238,7 +238,7 @@ namespace SKONanobotBuildAndRepairSystem
                         sb.AppendLine($"MaxDeformation: {target.MaxDeformation}");
                         sb.AppendLine($"HasDeformation: {target.HasDeformation}");
                         sb.AppendLine($"MinDeformation: {Utils.Utils.MinDeformation}");
-                        MyAPIGateway.Utilities.ShowNotification(sb.ToString(), 500);
+                        MyAPIGateway.Utilities.ShowNotification(sb.ToString(), 5000);
                     }
                 }
             }

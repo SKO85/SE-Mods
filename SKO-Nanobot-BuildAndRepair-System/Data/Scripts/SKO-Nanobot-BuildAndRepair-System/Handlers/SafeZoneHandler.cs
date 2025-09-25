@@ -1,9 +1,12 @@
 ﻿using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
+using SpaceEngineers.Game.ModAPI;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
+using VRage;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRageMath;
@@ -18,6 +21,18 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
            defaultTtl: TimeSpan.FromSeconds(15),
            concurrencyLevel: 4,
            comparer: null,
+           capacity: 100);
+
+        private static readonly TtlCache<long, long> BlockIntersectingZones = new TtlCache<long, long>(
+           defaultTtl: TimeSpan.FromSeconds(15),
+           concurrencyLevel: 4,
+           comparer: null,
+           capacity: 100);
+
+        private static readonly TtlCache<MyTuple<long, long>, bool> ProtectedFromGindingCache = new TtlCache<MyTuple<long, long>, bool>(
+           defaultTtl: TimeSpan.FromSeconds(15),
+           concurrencyLevel: 4,
+           comparer: new MyTupleComparer<long, long>(),
            capacity: 100);
 
         #region Registration
@@ -55,6 +70,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 }
 
                 GridIntersectingZones.CleanupExpired();
+                ProtectedFromGindingCache.CleanupExpired();
+                BlockIntersectingZones.CleanupExpired();
             }
             catch { }
         }
@@ -71,7 +88,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
 
             Zones?.Clear();
-            GridIntersectingZones?.Entries?.Clear();
+            GridIntersectingZones.Clear();
+            ProtectedFromGindingCache.Clear();
+            BlockIntersectingZones.Clear();
 
             _registered = false;
         }
@@ -113,6 +132,27 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         /// Uses a fast radius-distance precheck before the precise sphere vs AABB test.
         /// </summary>
 
+        public static List<MySafeZone> GetSafeZonesInRange(IMyCubeGrid targetGrid, int range, int take = 2)
+        {
+            if (Zones.Count == 0) return new List<MySafeZone>();
+
+            var zones = Zones.Values.Where(z =>
+            {
+                if (z != null && !z.Closed && !z.MarkedForClose && z.Enabled)
+                {
+                    double distance = Vector3D.Distance(targetGrid.WorldAABB.Center, z.PositionComp.WorldAABB.Center);
+                    if (distance <= range)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }).Take(take).ToList();
+
+            return zones;
+        }
+
         public static MySafeZone GetIntersectingSafeZone(IMyCubeGrid targetGrid)
         {
             if (targetGrid == null || Zones.Count == 0)
@@ -135,43 +175,121 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 }
             }
 
-            foreach (var kv in Zones)
+            // Get safe-zones within 300m range.
+            var zones = GetSafeZonesInRange(targetGrid, 300);
+
+            foreach (var zone in zones)
             {
-                var zone = kv.Value;
-                if (zone == null || zone.Closed || !zone.Enabled)
+                if (zone == null || zone.Closed || zone.MarkedForClose || !zone.Enabled)
                 {
                     continue;
                 }
 
-                BoundingBoxD targetBox = targetGrid.WorldAABB;
-                var checkSphere = new BoundingSphereD(zone.PositionComp.GetPosition(), zone.Radius);
-                var targetIntersects = checkSphere.Intersects(targetBox);
-
+                var targetIntersects = GridIntersects(targetGrid, zone);
                 if (targetIntersects)
                 {
-                    SetSubgridCache(targetGrid, zone.EntityId);
+                    // It intersects, so cache this and also for its subgrids.
+                    GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
+                    CacheZoneForSubGrids(targetGrid, zone.EntityId);
+
+                    // Return the intersecting zone.
                     return zone;
                 }
                 else
                 {
-                    SetSubgridCache(targetGrid, 0);
+                    // Get the subgrids.
+                    var groups = new List<IMyCubeGrid>();
+                    MyAPIGateway.GridGroups.GetGroup(targetGrid, GridLinkTypeEnum.Mechanical, groups);
+
+                    var subGridIntersects = false;
+                    foreach (var subGrid in groups)
+                    {
+                        if (subGrid.EntityId == targetGrid.EntityId)
+                            continue;
+
+                        // If a subgrid intersects, then mark the parent too and all other subgrids.
+                        if (GridIntersects(subGrid, zone))
+                        {
+                            subGridIntersects = true;
+                            GridIntersectingZones.Set(subGrid.EntityId, zone.EntityId);
+                            GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
+
+                            CacheZoneForSubGrids(subGrid, zone.EntityId);
+                            return zone;
+                        }
+                    }
+
+                    // If no subgrid intersection found, then nothing intersects.
+                    if (!subGridIntersects)
+                    {
+                        GridIntersectingZones.Set(targetGrid.EntityId, 0);
+                        CacheZoneForSubGrids(targetGrid, 0);
+                    }
                 }
             }
 
             return null;
         }
 
-        private static void SetSubgridCache(IMyCubeGrid targetGrid, long zoneId)
+        private static void CacheZoneForSubGrids(IMyCubeGrid targetGrid, long zoneId)
         {
             var groups = new List<IMyCubeGrid>();
             MyAPIGateway.GridGroups.GetGroup(targetGrid, GridLinkTypeEnum.Mechanical, groups);
-            if (groups != null)
+
+            foreach (var subGrid in groups)
             {
-                for (int i = 0; i < groups.Count; i++)
+                if (subGrid.EntityId == targetGrid.EntityId)
+                    continue;
+                GridIntersectingZones.Set(subGrid.EntityId, zoneId);
+            }
+        }
+
+        private static bool GridIntersects(IMyCubeGrid targetGrid, MySafeZone zone)
+        {
+            BoundingBoxD targetBox = targetGrid.WorldAABB;
+            var checkSphere = new BoundingSphereD(zone.PositionComp.WorldAABB.Center, zone.Radius);
+            var targetIntersects = checkSphere.Intersects(targetBox);
+
+            return targetIntersects;
+        }
+
+        private static bool BlockIntersects(IMySlimBlock targetBlock, MySafeZone zone, bool cache = true)
+        {
+            if (targetBlock == null) return false;
+
+            if (targetBlock.FatBlock != null && cache)
+            {
+                long zoneId = 0;
+                if (BlockIntersectingZones.TryGet(targetBlock.FatBlock.EntityId, out zoneId))
                 {
-                    GridIntersectingZones.Set(groups[i].EntityId, zoneId);
+                    if (zoneId > 0)
+                    {
+                        return true;
+                    }
+
+                    return false;
                 }
             }
+
+            BoundingBoxD targetBox;
+            targetBlock.GetWorldBoundingBox(out targetBox);
+
+            var checkSphere = new BoundingSphereD(zone.PositionComp.GetPosition(), zone.Radius);
+            var targetIntersects = targetBox.Intersects(checkSphere);
+
+            if (targetBlock.FatBlock != null && cache)
+            {
+                if (targetIntersects)
+                {
+                    BlockIntersectingZones.Set(targetBlock.FatBlock.EntityId, zone.EntityId);
+                }
+                else
+                {
+                    BlockIntersectingZones.Set(targetBlock.FatBlock.EntityId, 0);
+                }
+            }
+
+            return targetIntersects;
         }
 
         /// <summary>
@@ -187,26 +305,64 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             BuildingProjections = 512
         }
 
-        public static bool IsActionAllowedForSystem(NanobotSystem system, SafeZoneAction action)
+        public struct ActionsState
         {
+            public bool IsGrindingAllowed;
+            public bool IsWeldingAllowed;
+            public bool IsBuildingProjectionsAllowed;
+        }
+
+        public static MySafeZone GetIntersectingAttackerSafeZone(NanobotSystem system)
+        {
+            var safeZones = GetSafeZonesInRange(system.Welder.CubeGrid, 300);
+            foreach (var zone in safeZones)
+            {
+                if (BlockIntersects(system.Welder.SlimBlock, zone, false))
+                {
+                    return zone;
+                }
+            }
+
+            return null;
+        }
+
+        public static ActionsState GetActionsAllowedForSystem(NanobotSystem system)
+        {
+            var response = new ActionsState()
+            {
+                IsGrindingAllowed = true,
+                IsWeldingAllowed = true,
+                IsBuildingProjectionsAllowed = true,
+            };
+
             try
             {
                 if (!Mod.Settings.SafeZoneCheckEnabled || Zones.Count == 0)
-                    return true;
+                    return response;
 
                 if (system != null && system.Welder != null)
                 {
-                    var safeZone = GetIntersectingSafeZone(system.Welder.CubeGrid);
+                    var safeZone = GetIntersectingAttackerSafeZone(system);
                     if (safeZone != null && safeZone.Enabled)
                     {
-                        var isAllowed = safeZone.IsActionAllowed(CastProhibit(MySessionComponentSafeZones.AllowedActions, action), 0L);
-                        return isAllowed;
+                        response.IsGrindingAllowed = safeZone.IsActionAllowed(CastProhibit(MySessionComponentSafeZones.AllowedActions, SafeZoneAction.Grinding), 0L);
+                        response.IsWeldingAllowed = safeZone.IsActionAllowed(CastProhibit(MySessionComponentSafeZones.AllowedActions, SafeZoneAction.Welding), 0L);
+                        response.IsBuildingProjectionsAllowed = safeZone.IsActionAllowed(CastProhibit(MySessionComponentSafeZones.AllowedActions, SafeZoneAction.BuildingProjections), 0L);
+                        return response;
                     }
                 }
             }
             catch { }
 
-            return true;
+            return response;
+        }
+
+        private static void SetIsProtectedFromGrinding(IMySlimBlock targetBlock, long attackerBlockId, bool isProtected)
+        {
+            if (targetBlock != null && targetBlock.FatBlock != null)
+            {
+                ProtectedFromGindingCache.Set(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlockId), isProtected);
+            }
         }
 
         public static bool IsProtectedFromGrinding(IMySlimBlock targetBlock, IMyCubeBlock attackerBlock)
@@ -216,62 +372,87 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 if (targetBlock == null) return false;
                 if (attackerBlock == null) return false;
                 if (!Mod.Settings.SafeZoneCheckEnabled) return false;
+                if (Zones.Count == 0) return false;
+
+                if (targetBlock.FatBlock != null)
+                {
+                    var isProtected = false;
+                    if (ProtectedFromGindingCache.TryGet(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlock.EntityId), out isProtected))
+                    {
+                        return isProtected;
+                    }
+                }
 
                 // Try get a safe-zone intersecting with the blocks grid.
                 var safeZone = GetIntersectingSafeZone(targetBlock.CubeGrid);
 
                 if (safeZone == null || !safeZone.Enabled)
+                {
+                    SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
                     return false;
+                }
 
                 // Check if grinding is allowed first.
                 var isAllowed = safeZone.IsActionAllowed(CastProhibit(MySessionComponentSafeZones.AllowedActions, SafeZoneAction.Grinding), 0L);
 
                 if (isAllowed)
                 {
+                    //if (!BlockIntersects(targetBlock, safeZone))
+                    //{
+                    //    SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
+                    //    return false;
+                    //}
+
+                    if (safeZone.SafeZoneBlockId > 0)
+                    {
+                        var safeZoneBlock = MyEntities.GetEntityByName(safeZone.SafeZoneBlockId.ToString()) as IMySafeZoneBlock;
+
+                        // Relation between safeZone owner and attacker.
+                        var relationSafeZoneAttacker = attackerBlock.CubeGrid.GetRelationBetweenGridAndPlayer(safeZoneBlock.OwnerId);
+                        if (relationSafeZoneAttacker != VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner && relationSafeZoneAttacker != VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)
+                        {
+                            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, true);
+                            return true;
+                        }
+
+                        // Relation attacker grid and target block.
+                        var relationAttackerTarget = attackerBlock.CubeGrid.GetRelationBetweenGridAndPlayer(targetBlock.OwnerId);
+                        if (relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare || relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.NoOwnership)
+                        {
+                            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        // Relation attacker grid and target block.
+                        var relationAttackerTarget = attackerBlock.CubeGrid.GetRelationBetweenGridAndPlayer(targetBlock.OwnerId);
+                        if (relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)
+                        {
+                            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
+                            return false;
+                        }
+                    }
+
                     // Check relation between attacker and target.
                     var targetRelation = attackerBlock.GetUserRelationToOwner(targetBlock.OwnerId);
 
                     // If owner, faction member or not owned, then allow grinding within the safe-zone.
                     if (targetRelation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || targetRelation == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)
                     {
+                        SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
                         return false;
                     }
                 }
 
                 // Cannot grind a protected target block.
+                SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, true);
                 return true;
             }
             catch { }
+
+            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
             return false;
         }
-
-        //public static bool IsProtectedFromWelding(IMySlimBlock targetBlock, IMyCubeBlock attackerBlock, bool needForProjector = false)
-        //{
-        //    try
-        //    {
-        //        if (targetBlock == null) return false;
-        //        if (attackerBlock == null) return false;
-        //        if (!Mod.Settings.SafeZoneCheckEnabled) return false;
-
-        //        // Try get a safe-zone intersecting with the blocks grid.
-        //        var safeZone = GetIntersectingSafeZone(targetBlock);
-        //        if (safeZone != null && safeZone.Enabled)
-        //        {
-        //            // Check if welding is allowed first.
-        //            var isAllowed = safeZone.IsActionAllowed(CastProhibit(MySessionComponentSafeZones.AllowedActions, needForProjector ? SafeZoneAction.BuildingProjections : SafeZoneAction.Welding), 0L);
-
-        //            if (isAllowed)
-        //            {
-        //                return false;
-        //            }
-
-        //            // Cannot weld a protected target block.
-        //            return true;
-        //        }
-        //    }
-        //    catch { }
-        //    return false;
-
-        //}
     }
 }
