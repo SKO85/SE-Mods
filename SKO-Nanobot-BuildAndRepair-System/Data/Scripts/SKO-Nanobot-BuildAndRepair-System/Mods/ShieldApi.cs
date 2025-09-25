@@ -1,6 +1,7 @@
 ﻿using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using VRage;
 using VRage.Game.Entity;
 using VRage.Game.ModAPI;
@@ -18,6 +19,7 @@ namespace DefenseShields
         private Func<IMyTerminalBlock, Vector3D, long, float, bool, bool, bool, bool> _pointAttackShield; // negative damage values heal
         private Func<IMyTerminalBlock, Vector3D, long, float, bool, bool, bool, float?> _pointAttackShieldExt; // negative damage values heal
         private Func<IMyTerminalBlock, Vector3D, long, float, float, bool, bool, bool, float?> _pointAttackShieldCon; // negative damage values heal, conditional secondary damage
+        private Func<IMyTerminalBlock, Vector3D, long, float, float, bool, bool, bool, float, float?> _pointAttackShieldHeat; // negative damage values heal, conditional secondary damage
         private Action<IMyTerminalBlock, int> _setShieldHeat;
         private Action<IMyTerminalBlock> _overLoad;
         private Action<IMyTerminalBlock, float> _setCharge;
@@ -42,6 +44,7 @@ namespace DefenseShields
         private Func<IMyEntity, IMyTerminalBlock> _getShieldBlock;
         private Func<IMyEntity, bool, IMyTerminalBlock> _matchEntToShieldFast;
         private Func<MyEntity, bool, MyTuple<IMyTerminalBlock, MyTuple<bool, bool, float, float, float, int>, MyTuple<MatrixD, MatrixD>>?> _matchEntToShieldFastExt;
+        private Func<MyEntity, bool, MyTuple<IMyTerminalBlock, MyTuple<bool, bool, float, float, float, int>, MyTuple<MatrixD, MatrixD>, MyTuple<bool, bool, float, float>>?> _matchEntToShieldFastDetails;
         private Func<IMyTerminalBlock, bool> _isShieldBlock;
         private Func<Vector3D, IMyTerminalBlock> _getClosestShield;
         private Func<IMyTerminalBlock, Vector3D, double> _getDistanceToShield;
@@ -49,22 +52,37 @@ namespace DefenseShields
         private Func<MyEntity, MyTuple<bool, bool, float, float, float, int>> _getShieldInfo;
         private Func<MyEntity, MyTuple<bool, bool, float, float>> _getModulationInfo;
         private Func<IMyTerminalBlock, Vector3D, bool, MyTuple<bool, int, int, float, float>> _getFaceInfo;
+        private Func<IMyTerminalBlock, Vector3D, bool, MyTuple<bool, int, int, float, float, float>> _getFaceInfoAndPenChance;
         private Func<IMySlimBlock, bool> _isBlockProtected;
         private Func<MyEntity, MyTuple<bool, Vector3I>> _getFacesFast;
         private Action<MyEntity, ICollection<MyTuple<long, float, uint>>> _getLastAttackers;
+        private Func<IMyTerminalBlock, bool> _isFortified;
 
         private Action<long> _addAtacker;
 
         private const long Channel = 1365616918;
 
         public bool IsReady { get; private set; }
+        public bool Compromised { get; private set; }
 
         private void HandleMessage(object o)
         {
             if (_apiInit) return;
             var dict = o as IReadOnlyDictionary<string, Delegate>;
-            if (dict == null)
+            var message = o as string;
+
+            if (message != null && message == "Compromised")
+                Compromised = true;
+
+            if (dict == null || dict is ImmutableDictionary<string, Delegate>)
                 return;
+
+            var builder = ImmutableDictionary.CreateBuilder<string, Delegate>();
+            foreach (var pair in dict)
+                builder.Add(pair.Key, pair.Value);
+
+            MyAPIGateway.Utilities.SendModMessage(Channel, builder.ToImmutable());
+
             ApiLoad(dict);
             IsReady = true;
         }
@@ -102,6 +120,7 @@ namespace DefenseShields
             _pointAttackShield = (Func<IMyTerminalBlock, Vector3D, long, float, bool, bool, bool, bool>)delegates["PointAttackShield"];
             _pointAttackShieldExt = (Func<IMyTerminalBlock, Vector3D, long, float, bool, bool, bool, float?>)delegates["PointAttackShieldExt"];
             _pointAttackShieldCon = (Func<IMyTerminalBlock, Vector3D, long, float, float, bool, bool, bool, float?>)delegates["PointAttackShieldCon"];
+            _pointAttackShieldHeat = (Func<IMyTerminalBlock, Vector3D, long, float, float, bool, bool, bool, float, float?>)delegates["PointAttackShieldHeat"];
             _setShieldHeat = (Action<IMyTerminalBlock, int>)delegates["SetShieldHeat"];
             _overLoad = (Action<IMyTerminalBlock>)delegates["OverLoadShield"];
             _setCharge = (Action<IMyTerminalBlock, float>)delegates["SetCharge"];
@@ -126,6 +145,7 @@ namespace DefenseShields
             _getShieldBlock = (Func<IMyEntity, IMyTerminalBlock>)delegates["GetShieldBlock"];
             _matchEntToShieldFast = (Func<IMyEntity, bool, IMyTerminalBlock>)delegates["MatchEntToShieldFast"];
             _matchEntToShieldFastExt = (Func<MyEntity, bool, MyTuple<IMyTerminalBlock, MyTuple<bool, bool, float, float, float, int>, MyTuple<MatrixD, MatrixD>>?>)delegates["MatchEntToShieldFastExt"];
+            _matchEntToShieldFastDetails = (Func<MyEntity, bool, MyTuple<IMyTerminalBlock, MyTuple<bool, bool, float, float, float, int>, MyTuple<MatrixD, MatrixD>, MyTuple<bool, bool, float, float>>?>)delegates["MatchEntToShieldFastDetails"];
             _isShieldBlock = (Func<IMyTerminalBlock, bool>)delegates["IsShieldBlock"];
             _getClosestShield = (Func<Vector3D, IMyTerminalBlock>)delegates["GetClosestShield"];
             _getDistanceToShield = (Func<IMyTerminalBlock, Vector3D, double>)delegates["GetDistanceToShield"];
@@ -133,10 +153,12 @@ namespace DefenseShields
             _getShieldInfo = (Func<MyEntity, MyTuple<bool, bool, float, float, float, int>>)delegates["GetShieldInfo"];
             _getModulationInfo = (Func<MyEntity, MyTuple<bool, bool, float, float>>)delegates["GetModulationInfo"];
             _getFaceInfo = (Func<IMyTerminalBlock, Vector3D, bool, MyTuple<bool, int, int, float, float>>)delegates["GetFaceInfo"];
+            _getFaceInfoAndPenChance = (Func<IMyTerminalBlock, Vector3D, bool, MyTuple<bool, int, int, float, float, float>>)delegates["GetFaceInfoAndPenChance"];
             _addAtacker = (Action<long>)delegates["AddAttacker"];
             _isBlockProtected = (Func<IMySlimBlock, bool>)delegates["IsBlockProtected"];
             _getFacesFast = (Func<MyEntity, MyTuple<bool, Vector3I>>)delegates["GetFacesFast"];
             _getLastAttackers = (Action<MyEntity, ICollection<MyTuple<long, float, uint>>>)delegates["GetLastAttackers"];
+            _isFortified = (Func<IMyTerminalBlock, bool>)delegates["IsFortified"];
         }
 
         public Vector3D? RayAttackShield(IMyTerminalBlock block, RayD ray, long attackerId, float damage, bool energy, bool drawParticle) =>
@@ -156,6 +178,9 @@ namespace DefenseShields
 
         public float? PointAttackShieldCon(IMyTerminalBlock block, Vector3D pos, long attackerId, float damage, float optionalDamage, bool energy, bool drawParticle, bool posMustBeInside = false) =>
             _pointAttackShieldCon?.Invoke(block, pos, attackerId, damage, optionalDamage, energy, drawParticle, posMustBeInside) ?? null;
+
+        public float? PointAttackShieldHeat(IMyTerminalBlock block, Vector3D pos, long attackerId, float damage, float optionalDamage, bool energy, bool drawParticle, bool posMustBeInside = false, float heatScaler = 1) =>
+            _pointAttackShieldHeat?.Invoke(block, pos, attackerId, damage, optionalDamage, energy, drawParticle, posMustBeInside, heatScaler) ?? null;
 
         public void SetShieldHeat(IMyTerminalBlock block, int value) => _setShieldHeat?.Invoke(block, value);
 
@@ -205,6 +230,8 @@ namespace DefenseShields
 
         public MyTuple<IMyTerminalBlock, MyTuple<bool, bool, float, float, float, int>, MyTuple<MatrixD, MatrixD>>? MatchEntToShieldFastExt(MyEntity entity, bool onlyIfOnline) => _matchEntToShieldFastExt?.Invoke(entity, onlyIfOnline) ?? null;
 
+        public MyTuple<IMyTerminalBlock, MyTuple<bool, bool, float, float, float, int>, MyTuple<MatrixD, MatrixD>, MyTuple<bool, bool, float, float>>? MatchEntToShieldFastDetails(MyEntity entity, bool onlyIfOnline) => _matchEntToShieldFastDetails?.Invoke(entity, onlyIfOnline) ?? null;
+
         public bool IsShieldBlock(IMyTerminalBlock block) => _isShieldBlock?.Invoke(block) ?? false;
 
         public IMyTerminalBlock GetClosestShield(Vector3D pos) => _getClosestShield?.Invoke(pos) ?? null;
@@ -219,6 +246,8 @@ namespace DefenseShields
 
         public MyTuple<bool, int, int, float, float> GetFaceInfo(IMyTerminalBlock block, Vector3D pos, bool posMustBeInside = false) => _getFaceInfo?.Invoke(block, pos, posMustBeInside) ?? new MyTuple<bool, int, int, float, float>();
 
+        public MyTuple<bool, int, int, float, float, float> TAPI_GetFaceInfoAndPenChance(IMyTerminalBlock block, Vector3D pos, bool posMustBeInside = false) => _getFaceInfoAndPenChance?.Invoke(block, pos, posMustBeInside) ?? new MyTuple<bool, int, int, float, float, float>();
+
         public void AddAttacker(long attacker) => _addAtacker?.Invoke(attacker);
 
         public bool IsBlockProtected(IMySlimBlock block) => _isBlockProtected?.Invoke(block) ?? false;
@@ -226,5 +255,7 @@ namespace DefenseShields
         public MyTuple<bool, Vector3I> GetFacesFast(MyEntity entity) => _getFacesFast?.Invoke(entity) ?? new MyTuple<bool, Vector3I>();
 
         public void GetLastAttackers(MyEntity entity, ICollection<MyTuple<long, float, uint>> collection) => _getLastAttackers?.Invoke(entity, collection);
+
+        public bool IsFortified(IMyTerminalBlock block) => _isFortified?.Invoke(block) ?? false;
     }
 }
