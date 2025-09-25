@@ -1870,37 +1870,44 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         Vector3D posWelder;
                         _Welder.SlimBlock.ComputeWorldCenter(out posWelder);
-                        _TempPossibleSources.Sort((a, b) =>
+                        try
                         {
-                            var blockA = a.Owner as IMyCubeBlock;
-                            var blockB = b.Owner as IMyCubeBlock;
-                            if (blockA != null && blockB != null)
+                            _TempPossibleSources.Sort((a, b) =>
                             {
-                                var welderA = blockA as IMyShipWelder;
-                                var welderB = blockB as IMyShipWelder;
-                                if ((welderA == null) == (welderB == null))
+                                var blockA = a.Owner as IMyCubeBlock;
+                                var blockB = b.Owner as IMyCubeBlock;
+                                if (blockA != null && blockB != null)
                                 {
-                                    Vector3D posA;
-                                    Vector3D posB;
-                                    blockA.SlimBlock.ComputeWorldCenter(out posA);
-                                    blockB.SlimBlock.ComputeWorldCenter(out posB);
-                                    var distanceA = (int)Math.Abs((posWelder - posA).Length());
-                                    var distanceB = (int)Math.Abs((posWelder - posA).Length());
-                                    return distanceA - distanceB;
+                                    var welderA = blockA as IMyShipWelder;
+                                    var welderB = blockB as IMyShipWelder;
+                                    if ((welderA == null) == (welderB == null))
+                                    {
+                                        Vector3D posA;
+                                        Vector3D posB;
+                                        blockA.SlimBlock.ComputeWorldCenter(out posA);
+                                        blockB.SlimBlock.ComputeWorldCenter(out posB);
+                                        var distanceA = (int)Math.Abs((posWelder - posA).Length());
+                                        var distanceB = (int)Math.Abs((posWelder - posA).Length());
+                                        return distanceA - distanceB;
+                                    }
+                                    else if (welderA == null)
+                                    {
+                                        return -1;
+                                    }
+                                    else
+                                    {
+                                        return 1;
+                                    }
                                 }
-                                else if (welderA == null)
-                                {
-                                    return -1;
-                                }
-                                else
-                                {
-                                    return 1;
-                                }
-                            }
-                            else if (blockA != null) return -1;
-                            else if (blockB != null) return 1;
-                            else return 0;
-                        });
+                                else if (blockA != null) return -1;
+                                else if (blockB != null) return 1;
+                                else return 0;
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Logging.Instance.Error("Error on .Sort for _TempPossibleSources. Exception: {0}", ex);
+                        }
 
                         foreach (var inventory in _TempPossibleSources)
                         {
@@ -1930,72 +1937,93 @@ namespace SKONanobotBuildAndRepairSystem
                     }
 
                     pos = 3;
-                    _TempPossibleWeldTargets.Sort((a, b) =>
+                    try
                     {
-                        var priorityA = BlockWeldPriority.GetPriority(a.Block);
-                        var priorityB = BlockWeldPriority.GetPriority(b.Block);
-                        if (priorityA == priorityB)
+                        _TempPossibleWeldTargets.Sort((a, b) =>
                         {
-                            return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                        }
-                        else return priorityA - priorityB;
-                    });
-
-                    pos = 4;
-                    _TempPossibleGrindTargets.Sort((a, b) =>
-                    {
-                        if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
-                        {
-                            if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0)
-                            {
-                                var priorityA = BlockGrindPriority.GetPriority(a.Block);
-                                var priorityB = BlockGrindPriority.GetPriority(b.Block);
-                                if (priorityA == priorityB)
-                                {
-                                    if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))
-                                    {
-                                        var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                                        return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                    }
-                                    if (((Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0)) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                    return Utils.Utils.CompareDistance(b.Distance, a.Distance);
-                                }
-                                else return priorityA - priorityB;
-                            }
-
-                            if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))
-                            {
-                                var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                                return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                            }
-                            if (((Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0)) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                            return Utils.Utils.CompareDistance(b.Distance, a.Distance);
-                        }
-                        else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
-                        else if ((b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return 1;
-                        return 0;
-                    });
-
-                    _TempPossibleFloatingTargets.Sort((a, b) =>
-                    {
-                        var itemA = a.Entity;
-                        var itemB = b.Entity;
-                        var itemAFloating = itemA as MyFloatingObject;
-                        var itemBFloating = itemB as MyFloatingObject;
-                        if (itemAFloating != null && itemBFloating != null)
-                        {
-                            var priorityA = ComponentCollectPriority.GetPriority(itemAFloating.Item.Content.GetObjectId());
-                            var priorityB = ComponentCollectPriority.GetPriority(itemAFloating.Item.Content.GetObjectId());
+                            var priorityA = BlockWeldPriority.GetPriority(a.Block);
+                            var priorityB = BlockWeldPriority.GetPriority(b.Block);
                             if (priorityA == priorityB)
                             {
                                 return Utils.Utils.CompareDistance(a.Distance, b.Distance);
                             }
                             else return priorityA - priorityB;
-                        }
-                        else if (itemAFloating == null) return -1;
-                        else if (itemBFloating == null) return 1;
-                        return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                    });
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.Instance.Error("Error on .Sort for _TempPossibleWeldTargets. Exception: {0}", ex);
+                    }
+
+                    pos = 4;
+                    try
+                    {
+                        _TempPossibleGrindTargets.Sort((a, b) =>
+                        {
+                            if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
+                            {
+                                if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0)
+                                {
+                                    var priorityA = BlockGrindPriority.GetPriority(a.Block);
+                                    var priorityB = BlockGrindPriority.GetPriority(b.Block);
+                                    if (priorityA == priorityB)
+                                    {
+                                        if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))
+                                        {
+                                            var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
+                                            return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                        }
+                                        if (((Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0)) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                        return Utils.Utils.CompareDistance(b.Distance, a.Distance);
+                                    }
+                                    else return priorityA - priorityB;
+                                }
+
+                                if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))
+                                {
+                                    var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
+                                    return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                }
+                                if (((Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0)) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                return Utils.Utils.CompareDistance(b.Distance, a.Distance);
+                            }
+                            else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
+                            else if ((b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return 1;
+                            return 0;
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.Instance.Error("Error on .Sort for _TempPossibleGrindTargets. Exception: {0}", ex);
+                    }
+
+                    try
+                    {
+                        _TempPossibleFloatingTargets.Sort((a, b) =>
+                        {
+                            var itemA = a.Entity;
+                            var itemB = b.Entity;
+                            var itemAFloating = itemA as MyFloatingObject;
+                            var itemBFloating = itemB as MyFloatingObject;
+                            if (itemAFloating != null && itemBFloating != null)
+                            {
+                                var priorityA = ComponentCollectPriority.GetPriority(itemAFloating.Item.Content.GetObjectId());
+                                var priorityB = ComponentCollectPriority.GetPriority(itemAFloating.Item.Content.GetObjectId());
+                                if (priorityA == priorityB)
+                                {
+                                    return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                }
+                                else return priorityA - priorityB;
+                            }
+                            else if (itemAFloating == null) return -1;
+                            else if (itemBFloating == null) return 1;
+                            return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.Instance.Error("Error on .Sort for _TempPossibleFloatingTargets. Exception: {0}", ex);
+                    }
 
                     pos = 5;
                     // Removed logging.
@@ -2448,12 +2476,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (Mod.Settings.ShieldCheckEnabled && slimBlock != null && Mod.Shield != null && Mod.Shield.IsReady)
                 {
-                    var isProtected = Mod.Shield.ProtectedByShield(slimBlock.CubeGrid);
-
                     if (slimBlock.CubeGrid.EntityId == Welder.CubeGrid.EntityId)
-                        return false;
-
-                    if (!isProtected)
                         return false;
 
                     return Mod.Shield.IsBlockProtected(slimBlock);
