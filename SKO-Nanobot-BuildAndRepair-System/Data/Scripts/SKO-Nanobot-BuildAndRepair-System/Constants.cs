@@ -1,4 +1,4 @@
-﻿namespace SKONanobotBuildAndRepairSystem
+namespace SKONanobotBuildAndRepairSystem
 {
     public static class Constants
     {
