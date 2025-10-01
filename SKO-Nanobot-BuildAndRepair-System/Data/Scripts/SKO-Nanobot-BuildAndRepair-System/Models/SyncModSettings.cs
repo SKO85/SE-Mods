@@ -87,6 +87,9 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(24), XmlElement]
         public bool DecreaseFactionReputationOnGrinding { get; set; }
 
+        [ProtoMember(25), XmlElement]
+        public bool DeleteBotsWhenDead { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -104,6 +107,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             SafeZoneCheckEnabled = true;
             ShieldCheckEnabled = true;
             DecreaseFactionReputationOnGrinding = true;
+            DeleteBotsWhenDead = true;
         }
 
         public static SyncModSettings Load()

@@ -45,8 +45,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindPriority_Tooltip",           "Enable/Disable grinding of selected items kinds and set the priority while grinding\n(If grinded by grind color the priority and release status is ignored)"},
             {"GrindOrderNearest",               "Nearest First"},
             {"GrindOrderNearest_Tooltip",       "When checked, if blocks have the same priority, the nearest is grinded first."},
-            {"GrindOrderFurthest",              "Furthest first"},
-            {"GrindOrderFurthest_Tooltip",      "When checked, if blocks have the same priority, the furthest is grinded first."},
+            {"GrindOrderFarthest",              "Farthest first"},
+            {"GrindOrderFarthest_Tooltip",      "When checked, if blocks have the same priority, the farthest is grinded first."},
             {"GrindOrderSmallest",              "Smallest grid first"},
             {"GrindOrderSmallest_Tooltip",      "When checked, if blocks have the same priority, the smallest grid is grinded first."},
 

@@ -38,7 +38,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 }
 
                 // Just try fix the bones structure for defromations.
-                target.FixBones(0, 100f);
+                target.ResetSkeleton();
 
                 // Report it as target not to weld in this case as MaxDeformation is bugged in game and not resetting.
                 // It resets after restart of the game or after block is fully removed.
@@ -49,13 +49,31 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             if (target.HasDeformation)
             {
                 // try fix the bones as integrity is already on required level.
-                target.FixBones(0, 100f);
+                target.ResetSkeleton();
 
                 // Tell it to weld in this case as this property seems to be reliable, but heavy.
                 return true;
             }
 
             return false;
+        }
+
+        public static void ResetSkeleton(this IMySlimBlock block)
+        {
+            if (block == null) return;
+
+            var cg = block.CubeGrid as MyCubeGrid;
+            if (cg != null)
+            {
+                try
+                {
+                    cg.ResetBlockSkeleton(cg.GetCubeBlock(block.Min), true);
+                    return;
+                }
+                catch { }
+            }
+
+            block.FixBones(0, 100f);
         }
 
         /// <summary>

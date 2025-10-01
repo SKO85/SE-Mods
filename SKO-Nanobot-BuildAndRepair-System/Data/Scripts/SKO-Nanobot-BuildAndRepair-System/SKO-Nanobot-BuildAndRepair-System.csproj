@@ -170,6 +170,7 @@
     <Compile Include="Utils\UtilsInventory.cs" />
     <Compile Include="Utils\UtilsPlayer.cs" />
     <Compile Include="Utils\UtilsProductionBlock.cs" />
+    <Compile Include="Utils\UtilsSorting.cs" />
     <Compile Include="Utils\UtilsSynchronization.cs" />
     <Compile Include="Utils\SlimBlockUtils.cs" />
   </ItemGroup>
