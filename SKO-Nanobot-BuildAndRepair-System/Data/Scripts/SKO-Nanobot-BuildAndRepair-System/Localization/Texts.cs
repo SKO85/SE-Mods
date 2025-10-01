@@ -50,8 +50,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId GrindPriority_Tooltip;
         public static readonly MyStringId GrindOrderNearest;
         public static readonly MyStringId GrindOrderNearest_Tooltip;
-        public static readonly MyStringId GrindOrderFurthest;
-        public static readonly MyStringId GrindOrderFurthest_Tooltip;
+        public static readonly MyStringId GrindOrderFarthest;
+        public static readonly MyStringId GrindOrderFarthest_Tooltip;
         public static readonly MyStringId GrindOrderSmallest;
         public static readonly MyStringId GrindOrderSmallest_Tooltip;
 
@@ -163,8 +163,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
 
             GrindOrderNearest = LocalizationHelper.GetStringId(texts, "GrindOrderNearest");
             GrindOrderNearest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderNearest_Tooltip");
-            GrindOrderFurthest = LocalizationHelper.GetStringId(texts, "GrindOrderFurthest");
-            GrindOrderFurthest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderFurthest_Tooltip");
+            GrindOrderFarthest = LocalizationHelper.GetStringId(texts, "GrindOrderFarthest");
+            GrindOrderFarthest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderFarthest_Tooltip");
             GrindOrderSmallest = LocalizationHelper.GetStringId(texts, "GrindOrderSmallest");
             GrindOrderSmallest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderSmallest_Tooltip");
 

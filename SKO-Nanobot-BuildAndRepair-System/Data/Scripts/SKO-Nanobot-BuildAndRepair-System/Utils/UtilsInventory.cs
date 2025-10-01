@@ -298,6 +298,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         public static void GetMissingComponents(this IMySlimBlock block, Dictionary<string, int> componentList, IntegrityLevel level)
         {
             var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
+
             if (blockDefinition.Components == null || blockDefinition.Components.Length == 0) return;
 
             if (level == IntegrityLevel.Create)
@@ -310,16 +311,25 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 if (block.IsProjected())
                 {
                     int maxIdx = level == IntegrityLevel.Functional ? blockDefinition.CriticalGroup + 1 : blockDefinition.Components.Length;
+
                     for (var idx = 0; idx < maxIdx; idx++)
                     {
                         var component = blockDefinition.Components[idx];
-                        if (componentList.ContainsKey(component.Definition.Id.SubtypeName)) componentList[component.Definition.Id.SubtypeName] += component.Count;
-                        else componentList.Add(component.Definition.Id.SubtypeName, component.Count);
+
+                        if (componentList.ContainsKey(component.Definition.Id.SubtypeName))
+                        {
+                            componentList[component.Definition.Id.SubtypeName] += component.Count;
+                        }
+                        else
+                        {
+                            componentList.Add(component.Definition.Id.SubtypeName, component.Count);
+                        }
                     }
                 }
                 else
                 {
                     block.GetMissingComponents(componentList);
+
                     if (level == IntegrityLevel.Functional)
                     {
                         for (var idx = blockDefinition.CriticalGroup + 1; idx < blockDefinition.Components.Length; idx++)
@@ -328,8 +338,15 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                             if (componentList.ContainsKey(component.Definition.Id.SubtypeName))
                             {
                                 var amount = componentList[component.Definition.Id.SubtypeName];
-                                if (amount <= component.Count) componentList.Remove(component.Definition.Id.SubtypeName);
-                                else componentList[component.Definition.Id.SubtypeName] -= component.Count;
+
+                                if (amount <= component.Count)
+                                {
+                                    componentList.Remove(component.Definition.Id.SubtypeName);
+                                }
+                                else
+                                {
+                                    componentList[component.Definition.Id.SubtypeName] -= component.Count;
+                                }
                             }
                         }
                     }

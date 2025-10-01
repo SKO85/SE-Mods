@@ -45,8 +45,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindPriority_Tooltip",           "Schlaltet das Demontieren des selektierten Blocktypes ein/aus und legt die Priorität fest.\n(Wenn das Demontieren per festgelegter Farbe erfolgt, wird die Priorät und die Freigabe ignorierd)"},
             {"GrindOrderNearest",               "Nächstgelegen zurerst"},
             {"GrindOrderNearest_Tooltip",       "Wenn diese Option markiert ist und Blöcke die gleiche Priorität besitzen, wird der nächgelegen Block zuerst demontiert."},
-            {"GrindOrderFurthest",              "Enferntester zuerst"},
-            {"GrindOrderFurthest_Tooltip",      "Wenn diese Option markiert ist und Blöcke die gleiche Priorität besitzen, wird der enfernteste Block zuerst demontiert."},
+            {"GrindOrderFarthest",              "Enferntester zuerst"},
+            {"GrindOrderFarthest_Tooltip",      "Wenn diese Option markiert ist und Blöcke die gleiche Priorität besitzen, wird der enfernteste Block zuerst demontiert."},
             {"GrindOrderSmallest",              "Kleinster Verbund zuerst"},
             {"GrindOrderSmallest_Tooltip",      "Wenn diese Option markiert ist und Blöcke die gleiche Priorität besitzen, werden die Blöcke im kleinsten Verbund zuerst demontiert."},
 

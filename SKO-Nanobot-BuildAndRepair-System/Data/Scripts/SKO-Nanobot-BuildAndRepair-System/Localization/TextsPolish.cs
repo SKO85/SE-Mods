@@ -45,8 +45,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindPriority_Tooltip",           "Włącz/Wyłącz rozbiórkę wybranych przedmiotów i ustaw ich priorytet\n(Jeśli rozbiórka według koloru – priorytet i status są ignorowane)"},
             {"GrindOrderNearest",               "Najpierw najbliższe"},
             {"GrindOrderNearest_Tooltip",       "Po zaznaczeniu, jeśli bloki mają ten sam priorytet, najbliższy będzie rozbierany pierwszy."},
-            {"GrindOrderFurthest",              "Najpierw najdalsze"},
-            {"GrindOrderFurthest_Tooltip",      "Po zaznaczeniu, jeśli bloki mają ten sam priorytet, najdalszy będzie rozbierany pierwszy."},
+            {"GrindOrderFarthest",              "Najpierw najdalsze"},
+            {"GrindOrderFarthest_Tooltip",      "Po zaznaczeniu, jeśli bloki mają ten sam priorytet, najdalszy będzie rozbierany pierwszy."},
             {"GrindOrderSmallest",              "Najpierw najmniejsza siatka"},
             {"GrindOrderSmallest_Tooltip",      "Po zaznaczeniu, jeśli bloki mają ten sam priorytet, najmniejsza siatka będzie rozbierana jako pierwsza."},
 

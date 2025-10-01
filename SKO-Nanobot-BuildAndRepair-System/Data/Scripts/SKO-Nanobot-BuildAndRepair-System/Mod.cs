@@ -127,11 +127,39 @@ namespace SKONanobotBuildAndRepairSystem
             // Unregister Datamage Handler.
             try { DamageHandler.Unregister(); } catch { }
 
+            // Clear block assigned handler.
+            try { BlockSystemAssigningHandler.Clear(); } catch { }
+
             // Call base unload.
             base.UnloadData();
 
             _initialized = false;
         }
+
+        //public override void LoadData()
+        //{
+        //    try
+        //    {
+        //        var defId = new MyDefinitionId(typeof(MyObjectBuilder_ShipWelder), MyStringHash.Get("SELtdLargeNanobotBuildAndRepairSystem"));
+        //        var def = MyDefinitionManager.Static.GetCubeBlockDefinition(defId) as MyShipWelderDefinition;
+        //        var builderDef = MyDefinitionManager.Static.GetObjectBuilder(def) as MyObjectBuilder_ShipWelderDefinition;
+
+        //        builderDef.PCU = 1;
+        //        builderDef.Components = new List<MyObjectBuilder_CubeBlockDefinition.CubeBlockComponent>()
+        //        {
+        //            new MyObjectBuilder_CubeBlockDefinition.CubeBlockComponent()
+        //            {
+        //                Subtype = "SteelPlate",
+        //                Count = 1
+        //            }
+        //        }.ToArray();
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //    }
+
+        //    base.LoadData();
+        //}
 
         public override void UpdateBeforeSimulation()
         {

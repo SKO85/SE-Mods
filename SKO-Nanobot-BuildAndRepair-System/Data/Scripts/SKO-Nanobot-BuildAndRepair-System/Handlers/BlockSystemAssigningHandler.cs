@@ -37,5 +37,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             Cache.CleanupExpired();
         }
+
+        public static void Clear()
+        {
+            Cache.Clear();
+        }
     }
 }

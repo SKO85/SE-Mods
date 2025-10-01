@@ -1283,8 +1283,8 @@ namespace SKONanobotBuildAndRepairSystem
                             CreateProperty(checkbox);
 
                             checkbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyShipWelder>("GrindFarFirst");
-                            checkbox.Title = Texts.GrindOrderFurthest;
-                            checkbox.Tooltip = Texts.GrindOrderFurthest_Tooltip;
+                            checkbox.Title = Texts.GrindOrderFarthest;
+                            checkbox.Tooltip = Texts.GrindOrderFarthest_Tooltip;
                             checkbox.OnText = MySpaceTexts.SwitchText_On;
                             checkbox.OffText = MySpaceTexts.SwitchText_Off;
                             checkbox.Enabled = grindingAllowed ? isBaRSystem : isReadonly;
