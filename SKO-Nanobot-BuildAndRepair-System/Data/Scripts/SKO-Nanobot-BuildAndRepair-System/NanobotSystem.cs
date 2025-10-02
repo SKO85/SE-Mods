@@ -489,7 +489,7 @@ namespace SKONanobotBuildAndRepairSystem
                             else
                             {
                                 UpdateCustomInfo(false);
-                            }                                
+                            }
                         }
                         catch { }
                     }
