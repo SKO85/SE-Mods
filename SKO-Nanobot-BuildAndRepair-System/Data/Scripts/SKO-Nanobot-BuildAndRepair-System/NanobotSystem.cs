@@ -482,8 +482,14 @@ namespace SKONanobotBuildAndRepairSystem
                         _PeriodicExtraChecksLast = MyAPIGateway.Session.ElapsedPlayTime;
                         try
                         {
-                            SetSafeZoneAndShieldStates();
-                            UpdateCustomInfo(true);
+                            if (SetSafeZoneAndShieldStates())
+                            {
+                                UpdateCustomInfo(true);
+                            }
+                            else
+                            {
+                                UpdateCustomInfo(false);
+                            }
                         }
                         catch { }
                     }
@@ -547,6 +553,7 @@ namespace SKONanobotBuildAndRepairSystem
             var safeZoneAllowsBuildingProjections = safeZoneActionsState.IsBuildingProjectionsAllowed;
             var safeZoneAllowsGrinding = safeZoneActionsState.IsGrindingAllowed;
             var welderIsShielded = IsWelderShielded();
+
             var changed = false;
 
             if (State.SafeZoneAllowsWelding != safezoneAllowsWelding)
@@ -592,7 +599,7 @@ namespace SKONanobotBuildAndRepairSystem
             var needcollecting = false;
             var transporting = false;
 
-            if (_Welder.Closed || _Welder.MarkedForClose || !Mod.SettingsValid)
+            if (_Welder.Closed || _Welder.MarkedForClose)
                 return;
 
             var ready = _Welder.Enabled && _Welder.IsWorking && _Welder.IsFunctional;
@@ -2578,7 +2585,7 @@ namespace SKONanobotBuildAndRepairSystem
             customInfo.Clear();
 
             // If mod is not yet initialized, show this in the info panel.
-            if (!Mod.SettingsValid)
+            if (State.Ready && !Mod.SettingsValid)
             {
                 customInfo.Append($"[color=#FFFFFF00]Mod not initialized![/color]" + Environment.NewLine);
                 customInfo.Append($"---" + Environment.NewLine);

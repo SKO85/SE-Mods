@@ -457,10 +457,17 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
             MissingComponents.Clear();
             var missingComponentsSync = newState.MissingComponentsSync;
-            if (missingComponentsSync != null) foreach (var item in missingComponentsSync) MissingComponents.Add(item.Component, item.Amount);
+            if (missingComponentsSync != null)
+            {
+                foreach (var item in missingComponentsSync)
+                {
+                    MissingComponents.Add(item.Component, item.Amount);
+                }
+            }
 
             PossibleWeldTargets.Clear();
             var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
+
             if (possibleWeldTargetsSync != null)
             {
                 foreach (var item in possibleWeldTargetsSync)
@@ -491,6 +498,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
             PossibleGrindTargets.Clear();
             var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
+
             if (possibleGrindTargetsSync != null)
             {
                 foreach (var item in possibleGrindTargetsSync)
@@ -502,7 +510,14 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
             PossibleFloatingTargets.Clear();
             var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
-            if (possibleFloatingTargetsSync != null) foreach (var item in possibleFloatingTargetsSync) PossibleFloatingTargets.Add(new TargetEntityData(SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity), item.Distance));
+
+            if (possibleFloatingTargetsSync != null)
+            {
+                foreach (var item in possibleFloatingTargetsSync)
+                {
+                    PossibleFloatingTargets.Add(new TargetEntityData(SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity), item.Distance));
+                }
+            }
 
             _IsShielded = newState.IsShielded;
             _SafeZoneAllowsGrinding = newState.SafeZoneAllowsGrinding;
