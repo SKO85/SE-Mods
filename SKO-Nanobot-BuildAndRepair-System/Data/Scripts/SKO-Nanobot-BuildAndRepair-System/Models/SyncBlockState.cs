@@ -455,54 +455,88 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _CurrentTransportTarget = newState.CurrentTransportTarget;
             _CurrentTransportIsPick = newState.CurrentTransportIsPick;
 
-            MissingComponents.Clear();
-            var missingComponentsSync = newState.MissingComponentsSync;
-            if (missingComponentsSync != null) foreach (var item in missingComponentsSync) MissingComponents.Add(item.Component, item.Amount);
-
-            PossibleWeldTargets.Clear();
-            var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
-            if (possibleWeldTargetsSync != null)
+            if(MissingComponents.CurrentHash != newState.MissingComponents.CurrentHash)
             {
-                foreach (var item in possibleWeldTargetsSync)
+                MissingComponents.Clear();
+                var missingComponentsSync = newState.MissingComponentsSync;
+                if (missingComponentsSync != null)
                 {
-                    if (item.Entity == null)
-                        continue;
-
-                    if (item.Entity.EntityId == 0)
+                    foreach (var item in missingComponentsSync)
                     {
-                        IMyEntity gridEntity;
-                        if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
+                        MissingComponents.Add(item.Component, item.Amount);
+                    }
+                }
+                MissingComponents.RebuildHash();
+            }            
+
+            if(PossibleWeldTargets.CurrentHash != newState.PossibleWeldTargets.CurrentHash)
+            {
+                PossibleWeldTargets.Clear();
+                var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
+
+                if (possibleWeldTargetsSync != null)
+                {
+                    foreach (var item in possibleWeldTargetsSync)
+                    {
+                        if (item.Entity == null)
+                            continue;
+
+                        if (item.Entity.EntityId == 0)
                         {
-                            var grid = gridEntity as IMyCubeGrid;
-                            var block = grid?.GetCubeBlock(item.Entity.Position.Value);
-                            if (block != null)
+                            IMyEntity gridEntity;
+                            if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
                             {
-                                PossibleWeldTargets.Add(new TargetBlockData(SyncEntityId.GetItemAsSlimBlock(SyncEntityId.GetSyncId(block)), item.Distance, 0));
+                                var grid = gridEntity as IMyCubeGrid;
+                                var block = grid?.GetCubeBlock(item.Entity.Position.Value);
+                                if (block != null)
+                                {
+                                    PossibleWeldTargets.Add(new TargetBlockData(SyncEntityId.GetItemAsSlimBlock(SyncEntityId.GetSyncId(block)), item.Distance, 0));
+                                }
                             }
                         }
+                        else
+                        {
+                            var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                            PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        }
                     }
-                    else
+                }
+
+                PossibleWeldTargets.RebuildHash();
+            }                    
+
+            if(PossibleGrindTargets.CurrentHash != newState.PossibleGrindTargets.CurrentHash)
+            {
+                PossibleGrindTargets.Clear();
+                var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
+                
+                if (possibleGrindTargetsSync != null)
+                {
+                    foreach (var item in possibleGrindTargetsSync)
                     {
                         var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                        PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
                     }
                 }
-            }
 
-            PossibleGrindTargets.Clear();
-            var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
-            if (possibleGrindTargetsSync != null)
+                PossibleGrindTargets.RebuildHash();
+            }           
+
+            if(PossibleFloatingTargets.CurrentHash != newState.PossibleFloatingTargets.CurrentHash)
             {
-                foreach (var item in possibleGrindTargetsSync)
+                PossibleFloatingTargets.Clear();
+                var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
+                
+                if (possibleFloatingTargetsSync != null)
                 {
-                    var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                    PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                    foreach (var item in possibleFloatingTargetsSync)
+                    {
+                        PossibleFloatingTargets.Add(new TargetEntityData(SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity), item.Distance));
+                    }
                 }
-            }
 
-            PossibleFloatingTargets.Clear();
-            var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
-            if (possibleFloatingTargetsSync != null) foreach (var item in possibleFloatingTargetsSync) PossibleFloatingTargets.Add(new TargetEntityData(SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity), item.Distance));
+                PossibleFloatingTargets.RebuildHash();
+            }
 
             _IsShielded = newState.IsShielded;
             _SafeZoneAllowsGrinding = newState.SafeZoneAllowsGrinding;

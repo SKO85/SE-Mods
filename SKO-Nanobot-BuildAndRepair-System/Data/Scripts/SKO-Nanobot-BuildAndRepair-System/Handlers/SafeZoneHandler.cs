@@ -1,6 +1,7 @@
 ﻿using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Utils;
 using SpaceEngineers.Game.ModAPI;
 using System;
 using System.Collections.Concurrent;
@@ -415,8 +416,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                             return true;
                         }
 
+                        if (targetBlock.OwnerId == attackerBlock.OwnerId)
+                        {
+                            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
+                            return false;
+                        }
+
                         // Relation attacker grid and target block.
-                        var relationAttackerTarget = attackerBlock.CubeGrid.GetRelationBetweenGridAndPlayer(targetBlock.OwnerId);
+                        var relationAttackerTarget = targetBlock.CubeGrid.GetRelationBetweenGridAndPlayer(attackerBlock.OwnerId);
                         if (relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare || relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.NoOwnership)
                         {
                             SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
@@ -425,8 +432,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     }
                     else
                     {
-                        // Relation attacker grid and target block.
-                        var relationAttackerTarget = attackerBlock.CubeGrid.GetRelationBetweenGridAndPlayer(targetBlock.OwnerId);
+                        if (targetBlock.OwnerId == attackerBlock.OwnerId)
+                        {
+                            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
+                            return false;
+                        }
+
+                        // Relation between target block and attacker grid.
+                        var relationAttackerTarget = targetBlock.CubeGrid.GetRelationBetweenGridAndPlayer(attackerBlock.OwnerId);
                         if (relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)
                         {
                             SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
@@ -434,8 +447,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         }
                     }
 
+                    if (targetBlock.OwnerId == attackerBlock.OwnerId)
+                    {
+                        SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
+                        return false;
+                    }
+
                     // Check relation between attacker and target.
-                    var targetRelation = attackerBlock.GetUserRelationToOwner(targetBlock.OwnerId);
+                    var targetRelation = targetBlock.GetUserRelationToOwner(attackerBlock.OwnerId);
 
                     // If owner, faction member or not owned, then allow grinding within the safe-zone.
                     if (targetRelation == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || targetRelation == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)
