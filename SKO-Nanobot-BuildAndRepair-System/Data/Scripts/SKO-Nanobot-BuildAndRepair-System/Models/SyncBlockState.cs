@@ -455,87 +455,68 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _CurrentTransportTarget = newState.CurrentTransportTarget;
             _CurrentTransportIsPick = newState.CurrentTransportIsPick;
 
-            if(MissingComponents.CurrentHash != newState.MissingComponents.CurrentHash)
+            MissingComponents.Clear();
+            var missingComponentsSync = newState.MissingComponentsSync;
+            if (missingComponentsSync != null)
             {
-                MissingComponents.Clear();
-                var missingComponentsSync = newState.MissingComponentsSync;
-                if (missingComponentsSync != null)
+                foreach (var item in missingComponentsSync)
                 {
-                    foreach (var item in missingComponentsSync)
-                    {
-                        MissingComponents.Add(item.Component, item.Amount);
-                    }
+                    MissingComponents.Add(item.Component, item.Amount);
                 }
-                MissingComponents.RebuildHash();
-            }            
+            }
 
-            if(PossibleWeldTargets.CurrentHash != newState.PossibleWeldTargets.CurrentHash)
+            PossibleWeldTargets.Clear();
+            var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
+
+            if (possibleWeldTargetsSync != null)
             {
-                PossibleWeldTargets.Clear();
-                var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
-
-                if (possibleWeldTargetsSync != null)
+                foreach (var item in possibleWeldTargetsSync)
                 {
-                    foreach (var item in possibleWeldTargetsSync)
-                    {
-                        if (item.Entity == null)
-                            continue;
+                    if (item.Entity == null)
+                        continue;
 
-                        if (item.Entity.EntityId == 0)
+                    if (item.Entity.EntityId == 0)
+                    {
+                        IMyEntity gridEntity;
+                        if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
                         {
-                            IMyEntity gridEntity;
-                            if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
+                            var grid = gridEntity as IMyCubeGrid;
+                            var block = grid?.GetCubeBlock(item.Entity.Position.Value);
+                            if (block != null)
                             {
-                                var grid = gridEntity as IMyCubeGrid;
-                                var block = grid?.GetCubeBlock(item.Entity.Position.Value);
-                                if (block != null)
-                                {
-                                    PossibleWeldTargets.Add(new TargetBlockData(SyncEntityId.GetItemAsSlimBlock(SyncEntityId.GetSyncId(block)), item.Distance, 0));
-                                }
+                                PossibleWeldTargets.Add(new TargetBlockData(SyncEntityId.GetItemAsSlimBlock(SyncEntityId.GetSyncId(block)), item.Distance, 0));
                             }
                         }
-                        else
-                        {
-                            var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                            PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
-                        }
                     }
-                }
-
-                PossibleWeldTargets.RebuildHash();
-            }                    
-
-            if(PossibleGrindTargets.CurrentHash != newState.PossibleGrindTargets.CurrentHash)
-            {
-                PossibleGrindTargets.Clear();
-                var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
-                
-                if (possibleGrindTargetsSync != null)
-                {
-                    foreach (var item in possibleGrindTargetsSync)
+                    else
                     {
                         var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                        PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
                     }
                 }
+            }
 
-                PossibleGrindTargets.RebuildHash();
-            }           
+            PossibleGrindTargets.Clear();
+            var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
 
-            if(PossibleFloatingTargets.CurrentHash != newState.PossibleFloatingTargets.CurrentHash)
+            if (possibleGrindTargetsSync != null)
             {
-                PossibleFloatingTargets.Clear();
-                var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
-                
-                if (possibleFloatingTargetsSync != null)
+                foreach (var item in possibleGrindTargetsSync)
                 {
-                    foreach (var item in possibleFloatingTargetsSync)
-                    {
-                        PossibleFloatingTargets.Add(new TargetEntityData(SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity), item.Distance));
-                    }
+                    var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                    PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
                 }
+            }
 
-                PossibleFloatingTargets.RebuildHash();
+            PossibleFloatingTargets.Clear();
+            var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
+
+            if (possibleFloatingTargetsSync != null)
+            {
+                foreach (var item in possibleFloatingTargetsSync)
+                {
+                    PossibleFloatingTargets.Add(new TargetEntityData(SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity), item.Distance));
+                }
             }
 
             _IsShielded = newState.IsShielded;
