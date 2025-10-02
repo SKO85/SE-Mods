@@ -482,8 +482,14 @@ namespace SKONanobotBuildAndRepairSystem
                         _PeriodicExtraChecksLast = MyAPIGateway.Session.ElapsedPlayTime;
                         try
                         {
-                            SetSafeZoneAndShieldStates();
-                            UpdateCustomInfo(true);
+                            if (SetSafeZoneAndShieldStates())
+                            {
+                                UpdateCustomInfo(true);
+                            }
+                            else
+                            {
+                                UpdateCustomInfo(false);
+                            }                                
                         }
                         catch { }
                     }
@@ -547,6 +553,7 @@ namespace SKONanobotBuildAndRepairSystem
             var safeZoneAllowsBuildingProjections = safeZoneActionsState.IsBuildingProjectionsAllowed;
             var safeZoneAllowsGrinding = safeZoneActionsState.IsGrindingAllowed;
             var welderIsShielded = IsWelderShielded();
+
             var changed = false;
 
             if (State.SafeZoneAllowsWelding != safezoneAllowsWelding)
