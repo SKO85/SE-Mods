@@ -1144,7 +1144,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (_Welder.IsWithinWorldLimits(cubeGridProjected.Projector, blockDefinition.BlockPairName, blockDefinition.PCU))
                     {
-                        var blockBuildIntegrity = target.BuildIntegrity;
+                        //var blockBuildIntegrity = target.Integrity;
 
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed))
                         {
@@ -1171,11 +1171,11 @@ namespace SKONanobotBuildAndRepairSystem
                             targetData.Ignore = true;
                         }
 
-                        var newIntegrity = target?.BuildIntegrity;
-                        if (newIntegrity > blockBuildIntegrity)
-                        {
-                            _TransportInventory.RemoveItems(item.ItemId, 1);
-                        }
+                        //var newIntegrity = target?.BuildIntegrity;
+                        //if (newIntegrity > blockBuildIntegrity)
+                        //{
+                        //    _TransportInventory.RemoveItems(item.ItemId, 1);
+                        //}
                     }
                     else
                     {
