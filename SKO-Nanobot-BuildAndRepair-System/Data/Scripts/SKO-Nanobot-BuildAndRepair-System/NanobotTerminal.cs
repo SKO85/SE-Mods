@@ -339,7 +339,7 @@ namespace SKONanobotBuildAndRepairSystem
                             CreateProperty(onoffSwitch, Mod.Settings.Welder.UseGrindJanitorFixed || !janitorAllowedNoOwnership);
 
                             // --- Grind Neutrals ---
-                            onoffSwitch = OnOffSwitches.CreateGrindJanitorNotOwned(janitorAllowedNeutral, isJanitorAllowedNeutral, isReadonly, isBaRSystem);
+                            onoffSwitch = OnOffSwitches.CreateGrindJanitorNeutrals(janitorAllowedNeutral, isJanitorAllowedNeutral, isReadonly, isBaRSystem);
                             CreateProperty(onoffSwitch, Mod.Settings.Welder.UseGrindJanitorFixed || !janitorAllowedNeutral);
                         }
 
