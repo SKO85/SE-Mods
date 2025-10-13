@@ -30,11 +30,12 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             return texts;
         }
 
-        public static MyStringId GetStringId(Dictionary<string, string> texts, string key)
+        public static MyStringId GetStringId(Dictionary<string, string> texts, string key, int maxLineLength = Texts.TextDefaultMaxLenght)
         {
             try
             {
-                return MyStringId.GetOrCompute(texts[key]);
+                // Use the WrapText call to have multiple lines when having longs texts.
+                return MyStringId.GetOrCompute(UtilsText.WrapText(texts[key], maxLineLength));
             }
             catch (Exception ex)
             {

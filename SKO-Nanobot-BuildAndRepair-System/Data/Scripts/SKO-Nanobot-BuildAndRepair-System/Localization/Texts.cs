@@ -113,6 +113,10 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId Cmd_HelpClient;
         public static readonly MyStringId Cmd_HelpServer;
 
+        public const int TextDefaultMaxLenght = 40;
+        public const int TextDefaultMaxTooltipLenght = 50;
+        // public const int TextDefaultCheckBoxMaxLength = 30;
+
         static Texts()
         {
             var language = Mod.DisableLocalization ? MyLanguagesEnum.English : MyAPIGateway.Session.Config.Language;
@@ -121,12 +125,12 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             var texts = LocalizationHelper.GetTexts(language, GetDictionaries(), Logging.Instance);
             ModeSettings_Headline = LocalizationHelper.GetStringId(texts, "ModeSettings_Headline");
             SearchMode = LocalizationHelper.GetStringId(texts, "SearchMode");
-            SearchMode_Tooltip = LocalizationHelper.GetStringId(texts, "SearchMode_Tooltip");
+            SearchMode_Tooltip = LocalizationHelper.GetStringId(texts, "SearchMode_Tooltip", TextDefaultMaxTooltipLenght);
             SearchMode_Walk = LocalizationHelper.GetStringId(texts, "SearchMode_Walk");
             SearchMode_Fly = LocalizationHelper.GetStringId(texts, "SearchMode_Fly");
 
             WorkMode = LocalizationHelper.GetStringId(texts, "WorkMode");
-            WorkMode_Tooltip = LocalizationHelper.GetStringId(texts, "WorkMode_Tooltip");
+            WorkMode_Tooltip = LocalizationHelper.GetStringId(texts, "WorkMode_Tooltip", TextDefaultMaxTooltipLenght);
             WorkMode_WeldB4Grind = LocalizationHelper.GetStringId(texts, "WorkMode_WeldB4Grind");
             WorkMode_GrindB4Weld = LocalizationHelper.GetStringId(texts, "WorkMode_GrindB4Weld");
             WorkMode_GrindIfWeldStuck = LocalizationHelper.GetStringId(texts, "WorkMode_GrindIfWeldStuck");
@@ -135,50 +139,50 @@ namespace SKONanobotBuildAndRepairSystem.Localization
 
             WeldSettings_Headline = LocalizationHelper.GetStringId(texts, "WeldSettings_Headline");
             WeldUseIgnoreColor = LocalizationHelper.GetStringId(texts, "WeldUseIgnoreColor");
-            WeldUseIgnoreColor_Tooltip = LocalizationHelper.GetStringId(texts, "WeldUseIgnoreColor_Tooltip");
+            WeldUseIgnoreColor_Tooltip = LocalizationHelper.GetStringId(texts, "WeldUseIgnoreColor_Tooltip", TextDefaultMaxTooltipLenght);
             WeldBuildNew = LocalizationHelper.GetStringId(texts, "WeldBuildNew");
-            WeldBuildNew_Tooltip = LocalizationHelper.GetStringId(texts, "WeldBuildNew_Tooltip");
+            WeldBuildNew_Tooltip = LocalizationHelper.GetStringId(texts, "WeldBuildNew_Tooltip", TextDefaultMaxTooltipLenght);
             WeldToFuncOnly = LocalizationHelper.GetStringId(texts, "WeldToFuncOnly");
-            WeldToFuncOnly_Tooltip = LocalizationHelper.GetStringId(texts, "WeldToFuncOnly_Tooltip");
+            WeldToFuncOnly_Tooltip = LocalizationHelper.GetStringId(texts, "WeldToFuncOnly_Tooltip", TextDefaultMaxTooltipLenght);
             WeldPriority = LocalizationHelper.GetStringId(texts, "WeldPriority");
-            WeldPriority_Tooltip = LocalizationHelper.GetStringId(texts, "WeldPriority_Tooltip");
+            WeldPriority_Tooltip = LocalizationHelper.GetStringId(texts, "WeldPriority_Tooltip", TextDefaultMaxTooltipLenght);
 
             GrindSettings_Headline = LocalizationHelper.GetStringId(texts, "GrindSettings_Headline");
             GrindUseGrindColor = LocalizationHelper.GetStringId(texts, "GrindUseGrindColor");
-            GrindUseGrindColor_Tooltip = LocalizationHelper.GetStringId(texts, "GrindUseGrindColor_Tooltip");
+            GrindUseGrindColor_Tooltip = LocalizationHelper.GetStringId(texts, "GrindUseGrindColor_Tooltip", TextDefaultMaxTooltipLenght);
 
             GrindJanitorEnemy = LocalizationHelper.GetStringId(texts, "GrindJanitorEnemy");
-            GrindJanitorEnemy_Tooltip = LocalizationHelper.GetStringId(texts, "GrindJanitorEnemy_Tooltip");
+            GrindJanitorEnemy_Tooltip = LocalizationHelper.GetStringId(texts, "GrindJanitorEnemy_Tooltip", TextDefaultMaxTooltipLenght);
             GrindJanitorNotOwned = LocalizationHelper.GetStringId(texts, "GrindJanitorNotOwned");
-            GrindJanitorNotOwned_Tooltip = LocalizationHelper.GetStringId(texts, "GrindJanitorNotOwned_Tooltip");
+            GrindJanitorNotOwned_Tooltip = LocalizationHelper.GetStringId(texts, "GrindJanitorNotOwned_Tooltip", TextDefaultMaxTooltipLenght);
             GrindJanitorNeutrals = LocalizationHelper.GetStringId(texts, "GrindJanitorNeutrals");
-            GrindJanitorNeutrals_Tooltip = LocalizationHelper.GetStringId(texts, "GrindJanitorNeutrals_Tooltip");
+            GrindJanitorNeutrals_Tooltip = LocalizationHelper.GetStringId(texts, "GrindJanitorNeutrals_Tooltip", TextDefaultMaxTooltipLenght);
             GrindJanitorDisableOnly = LocalizationHelper.GetStringId(texts, "GrindJanitorDisableOnly");
-            GrindJanitorDisableOnly_Tooltip = LocalizationHelper.GetStringId(texts, "GrindJanitorDisableOnly_Tooltip");
+            GrindJanitorDisableOnly_Tooltip = LocalizationHelper.GetStringId(texts, "GrindJanitorDisableOnly_Tooltip", TextDefaultMaxTooltipLenght);
             GrindJanitorHackOnly = LocalizationHelper.GetStringId(texts, "GrindJanitorHackOnly");
-            GrindJanitorHackOnly_Tooltip = LocalizationHelper.GetStringId(texts, "GrindJanitorHackOnly_Tooltip");
+            GrindJanitorHackOnly_Tooltip = LocalizationHelper.GetStringId(texts, "GrindJanitorHackOnly_Tooltip", TextDefaultMaxTooltipLenght);
 
             GrindPriority = LocalizationHelper.GetStringId(texts, "GrindPriority");
-            GrindPriority_Tooltip = LocalizationHelper.GetStringId(texts, "GrindPriority_Tooltip");
+            GrindPriority_Tooltip = LocalizationHelper.GetStringId(texts, "GrindPriority_Tooltip", TextDefaultMaxTooltipLenght);
 
             GrindOrderNearest = LocalizationHelper.GetStringId(texts, "GrindOrderNearest");
-            GrindOrderNearest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderNearest_Tooltip");
+            GrindOrderNearest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderNearest_Tooltip", TextDefaultMaxTooltipLenght);
             GrindOrderFarthest = LocalizationHelper.GetStringId(texts, "GrindOrderFarthest");
-            GrindOrderFarthest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderFarthest_Tooltip");
+            GrindOrderFarthest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderFarthest_Tooltip", TextDefaultMaxTooltipLenght);
             GrindOrderSmallest = LocalizationHelper.GetStringId(texts, "GrindOrderSmallest");
-            GrindOrderSmallest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderSmallest_Tooltip");
+            GrindOrderSmallest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderSmallest_Tooltip", TextDefaultMaxTooltipLenght);
 
             CollectSettings_Headline = LocalizationHelper.GetStringId(texts, "CollectSettings_Headline");
             CollectPriority = LocalizationHelper.GetStringId(texts, "CollectPriority");
-            CollectPriority_Tooltip = LocalizationHelper.GetStringId(texts, "CollectPriority_Tooltip");
+            CollectPriority_Tooltip = LocalizationHelper.GetStringId(texts, "CollectPriority_Tooltip", TextDefaultMaxTooltipLenght);
             CollectOnlyIfIdle = LocalizationHelper.GetStringId(texts, "CollectOnlyIfIdle");
-            CollectOnlyIfIdle_Tooltip = LocalizationHelper.GetStringId(texts, "CollectOnlyIfIdle_Tooltip");
+            CollectOnlyIfIdle_Tooltip = LocalizationHelper.GetStringId(texts, "CollectOnlyIfIdle_Tooltip", TextDefaultMaxTooltipLenght);
             CollectPushOre = LocalizationHelper.GetStringId(texts, "CollectPushOre");
-            CollectPushOre_Tooltip = LocalizationHelper.GetStringId(texts, "CollectPushOre_Tooltip");
+            CollectPushOre_Tooltip = LocalizationHelper.GetStringId(texts, "CollectPushOre_Tooltip", TextDefaultMaxTooltipLenght);
             CollectPushItems = LocalizationHelper.GetStringId(texts, "CollectPushItems");
-            CollectPushItems_Tooltip = LocalizationHelper.GetStringId(texts, "CollectPushItems_Tooltip");
+            CollectPushItems_Tooltip = LocalizationHelper.GetStringId(texts, "CollectPushItems_Tooltip", TextDefaultMaxTooltipLenght);
             CollectPushComp = LocalizationHelper.GetStringId(texts, "CollectPushComp");
-            CollectPushComp_Tooltip = LocalizationHelper.GetStringId(texts, "CollectPushComp_Tooltip");
+            CollectPushComp_Tooltip = LocalizationHelper.GetStringId(texts, "CollectPushComp_Tooltip", TextDefaultMaxTooltipLenght);
 
             Color_PickCurrentColor = LocalizationHelper.GetStringId(texts, "Color_PickCurrentColor");
             Color_SetCurrentColor = LocalizationHelper.GetStringId(texts, "Color_SetCurrentColor");
@@ -189,7 +193,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             Priority_Down = LocalizationHelper.GetStringId(texts, "Priority_Down");
 
             AreaShow = LocalizationHelper.GetStringId(texts, "AreaShow");
-            AreaShow_Tooltip = LocalizationHelper.GetStringId(texts, "AreaShow_Tooltip");
+            AreaShow_Tooltip = LocalizationHelper.GetStringId(texts, "AreaShow_Tooltip", TextDefaultMaxTooltipLenght);
             AreaWidth = LocalizationHelper.GetStringId(texts, "AreaWidth");
             AreaHeight = LocalizationHelper.GetStringId(texts, "AreaHeight");
             AreaDepth = LocalizationHelper.GetStringId(texts, "AreaDepth");
@@ -205,7 +209,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
 
             SoundVolume = LocalizationHelper.GetStringId(texts, "SoundVolume");
             ScriptControlled = LocalizationHelper.GetStringId(texts, "ScriptControlled");
-            ScriptControlled_Tooltip = LocalizationHelper.GetStringId(texts, "ScriptControlled_Tooltip");
+            ScriptControlled_Tooltip = LocalizationHelper.GetStringId(texts, "ScriptControlled_Tooltip", TextDefaultMaxTooltipLenght);
 
             Info_CurentWeldEntity = LocalizationHelper.GetStringId(texts, "Info_CurentWeldEntity");
             Info_CurentGrindEntity = LocalizationHelper.GetStringId(texts, "Info_CurentGrindEntity");
