@@ -62,8 +62,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"CollectPushComp",                 "Komponenten sofort auslagern"},
             {"CollectPushComp_Tooltip",         "Wenn diese Option markiert ist, wird das System sofort versuchen Komponenten in angschlosse Container auszulagern."},
 
-            {"Priority_Enable",                 "Aktivieren"},
-            {"Priority_Disable",                "Deaktivieren"},
+            {"Priority_Enable",                 "Aktiv."},
+            {"Priority_Disable",                "Deakt."},
             {"Priority_Up",                     "Priorität hoch"},
             {"Priority_Down",                   "Priorität runter"},
 
