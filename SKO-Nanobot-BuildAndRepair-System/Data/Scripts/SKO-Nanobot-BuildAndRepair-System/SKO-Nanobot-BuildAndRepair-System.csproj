@@ -158,6 +158,14 @@
     <Compile Include="Models\TargetEntityData.cs" />
     <Compile Include="Mods\ShieldApi.cs" />
     <Compile Include="NanobotSystemEffects.cs" />
+    <Compile Include="Terminal\Buttons.cs" />
+    <Compile Include="Terminal\ComboBoxes.cs" />
+    <Compile Include="Terminal\Labels.cs" />
+    <Compile Include="Terminal\ListBoxes.cs" />
+    <Compile Include="Terminal\OnOffSwitches.cs" />
+    <Compile Include="Terminal\Properties.cs" />
+    <Compile Include="Terminal\Separators.cs" />
+    <Compile Include="Terminal\Sliders.cs" />
     <Compile Include="Utils\Logging.cs" />
     <Compile Include="NanobotSystem.cs" />
     <Compile Include="Localization\Texts.cs" />
@@ -173,6 +181,7 @@
     <Compile Include="Utils\UtilsSorting.cs" />
     <Compile Include="Utils\UtilsSynchronization.cs" />
     <Compile Include="Utils\SlimBlockUtils.cs" />
+    <Compile Include="Utils\UtilsText.cs" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Managers\" />

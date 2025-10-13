@@ -7,7 +7,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static Dictionary<string, string> Dictionary = new Dictionary<string, string>()
         {
             {"ModeSettings_Headline",           "—— Moduseinstellungen ——"},
-            {"SearchMode",                      "Mode"},
+            {"SearchMode",                      "Modus"},
             {"SearchMode_Tooltip",              "Wählen Sie aus, wie die Nanobots ihre Ziele suchen und erreichen."},
             {"SearchMode_Walk",                 "Laufmodus"},
             {"SearchMode_Fly",                  "Flugmodus"},

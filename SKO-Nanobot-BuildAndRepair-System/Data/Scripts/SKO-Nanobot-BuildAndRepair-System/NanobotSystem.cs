@@ -2161,6 +2161,20 @@ namespace SKONanobotBuildAndRepairSystem
                     var grid = entity as IMyCubeGrid;
                     if (grid != null)
                     {
+                        // Check for non-projected grids we might need to skip. Conditions:
+                        // 1. are not editable...
+                        // 2. are not possible to destruct...
+                        // 3. are in preview-mode (copy-paste)...
+                        // Notes:
+                        // - Plugins might set Editable and DestructibleBlocks to false. In those cases we want to skip scanning for target blocks as it is not intended to weld or grind anything of that grid.
+                        // - Copy-paste by admins or in creative-mode should not scan while in preview mode. The grid should be scanned after it has been placed in the world.
+                        var cubeGrid = grid as MyCubeGrid;
+                        if (cubeGrid != null && cubeGrid.Projector == null && (!cubeGrid.Editable || !cubeGrid.DestructibleBlocks || cubeGrid.IsPreview))
+                        {
+                            continue;
+                        }
+
+                        // Scan for target blocks of grid.
                         AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, grid, grids, null, possibleWeldTargets, possibleGrindTargets);
                         continue;
                     }

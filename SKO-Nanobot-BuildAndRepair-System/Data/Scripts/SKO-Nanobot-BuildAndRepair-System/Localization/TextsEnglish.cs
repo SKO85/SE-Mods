@@ -6,19 +6,19 @@ namespace SKONanobotBuildAndRepairSystem.Localization
     {
         public static Dictionary<string, string> Dictionary = new Dictionary<string, string>()
         {
-            {"ModeSettings_Headline",           "———————Mode Settings———————"},
+            {"ModeSettings_Headline",           "—————— Mode Settings ——————"},
             {"SearchMode",                      "Mode"},
             {"SearchMode_Tooltip",              "Select how the nanobots search and reach their targets."},
             {"SearchMode_Walk",                 "Walk mode"},
             {"SearchMode_Fly",                  "Fly mode"},
-            {"WorkMode",                        "WorkMode"},
+            {"WorkMode",                        "Work mode"},
             {"WorkMode_Tooltip",                "Select how the nanobots decide what to do (weld or grind)."},
             {"WorkMode_WeldB4Grind",            "Weld before grind"},
             {"WorkMode_GrindB4Weld",            "Grind before weld"},
             {"WorkMode_GrindIfWeldStuck",       "Grind if weld get stuck"},
             {"WorkMode_WeldOnly",               "Welding only"},
             {"WorkMode_GrindOnly",              "Grinding only"},
-            {"WeldSettings_Headline",           "———————Settings for Welding———————"},
+            {"WeldSettings_Headline",           "—————— Settings for Welding ——————"},
             {"WeldUseIgnoreColor",              "Use Ignore Color"},
             {"WeldUseIgnoreColor_Tooltip",      "When checked, the system will ignore blocks with the color defined further down."},
             {"WeldBuildNew",                    "Build new"},
@@ -28,7 +28,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"WeldPriority",                    "Welding Priority"},
             {"WeldPriority_Tooltip",            "Enable/Disable build-repair of selected items kinds"},
 
-            {"GrindSettings_Headline",          "———————Settings for Grinding———————"},
+            {"GrindSettings_Headline",          "—————— Settings for Grinding ——————"},
             {"GrindUseGrindColor",              "Use Grind Color"},
             {"GrindUseGrindColor_Tooltip",      "When checked, the system will grind blocks with the color defined further down."},
             {"GrindJanitorEnemy",               "Janitor grinds enemy blocks"},
@@ -50,7 +50,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindOrderSmallest",              "Smallest grid first"},
             {"GrindOrderSmallest_Tooltip",      "When checked, if blocks have the same priority, the smallest grid is grinded first."},
 
-            {"CollectSettings_Headline",        "———————Settings for Collecting———————"},
+            {"CollectSettings_Headline",        "—————— Settings for Collecting ——————"},
             {"CollectPriority",                 "Collect Priority"},
             {"CollectPriority_Tooltip",         "Enable/Disable collecting of selected items kind"},
             {"CollectOnlyIfIdle",               "Collect only if idle"},
