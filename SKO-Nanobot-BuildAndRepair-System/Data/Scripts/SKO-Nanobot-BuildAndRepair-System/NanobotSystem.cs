@@ -2161,17 +2161,15 @@ namespace SKONanobotBuildAndRepairSystem
                     var grid = entity as IMyCubeGrid;
                     if (grid != null)
                     {
-                        // Check for non-projected grids we might need to skip. Conditions:
-                        // 1. are not editable...
-                        // 2. are not possible to destruct...
-                        // 3. are in preview-mode (copy-paste)...
-                        // Notes:
-                        // - Plugins might set Editable and DestructibleBlocks to false. In those cases we want to skip scanning for target blocks as it is not intended to weld or grind anything of that grid.
-                        // - Copy-paste by admins or in creative-mode should not scan while in preview mode. The grid should be scanned after it has been placed in the world.
                         var cubeGrid = grid as MyCubeGrid;
-                        if (cubeGrid != null && cubeGrid.Projector == null && (!cubeGrid.Editable || !cubeGrid.DestructibleBlocks || cubeGrid.IsPreview))
+                        if (cubeGrid != null && cubeGrid.Projector == null)
                         {
-                            continue;
+                            // IsPreview: Skip if grid is in preview-mode (copy-paste and not yet placed).
+                            // Editable: Editable == false means that a player cannot target the grid anymore. Cannot add new blocks, weld stuff, or grind stuff.
+                            if (cubeGrid.IsPreview || !cubeGrid.Editable)
+                            {
+                                continue;
+                            }
                         }
 
                         // Scan for target blocks of grid.
@@ -2255,7 +2253,9 @@ namespace SKONanobotBuildAndRepairSystem
                 if (mechanicalConnectionBlock != null)
                 {
                     if (mechanicalConnectionBlock.TopGrid != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
+                    {
                         AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, mechanicalConnectionBlock.TopGrid, grids, possibleSources, possibleWeldTargets, possibleGrindTargets);
+                    }
                     continue;
                 }
 
@@ -2263,7 +2263,9 @@ namespace SKONanobotBuildAndRepairSystem
                 if (attachableTopBlock != null)
                 {
                     if (attachableTopBlock.Base != null && attachableTopBlock.Base.CubeGrid != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
+                    {
                         AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, attachableTopBlock.Base.CubeGrid, grids, possibleSources, possibleWeldTargets, possibleGrindTargets);
+                    }
                     continue;
                 }
 
@@ -2461,11 +2463,21 @@ namespace SKONanobotBuildAndRepairSystem
                 return false;
             }
 
-            //block.CubeGrid.BlocksDestructionEnabled is not available for modding, so at least check if general destruction is enabled
-            if ((MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode) && !MyAPIGateway.Session.SessionSettings.DestructibleBlocks) return false;
+            // Check if session allows destructible blocks or not. If not, we cannot grind anything.
+            if ((MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode) && !MyAPIGateway.Session.SessionSettings.DestructibleBlocks)
+            {
+                return false;
+            }
 
             if (block.IsProjected())
                 return false;
+
+            // Skip checks for grinding if destructible blocks is disabled or if grid is Immune. We cannot grind anytihng on the target grid then.
+            var cubeGrid = block.CubeGrid as MyCubeGrid;
+            if (cubeGrid != null && (!cubeGrid.DestructibleBlocks || cubeGrid.Immune))
+            {
+                return false;
+            }
 
             var autoGrind = autoGrindRelation != 0 && BlockGrindPriority.GetEnabled(block);
             if (autoGrind)
@@ -2488,10 +2500,12 @@ namespace SKONanobotBuildAndRepairSystem
                 var criticalIntegrityRatio = ((MyCubeBlockDefinition)block.BlockDefinition).CriticalIntegrityRatio;
                 var ownershipIntegrityRatio = ((MyCubeBlockDefinition)block.BlockDefinition).OwnershipIntegrityRatio > 0 ? ((MyCubeBlockDefinition)block.BlockDefinition).OwnershipIntegrityRatio : criticalIntegrityRatio;
                 var integrityRation = block.Integrity / block.MaxIntegrity;
+
                 if (autoGrind && ((autoGrindOptions & AutoGrindOptions.DisableOnly) != 0))
                 {
                     autoGrind = block.FatBlock != null && integrityRation > criticalIntegrityRatio;
                 }
+
                 if (autoGrind && ((autoGrindOptions & AutoGrindOptions.HackOnly) != 0))
                 {
                     autoGrind = block.FatBlock != null && integrityRation > ownershipIntegrityRatio;
