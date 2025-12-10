@@ -66,12 +66,13 @@ namespace SKONanobotBuildAndRepairSystem
         public static readonly int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
 
         public static readonly MyDefinitionId ElectricityId = new MyDefinitionId(typeof(VRage.Game.ObjectBuilders.Definitions.MyObjectBuilder_GasProperties), "Electricity");
+        internal bool CreativeModeActive = false;
 
         private static readonly MyStringId RangeGridResourceId = MyStringId.GetOrCompute("WelderGrid");
         private static readonly Random _RandomDelay = new Random();
 
         private Stopwatch _DelayWatch = new Stopwatch();
-        private int _Delay = 0;
+        private int _Delay = 0;        
 
         private bool _AsyncUpdateSourcesAndTargetsRunning = false;
         private List<TargetBlockData> _TempPossibleWeldTargets = new List<TargetBlockData>();
@@ -467,9 +468,12 @@ namespace SKONanobotBuildAndRepairSystem
                 }
 
                 _DelayWatch.Restart();
+                
 
                 if (MyAPIGateway.Session.IsServer)
                 {
+                    CreativeModeActive = MyAPIGateway.Session.CreativeMode;
+
                     if (!fast)
                     {
                         CleanupFriendlyDamage();
@@ -1140,7 +1144,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var blockDefinition = target.BlockDefinition as MyCubeBlockDefinition;
                 var item = _TransportInventory.FindItem(blockDefinition.Components[0].Definition.Id);
 
-                if (item != null && item.Amount >= 1 && cubeGridProjected != null && cubeGridProjected.Projector != null)
+                if ((CreativeModeActive || (item != null && item.Amount >= 1)) && cubeGridProjected != null && cubeGridProjected.Projector != null)
                 {
                     if (_Welder.IsWithinWorldLimits(cubeGridProjected.Projector, blockDefinition.BlockPairName, blockDefinition.PCU))
                     {
@@ -1194,7 +1198,7 @@ namespace SKONanobotBuildAndRepairSystem
                     target.MoveItemsToConstructionStockpile(_TransportInventory);
 
                     //Incomplete
-                    welding = target.CanContinueBuild(_TransportInventory);
+                    welding = target.CanContinueBuild(_TransportInventory) || CreativeModeActive;
 
                     if (welding)
                     {
@@ -1467,7 +1471,7 @@ namespace SKONanobotBuildAndRepairSystem
                     ServerFindMissingComponents(targetData, ref remainingVolume);
                 }
 
-                if (remainingVolume < _MaxTransportVolume)
+                if (remainingVolume < _MaxTransportVolume || (CreativeModeActive && _TempMissingComponents.Count > 0))
                 {
                     //Transport startet
                     State.CurrentTransportIsPick = false;
@@ -1578,42 +1582,49 @@ namespace SKONanobotBuildAndRepairSystem
             var empty = _TransportInventory.Empty();
             if (!empty)
             {
-                var welderInventory = _Welder.GetInventory(0);
-                if (welderInventory != null)
+                if(!CreativeModeActive)
                 {
-                    if (push && !welderInventory.Empty())
+                    var welderInventory = _Welder.GetInventory(0);
+                    if (welderInventory != null)
                     {
-                        if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryPushInventoryLast).TotalSeconds > 5 && welderInventory.MaxVolume - welderInventory.CurrentVolume < _TransportInventory.CurrentVolume * 1.5f)
+                        if (push && !welderInventory.Empty())
                         {
-                            if (!welderInventory.PushComponents(_PossibleSources, null))
+                            if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryPushInventoryLast).TotalSeconds > 5 && welderInventory.MaxVolume - welderInventory.CurrentVolume < _TransportInventory.CurrentVolume * 1.5f)
                             {
-                                // Failed retry after timeout
-                                _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
+                                if (!welderInventory.PushComponents(_PossibleSources, null))
+                                {
+                                    // Failed retry after timeout
+                                    _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
+                                }
                             }
                         }
-                    }
 
-                    var tempInventoryItems = new List<MyInventoryItem>();
-                    _TransportInventory.GetItems(tempInventoryItems);
+                        var tempInventoryItems = new List<MyInventoryItem>();
+                        _TransportInventory.GetItems(tempInventoryItems);
 
-                    for (int srcItemIndex = tempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
-                    {
-                        var item = tempInventoryItems[srcItemIndex];
-                        if (item == null) continue;
-
-                        // Try to move as much as possible
-                        var amount = item.Amount;
-                        var moveableAmount = welderInventory.MaxItemsAddable(amount, item.Type);
-                        if (moveableAmount > 0)
+                        for (int srcItemIndex = tempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                         {
-                            if (welderInventory.TransferItemFrom(_TransportInventory, srcItemIndex, null, true, moveableAmount, false))
+                            var item = tempInventoryItems[srcItemIndex];
+                            if (item == null) continue;
+
+                            // Try to move as much as possible
+                            var amount = item.Amount;
+                            var moveableAmount = welderInventory.MaxItemsAddable(amount, item.Type);
+                            if (moveableAmount > 0)
                             {
-                                amount -= moveableAmount;
+                                if (welderInventory.TransferItemFrom(_TransportInventory, srcItemIndex, null, true, moveableAmount, false))
+                                {
+                                    amount -= moveableAmount;
+                                }
                             }
                         }
-                    }
 
-                    tempInventoryItems.Clear();
+                        tempInventoryItems.Clear();
+                    }
+                }
+                else
+                {
+                    _TransportInventory.Clear();
                 }
 
                 empty = _TransportInventory.Empty();
@@ -2624,6 +2635,12 @@ namespace SKONanobotBuildAndRepairSystem
                 return;
             }
 
+            if (CreativeModeActive)
+            {
+                customInfo.Append($"[color=#FFFFFF00]Creative Mode Active[/color]");
+                customInfo.Append(Environment.NewLine);
+            }
+
             customInfo.Append($"State: {GetStateString()}{Environment.NewLine}");
 
             var resourceSink = _Welder.ResourceSink as Sandbox.Game.EntityComponents.MyResourceSinkComponent;
@@ -2636,7 +2653,7 @@ namespace SKONanobotBuildAndRepairSystem
                 customInfo.Append(Environment.NewLine);
             }
 
-            customInfo.Append(Environment.NewLine);
+            customInfo.Append(Environment.NewLine);            
 
             if (State.IsShielded)
             {

@@ -18,6 +18,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
         public static bool HasRequiredElectricPower(this NanobotSystem system)
         {
             if (system.Welder == null) return false;
+            if (system.CreativeModeActive) return true;
 
             var required = ComputeRequiredElectricPower(system);
             var maxAvailable = GetAvailablePower(system); ;
