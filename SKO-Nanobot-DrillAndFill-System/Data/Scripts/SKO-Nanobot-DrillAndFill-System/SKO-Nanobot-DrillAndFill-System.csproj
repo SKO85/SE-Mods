@@ -117,7 +117,22 @@
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Compile Include="Localization.cs" />
+    <Compile Include="Logging.cs" />
+    <Compile Include="NanobotDrillSystemBlock.cs" />
+    <Compile Include="NanobotDrillSystemLocalization.cs" />
+    <Compile Include="NanobotDrillSystemMod.cs" />
+    <Compile Include="NanobotDrillSystemPriorityHandling.cs" />
+    <Compile Include="NanobotDrillSystemSynchronization.cs" />
+    <Compile Include="NanobotDrillSystemTerminal.cs" />
+    <Compile Include="PriorityHandling.cs" />
+    <Compile Include="Utils.cs" />
+    <Compile Include="UtilsInventory.cs" />
+    <Compile Include="UtilsProductionBlock.cs" />
+    <Compile Include="UtilsSynchronization.cs" />
+    <Compile Include="UtilsVoxels.cs" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>D:\Git\GitHub\SKO85\SE\SE-Mods\_Scripts\BuildAndFillSystem\build_post.cmd $(ProjectName) $(SolutionDir)$(ProjectName)</PostBuildEvent>

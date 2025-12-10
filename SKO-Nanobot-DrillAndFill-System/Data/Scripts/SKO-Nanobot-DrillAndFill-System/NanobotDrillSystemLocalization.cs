@@ -1,158 +1,157 @@
-namespace SpaceEquipmentLtd.NanobotDrillSystem
+namespace SKONanobotDrillAndFillSystem.NanobotDrillSystem
 {
-   using System.Collections.Generic;
-   using VRage;
-   using VRage.Utils;
-   using Sandbox.ModAPI;
-   using SpaceEquipmentLtd.Localization;
-   using SpaceEquipmentLtd.Utils;
+    using Sandbox.ModAPI;
+    using SKONanobotDrillAndFillSystem.Localization;
+    using SKONanobotDrillAndFillSystem.Utils;
+    using System.Collections.Generic;
+    using VRage;
+    using VRage.Utils;
 
-   
-   public static class Texts
-   {
-      public readonly static MyStringId ModeSettings_Headline;
-      public readonly static MyStringId WorkMode;
-      public readonly static MyStringId WorkMode_Tooltip;
-      public readonly static MyStringId WorkMode_Collect;
-      public readonly static MyStringId WorkMode_Drill;
-      public readonly static MyStringId WorkMode_Fill;
-      public readonly static MyStringId DrillSettings_Headline;
-      public readonly static MyStringId DrillPriority;
-      public readonly static MyStringId DrillPriority_Tooltip;
+    public static class Texts
+    {
+        public static readonly MyStringId ModeSettings_Headline;
+        public static readonly MyStringId WorkMode;
+        public static readonly MyStringId WorkMode_Tooltip;
+        public static readonly MyStringId WorkMode_Collect;
+        public static readonly MyStringId WorkMode_Drill;
+        public static readonly MyStringId WorkMode_Fill;
+        public static readonly MyStringId DrillSettings_Headline;
+        public static readonly MyStringId DrillPriority;
+        public static readonly MyStringId DrillPriority_Tooltip;
 
-      public readonly static MyStringId FillSettings_Headline;
-      public readonly static MyStringId FillMaterial;
-      public readonly static MyStringId FillMaterial_Tooltip;
+        public static readonly MyStringId FillSettings_Headline;
+        public static readonly MyStringId FillMaterial;
+        public static readonly MyStringId FillMaterial_Tooltip;
 
-      public readonly static MyStringId CollectSettings_Headline;
-      public readonly static MyStringId CollectPriority;
-      public readonly static MyStringId CollectPriority_Tooltip;
-      public readonly static MyStringId CollectOnlyIfIdle;
-      public readonly static MyStringId CollectOnlyIfIdle_Tooltip;
+        public static readonly MyStringId CollectSettings_Headline;
+        public static readonly MyStringId CollectPriority;
+        public static readonly MyStringId CollectPriority_Tooltip;
+        public static readonly MyStringId CollectOnlyIfIdle;
+        public static readonly MyStringId CollectOnlyIfIdle_Tooltip;
 
-      public readonly static MyStringId Priority_Enable;
-      public readonly static MyStringId Priority_Disable;
-      public readonly static MyStringId Priority_Up;
-      public readonly static MyStringId Priority_Down;
+        public static readonly MyStringId Priority_Enable;
+        public static readonly MyStringId Priority_Disable;
+        public static readonly MyStringId Priority_Up;
+        public static readonly MyStringId Priority_Down;
 
-      public readonly static MyStringId GeneralSettings_Headline;
+        public static readonly MyStringId GeneralSettings_Headline;
 
-      public readonly static MyStringId AreaShow;
-      public readonly static MyStringId AreaShow_Tooltip;
+        public static readonly MyStringId AreaShow;
+        public static readonly MyStringId AreaShow_Tooltip;
 
-      public readonly static MyStringId AreaWidth;
-      public readonly static MyStringId AreaHeight;
-      public readonly static MyStringId AreaDepth;
+        public static readonly MyStringId AreaWidth;
+        public static readonly MyStringId AreaHeight;
+        public static readonly MyStringId AreaDepth;
 
-      public readonly static MyStringId RemoteCtrlBy;
-      public readonly static MyStringId RemoteCtrlBy_Tooltip;
-      public readonly static MyStringId RemoteCtrlBy_None;
-      public readonly static MyStringId RemoteCtrlShowArea;
-      public readonly static MyStringId RemoteCtrlShowArea_Tooltip;
-      public readonly static MyStringId RemoteCtrlWorking;
-      public readonly static MyStringId RemoteCtrlWorking_Tooltip;
+        public static readonly MyStringId RemoteCtrlBy;
+        public static readonly MyStringId RemoteCtrlBy_Tooltip;
+        public static readonly MyStringId RemoteCtrlBy_None;
+        public static readonly MyStringId RemoteCtrlShowArea;
+        public static readonly MyStringId RemoteCtrlShowArea_Tooltip;
+        public static readonly MyStringId RemoteCtrlWorking;
+        public static readonly MyStringId RemoteCtrlWorking_Tooltip;
 
-      public readonly static MyStringId Parent;
-      public readonly static MyStringId Parent_Tooltip;
+        public static readonly MyStringId Parent;
+        public static readonly MyStringId Parent_Tooltip;
 
-      public readonly static MyStringId SoundVolume;
-      public readonly static MyStringId ScriptControlled;
-      public readonly static MyStringId ScriptControlled_Tooltip;
+        public static readonly MyStringId SoundVolume;
+        public static readonly MyStringId ScriptControlled;
+        public static readonly MyStringId ScriptControlled_Tooltip;
 
-      public readonly static MyStringId Info_CurentDrillEntity;
-      public readonly static MyStringId Info_CurentFillEntity;
-      public readonly static MyStringId Info_InventoryFull;
-      public readonly static MyStringId Info_DisabledByRemote;
-      public readonly static MyStringId Info_ItemsToDrill;
-      public readonly static MyStringId Info_ItemsToFill;
-      public readonly static MyStringId Info_ItemsToCollect;
-      public readonly static MyStringId Info_More;
-      public readonly static MyStringId Info_MissingMaterial;
-      public readonly static MyStringId Info_ObjectInWorkarea;
-      public readonly static MyStringId Info_BlockSwitchedOff;
-      public readonly static MyStringId Info_BlockDamaged;
-      public readonly static MyStringId Info_BlockUnpowered;
+        public static readonly MyStringId Info_CurentDrillEntity;
+        public static readonly MyStringId Info_CurentFillEntity;
+        public static readonly MyStringId Info_InventoryFull;
+        public static readonly MyStringId Info_DisabledByRemote;
+        public static readonly MyStringId Info_ItemsToDrill;
+        public static readonly MyStringId Info_ItemsToFill;
+        public static readonly MyStringId Info_ItemsToCollect;
+        public static readonly MyStringId Info_More;
+        public static readonly MyStringId Info_MissingMaterial;
+        public static readonly MyStringId Info_ObjectInWorkarea;
+        public static readonly MyStringId Info_BlockSwitchedOff;
+        public static readonly MyStringId Info_BlockDamaged;
+        public static readonly MyStringId Info_BlockUnpowered;
 
-      public readonly static MyStringId Cmd_HelpClient;
-      public readonly static MyStringId Cmd_HelpServer;
+        public static readonly MyStringId Cmd_HelpClient;
+        public static readonly MyStringId Cmd_HelpServer;
 
-      static Texts()
-      {
-         var language = Mod.DisableLocalization ? MyLanguagesEnum.English : MyAPIGateway.Session.Config.Language;
-         Mod.Log.Write(Logging.Level.Error, "Localization: Disabled={0} Language={1}", Mod.DisableLocalization, language);
+        static Texts()
+        {
+            var language = Mod.DisableLocalization ? MyLanguagesEnum.English : MyAPIGateway.Session.Config.Language;
+            Mod.Log.Write(Logging.Level.Error, "Localization: Disabled={0} Language={1}", Mod.DisableLocalization, language);
 
-         var texts = LocalizationHelper.GetTexts(language, GetDictionaries(), Mod.Log);
-         ModeSettings_Headline = LocalizationHelper.GetStringId(texts, "ModeSettings_Headline");
-         WorkMode = LocalizationHelper.GetStringId(texts, "WorkMode");
-         WorkMode_Tooltip = LocalizationHelper.GetStringId(texts, "WorkMode_Tooltip");
-         WorkMode_Collect = LocalizationHelper.GetStringId(texts, "WorkMode_Collect");
-         WorkMode_Drill = LocalizationHelper.GetStringId(texts, "WorkMode_Drill");
-         WorkMode_Fill = LocalizationHelper.GetStringId(texts, "WorkMode_Fill");
+            var texts = LocalizationHelper.GetTexts(language, GetDictionaries(), Mod.Log);
+            ModeSettings_Headline = LocalizationHelper.GetStringId(texts, "ModeSettings_Headline");
+            WorkMode = LocalizationHelper.GetStringId(texts, "WorkMode");
+            WorkMode_Tooltip = LocalizationHelper.GetStringId(texts, "WorkMode_Tooltip");
+            WorkMode_Collect = LocalizationHelper.GetStringId(texts, "WorkMode_Collect");
+            WorkMode_Drill = LocalizationHelper.GetStringId(texts, "WorkMode_Drill");
+            WorkMode_Fill = LocalizationHelper.GetStringId(texts, "WorkMode_Fill");
 
-         DrillSettings_Headline = LocalizationHelper.GetStringId(texts, "DrillSettings_Headline");
-         DrillPriority = LocalizationHelper.GetStringId(texts, "DrillPriority");
-         DrillPriority_Tooltip = LocalizationHelper.GetStringId(texts, "DrillPriority_Tooltip");
+            DrillSettings_Headline = LocalizationHelper.GetStringId(texts, "DrillSettings_Headline");
+            DrillPriority = LocalizationHelper.GetStringId(texts, "DrillPriority");
+            DrillPriority_Tooltip = LocalizationHelper.GetStringId(texts, "DrillPriority_Tooltip");
 
-         FillSettings_Headline = LocalizationHelper.GetStringId(texts, "FillSettings_Headline");
-         FillMaterial = LocalizationHelper.GetStringId(texts, "FillMaterial");
-         FillMaterial_Tooltip = LocalizationHelper.GetStringId(texts, "FillMaterial_Tooltip");
+            FillSettings_Headline = LocalizationHelper.GetStringId(texts, "FillSettings_Headline");
+            FillMaterial = LocalizationHelper.GetStringId(texts, "FillMaterial");
+            FillMaterial_Tooltip = LocalizationHelper.GetStringId(texts, "FillMaterial_Tooltip");
 
-         CollectSettings_Headline = LocalizationHelper.GetStringId(texts, "CollectSettings_Headline");
-         CollectPriority = LocalizationHelper.GetStringId(texts, "CollectPriority");
-         CollectPriority_Tooltip = LocalizationHelper.GetStringId(texts, "CollectPriority_Tooltip");
-         CollectOnlyIfIdle = LocalizationHelper.GetStringId(texts, "CollectOnlyIfIdle");
-         CollectOnlyIfIdle_Tooltip = LocalizationHelper.GetStringId(texts, "CollectOnlyIfIdle_Tooltip");
+            CollectSettings_Headline = LocalizationHelper.GetStringId(texts, "CollectSettings_Headline");
+            CollectPriority = LocalizationHelper.GetStringId(texts, "CollectPriority");
+            CollectPriority_Tooltip = LocalizationHelper.GetStringId(texts, "CollectPriority_Tooltip");
+            CollectOnlyIfIdle = LocalizationHelper.GetStringId(texts, "CollectOnlyIfIdle");
+            CollectOnlyIfIdle_Tooltip = LocalizationHelper.GetStringId(texts, "CollectOnlyIfIdle_Tooltip");
 
-         Priority_Enable = LocalizationHelper.GetStringId(texts, "Priority_Enable");
-         Priority_Disable = LocalizationHelper.GetStringId(texts, "Priority_Disable");
-         Priority_Up = LocalizationHelper.GetStringId(texts, "Priority_Up");
-         Priority_Down = LocalizationHelper.GetStringId(texts, "Priority_Down");
+            Priority_Enable = LocalizationHelper.GetStringId(texts, "Priority_Enable");
+            Priority_Disable = LocalizationHelper.GetStringId(texts, "Priority_Disable");
+            Priority_Up = LocalizationHelper.GetStringId(texts, "Priority_Up");
+            Priority_Down = LocalizationHelper.GetStringId(texts, "Priority_Down");
 
-         GeneralSettings_Headline = LocalizationHelper.GetStringId(texts, "GeneralSettings_Headline");
+            GeneralSettings_Headline = LocalizationHelper.GetStringId(texts, "GeneralSettings_Headline");
 
-         AreaShow = LocalizationHelper.GetStringId(texts, "AreaShow");
-         AreaShow_Tooltip = LocalizationHelper.GetStringId(texts, "AreaShow_Tooltip");
-         AreaWidth = LocalizationHelper.GetStringId(texts, "AreaWidth");
-         AreaHeight = LocalizationHelper.GetStringId(texts, "AreaHeight");
-         AreaDepth = LocalizationHelper.GetStringId(texts, "AreaDepth");
+            AreaShow = LocalizationHelper.GetStringId(texts, "AreaShow");
+            AreaShow_Tooltip = LocalizationHelper.GetStringId(texts, "AreaShow_Tooltip");
+            AreaWidth = LocalizationHelper.GetStringId(texts, "AreaWidth");
+            AreaHeight = LocalizationHelper.GetStringId(texts, "AreaHeight");
+            AreaDepth = LocalizationHelper.GetStringId(texts, "AreaDepth");
 
-         Parent = LocalizationHelper.GetStringId(texts, "Parent");
-         Parent_Tooltip = LocalizationHelper.GetStringId(texts, "Parent_Tooltip");
+            Parent = LocalizationHelper.GetStringId(texts, "Parent");
+            Parent_Tooltip = LocalizationHelper.GetStringId(texts, "Parent_Tooltip");
 
-         RemoteCtrlBy = LocalizationHelper.GetStringId(texts, "RemoteCtrlBy");
-         RemoteCtrlBy_Tooltip = LocalizationHelper.GetStringId(texts, "RemoteCtrlBy_Tooltip");
-         RemoteCtrlBy_None = LocalizationHelper.GetStringId(texts, "RemoteCtrlBy_None");
+            RemoteCtrlBy = LocalizationHelper.GetStringId(texts, "RemoteCtrlBy");
+            RemoteCtrlBy_Tooltip = LocalizationHelper.GetStringId(texts, "RemoteCtrlBy_Tooltip");
+            RemoteCtrlBy_None = LocalizationHelper.GetStringId(texts, "RemoteCtrlBy_None");
 
-         RemoteCtrlShowArea = LocalizationHelper.GetStringId(texts, "RemoteCtrlShowArea");
-         RemoteCtrlShowArea_Tooltip = LocalizationHelper.GetStringId(texts, "RemoteCtrlShowArea_Tooltip");
-         RemoteCtrlWorking = LocalizationHelper.GetStringId(texts, "RemoteCtrlWorking");
-         RemoteCtrlWorking_Tooltip = LocalizationHelper.GetStringId(texts, "RemoteCtrlWorking_Tooltip");
+            RemoteCtrlShowArea = LocalizationHelper.GetStringId(texts, "RemoteCtrlShowArea");
+            RemoteCtrlShowArea_Tooltip = LocalizationHelper.GetStringId(texts, "RemoteCtrlShowArea_Tooltip");
+            RemoteCtrlWorking = LocalizationHelper.GetStringId(texts, "RemoteCtrlWorking");
+            RemoteCtrlWorking_Tooltip = LocalizationHelper.GetStringId(texts, "RemoteCtrlWorking_Tooltip");
 
-         SoundVolume = LocalizationHelper.GetStringId(texts, "SoundVolume");
-         ScriptControlled = LocalizationHelper.GetStringId(texts, "ScriptControlled");
-         ScriptControlled_Tooltip = LocalizationHelper.GetStringId(texts, "ScriptControlled_Tooltip");
+            SoundVolume = LocalizationHelper.GetStringId(texts, "SoundVolume");
+            ScriptControlled = LocalizationHelper.GetStringId(texts, "ScriptControlled");
+            ScriptControlled_Tooltip = LocalizationHelper.GetStringId(texts, "ScriptControlled_Tooltip");
 
-         Info_CurentDrillEntity = LocalizationHelper.GetStringId(texts, "Info_CurentDrillEntity");
-         Info_CurentFillEntity = LocalizationHelper.GetStringId(texts, "Info_CurentFillEntity");
-         Info_InventoryFull = LocalizationHelper.GetStringId(texts, "Info_InventoryFull");
-         Info_DisabledByRemote = LocalizationHelper.GetStringId(texts, "Info_DisabledByRemote");
-         Info_ItemsToDrill = LocalizationHelper.GetStringId(texts, "Info_ItemsToDrill");
-         Info_ItemsToFill = LocalizationHelper.GetStringId(texts, "Info_ItemsToFill");
-         Info_ItemsToCollect = LocalizationHelper.GetStringId(texts, "Info_ItemsToCollect");
-         Info_More = LocalizationHelper.GetStringId(texts, "Info_More");
-         Info_MissingMaterial = LocalizationHelper.GetStringId(texts, "Info_MissingMaterial");
-         Info_ObjectInWorkarea = LocalizationHelper.GetStringId(texts, "Info_ObjectInWorkarea");
-         Info_BlockSwitchedOff = LocalizationHelper.GetStringId(texts, "Info_BlockSwitchedOff");
-         Info_BlockDamaged = LocalizationHelper.GetStringId(texts, "Info_BlockDamaged");
-         Info_BlockUnpowered = LocalizationHelper.GetStringId(texts, "Info_BlockUnpowered");
+            Info_CurentDrillEntity = LocalizationHelper.GetStringId(texts, "Info_CurentDrillEntity");
+            Info_CurentFillEntity = LocalizationHelper.GetStringId(texts, "Info_CurentFillEntity");
+            Info_InventoryFull = LocalizationHelper.GetStringId(texts, "Info_InventoryFull");
+            Info_DisabledByRemote = LocalizationHelper.GetStringId(texts, "Info_DisabledByRemote");
+            Info_ItemsToDrill = LocalizationHelper.GetStringId(texts, "Info_ItemsToDrill");
+            Info_ItemsToFill = LocalizationHelper.GetStringId(texts, "Info_ItemsToFill");
+            Info_ItemsToCollect = LocalizationHelper.GetStringId(texts, "Info_ItemsToCollect");
+            Info_More = LocalizationHelper.GetStringId(texts, "Info_More");
+            Info_MissingMaterial = LocalizationHelper.GetStringId(texts, "Info_MissingMaterial");
+            Info_ObjectInWorkarea = LocalizationHelper.GetStringId(texts, "Info_ObjectInWorkarea");
+            Info_BlockSwitchedOff = LocalizationHelper.GetStringId(texts, "Info_BlockSwitchedOff");
+            Info_BlockDamaged = LocalizationHelper.GetStringId(texts, "Info_BlockDamaged");
+            Info_BlockUnpowered = LocalizationHelper.GetStringId(texts, "Info_BlockUnpowered");
 
-         Cmd_HelpClient = LocalizationHelper.GetStringId(texts, "Cmd_HelpClient");
-         Cmd_HelpServer = LocalizationHelper.GetStringId(texts, "Cmd_HelpServer");
-      }
+            Cmd_HelpClient = LocalizationHelper.GetStringId(texts, "Cmd_HelpClient");
+            Cmd_HelpServer = LocalizationHelper.GetStringId(texts, "Cmd_HelpServer");
+        }
 
-      static Dictionary<MyLanguagesEnum, Dictionary<string, string>> GetDictionaries()
-      {
-         var dicts = new Dictionary<MyLanguagesEnum, Dictionary<string, string>>
+        private static Dictionary<MyLanguagesEnum, Dictionary<string, string>> GetDictionaries()
+        {
+            var dicts = new Dictionary<MyLanguagesEnum, Dictionary<string, string>>
          {
             { MyLanguagesEnum.English, new Dictionary<string, string>
                {
@@ -334,7 +333,7 @@ namespace SpaceEquipmentLtd.NanobotDrillSystem
                   {"Info_BlockUnpowered",        "Блоку недостаточно энергии"},
                   {"Cmd_HelpClient",             "Версия: {0}" +
                                                  "\nДоступные команды:" +
-                                                 "\n[{1};{2}]: Показать эту информацию" + 
+                                                 "\n[{1};{2}]: Показать эту информацию" +
                                                  "\n[{3} {4};{5}]: Установить текущий уровень записи логов. Предупреждение: Установка уровня на '{4}' может создавать огромные лог-файлы"},
                   {"Cmd_HelpServer",             "\n[{0}]: Создает файл с настройками внутри папки текущего мира. После рестарта настройки в этом файле будут использованы вместо глобальных настроек." +
                                                  "\n[{1}]: Создает файл с глобальными настройками внутри папки мода (включает все опции)."}
@@ -519,8 +518,8 @@ namespace SpaceEquipmentLtd.NanobotDrillSystem
             }
          };
 
-         dicts.Add(MyLanguagesEnum.Spanish_HispanicAmerica, dicts[MyLanguagesEnum.Spanish_Spain]);
-         return dicts;
-      }
-   }
+            dicts.Add(MyLanguagesEnum.Spanish_HispanicAmerica, dicts[MyLanguagesEnum.Spanish_Spain]);
+            return dicts;
+        }
+    }
 }
