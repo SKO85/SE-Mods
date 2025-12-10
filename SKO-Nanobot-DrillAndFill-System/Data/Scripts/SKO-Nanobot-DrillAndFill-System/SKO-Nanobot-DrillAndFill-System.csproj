@@ -4,10 +4,10 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{AC9B5B5D-5CBE-4535-ACBF-BB0D6F1E6204}</ProjectGuid>
+    <ProjectGuid>{BD90B369-3CD6-440E-B7B2-3B83096A27E9}</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>SKONanobotBuildAndRepairSystem</RootNamespace>
-    <AssemblyName>SKONanobotBuildAndRepairSystem</AssemblyName>
+    <RootNamespace>SKONanobotFillAndDrillSystem</RootNamespace>
+    <AssemblyName>SKONanobotFillAndDrillSystem</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -117,77 +117,9 @@
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Handlers\BlockSystemAssigningHandler.cs" />
-    <Compile Include="Handlers\SafeZoneHandler.cs" />
-    <Compile Include="Helpers\InventoryHelper.cs" />
-    <Compile Include="Localization\TextsPolish.cs" />
-    <Compile Include="Localization\TextsRussian.cs" />
-    <Compile Include="Localization\TextsGerman.cs" />
-    <Compile Include="Localization\TextsEnglish.cs" />
-    <Compile Include="Models\TtlCache.cs" />
-    <Compile Include="Constants.cs" />
-    <Compile Include="Handlers\ChatHandler.cs" />
-    <Compile Include="Handlers\ComponentPriorityHandling.cs" />
-    <Compile Include="Handlers\DamageHandler.cs" />
-    <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />
-    <Compile Include="Handlers\NetworkMessagingHandler.cs" />
-    <Compile Include="Helpers\PowerHelper.cs" />
-    <Compile Include="Helpers\SlimBlockHelper.cs" />
-    <Compile Include="Helpers\MathHelper.cs" />
-    <Compile Include="Localization\LocalizationHelper.cs" />
-    <Compile Include="Collections\DefinitionIdHashDictionary.cs" />
-    <Compile Include="Collections\TargetBlockDataHashList.cs" />
-    <Compile Include="Collections\TargetEntityDataHasList.cs" />
-    <Compile Include="Collections\HashDictionary.cs" />
-    <Compile Include="Collections\HashList.cs" />
-    <Compile Include="Models\MsgBlockDataRequest.cs" />
-    <Compile Include="Models\MsgBlockSettings.cs" />
-    <Compile Include="Models\MsgBlockState.cs" />
-    <Compile Include="Models\MsgDataRequest.cs" />
-    <Compile Include="Models\MsgModCommand.cs" />
-    <Compile Include="Models\MsgModSettings.cs" />
-    <Compile Include="Models\SyncBlockSettings.cs" />
-    <Compile Include="Models\SyncBlockState.cs" />
-    <Compile Include="Models\SyncComponents.cs" />
-    <Compile Include="Models\SyncEntityId.cs" />
-    <Compile Include="Models\SyncModSettings.cs" />
-    <Compile Include="Models\SyncModSettingsWelder.cs" />
-    <Compile Include="Models\SyncTargetEntityData.cs" />
-    <Compile Include="Models\TargetBlockData.cs" />
-    <Compile Include="Models\TargetEntityData.cs" />
-    <Compile Include="Mods\ShieldApi.cs" />
-    <Compile Include="NanobotSystemEffects.cs" />
-    <Compile Include="Terminal\Buttons.cs" />
-    <Compile Include="Terminal\ComboBoxes.cs" />
-    <Compile Include="Terminal\Labels.cs" />
-    <Compile Include="Terminal\ListBoxes.cs" />
-    <Compile Include="Terminal\OnOffSwitches.cs" />
-    <Compile Include="Terminal\Properties.cs" />
-    <Compile Include="Terminal\Separators.cs" />
-    <Compile Include="Terminal\Sliders.cs" />
-    <Compile Include="Utils\Logging.cs" />
-    <Compile Include="NanobotSystem.cs" />
-    <Compile Include="Localization\Texts.cs" />
-    <Compile Include="Mod.cs" />
-    <Compile Include="Handlers\BlockPriorityHandling.cs" />
-    <Compile Include="NanobotTerminal.cs" />
-    <Compile Include="Handlers\PriorityHandling.cs" />
-    <Compile Include="Utils\Utils.cs" />
-    <Compile Include="Utils\UtilsFaction.cs" />
-    <Compile Include="Utils\UtilsInventory.cs" />
-    <Compile Include="Utils\UtilsPlayer.cs" />
-    <Compile Include="Utils\UtilsProductionBlock.cs" />
-    <Compile Include="Utils\UtilsSorting.cs" />
-    <Compile Include="Utils\UtilsSynchronization.cs" />
-    <Compile Include="Utils\SlimBlockUtils.cs" />
-    <Compile Include="Utils\UtilsText.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Managers\" />
-  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>D:\Git\GitHub\SKO85\SE\SE-Mods\_Scripts\BuildAndRepairSystem\build_post.cmd $(ProjectName) $(SolutionDir)$(ProjectName)</PostBuildEvent>
+    <PostBuildEvent>D:\Git\GitHub\SKO85\SE\SE-Mods\_Scripts\BuildAndFillSystem\build_post.cmd $(ProjectName) $(SolutionDir)$(ProjectName)</PostBuildEvent>
   </PropertyGroup>
 </Project>

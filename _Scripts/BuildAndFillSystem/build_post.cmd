@@ -20,18 +20,3 @@ del /s /q "%ScriptFolder%\*.sln"
 del /s /q "%ScriptFolder%\*.csproj"
 del /s /q "%ScriptFolder%\*.user"
 del /s /q "%ScriptFolder%\..\..\..\Textures\Models\*.xcf"
-
-
-
-
-set ModFolderTesting=%ModFolder%-Testing
-rmdir "%ModFolderTesting%" /s /q
-mkdir "%ModFolderTesting%"
-xcopy "%ModFolder%" "%ModFolderTesting%" /S /Y
-xcopy "%ProjectDir%\..\_Scripts\Testing\" "%ModFolderTesting%" /S /Y
-
-set ModFolderOriginal=%ModFolder%-Original
-rmdir "%ModFolderOriginal%" /s /q
-mkdir "%ModFolderOriginal%"
-xcopy "%ModFolder%" "%ModFolderOriginal%" /S /Y
-xcopy "%ProjectDir%\..\_Scripts\Original\" "%ModFolderOriginal%" /S /Y
