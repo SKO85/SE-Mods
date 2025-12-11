@@ -39,7 +39,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
     public abstract class PriorityHandling<C, I> : List<PrioItemState<C>> where C : PrioItem //where C : struct
     {
-        private bool _HashDirty = true;
+        protected bool _HashDirty = true;
         private MemorySafeList<string> _ClassList = new MemorySafeList<string>();
         private Dictionary<int, int> _PrioHash = new Dictionary<int, int>();
 
