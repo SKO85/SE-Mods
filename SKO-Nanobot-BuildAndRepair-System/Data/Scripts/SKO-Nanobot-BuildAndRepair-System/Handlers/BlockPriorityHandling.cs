@@ -65,7 +65,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             // Check cache.
             int result = 14;
-            if (GetItemKeyCache.TryGet(block.EntityId, out result))
+            if (!_HashDirty && GetItemKeyCache.TryGet(block.EntityId, out result))
             {
                 return result;
             }
