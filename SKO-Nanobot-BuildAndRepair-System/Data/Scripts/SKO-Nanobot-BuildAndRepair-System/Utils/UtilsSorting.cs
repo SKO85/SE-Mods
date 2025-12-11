@@ -1,7 +1,8 @@
-﻿using Sandbox.Game.Entities;
+using Sandbox.Game.Entities;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
 using System.Collections.Generic;
+using System.Linq;
 using VRage.Game.ModAPI;
 using VRageMath;
 
@@ -27,7 +28,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 }
 
                 // Remove from list when not enabled.
-                list.RemoveAll(i => !priorityHandler.GetEnabled(i));
+                list = list.Where(i => priorityHandler.GetEnabled(i)).ToList();
 
                 var welderCenter = system.Welder.WorldAABB.Center;
 
