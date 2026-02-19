@@ -2,6 +2,7 @@
 using Sandbox.Game.Entities;
 using Sandbox.Game.Lights;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Models;
 using System;
 using System.Threading;
 using VRage.Game;
@@ -29,6 +30,7 @@ namespace SKONanobotBuildAndRepairSystem
         public Vector3 EmitterPosition;
         public WorkingState WorkingStateSet = WorkingState.Invalid;
         public float SoundVolumeSet;
+        private bool _DisableTickingSoundSet;
 
         private MyEntity3DSoundEmitter _SoundEmitter;
         private MyEntity3DSoundEmitter _SoundEmitterWorking;
@@ -72,8 +74,11 @@ namespace SKONanobotBuildAndRepairSystem
 
             // Welding/Grinding state
             var workingState = system.GetWorkingState();
-            if (workingState != WorkingStateSet || system.Settings.SoundVolume != SoundVolumeSet)
+            var disableTickingSound = Mod.Settings.DisableTickingSound || ((system.Settings.Flags & SyncBlockSettings.Settings.DisableTickingSound) != 0);
+                                    
+            if (workingState != WorkingStateSet || system.Settings.SoundVolume != SoundVolumeSet || disableTickingSound != _DisableTickingSoundSet)
             {
+                _DisableTickingSoundSet = disableTickingSound;
                 SetWorkingEffects(system, workingState);
                 WorkingStateSet = workingState;
                 SoundVolumeSet = system.Settings.SoundVolume;
@@ -188,9 +193,21 @@ namespace SKONanobotBuildAndRepairSystem
 
             var sound = _Sounds[(int)workingState];
 
-            // If mod settings have ticking sound disabled. Don't use the ticking sound.
-            if(Mod.Settings.DisableTickingSound && sound != null && sound.GetCueName() == "BaRUnable")
+            // If ticking sound is disabled globally or per-block, suppress it.
+            if (sound != null && sound.GetCueName() == "BaRUnable" && _DisableTickingSoundSet)
             {
+                if (_SoundEmitter != null)
+                {
+                    _SoundEmitter.StopSound(true);
+                }
+
+                if (_SoundEmitterWorking != null)
+                {
+                    _SoundEmitterWorking.StopSound(true);
+                    _SoundEmitterWorking.SetPosition(null); //Reset
+                    _SoundEmitterWorkingPosition = null;
+                }
+
                 sound = null;
             }
 
@@ -286,13 +303,21 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             var sound = _Sounds[(int)workingState];
+           
             if ((_SoundEmitterWorking != null) && (sound != null))
             {
                 if (!_SoundEmitterWorking.IsPlaying || _SoundEmitterWorkingPosition == null || Math.Abs((_SoundEmitterWorkingPosition.Value - position).Length()) > 2)
                 {
-                    _SoundEmitterWorking.SetPosition(position);
-                    _SoundEmitterWorkingPosition = position;
-                    _SoundEmitterWorking.PlaySound(sound, true);
+                    if (sound != null && sound.GetCueName() == "BaRUnable" && _DisableTickingSoundSet)
+                    {
+                        // Ignore ticking...
+                    }
+                    else
+                    {
+                        _SoundEmitterWorking.SetPosition(position);
+                        _SoundEmitterWorkingPosition = position;
+                        _SoundEmitterWorking.PlaySound(sound, true);
+                    }                    
                 }
             }
         }

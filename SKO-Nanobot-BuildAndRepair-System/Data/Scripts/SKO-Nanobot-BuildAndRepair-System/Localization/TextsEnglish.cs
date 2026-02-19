@@ -85,6 +85,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"RemoteCtrlWorking",               "Control Working"},
             {"RemoteCtrlWorking_Tooltip",       "Select if drill is only switched on as long as character is equipped with hand welder/grinder"},
             {"SoundVolume",                     "Sound Volume"},
+            {"DisableTickingSound",             "Disable ticking sound"},
+            {"DisableTickingSound_Tooltip",     "When checked, the ticking/unable sound for this block is disabled."},
             {"ScriptControlled",                "Controlled by Script"},
             {"ScriptControlled_Tooltip",        "When checked, the system will not build/repair blocks automatically. Each block has to be picked by calling scripting functions."},
             {"Info_CurentWeldEntity",           "Picked Welding Block:"},

@@ -1139,5 +1139,47 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
 
             return control;
         }
+
+        public static IMyTerminalControlOnOffSwitch CreateDisableTickingSound(Func<IMyTerminalBlock, bool> isReadonly, Func<IMyTerminalBlock, bool> isBaRSystem)
+        {
+            var control = Create(
+                // Id:
+                "DisableTickingSound",
+
+                // Texts
+                Texts.DisableTickingSound,
+                Texts.DisableTickingSound_Tooltip,
+                MySpaceTexts.SwitchText_On,
+                MySpaceTexts.SwitchText_Off,
+
+                // Visible:
+                isBaRSystem,
+
+                // Enabled:
+                isBaRSystem,
+
+                // Getter:
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    return system != null ? ((system.Settings.Flags & SyncBlockSettings.Settings.DisableTickingSound) != 0) : false;
+                },
+
+                // Setter:
+                (block, value) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null)
+                    {
+                        system.Settings.Flags = (system.Settings.Flags & ~SyncBlockSettings.Settings.DisableTickingSound) | (value ? SyncBlockSettings.Settings.DisableTickingSound : 0);
+                    }
+                },
+
+                // Multiple blocks support.
+                true
+            );
+
+            return control;
+        }
     }
 }

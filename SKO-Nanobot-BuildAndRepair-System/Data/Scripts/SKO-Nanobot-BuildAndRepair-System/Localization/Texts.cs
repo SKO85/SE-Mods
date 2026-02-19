@@ -93,6 +93,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         //public readonly static MyStringId RemoteCtrlWorking_Tooltip;
 
         public static readonly MyStringId SoundVolume;
+        public static readonly MyStringId DisableTickingSound;
+        public static readonly MyStringId DisableTickingSound_Tooltip;
         public static readonly MyStringId ScriptControlled;
         public static readonly MyStringId ScriptControlled_Tooltip;
 
@@ -212,6 +214,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             //RemoteCtrlWorking_Tooltip = LocalizationHelper.GetStringId(texts, "RemoteCtrlWorking_Tooltip");
 
             SoundVolume = LocalizationHelper.GetStringId(texts, "SoundVolume");
+            DisableTickingSound = LocalizationHelper.GetStringId(texts, "DisableTickingSound");
+            DisableTickingSound_Tooltip = LocalizationHelper.GetStringId(texts, "DisableTickingSound_Tooltip", TextDefaultMaxTooltipLenght);
             ScriptControlled = LocalizationHelper.GetStringId(texts, "ScriptControlled");
             ScriptControlled_Tooltip = LocalizationHelper.GetStringId(texts, "ScriptControlled_Tooltip", TextDefaultMaxTooltipLenght);
 

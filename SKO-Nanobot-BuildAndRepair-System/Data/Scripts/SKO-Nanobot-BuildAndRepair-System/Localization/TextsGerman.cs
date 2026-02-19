@@ -85,6 +85,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"RemoteCtrlWorking",               "Block ein/aus steuern"},
             {"RemoteCtrlWorking_Tooltip",       "Wählen Sie, ob der Block nur eingeschaltet ist, solange der Charakter mit einem Schweißgerät oder Winkelschleifer ausgestattet ist."},
             {"SoundVolume",                     "Lautstärke"},
+            {"DisableTickingSound",             "Tickgeräusch deaktivieren"},
+            {"DisableTickingSound_Tooltip",     "Wenn aktiv, wird das Tickgeräusch für diesen Block deaktiviert."},
             {"ScriptControlled",                "Vom Skript gesteuert"},
             {"ScriptControlled_Tooltip",        "Wenn diese Option aktiviert ist, bohrt / füllt das System nicht automatisch. Jede Aktion muss durch Aufrufen von Skriptfunktionen ausgewählt werden."},
 

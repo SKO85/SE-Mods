@@ -85,6 +85,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"RemoteCtrlWorking",               "Контроль работы"},
             {"RemoteCtrlWorking_Tooltip",       "Если отмечено, система будет включена пока\nперсонаж оснащен ручным сварщиком/резаком."},
             {"SoundVolume",                     "Громкость"},
+            {"DisableTickingSound",             "Отключить звук тиканья"},
+            {"DisableTickingSound_Tooltip",     "Если включено, звук тиканья для этого блока отключается."},
             {"ScriptControlled",                "Контролируется скриптом"},
             {"ScriptControlled_Tooltip",        "Если этот флажок установлен, система не будет автоматически\nсваривать/разрезать. Каждое действие нужно выбирать, вызывая скриптовые функции."},
             {"Info_CurentWeldEntity",           "Выбран блок сварщика:"},

@@ -489,6 +489,13 @@ namespace SKONanobotBuildAndRepairSystem
                         // --- SoundVolume ---
                         slider = Sliders.SoundVolume(isReadonly, isBaRSystem);
                         CreateProperty(slider, Mod.Settings.Welder.SoundVolumeFixed);
+
+                        // --- DisableTickingSound (per-block, only shown when not disabled globally) ---
+                        if (!Mod.Settings.DisableTickingSound)
+                        {
+                            onoffSwitch = OnOffSwitches.CreateDisableTickingSound(isReadonly, isBaRSystem);
+                            CreateProperty(onoffSwitch);
+                        }
                     }
 
                     // -- Script Control
