@@ -2021,10 +2021,13 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0)
                                 {
-                                    var priorityA = BlockGrindPriority.GetPriority(a.Block);
-                                    var priorityB = BlockGrindPriority.GetPriority(b.Block);
-                                    if (priorityA != priorityB)
-                                        return priorityA - priorityB;
+                                    if (((Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0))
+                                    {
+                                        var priorityA = BlockGrindPriority.GetPriority(a.Block);
+                                        var priorityB = BlockGrindPriority.GetPriority(b.Block);
+                                        if (priorityA != priorityB)
+                                            return priorityA - priorityB;
+                                    }
 
                                     if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))
                                     {
@@ -2033,6 +2036,14 @@ namespace SKONanobotBuildAndRepairSystem
                                     }
                                     if (((Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0)) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
                                     return Utils.Utils.CompareDistance(b.Distance, a.Distance);
+                                }
+
+                                if (((Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0))
+                                {
+                                    var priorityA = BlockGrindPriority.GetPriority(a.Block);
+                                    var priorityB = BlockGrindPriority.GetPriority(b.Block);
+                                    if (priorityA != priorityB)
+                                        return priorityA - priorityB;
                                 }
 
                                 if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))

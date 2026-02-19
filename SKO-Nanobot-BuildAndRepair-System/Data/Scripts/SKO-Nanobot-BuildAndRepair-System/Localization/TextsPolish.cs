@@ -49,6 +49,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindOrderFarthest_Tooltip",      "Po zaznaczeniu, jeśli bloki mają ten sam priorytet, najdalszy będzie rozbierany pierwszy."},
             {"GrindOrderSmallest",              "Najpierw najmniejsza siatka"},
             {"GrindOrderSmallest_Tooltip",      "Po zaznaczeniu, jeśli bloki mają ten sam priorytet, najmniejsza siatka będzie rozbierana jako pierwsza."},
+            {"GrindIgnorePriority",             "Ignoruj kolejność priorytetów"},
+            {"GrindIgnorePriority_Tooltip",     "Po zaznaczeniu kolejność priorytetów jest ignorowana, a bloki są rozbierane tylko według odległości. Status włączenia/wyłączenia typów bloków jest nadal respektowany."},
 
             {"CollectSettings_Headline",        "———————Ustawienia Zbierania———————"},
             {"CollectPriority",                 "Priorytet zbierania"},

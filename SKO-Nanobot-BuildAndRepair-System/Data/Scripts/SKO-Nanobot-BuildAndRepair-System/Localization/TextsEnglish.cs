@@ -49,6 +49,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindOrderFarthest_Tooltip",      "When checked, if blocks have the same priority, the farthest is grinded first."},
             {"GrindOrderSmallest",              "Smallest grid first"},
             {"GrindOrderSmallest_Tooltip",      "When checked, if blocks have the same priority, the smallest grid is grinded first."},
+            {"GrindIgnorePriority",             "Ignore priority order"},
+            {"GrindIgnorePriority_Tooltip",     "When checked, the priority order is ignored and blocks are grinded by distance only. Enabled/disabled state of block types is still respected."},
 
             {"CollectSettings_Headline",        "—————— Settings for Collecting ——————"},
             {"CollectPriority",                 "Collect Priority"},

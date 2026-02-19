@@ -374,6 +374,10 @@ namespace SKONanobotBuildAndRepairSystem
                             var listbox = ListBoxes.CreateGrindPriority(grindingAllowed, isGrindingAllowed, isReadonly, isBaRSystem);
                             _GrindPriorityListBox = listbox;
 
+                            // --- GrindIgnorePriorityOrder ---
+                            onoffSwitch = OnOffSwitches.CreateGrindIgnorePriorityOrder(grindingAllowed, isGrindingAllowed, isReadonly, isBaRSystem);
+                            CreateProperty(onoffSwitch);
+
                             // --- GrindNearFirst ---
                             onoffSwitch = OnOffSwitches.CreateGrindNearFirst(grindingAllowed, isGrindingAllowed, isReadonly, isBaRSystem);
                             CreateProperty(onoffSwitch);

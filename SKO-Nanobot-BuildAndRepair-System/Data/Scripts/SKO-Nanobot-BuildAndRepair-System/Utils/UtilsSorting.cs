@@ -27,13 +27,17 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 {
                     bool grindSmallestFirst = (system.Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
                     bool grindNearFirst = (system.Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
+                    bool ignorePriorityOrder = (system.Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) != 0;
 
                     list.Sort((a, b) =>
                     {
-                        var priorityA = priorityHandler.GetPriority(a);
-                        var priorityB = priorityHandler.GetPriority(b);
-                        if (priorityA != priorityB)
-                            return priorityA - priorityB;
+                        if (!ignorePriorityOrder)
+                        {
+                            var priorityA = priorityHandler.GetPriority(a);
+                            var priorityB = priorityHandler.GetPriority(b);
+                            if (priorityA != priorityB)
+                                return priorityA - priorityB;
+                        }
 
                         BoundingBoxD bboxA;
                         a.GetWorldBoundingBox(out bboxA, false);

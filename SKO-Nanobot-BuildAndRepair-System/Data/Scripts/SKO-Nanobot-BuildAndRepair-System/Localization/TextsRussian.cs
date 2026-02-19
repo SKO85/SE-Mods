@@ -49,6 +49,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindOrderFarthest_Tooltip",      "Если блоки имеют одинаковый приоритет, самый\nдальний распиливается первым."},
             {"GrindOrderSmallest",              "Сначала самый маленький блок"},
             {"GrindOrderSmallest_Tooltip",      "Если блоки имеют одинаковый приоритет, вначале\nраспиливается самый маленький блок."},
+            {"GrindIgnorePriority",             "Игнорировать порядок приоритетов"},
+            {"GrindIgnorePriority_Tooltip",     "Если включено, порядок приоритетов игнорируется и блоки распиливаются только по расстоянию. Статус включения/отключения типов блоков по-прежнему учитывается."},
 
             {"CollectSettings_Headline",        "——————— Настройки для сбора ———————"},
             {"CollectPriority",                 "Приоритет сбора"},

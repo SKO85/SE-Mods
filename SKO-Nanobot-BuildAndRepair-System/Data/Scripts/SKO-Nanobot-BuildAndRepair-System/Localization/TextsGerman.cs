@@ -49,6 +49,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindOrderFarthest_Tooltip",      "Wenn diese Option markiert ist und Blöcke die gleiche Priorität besitzen, wird der enfernteste Block zuerst demontiert."},
             {"GrindOrderSmallest",              "Kleinster Verbund zuerst"},
             {"GrindOrderSmallest_Tooltip",      "Wenn diese Option markiert ist und Blöcke die gleiche Priorität besitzen, werden die Blöcke im kleinsten Verbund zuerst demontiert."},
+            {"GrindIgnorePriority",             "Prioritätsreihenfolge ignorieren"},
+            {"GrindIgnorePriority_Tooltip",     "Wenn aktiv, wird die Prioritätsreihenfolge ignoriert und Blöcke werden nur nach Entfernung demontiert. Aktiviert/deaktiviert Status der Blocktypen wird weiterhin beachtet."},
 
             {"CollectSettings_Headline",        "—— Einstellungen zum Sammeln ——————"},
             {"CollectPriority",                 "Sammelpriorität"},
