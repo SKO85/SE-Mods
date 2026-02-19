@@ -2,7 +2,6 @@ using Sandbox.Game.Entities;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
 using System.Collections.Generic;
-using System.Linq;
 using VRage.Game.ModAPI;
 using VRageMath;
 
@@ -17,29 +16,25 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
             try
             {
-                BlockPriorityHandling priorityHandler;
-                if (isGrinding)
-                {
-                    priorityHandler = system.BlockGrindPriority;
-                }
-                else
-                {
-                    priorityHandler = system.BlockWeldPriority;
-                }
+                BlockPriorityHandling priorityHandler = isGrinding ? system.BlockGrindPriority : system.BlockWeldPriority;
 
-                // Remove from list when not enabled.
-                list = list.Where(i => priorityHandler.GetEnabled(i)).ToList();
+                // Filter in-place so the caller's list is actually modified.
+                list.RemoveAll(i => !priorityHandler.GetEnabled(i));
 
                 var welderCenter = system.Welder.WorldAABB.Center;
 
-                list.Sort((a, b) =>
+                if (isGrinding)
                 {
-                    var priorityA = priorityHandler.GetPriority(a);
-                    var priorityB = priorityHandler.GetPriority(b);
+                    bool grindSmallestFirst = (system.Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
+                    bool grindNearFirst = (system.Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
 
-                    // If the priority is the same.
-                    if (priorityA == priorityB)
+                    list.Sort((a, b) =>
                     {
+                        var priorityA = priorityHandler.GetPriority(a);
+                        var priorityB = priorityHandler.GetPriority(b);
+                        if (priorityA != priorityB)
+                            return priorityA - priorityB;
+
                         BoundingBoxD bboxA;
                         a.GetWorldBoundingBox(out bboxA, false);
                         var distA = (welderCenter - bboxA.Center).Length();
@@ -48,36 +43,34 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                         b.GetWorldBoundingBox(out bboxB, false);
                         var distB = (welderCenter - bboxB.Center).Length();
 
-                        // Welding.
-                        if (!isGrinding)
+                        if (grindSmallestFirst)
                         {
-                            return Utils.CompareDistance(distA, distB);
+                            var gridRes = ((MyCubeGrid)a.CubeGrid).BlocksCount - ((MyCubeGrid)b.CubeGrid).BlocksCount;
+                            return gridRes != 0 ? gridRes : Utils.CompareDistance(distA, distB);
                         }
 
-                        // Grinding.
-                        else
-                        {
-                            // Check for smallest grid first.
-                            if ((system.Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0)
-                            {
-                                var res = ((MyCubeGrid)a.CubeGrid).BlocksCount - ((MyCubeGrid)b.CubeGrid).BlocksCount;
-                                return res != 0 ? res : Utils.CompareDistance(distA, distB);
-                            }
+                        return grindNearFirst ? Utils.CompareDistance(distA, distB) : Utils.CompareDistance(distB, distA);
+                    });
+                    return;
+                }
 
-                            // Check for nearest grid blocks first.
-                            if ((system.Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0)
-                            {
-                                return Utils.CompareDistance(distA, distB);
-                            }
-
-                            // otherwise, farthest grid blocks first.
-                            return Utils.CompareDistance(distB, distA);
-                        }
-                    }
-                    else
-                    {
+                // Welding: priority first, then nearest distance as tiebreaker.
+                list.Sort((a, b) =>
+                {
+                    var priorityA = priorityHandler.GetPriority(a);
+                    var priorityB = priorityHandler.GetPriority(b);
+                    if (priorityA != priorityB)
                         return priorityA - priorityB;
-                    }
+
+                    BoundingBoxD bboxA;
+                    a.GetWorldBoundingBox(out bboxA, false);
+                    var distA = (welderCenter - bboxA.Center).Length();
+
+                    BoundingBoxD bboxB;
+                    b.GetWorldBoundingBox(out bboxB, false);
+                    var distB = (welderCenter - bboxB.Center).Length();
+
+                    return Utils.CompareDistance(distA, distB);
                 });
             }
             catch { }

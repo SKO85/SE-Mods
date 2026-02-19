@@ -2016,17 +2016,16 @@ namespace SKONanobotBuildAndRepairSystem
                                 {
                                     var priorityA = BlockGrindPriority.GetPriority(a.Block);
                                     var priorityB = BlockGrindPriority.GetPriority(b.Block);
-                                    if (priorityA == priorityB)
+                                    if (priorityA != priorityB)
+                                        return priorityA - priorityB;
+
+                                    if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))
                                     {
-                                        if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))
-                                        {
-                                            var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                                            return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                        }
-                                        if (((Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0)) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                        return Utils.Utils.CompareDistance(b.Distance, a.Distance);
+                                        var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
+                                        return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
                                     }
-                                    else return priorityA - priorityB;
+                                    if (((Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0)) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                    return Utils.Utils.CompareDistance(b.Distance, a.Distance);
                                 }
 
                                 if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))
@@ -2162,6 +2161,21 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (entityInRange != null)
             {
+                // When grinding smallest grid first, pre-sort entities so smaller grids fill
+                // the candidate list before large grids can crowd them out.
+                if (possibleGrindTargets != null && (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0)
+                {
+                    entityInRange.Sort((a, b) =>
+                    {
+                        var ga = a as MyCubeGrid;
+                        var gb = b as MyCubeGrid;
+                        if (ga != null && gb != null) return ga.BlocksCount - gb.BlocksCount;
+                        if (ga != null) return -1;
+                        if (gb != null) return 1;
+                        return 0;
+                    });
+                }
+
                 foreach (var entity in entityInRange)
                 {
                     if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, possibleFloatingTargets))

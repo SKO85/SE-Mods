@@ -187,6 +187,14 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             var sound = _Sounds[(int)workingState];
+
+            // If mod settings have ticking sound disabled. Don't use the ticking sound.
+            if(Mod.Settings.DisableTickingSound && sound != null && sound.GetCueName() == "BaRUnable")
+            {
+                sound = null;
+            }
+
+            // If sound is set for working state.
             if (sound != null)
             {
                 if (_SoundEmitter == null)
