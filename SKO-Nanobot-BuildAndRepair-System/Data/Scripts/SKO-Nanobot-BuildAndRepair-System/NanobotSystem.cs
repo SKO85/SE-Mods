@@ -59,9 +59,9 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 4f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
-        private const int MaxPossibleWeldTargets = 256;
-        private const int MaxPossibleGrindTargets = 256;
-        private const int MaxPossibleFloatingTargets = 32;
+        private const int MaxPossibleWeldTargets = 512;
+        private const int MaxPossibleGrindTargets = 512;
+        private const int MaxPossibleFloatingTargets = 64;
 
         public static readonly int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
 
@@ -85,6 +85,12 @@ namespace SKONanobotBuildAndRepairSystem
 
         private ConcurrentDictionary<long, TimeSpan> CachedBlocksTime = new ConcurrentDictionary<long, TimeSpan>();
         private ConcurrentDictionary<long, List<IMySlimBlock>> CachedBlocks = new ConcurrentDictionary<long, List<IMySlimBlock>>();
+
+        private List<IMyEntity> _CachedEntitiesInRange;
+        private TimeSpan _CachedEntitiesInRangeTime;
+        private Vector3D _CachedEntitiesInRangeBBoxCenter;
+        private const double EntityCacheTtlSeconds = 5.0;
+        private const double EntityCachePositionTolerance = 25.0; // metres
 
         private IMyShipWelder _Welder;
         public IMyInventory _TransportInventory;
@@ -347,6 +353,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 CachedBlocksTime.Clear();
                 CachedBlocks.Clear();
+                _CachedEntitiesInRange = null;
 
                 _DelayWatch?.Stop();
 
@@ -2151,13 +2158,24 @@ namespace SKONanobotBuildAndRepairSystem
             emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
             var areaBoundingBox = Settings.CorrectedAreaBoundingBox.TransformFast(emitterMatrix);
 
-            // TODO: Improve performance with chaching this.
-            List<IMyEntity> entityInRange = null;
-            lock (MyAPIGateway.Entities)
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            var bboxCenter = areaBoundingBox.Center;
+            var cacheStale = _CachedEntitiesInRange == null
+                || (now - _CachedEntitiesInRangeTime).TotalSeconds > EntityCacheTtlSeconds
+                || (bboxCenter - _CachedEntitiesInRangeBBoxCenter).LengthSquared()
+                   > EntityCachePositionTolerance * EntityCachePositionTolerance;
+
+            if (cacheStale)
             {
-                // Use the top-most entities now as this should be faster than getting all entities.
-                entityInRange = MyAPIGateway.Entities.GetTopMostEntitiesInBox(ref areaBoundingBox);
+                lock (MyAPIGateway.Entities)
+                {
+                    // Use the top-most entities now as this should be faster than getting all entities.
+                    _CachedEntitiesInRange = MyAPIGateway.Entities.GetTopMostEntitiesInBox(ref areaBoundingBox);
+                }
+                _CachedEntitiesInRangeTime = now;
+                _CachedEntitiesInRangeBBoxCenter = bboxCenter;
             }
+            var entityInRange = _CachedEntitiesInRange;
 
             if (entityInRange != null)
             {
