@@ -188,6 +188,6 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>D:\Git\GitHub\SKO85\SE\SE-Mods\_Scripts\build_post.cmd $(ProjectName) $(SolutionDir)$(ProjectName)</PostBuildEvent>
+    <PostBuildEvent>D:\Git\GitHub\SKO85\SE\SE-Mods\_Scripts\BuildAndRepairSystem\build_post.cmd $(ProjectName) $(SolutionDir)$(ProjectName)</PostBuildEvent>
   </PropertyGroup>
 </Project>

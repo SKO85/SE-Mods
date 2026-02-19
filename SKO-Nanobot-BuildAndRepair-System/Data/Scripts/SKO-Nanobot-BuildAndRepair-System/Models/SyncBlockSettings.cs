@@ -26,6 +26,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
             UseGrindColor = 0x00000020,
             GrindNearFirst = 0x00000100,
             GrindSmallestGridFirst = 0x00000200,
+            GrindIgnorePriorityOrder = 0x00000400,
+            DisableTickingSound = 0x00000800,
             ComponentCollectIfIdle = 0x00010000,
             PushIngotOreImmediately = 0x00020000,
             PushComponentImmediately = 0x00040000,
@@ -647,7 +649,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
         public bool IsTransmitNeeded()
         {
-            return (Changed & 1u) != 0 && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastTransmitted) >= TimeSpan.FromSeconds(2);
+            return (Changed & 1u) != 0 && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastTransmitted) >= TimeSpan.FromSeconds(1);
         }
 
         private void RecalcAreaBoundigBox()

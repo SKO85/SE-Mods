@@ -49,6 +49,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindOrderFarthest_Tooltip",      "Po zaznaczeniu, jeśli bloki mają ten sam priorytet, najdalszy będzie rozbierany pierwszy."},
             {"GrindOrderSmallest",              "Najpierw najmniejsza siatka"},
             {"GrindOrderSmallest_Tooltip",      "Po zaznaczeniu, jeśli bloki mają ten sam priorytet, najmniejsza siatka będzie rozbierana jako pierwsza."},
+            {"GrindIgnorePriority",             "Ignoruj kolejność priorytetów"},
+            {"GrindIgnorePriority_Tooltip",     "Po zaznaczeniu kolejność priorytetów jest ignorowana, a bloki są rozbierane tylko według odległości. Status włączenia/wyłączenia typów bloków jest nadal respektowany."},
 
             {"CollectSettings_Headline",        "———————Ustawienia Zbierania———————"},
             {"CollectPriority",                 "Priorytet zbierania"},
@@ -83,6 +85,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"RemoteCtrlWorking",               "Zdalne działanie"},
             {"RemoteCtrlWorking_Tooltip",       "Select if drill is only switched on as long as character is equipped with hand welder/grinder"},
             {"SoundVolume",                     "Głośność efektow pracy"},
+            {"DisableTickingSound",             "Wyłącz dźwięk tykania"},
+            {"DisableTickingSound_Tooltip",     "Po zaznaczeniu dźwięk tykania dla tego bloku jest wyłączony."},
             {"ScriptControlled",                "Kontrolowany przez skrypt"},
             {"ScriptControlled_Tooltip",        "Po zaznaczeniu, system nie będzie automatycznie budował/naprawiał bloków. Każdy blok musi być wybrany przez skrypt."},
             {"Info_CurentWeldEntity",           "Wybrany blok do spawania:"},

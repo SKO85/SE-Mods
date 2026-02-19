@@ -1,0 +1,59 @@
+<?xml version="1.0"  encoding="utf-8"?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+   <CategoryClasses>
+      <Category xsi:type="MyObjectBuilder_GuiBlockCategoryDefinition">
+         <Id>
+            <TypeId>GuiBlockCategoryDefinition</TypeId>
+            <SubtypeId/>
+         </Id>
+         <DisplayName>Dummy Industries</DisplayName>
+         <Name>Dummy Industries</Name>
+         <ItemIds>
+            <string>Drill/SELtdLargeNanobotDrillSystem</string>
+            <string>Drill/SELtdSmallNanobotDrillSystem</string>
+         </ItemIds>
+      </Category>
+      
+      <Category xsi:type="MyObjectBuilder_GuiBlockCategoryDefinition">
+         <Id>
+            <TypeId>GuiBlockCategoryDefinition</TypeId>
+            <SubtypeId/>
+         </Id>
+         <DisplayName>DisplayName_Category_LargeBlocks</DisplayName>
+         <Name>LargeBlocks</Name>
+         <ItemIds>
+            <string>Drill/SELtdLargeNanobotDrillSystem</string>
+         </ItemIds>
+      </Category>
+      
+      <Category xsi:type="MyObjectBuilder_GuiBlockCategoryDefinition">
+         <Id>
+            <TypeId>GuiBlockCategoryDefinition</TypeId>
+            <SubtypeId/>
+         </Id>
+         <DisplayName>DisplayName_Category_SmallBlocks</DisplayName>
+         <Name>SmallBlocks</Name>
+         <ItemIds>
+            <string>Drill/SELtdSmallNanobotDrillSystem</string>
+         </ItemIds>
+      </Category>
+
+      <Category xsi:type="MyObjectBuilder_GuiBlockCategoryDefinition">
+         <Id>
+            <TypeId>GuiBlockCategoryDefinition</TypeId>
+            <SubtypeId/>
+         </Id>
+         <DisplayName>DisplayName_Category_ShipTools</DisplayName>
+         <Name>ShipTools</Name>
+         <SearchBlocks>false</SearchBlocks>
+         <IsShipCategory>true</IsShipCategory>
+         <IsBlockCategory>false</IsBlockCategory>
+         <IsToolCategory>true</IsToolCategory>
+         <ItemIds>
+            <string>ShipWelder/SELtdLargeNanobotDrillSystem</string>
+            <string>ShipWelder/SELtdSmallNanobotDrillSystem</string>
+         </ItemIds>
+      </Category>
+
+   </CategoryClasses>
+</Definitions>

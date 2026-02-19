@@ -17,7 +17,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             get
             {
                 if (_instance == null)
-                    _instance = new Logging("NanobotBuildAndRepairSystem", 0, "NanobotBuildAndRepairSystem.log", typeof(Mod));
+                    _instance = new Logging("SKONanobotBuildAndRepairSystem", 0, "NanobotBuildAndRepairSystem.log", typeof(Mod));
                 return _instance;
             }
         }

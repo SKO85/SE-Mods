@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+   <CubeBlocks>
+      <!--NanobotDrillSystem-->
+      <Definition xsi:type="MyObjectBuilder_ShipDrillDefinition">
+         <Id>
+            <TypeId>Drill</TypeId>
+            <SubtypeId>SELtdLargeNanobotDrillSystem</SubtypeId>
+         </Id>
+         <DisplayName>DrillSystem</DisplayName>
+         <Icon>Textures\Icons\SELtdNanobotDrillSystem.dds</Icon>
+         <CubeSize>Large</CubeSize>
+         <BlockTopology>TriangleMesh</BlockTopology>
+         <Size x="1" y="1" z="3" />
+         <ModelOffset x="0" y="0" z="0" />
+         <Center x="0" y="0" z="0" />
+         <Model>Models\NanobotDrillSystem\SELtdLargeNanobotDrillSystem.mwm</Model>
+         <Components>
+            <Component Subtype="SteelPlate" Count="40" />
+            <Component Subtype="Construction" Count="120" />
+            <Component Subtype="InteriorPlate" Count="25" />
+            <Component Subtype="SmallTube" Count="60" />
+            <Component Subtype="LargeTube" Count="10" />
+            <Component Subtype="Computer" Count="20" />            
+            <Component Subtype="Motor" Count="40" />
+            <Component Subtype="Construction" Count="20" />
+            <Component Subtype="SteelPlate" Count="12" />
+         </Components>
+         <CriticalComponent Subtype="Motor" Index="0" />
+         <MountPoints>
+            <MountPoint Side="Front" StartX="0.00" StartY="0.00" EndX="1.00" EndY="1.00" />
+            <MountPoint Side="Left" StartX="0.00" StartY="0.00" EndX="1.00" EndY="1.00" />
+            <MountPoint Side="Right" StartX="2.00" StartY="0.00" EndX="3.00" EndY="1.00" />
+            <MountPoint Side="Bottom" StartX="0.00" StartY="0.00" EndX="1.00" EndY="1.00" />
+            <MountPoint Side="Top" StartX="0.00" StartY="2.00" EndX="1.00" EndY="3.00" />
+         </MountPoints>
+         <BuildProgressModels>
+				<Model BuildPercentUpperBound="0.33" File="Models\NanobotDrillSystem\SELtdLargeNanobotDrillSystem_Constr1.mwm" />
+				<Model BuildPercentUpperBound="0.67" File="Models\NanobotDrillSystem\SELtdLargeNanobotDrillSystem_Constr2.mwm" />
+				<Model BuildPercentUpperBound="1.00" File="Models\NanobotDrillSystem\SELtdLargeNanobotDrillSystem_Constr3.mwm" />
+         </BuildProgressModels>
+         <BuildTimeSeconds>40</BuildTimeSeconds>
+         <BlockPairName>SELtdNanobotDrillSystem</BlockPairName>
+         <MirroringX>None</MirroringX>
+         <MirroringY>None</MirroringY>
+         <MirroringZ>None</MirroringZ>
+         <EdgeType>Light</EdgeType>
+
+         <ResourceSinkGroup>Defense</ResourceSinkGroup>
+         <!--Original range set to zero -->
+         <SensorRadius>0</SensorRadius>
+         <SensorOffset>0</SensorOffset>
+         <CutOutRadius>0</CutOutRadius>
+         <CutOutOffset>0</CutOutOffset>
+
+         <PrimarySound>BlockModuleEfficiency</PrimarySound>
+         <DamageEffectId>212</DamageEffectId>
+         <DamagedSound>ParticleHeavyMech</DamagedSound>
+         <PCU>200</PCU>
+      </Definition>
+
+      <Definition xsi:type="MyObjectBuilder_ShipDrillDefinition">
+         <Id>
+            <TypeId>Drill</TypeId>
+            <SubtypeId>SELtdSmallNanobotDrillSystem</SubtypeId>
+         </Id>
+         <DisplayName>DrillSystem</DisplayName>
+         <Icon>Textures\Icons\SELtdNanobotDrillSystem.dds</Icon>
+         <CubeSize>Small</CubeSize>
+         <BlockTopology>TriangleMesh</BlockTopology>
+         <Size x="3" y="3" z="6" />
+         <ModelOffset x="0" y="0" z="0" />
+         <Model>Models\NanobotDrillSystem\SELtdSmallNanobotDrillSystem.mwm</Model>
+         <Components>
+            <Component Subtype="SteelPlate" Count="15" />
+            <Component Subtype="Construction" Count="40" />
+            <Component Subtype="InteriorPlate" Count="8" />
+            <Component Subtype="SmallTube" Count="20" />
+            <Component Subtype="LargeTube" Count="2" />
+            <Component Subtype="Computer" Count="10" />            
+            <Component Subtype="Motor" Count="12" />
+            <Component Subtype="Construction" Count="10" />
+            <Component Subtype="SteelPlate" Count="4" />
+         </Components>
+         <CriticalComponent Subtype="Motor" Index="0" />
+         <Center x="1" y="1" z="0" />
+         <MountPoints>
+            <MountPoint Side="Front" StartX="0.00" StartY="1.00" EndX="3.00" EndY="2.00" Default="true"/>
+            <MountPoint Side="Left" StartX="0.00" StartY="1.00" EndX="1.00" EndY="2.00"/>
+            <MountPoint Side="Right" StartX="5.00" StartY="1.00" EndX="6.00" EndY="2.00"/>
+         </MountPoints>
+         <BuildProgressModels>
+      		<Model BuildPercentUpperBound="0.50" File="Models\NanobotDrillSystem\SELtdSmallNanobotDrillSystem_Constr1.mwm" />
+		      <Model BuildPercentUpperBound="1.00" File="Models\NanobotDrillSystem\SELtdSmallNanobotDrillSystem_Constr2.mwm" />
+         </BuildProgressModels>
+         <BuildTimeSeconds>30</BuildTimeSeconds>
+         <BlockPairName>SELtdNanobotDrillSystem</BlockPairName>
+         <MirroringX>None</MirroringX>
+         <MirroringY>None</MirroringY>
+         <MirroringZ>None</MirroringZ>
+         <EdgeType>Light</EdgeType>
+
+         <ResourceSinkGroup>Defense</ResourceSinkGroup>
+         <!--Original range set to zero -->
+         <SensorRadius>0</SensorRadius>
+         <SensorOffset>0</SensorOffset>
+         <CutOutRadius>0</CutOutRadius>
+         <CutOutOffset>0</CutOutOffset>
+
+         <PrimarySound>BlockModuleEfficiency</PrimarySound>
+         <DamageEffectId>212</DamageEffectId>
+         <DamagedSound>ParticleHeavyMech</DamagedSound>
+         <PCU>200</PCU>
+      </Definition>
+   </CubeBlocks>
+
+   <Sounds>
+      <Sound>
+         <Id>
+            <TypeId>MyObjectBuilder_AudioDefinition</TypeId>
+            <SubtypeId>ArcDrillSystemUnable</SubtypeId>
+         </Id>
+         <Category>TOOL</Category>
+         <Volume>0.1</Volume>
+         <MaxDistance>35</MaxDistance>
+         <Loopable>true</Loopable>
+         <Waves>
+            <Wave Type="D2">
+               <Loop>Sounds\ArcDrillSystemUnable2d.xwm</Loop>
+            </Wave>
+            <Wave Type="D3">
+               <Loop>Sounds\ArcDrillSystemUnable3d.xwm</Loop>
+            </Wave>
+         </Waves>
+      </Sound>
+
+      <Sound>
+         <Id>
+            <TypeId>MyObjectBuilder_AudioDefinition</TypeId>
+            <SubtypeId>RealDrillSystemUnable</SubtypeId>
+         </Id>
+         <Category>TOOL_R</Category>
+         <MaxDistance>5</MaxDistance>
+         <Volume>0.1</Volume>
+         <Pitch>-1</Pitch>
+         <Loopable>true</Loopable>
+         <Waves>
+            <Wave Type="D2">
+               <Loop>Sounds\RealDrillSystemUnable2d.wav</Loop>
+            </Wave>
+            <Wave Type="D3">
+               <Loop>Sounds\RealDrillSystemUnable3d.wav</Loop>
+            </Wave>
+         </Waves>
+      </Sound>
+   </Sounds>
+</Definitions>

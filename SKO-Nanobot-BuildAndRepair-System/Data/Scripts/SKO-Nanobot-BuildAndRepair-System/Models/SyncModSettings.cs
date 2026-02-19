@@ -38,16 +38,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(2), XmlElement]
         public int Range { get; set; }
 
-        [ProtoMember(3), XmlElement]
-        public long SourcesAndTargetsUpdateIntervalTicks
-        {
-            get { return TargetsUpdateInterval.Ticks; }
-            set
-            {
-                TargetsUpdateInterval = new TimeSpan(value);
-                SourcesUpdateInterval = new TimeSpan(value * 6);
-            }
-        }
+
 
         [ProtoMember(4), XmlElement]
         public long FriendlyDamageTimeoutTicks
@@ -89,6 +80,9 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
         [ProtoMember(25), XmlElement]
         public bool DeleteBotsWhenDead { get; set; }
+
+        [ProtoMember(26), XmlElement]
+        public bool DisableTickingSound { get; set; }
 
         public SyncModSettings()
         {

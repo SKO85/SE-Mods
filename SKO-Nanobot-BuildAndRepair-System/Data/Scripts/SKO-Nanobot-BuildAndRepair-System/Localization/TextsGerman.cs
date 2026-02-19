@@ -49,6 +49,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindOrderFarthest_Tooltip",      "Wenn diese Option markiert ist und Blöcke die gleiche Priorität besitzen, wird der enfernteste Block zuerst demontiert."},
             {"GrindOrderSmallest",              "Kleinster Verbund zuerst"},
             {"GrindOrderSmallest_Tooltip",      "Wenn diese Option markiert ist und Blöcke die gleiche Priorität besitzen, werden die Blöcke im kleinsten Verbund zuerst demontiert."},
+            {"GrindIgnorePriority",             "Prioritätsreihenfolge ignorieren"},
+            {"GrindIgnorePriority_Tooltip",     "Wenn aktiv, wird die Prioritätsreihenfolge ignoriert und Blöcke werden nur nach Entfernung demontiert. Aktiviert/deaktiviert Status der Blocktypen wird weiterhin beachtet."},
 
             {"CollectSettings_Headline",        "—— Einstellungen zum Sammeln ——————"},
             {"CollectPriority",                 "Sammelpriorität"},
@@ -83,6 +85,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"RemoteCtrlWorking",               "Block ein/aus steuern"},
             {"RemoteCtrlWorking_Tooltip",       "Wählen Sie, ob der Block nur eingeschaltet ist, solange der Charakter mit einem Schweißgerät oder Winkelschleifer ausgestattet ist."},
             {"SoundVolume",                     "Lautstärke"},
+            {"DisableTickingSound",             "Tickgeräusch deaktivieren"},
+            {"DisableTickingSound_Tooltip",     "Wenn aktiv, wird das Tickgeräusch für diesen Block deaktiviert."},
             {"ScriptControlled",                "Vom Skript gesteuert"},
             {"ScriptControlled_Tooltip",        "Wenn diese Option aktiviert ist, bohrt / füllt das System nicht automatisch. Jede Aktion muss durch Aufrufen von Skriptfunktionen ausgewählt werden."},
 

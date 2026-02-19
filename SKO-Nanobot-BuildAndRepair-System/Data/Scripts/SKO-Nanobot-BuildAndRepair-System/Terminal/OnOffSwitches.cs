@@ -847,6 +847,50 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             return control;
         }
 
+        public static IMyTerminalControlOnOffSwitch CreateGrindIgnorePriorityOrder(bool grindingAllowed, Func<IMyTerminalBlock, bool> isGrindingAllowed, Func<IMyTerminalBlock, bool> isReadonly, Func<IMyTerminalBlock, bool> isBaRSystem)
+        {
+            var isEnabled = grindingAllowed ? isBaRSystem : isReadonly;
+
+            var control = Create(
+                // Id:
+                "GrindIgnorePriorityOrder",
+
+                // Texts
+                Texts.GrindIgnorePriority,
+                Texts.GrindIgnorePriority_Tooltip,
+                MySpaceTexts.SwitchText_On,
+                MySpaceTexts.SwitchText_Off,
+
+                // Visible:
+                isGrindingAllowed,
+
+                // Enabled:
+                isEnabled,
+
+                // Getter:
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    return system != null ? ((system.Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) != 0) : false;
+                },
+
+                // Setter:
+                (block, value) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null && isGrindingAllowed(block))
+                    {
+                        system.Settings.Flags = (system.Settings.Flags & ~SyncBlockSettings.Settings.GrindIgnorePriorityOrder) | (value ? SyncBlockSettings.Settings.GrindIgnorePriorityOrder : 0);
+                    }
+                },
+
+                // Multiple blocks support.
+                true
+            );
+
+            return control;
+        }
+
         public static IMyTerminalControlOnOffSwitch CreateGrindNearFirst(bool grindingAllowed, Func<IMyTerminalBlock, bool> isGrindingAllowed, Func<IMyTerminalBlock, bool> isReadonly, Func<IMyTerminalBlock, bool> isBaRSystem)
         {
             var isEnabled = grindingAllowed ? isBaRSystem : isReadonly;
@@ -1086,6 +1130,48 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                     if (system != null)
                     {
                         system.Settings.Flags = (system.Settings.Flags & ~SyncBlockSettings.Settings.ScriptControlled) | (value ? SyncBlockSettings.Settings.ScriptControlled : 0);
+                    }
+                },
+
+                // Multiple blocks support.
+                true
+            );
+
+            return control;
+        }
+
+        public static IMyTerminalControlOnOffSwitch CreateDisableTickingSound(Func<IMyTerminalBlock, bool> isReadonly, Func<IMyTerminalBlock, bool> isBaRSystem)
+        {
+            var control = Create(
+                // Id:
+                "DisableTickingSound",
+
+                // Texts
+                Texts.DisableTickingSound,
+                Texts.DisableTickingSound_Tooltip,
+                MySpaceTexts.SwitchText_On,
+                MySpaceTexts.SwitchText_Off,
+
+                // Visible:
+                isBaRSystem,
+
+                // Enabled:
+                isBaRSystem,
+
+                // Getter:
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    return system != null ? ((system.Settings.Flags & SyncBlockSettings.Settings.DisableTickingSound) != 0) : false;
+                },
+
+                // Setter:
+                (block, value) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null)
+                    {
+                        system.Settings.Flags = (system.Settings.Flags & ~SyncBlockSettings.Settings.DisableTickingSound) | (value ? SyncBlockSettings.Settings.DisableTickingSound : 0);
                     }
                 },
 

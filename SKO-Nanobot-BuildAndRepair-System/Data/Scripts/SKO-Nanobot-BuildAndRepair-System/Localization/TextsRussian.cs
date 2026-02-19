@@ -49,6 +49,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindOrderFarthest_Tooltip",      "Если блоки имеют одинаковый приоритет, самый\nдальний распиливается первым."},
             {"GrindOrderSmallest",              "Сначала самый маленький блок"},
             {"GrindOrderSmallest_Tooltip",      "Если блоки имеют одинаковый приоритет, вначале\nраспиливается самый маленький блок."},
+            {"GrindIgnorePriority",             "Игнорировать порядок приоритетов"},
+            {"GrindIgnorePriority_Tooltip",     "Если включено, порядок приоритетов игнорируется и блоки распиливаются только по расстоянию. Статус включения/отключения типов блоков по-прежнему учитывается."},
 
             {"CollectSettings_Headline",        "——————— Настройки для сбора ———————"},
             {"CollectPriority",                 "Приоритет сбора"},
@@ -83,6 +85,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"RemoteCtrlWorking",               "Контроль работы"},
             {"RemoteCtrlWorking_Tooltip",       "Если отмечено, система будет включена пока\nперсонаж оснащен ручным сварщиком/резаком."},
             {"SoundVolume",                     "Громкость"},
+            {"DisableTickingSound",             "Отключить звук тиканья"},
+            {"DisableTickingSound_Tooltip",     "Если включено, звук тиканья для этого блока отключается."},
             {"ScriptControlled",                "Контролируется скриптом"},
             {"ScriptControlled_Tooltip",        "Если этот флажок установлен, система не будет автоматически\nсваривать/разрезать. Каждое действие нужно выбирать, вызывая скриптовые функции."},
             {"Info_CurentWeldEntity",           "Выбран блок сварщика:"},
