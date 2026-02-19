@@ -755,6 +755,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
             UseGrindJanitorOn &= Mod.Settings.Welder.AllowedGrindJanitorRelations;
 
+            if (init) Flags = Flags | Settings.GrindIgnorePriorityOrder;
             if (Mod.Settings.Welder.ShowAreaFixed || init) Flags = (Flags & ~Settings.ShowArea);
             if (Mod.Settings.Welder.PushIngotOreImmediatelyFixed || init) Flags = (Flags & ~Settings.PushIngotOreImmediately) | (Mod.Settings.Welder.PushIngotOreImmediatelyDefault ? Settings.PushIngotOreImmediately : 0);
             if (Mod.Settings.Welder.PushComponentImmediatelyFixed || init) Flags = (Flags & ~Settings.PushComponentImmediately) | (Mod.Settings.Welder.PushComponentImmediatelyDefault ? Settings.PushComponentImmediately : 0);
