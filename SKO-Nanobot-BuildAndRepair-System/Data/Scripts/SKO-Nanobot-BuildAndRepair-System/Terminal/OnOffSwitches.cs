@@ -986,6 +986,10 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                         {
                             system.Settings.Flags = (system.Settings.Flags & ~(SyncBlockSettings.Settings.GrindSmallestGridFirst | SyncBlockSettings.Settings.GrindNearFirst));
                         }
+                        else
+                        {
+                            system.Settings.Flags = system.Settings.Flags | SyncBlockSettings.Settings.GrindNearFirst;
+                        }
                         foreach (var ctrl in NanobotTerminal.CustomControls)
                         {
                             if (ctrl.Id.Contains("GrindNearFirst")) ctrl.UpdateVisual();
@@ -1038,6 +1042,10 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                         if (value)
                         {
                             system.Settings.Flags = (system.Settings.Flags & ~SyncBlockSettings.Settings.GrindNearFirst) | SyncBlockSettings.Settings.GrindSmallestGridFirst;
+                        }
+                        else
+                        {
+                            system.Settings.Flags = (system.Settings.Flags & ~SyncBlockSettings.Settings.GrindSmallestGridFirst) | SyncBlockSettings.Settings.GrindNearFirst;
                         }
                         foreach (var ctrl in NanobotTerminal.CustomControls)
                         {

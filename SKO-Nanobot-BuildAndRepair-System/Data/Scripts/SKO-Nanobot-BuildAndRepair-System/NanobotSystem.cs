@@ -2286,7 +2286,8 @@ namespace SKONanobotBuildAndRepairSystem
 
             grids.Add(cubeGrid);
 
-            var isGrinding = State.Grinding || State.NeedGrinding || Settings.WorkMode == WorkModes.GrindOnly;
+            var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly || Settings.WorkMode == WorkModes.GrindBeforeWeld;
+            var isGrinding = State.Grinding || State.NeedGrinding || (State.Transporting && isGrindingMode) || isGrindingMode;
 
             // Use a cached list to avoid many GetBlocks calls from the API.
             var newBlocks = GetBlocksFromCache(cubeGrid, isGrinding);
@@ -2566,7 +2567,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            if (autoGrind || (useGrindColor && IsColorNearlyEquals(grindColor, block.GetColorMask())))
+            if (autoGrind || (useGrindColor && IsColorNearlyEquals(grindColor, block.GetColorMask()) && BlockGrindPriority.GetEnabled(block)))
             {
                 double distance;
                 if (block.IsInRange(ref areaBox, out distance))

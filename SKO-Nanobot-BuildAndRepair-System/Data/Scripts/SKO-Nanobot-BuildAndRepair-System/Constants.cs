@@ -2,6 +2,6 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public static class Constants
     {
-        public const string ModVersion = "2.4.1";
+        public const string ModVersion = "2.4.2";
     }
 }
