@@ -424,7 +424,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
         internal bool IsTransmitNeeded()
         {
-            return Changed && MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTransmitted).TotalSeconds >= 2;
+            return Changed && MyAPIGateway.Session.ElapsedPlayTime.Subtract(LastTransmitted).TotalSeconds >= 1;
         }
 
         internal SyncBlockState GetTransmit()

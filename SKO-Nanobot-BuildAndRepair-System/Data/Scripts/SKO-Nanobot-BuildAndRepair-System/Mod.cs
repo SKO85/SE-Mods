@@ -31,7 +31,7 @@ namespace SKONanobotBuildAndRepairSystem
         private static TimeSpan _LastTtlCacheCleanerCheck;
         private static TimeSpan _LastSafeZoneUpdateCheck;
 
-        public const int MaxBackgroundTasks_Default = 2;
+        public const int MaxBackgroundTasks_Default = 4;
         public const int MaxBackgroundTasks_Max = 10;
         public const int MaxBackgroundTasks_Min = 1;
         public static List<Action> AsynActions = new List<Action>();
@@ -129,6 +129,9 @@ namespace SKONanobotBuildAndRepairSystem
 
             // Clear block assigned handler.
             try { BlockSystemAssigningHandler.Clear(); } catch { }
+
+            // Close the logging instance to release the log file.
+            try { Logging.Instance.Close(); } catch { }
 
             // Call base unload.
             base.UnloadData();

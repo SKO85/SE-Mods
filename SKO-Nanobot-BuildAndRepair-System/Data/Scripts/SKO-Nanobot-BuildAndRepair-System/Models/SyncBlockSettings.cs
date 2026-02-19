@@ -647,7 +647,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
         public bool IsTransmitNeeded()
         {
-            return (Changed & 1u) != 0 && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastTransmitted) >= TimeSpan.FromSeconds(2);
+            return (Changed & 1u) != 0 && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastTransmitted) >= TimeSpan.FromSeconds(1);
         }
 
         private void RecalcAreaBoundigBox()
