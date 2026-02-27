@@ -61,7 +61,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private const int MaxPossibleWeldTargets = 512;
         private const int MaxPossibleGrindTargets = 512;
-        private const int MaxPossibleFloatingTargets = 64;
+        private const int MaxPossibleFloatingTargets = 32;
 
         public static readonly int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
 
@@ -72,7 +72,7 @@ namespace SKONanobotBuildAndRepairSystem
         private static readonly Random _RandomDelay = new Random();
 
         private Stopwatch _DelayWatch = new Stopwatch();
-        private int _Delay = 0;        
+        private int _Delay = 0;
 
         private bool _AsyncUpdateSourcesAndTargetsRunning = false;
         private List<TargetBlockData> _TempPossibleWeldTargets = new List<TargetBlockData>();
@@ -475,7 +475,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
 
                 _DelayWatch.Restart();
-                
+
 
                 if (MyAPIGateway.Session.IsServer)
                 {
@@ -1589,7 +1589,7 @@ namespace SKONanobotBuildAndRepairSystem
             var empty = _TransportInventory.Empty();
             if (!empty)
             {
-                if(!CreativeModeActive)
+                if (!CreativeModeActive)
                 {
                     var welderInventory = _Welder.GetInventory(0);
                     if (welderInventory != null)
@@ -2190,19 +2190,29 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (entityInRange != null)
             {
-                // When grinding smallest grid first, pre-sort entities so smaller grids fill
-                // the candidate list before large grids can crowd them out.
+                // When grinding smallest grid first, pre-sort only MyCubeGrid entities so
+                // smaller grids fill the candidate list before large grids can crowd them out.
+                // Build a sorted copy to avoid mutating the cached list.
                 if (possibleGrindTargets != null && (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0)
                 {
-                    entityInRange.Sort((a, b) =>
+                    var sortedGrids = new List<IMyEntity>(entityInRange.Count);
+                    var nonGridEntities = new List<IMyEntity>();
+                    foreach (var e in entityInRange)
                     {
-                        var ga = a as MyCubeGrid;
-                        var gb = b as MyCubeGrid;
-                        if (ga != null && gb != null) return ga.BlocksCount - gb.BlocksCount;
-                        if (ga != null) return -1;
-                        if (gb != null) return 1;
-                        return 0;
-                    });
+                        if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, possibleFloatingTargets))
+                        {
+                            break;
+                        }
+
+                        if (e is MyCubeGrid)
+                            sortedGrids.Add(e);
+                        else
+                            nonGridEntities.Add(e);
+                    }
+
+                    sortedGrids.Sort((a, b) => ((MyCubeGrid)a).BlocksCount - ((MyCubeGrid)b).BlocksCount);
+                    sortedGrids.AddRange(nonGridEntities);
+                    entityInRange = sortedGrids;
                 }
 
                 foreach (var entity in entityInRange)
@@ -2286,7 +2296,8 @@ namespace SKONanobotBuildAndRepairSystem
 
             grids.Add(cubeGrid);
 
-            var isGrinding = State.Grinding || State.NeedGrinding || Settings.WorkMode == WorkModes.GrindOnly;
+            var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly || Settings.WorkMode == WorkModes.GrindBeforeWeld;
+            var isGrinding = State.Grinding || State.NeedGrinding || (State.Transporting && isGrindingMode) || isGrindingMode;
 
             // Use a cached list to avoid many GetBlocks calls from the API.
             var newBlocks = GetBlocksFromCache(cubeGrid, isGrinding);
@@ -2566,7 +2577,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            if (autoGrind || (useGrindColor && IsColorNearlyEquals(grindColor, block.GetColorMask())))
+            if (autoGrind || (useGrindColor && IsColorNearlyEquals(grindColor, block.GetColorMask()) && BlockGrindPriority.GetEnabled(block)))
             {
                 double distance;
                 if (block.IsInRange(ref areaBox, out distance))
@@ -2696,7 +2707,7 @@ namespace SKONanobotBuildAndRepairSystem
                 customInfo.Append(Environment.NewLine);
             }
 
-            customInfo.Append(Environment.NewLine);            
+            customInfo.Append(Environment.NewLine);
 
             if (State.IsShielded)
             {
