@@ -102,6 +102,7 @@ namespace SKONanobotBuildAndRepairSystem
         private HashSet<IMyInventory> _Ignore4Items = new HashSet<IMyInventory>();
         private HashSet<IMyInventory> _Ignore4Components = new HashSet<IMyInventory>();
         private Dictionary<string, int> _TempMissingComponents = new Dictionary<string, int>();
+        private List<MyInventoryItem> _TempInventoryItems = new List<MyInventoryItem>();
 
         private int _UpdateEffectsInterval;
         private bool _UpdateCustomInfoNeeded;
@@ -792,11 +793,11 @@ namespace SKONanobotBuildAndRepairSystem
                 if (welderInventory.Empty()) return;
                 var lastPush = MyAPIGateway.Session.ElapsedPlayTime;
 
-                var tempInventoryItems = new List<MyInventoryItem>();
-                welderInventory.GetItems(tempInventoryItems);
-                for (int srcItemIndex = tempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                _TempInventoryItems.Clear();
+                welderInventory.GetItems(_TempInventoryItems);
+                for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                 {
-                    var srcItem = tempInventoryItems[srcItemIndex];
+                    var srcItem = _TempInventoryItems[srcItemIndex];
                     if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Ore).Name || srcItem.Type.TypeId == typeof(MyObjectBuilder_Ingot).Name)
                     {
                         if ((Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0)
@@ -823,7 +824,7 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
                 }
-                tempInventoryItems.Clear();
+                _TempInventoryItems.Clear();
             }
         }
 
@@ -1554,11 +1555,11 @@ namespace SKONanobotBuildAndRepairSystem
                 return picked;
             }
 
-            var tempInventoryItems = new List<MyInventoryItem>();
-            welderInventory.GetItems(tempInventoryItems);
-            for (int i1 = tempInventoryItems.Count - 1; i1 >= 0; i1--)
+            _TempInventoryItems.Clear();
+            welderInventory.GetItems(_TempInventoryItems);
+            for (int i1 = _TempInventoryItems.Count - 1; i1 >= 0; i1--)
             {
-                var srcItem = tempInventoryItems[i1];
+                var srcItem = _TempInventoryItems[i1];
                 if (srcItem != null && (MyDefinitionId)srcItem.Type == componentId && srcItem.Amount > 0)
                 {
                     var maxpossibleAmount = Math.Min(neededAmount, (int)Math.Floor(remainingVolume / volume));
@@ -1577,7 +1578,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 if (neededAmount <= 0 || remainingVolume <= 0) break;
             }
-            tempInventoryItems.Clear();
+            _TempInventoryItems.Clear();
             return picked;
         }
 
@@ -1606,12 +1607,12 @@ namespace SKONanobotBuildAndRepairSystem
                             }
                         }
 
-                        var tempInventoryItems = new List<MyInventoryItem>();
-                        _TransportInventory.GetItems(tempInventoryItems);
+                        _TempInventoryItems.Clear();
+                        _TransportInventory.GetItems(_TempInventoryItems);
 
-                        for (int srcItemIndex = tempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                        for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                         {
-                            var item = tempInventoryItems[srcItemIndex];
+                            var item = _TempInventoryItems[srcItemIndex];
                             if (item == null) continue;
 
                             // Try to move as much as possible
@@ -1626,7 +1627,7 @@ namespace SKONanobotBuildAndRepairSystem
                             }
                         }
 
-                        tempInventoryItems.Clear();
+                        _TempInventoryItems.Clear();
                     }
                 }
                 else
@@ -1659,11 +1660,11 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (remainingVolume <= 0) return true; //No more transport volume
 
-                var tempInventoryItems = new List<MyInventoryItem>();
-                srcInventory.GetItems(tempInventoryItems);
-                for (int srcItemIndex = tempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                _TempInventoryItems.Clear();
+                srcInventory.GetItems(_TempInventoryItems);
+                for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                 {
-                    var srcItem = srcInventory.GetItemByID(tempInventoryItems[srcItemIndex].ItemId);
+                    var srcItem = srcInventory.GetItemByID(_TempInventoryItems[srcItemIndex].ItemId);
                     if (srcItem == null) continue;
 
                     var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(srcItem.Content.GetId());
@@ -1688,7 +1689,7 @@ namespace SKONanobotBuildAndRepairSystem
                         return running; //No more space
                     }
                 }
-                tempInventoryItems.Clear();
+                _TempInventoryItems.Clear();
             }
             return running;
         }
@@ -1944,7 +1945,7 @@ namespace SKONanobotBuildAndRepairSystem
                                         blockA.SlimBlock.ComputeWorldCenter(out posA);
                                         blockB.SlimBlock.ComputeWorldCenter(out posB);
                                         var distanceA = (int)Math.Abs((posWelder - posA).Length());
-                                        var distanceB = (int)Math.Abs((posWelder - posA).Length());
+                                        var distanceB = (int)Math.Abs((posWelder - posB).Length());
                                         return distanceA - distanceB;
                                     }
                                     else if (welderA == null)
@@ -2015,13 +2016,16 @@ namespace SKONanobotBuildAndRepairSystem
                     pos = 4;
                     try
                     {
+                        var grindUsePriority = (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0;
+                        var grindSmallestGridFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
+                        var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
                         _TempPossibleGrindTargets.Sort((a, b) =>
                         {
                             if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
                             {
                                 if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0)
                                 {
-                                    if (((Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0))
+                                    if (grindUsePriority)
                                     {
                                         var priorityA = BlockGrindPriority.GetPriority(a.Block);
                                         var priorityB = BlockGrindPriority.GetPriority(b.Block);
@@ -2029,16 +2033,16 @@ namespace SKONanobotBuildAndRepairSystem
                                             return priorityA - priorityB;
                                     }
 
-                                    if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))
+                                    if (grindSmallestGridFirst)
                                     {
                                         var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
                                         return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
                                     }
-                                    if (((Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0)) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                    if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
                                     return Utils.Utils.CompareDistance(b.Distance, a.Distance);
                                 }
 
-                                if (((Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0))
+                                if (grindUsePriority)
                                 {
                                     var priorityA = BlockGrindPriority.GetPriority(a.Block);
                                     var priorityB = BlockGrindPriority.GetPriority(b.Block);
@@ -2046,12 +2050,12 @@ namespace SKONanobotBuildAndRepairSystem
                                         return priorityA - priorityB;
                                 }
 
-                                if (((Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0))
+                                if (grindSmallestGridFirst)
                                 {
                                     var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
                                     return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
                                 }
-                                if (((Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0)) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
                                 return Utils.Utils.CompareDistance(b.Distance, a.Distance);
                             }
                             else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
@@ -2075,7 +2079,7 @@ namespace SKONanobotBuildAndRepairSystem
                             if (itemAFloating != null && itemBFloating != null)
                             {
                                 var priorityA = ComponentCollectPriority.GetPriority(itemAFloating.Item.Content.GetObjectId());
-                                var priorityB = ComponentCollectPriority.GetPriority(itemAFloating.Item.Content.GetObjectId());
+                                var priorityB = ComponentCollectPriority.GetPriority(itemBFloating.Item.Content.GetObjectId());
                                 if (priorityA == priorityB)
                                 {
                                     return Utils.Utils.CompareDistance(a.Distance, b.Distance);
