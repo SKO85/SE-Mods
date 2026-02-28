@@ -1900,6 +1900,8 @@ namespace SKONanobotBuildAndRepairSystem
                 }
 
                 _AsyncUpdateSourcesAndTargetsRunning = false;
+                _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
+                _LastSourceUpdate = _LastTargetsUpdate;
 
                 return;
             }
