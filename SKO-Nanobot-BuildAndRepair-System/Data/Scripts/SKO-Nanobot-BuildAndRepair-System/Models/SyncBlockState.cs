@@ -484,14 +484,15 @@ namespace SKONanobotBuildAndRepairSystem.Models
                             var block = grid?.GetCubeBlock(item.Entity.Position.Value);
                             if (block != null)
                             {
-                                PossibleWeldTargets.Add(new TargetBlockData(SyncEntityId.GetItemAsSlimBlock(SyncEntityId.GetSyncId(block)), item.Distance, 0));
+                                PossibleWeldTargets.Add(new TargetBlockData(block, item.Distance, 0));
                             }
                         }
                     }
                     else
                     {
                         var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                        PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        if (slimBlock != null)
+                            PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
                     }
                 }
             }
@@ -503,8 +504,28 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 foreach (var item in possibleGrindTargetsSync)
                 {
-                    var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                    PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                    if (item.Entity == null)
+                        continue;
+
+                    if (item.Entity.EntityId == 0)
+                    {
+                        IMyEntity gridEntity;
+                        if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
+                        {
+                            var grid = gridEntity as IMyCubeGrid;
+                            var block = grid?.GetCubeBlock(item.Entity.Position.Value);
+                            if (block != null)
+                            {
+                                PossibleGrindTargets.Add(new TargetBlockData(block, item.Distance, 0));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                        if (slimBlock != null)
+                            PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                    }
                 }
             }
 
@@ -515,7 +536,9 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 foreach (var item in possibleFloatingTargetsSync)
                 {
-                    PossibleFloatingTargets.Add(new TargetEntityData(SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity), item.Distance));
+                    var floatingObj = SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity);
+                    if (floatingObj != null)
+                        PossibleFloatingTargets.Add(new TargetEntityData(floatingObj, item.Distance));
                 }
             }
 

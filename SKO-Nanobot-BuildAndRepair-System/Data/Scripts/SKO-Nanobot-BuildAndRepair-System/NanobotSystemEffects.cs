@@ -238,10 +238,8 @@ namespace SKONanobotBuildAndRepairSystem
                 if (_SoundEmitterWorking != null)
                 {
                     _SoundEmitterWorking.StopSound(true);
-                    _SoundEmitterWorking.CustomVolume = _SoundLevels[(int)workingState] * system.Settings.SoundVolume;
-                    _SoundEmitterWorking.SetPosition(null); //Reset
+                    _SoundEmitterWorking.SetPosition(null);
                     _SoundEmitterWorkingPosition = null;
-                    //_SoundEmitterWorking.PlaySound(sound, true); done after position is set
                 }
             }
             else
@@ -266,7 +264,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void UpdateWorkingEffectPosition(NanobotSystem system, WorkingState workingState)
         {
-            if (_ParticleEffectWorking1 == null && _SoundEmitterWorking == null) return;
+            if (_ParticleEffectWorking1 == null && _LightEffect == null) return;
 
             Vector3D position;
             MatrixD matrix;
@@ -302,24 +300,6 @@ namespace SKONanobotBuildAndRepairSystem
                 _ParticleEffectWorking1.WorldMatrix = matrix;
             }
 
-            var sound = _Sounds[(int)workingState];
-           
-            if ((_SoundEmitterWorking != null) && (sound != null))
-            {
-                if (!_SoundEmitterWorking.IsPlaying || _SoundEmitterWorkingPosition == null || Math.Abs((_SoundEmitterWorkingPosition.Value - position).Length()) > 2)
-                {
-                    if (sound != null && sound.GetCueName() == "BaRUnable" && _DisableTickingSoundSet)
-                    {
-                        // Ignore ticking...
-                    }
-                    else
-                    {
-                        _SoundEmitterWorking.SetPosition(position);
-                        _SoundEmitterWorkingPosition = position;
-                        _SoundEmitterWorking.PlaySound(sound, true);
-                    }                    
-                }
-            }
         }
 
         /// <summary>

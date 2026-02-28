@@ -591,7 +591,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
                         settings.ComponentCollectPriority = componentCollectPriority.GetEntries();
 
                         settings.Changed = 0;
-                        settings._LastStored = MyAPIGateway.Session.ElapsedPlayTime.Add(TimeSpan.FromSeconds(60));
+                        settings._LastStored = MyAPIGateway.Session.ElapsedPlayTime;
                         settings._LastTransmitted = MyAPIGateway.Session.ElapsedPlayTime;
                         return settings;
                     }

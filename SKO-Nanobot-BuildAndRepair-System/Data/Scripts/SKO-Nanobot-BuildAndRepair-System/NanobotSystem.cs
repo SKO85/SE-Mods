@@ -59,8 +59,8 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 4f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
-        private const int MaxPossibleWeldTargets = 512;
-        private const int MaxPossibleGrindTargets = 512;
+        private const int MaxPossibleWeldTargets = 256;
+        private const int MaxPossibleGrindTargets = 256;
         private const int MaxPossibleFloatingTargets = 32;
 
         public static readonly int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
@@ -106,6 +106,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private int _UpdateEffectsInterval;
         private bool _UpdateCustomInfoNeeded;
+        internal bool _firstSettingsReceived = false;
         private float _MaxTransportVolume;
         private int _ContinuouslyError;
 
@@ -232,6 +233,20 @@ namespace SKONanobotBuildAndRepairSystem
 
             var multiplier = (maxMultiplier > WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER ? WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER : maxMultiplier);
             _MaxTransportVolume = ((float)_TransportInventory.MaxVolume * multiplier) / WELDER_TRANSPORTVOLUME_DIVISOR;
+
+            UpdateCustomInfo(true);
+        }
+
+        /// <summary>
+        /// Called on the client when server settings are received for the first time.
+        /// Reloads settings from entity storage to ensure the persisted state is used,
+        /// then refreshes the terminal controls and custom info panel.
+        /// </summary>
+        internal void OnFirstSettingsReceived()
+        {
+            _Settings = SyncBlockSettings.Load(this, Mod.ModGuid, BlockWeldPriority, BlockGrindPriority, ComponentCollectPriority);
+            SettingsChanged();
+            Mod.InitControls();
         }
 
         /// <summary>
@@ -630,6 +645,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     State.LastTransportTarget = State.CurrentTransportTarget;
                     State.CurrentTransportTarget = null;
+                    State.CurrentTransportStartTime = TimeSpan.Zero;
                     transporting = false;
                 }
                 else
@@ -692,6 +708,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     State.LastTransportTarget = State.CurrentTransportTarget;
                     State.CurrentTransportTarget = null;
+                    State.CurrentTransportStartTime = TimeSpan.Zero;
                     transporting = false;
                 }
                 else
@@ -725,6 +742,15 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     StartAsyncUpdateSourcesAndTargets(false); //Scan immediately once for new targets
                 }
+            }
+
+            // When transporting components for welding (delivery, not a pick), preserve the
+            // previous NeedWelding state so the "Blocks to Build" panel remains visible and
+            // MissingComponents doesn't flicker while the transport timer is ticking.
+            if (transporting && !State.CurrentTransportIsPick && !needwelding && State.NeedWelding)
+            {
+                needwelding = State.NeedWelding;
+                currentWeldingBlock = State.CurrentWeldingBlock;
             }
 
             var readyChanged = State.Ready != ready;
@@ -998,6 +1024,17 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                     else
                     {
+                        if (targetData.Ignore)
+                        {
+                            targetData.Block.ReleaseFromSystem();
+                            State.PossibleWeldTargets.ChangeHash();
+                        }
+                        // Current tracked block is no longer weldable; clear the lock so the
+                        // loop can find the next eligible block in this same tick.
+                        if (State.CurrentWeldingBlock == targetData.Block)
+                        {
+                            State.CurrentWeldingBlock = null;
+                        }
                         // TODO: Cooldown as the block is not weldable...
                     }
                 }
@@ -2001,11 +2038,19 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             var priorityA = BlockWeldPriority.GetPriority(a.Block);
                             var priorityB = BlockWeldPriority.GetPriority(b.Block);
-                            if (priorityA == priorityB)
-                            {
-                                return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                            }
-                            else return priorityA - priorityB;
+                            if (priorityA != priorityB) return priorityA - priorityB;
+
+                            var distCmp = Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                            if (distCmp != 0) return distCmp;
+
+                            // Stable tiebreaker: grid entity ID then block grid position
+                            var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
+                            if (gridCmp != 0) return gridCmp;
+                            var posA = a.Block.Position;
+                            var posB = b.Block.Position;
+                            if (posA.X != posB.X) return posA.X - posB.X;
+                            if (posA.Y != posB.Y) return posA.Y - posB.Y;
+                            return posA.Z - posB.Z;
                         });
                     }
                     catch (Exception ex)
@@ -2687,6 +2732,9 @@ namespace SKONanobotBuildAndRepairSystem
                 customInfo.Append($"[color=#FFFFFF00]Mod not initialized![/color]" + Environment.NewLine);
                 customInfo.Append($"---" + Environment.NewLine);
                 customInfo.Append($"If this message remains:" + Environment.NewLine);
+                customInfo.Append($"- Try reopen this terminal in a few seconds." + Environment.NewLine + Environment.NewLine);
+
+                customInfo.Append($"If above does not work:" + Environment.NewLine);
                 customInfo.Append($"- Try cleanup the mod folder." + Environment.NewLine);
                 customInfo.Append($"- Re-Subscribe to the mod." + Environment.NewLine);
                 customInfo.Append($"- Check FAQ on workshop page." + Environment.NewLine);
@@ -2792,6 +2840,7 @@ namespace SKONanobotBuildAndRepairSystem
                             customInfo.Append(Texts.Info_BlocksToBuild + Environment.NewLine);
                             foreach (var blockData in State.PossibleWeldTargets)
                             {
+                                if (blockData.Block == null) continue;
                                 customInfo.Append(string.Format(" -{0}" + Environment.NewLine, blockData.Block.BlockName()));
                                 cnt++;
                                 if (cnt >= SyncBlockState.MaxSyncItems)
@@ -2815,6 +2864,7 @@ namespace SKONanobotBuildAndRepairSystem
                             customInfo.Append(Texts.Info_BlocksToGrind + Environment.NewLine);
                             foreach (var blockData in State.PossibleGrindTargets)
                             {
+                                if (blockData.Block == null) continue;
                                 customInfo.Append(string.Format(" -{0}" + Environment.NewLine, blockData.Block.BlockName()));
                                 cnt++;
                                 if (cnt >= SyncBlockState.MaxSyncItems)
@@ -2836,6 +2886,7 @@ namespace SKONanobotBuildAndRepairSystem
                         customInfo.Append(Texts.Info_ItemsToCollect + Environment.NewLine);
                         foreach (var entityData in State.PossibleFloatingTargets)
                         {
+                            if (entityData.Entity == null) continue;
                             customInfo.Append(string.Format(" -{0}" + Environment.NewLine, Logging.BlockName(entityData.Entity, Logging.BlockNameOptions.None)));
                             cnt++;
                             if (cnt >= SyncBlockState.MaxSyncItems)

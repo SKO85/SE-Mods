@@ -31,7 +31,7 @@ namespace SKONanobotBuildAndRepairSystem
         private static TimeSpan _LastTtlCacheCleanerCheck;
         private static TimeSpan _LastSafeZoneUpdateCheck;
 
-        public const int MaxBackgroundTasks_Default = 4;
+        public const int MaxBackgroundTasks_Default = 3;
         public const int MaxBackgroundTasks_Max = 10;
         public const int MaxBackgroundTasks_Min = 1;
         public static Queue<Action> AsynActions = new Queue<Action>();
@@ -137,6 +137,21 @@ namespace SKONanobotBuildAndRepairSystem
             base.UnloadData();
 
             _initialized = false;
+        }
+
+        public override void SaveData()
+        {
+            if (MyAPIGateway.Session.IsServer)
+            {
+                lock (NanobotSystems)
+                {
+                    foreach (var entry in NanobotSystems)
+                    {
+                        try { entry.Value.Settings.Save(entry.Value.Entity, ModGuid); } catch { }
+                    }
+                }
+            }
+            base.SaveData();
         }
 
         //public override void LoadData()

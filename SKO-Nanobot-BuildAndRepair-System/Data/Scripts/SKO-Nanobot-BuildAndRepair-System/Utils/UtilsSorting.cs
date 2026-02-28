@@ -58,7 +58,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                     return;
                 }
 
-                // Welding: priority first, then nearest distance as tiebreaker.
+                // Welding: priority first, then nearest distance, then stable tiebreaker.
                 list.Sort((a, b) =>
                 {
                     var priorityA = priorityHandler.GetPriority(a);
@@ -74,7 +74,17 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                     b.GetWorldBoundingBox(out bboxB, false);
                     var distB = (welderCenter - bboxB.Center).Length();
 
-                    return Utils.CompareDistance(distA, distB);
+                    var distCmp = Utils.CompareDistance(distA, distB);
+                    if (distCmp != 0) return distCmp;
+
+                    // Stable tiebreaker: grid entity ID then block grid position
+                    var gridCmp = a.CubeGrid.EntityId.CompareTo(b.CubeGrid.EntityId);
+                    if (gridCmp != 0) return gridCmp;
+                    var posA = a.Position;
+                    var posB = b.Position;
+                    if (posA.X != posB.X) return posA.X - posB.X;
+                    if (posA.Y != posB.Y) return posA.Y - posB.Y;
+                    return posA.Z - posB.Z;
                 });
             }
             catch { }
