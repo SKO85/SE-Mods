@@ -156,12 +156,22 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 NanobotSystem system;
                 if (Mod.NanobotSystems.TryGetValue(msgRcv.EntityId, out system))
                 {
-                    system.Settings.AssignReceived(msgRcv.Settings, system.BlockWeldPriority, system.BlockGrindPriority, system.ComponentCollectPriority);
-                    system.SettingsChanged();
-
                     if (MyAPIGateway.Session.IsServer)
                     {
+                        system.Settings.AssignReceived(msgRcv.Settings, system.BlockWeldPriority, system.BlockGrindPriority, system.ComponentCollectPriority);
+                        system.SettingsChanged();
+                        system.Settings.Save(system.Entity, Mod.ModGuid);
                         MsgBlockSettingsSend(0, system);
+                    }
+                    else if (!system._firstSettingsReceived)
+                    {
+                        system._firstSettingsReceived = true;
+                        system.OnFirstSettingsReceived();
+                    }
+                    else
+                    {
+                        system.Settings.AssignReceived(msgRcv.Settings, system.BlockWeldPriority, system.BlockGrindPriority, system.ComponentCollectPriority);
+                        system.SettingsChanged();
                     }
                 }
                 else

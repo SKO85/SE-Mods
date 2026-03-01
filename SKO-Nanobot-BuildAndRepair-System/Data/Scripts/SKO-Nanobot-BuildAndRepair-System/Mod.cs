@@ -31,10 +31,10 @@ namespace SKONanobotBuildAndRepairSystem
         private static TimeSpan _LastTtlCacheCleanerCheck;
         private static TimeSpan _LastSafeZoneUpdateCheck;
 
-        public const int MaxBackgroundTasks_Default = 4;
+        public const int MaxBackgroundTasks_Default = 3;
         public const int MaxBackgroundTasks_Max = 10;
         public const int MaxBackgroundTasks_Min = 1;
-        public static List<Action> AsynActions = new List<Action>();
+        public static Queue<Action> AsynActions = new Queue<Action>();
         private static int ActualBackgroundTaskCount = 0;
 
         public void Init()
@@ -137,6 +137,21 @@ namespace SKONanobotBuildAndRepairSystem
             base.UnloadData();
 
             _initialized = false;
+        }
+
+        public override void SaveData()
+        {
+            if (MyAPIGateway.Session.IsServer)
+            {
+                lock (NanobotSystems)
+                {
+                    foreach (var entry in NanobotSystems)
+                    {
+                        try { entry.Value.Settings.Save(entry.Value.Entity, ModGuid); } catch { }
+                    }
+                }
+            }
+            base.SaveData();
         }
 
         //public override void LoadData()
@@ -286,7 +301,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             lock (AsynActions)
             {
-                AsynActions.Add(newAction);
+                AsynActions.Enqueue(newAction);
                 if (ActualBackgroundTaskCount < Settings.MaxBackgroundTasks)
                 {
                     ActualBackgroundTaskCount++;
@@ -301,8 +316,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 {
                                     if (AsynActions.Count > 0)
                                     {
-                                        pendingAction = AsynActions[0];
-                                        AsynActions.RemoveAt(0);
+                                        pendingAction = AsynActions.Dequeue();
                                     }
                                     if (pendingAction == null)
                                     {
