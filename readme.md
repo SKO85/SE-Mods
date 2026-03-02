@@ -10,16 +10,16 @@ A collection of mods for [Space Engineers](https://store.steampowered.com/app/24
 
 Automatically welds, repairs, grinds, and collects floating objects within range. Fully configurable per-block through the terminal and server-wide through a `ModSettings.xml` file.
 
-| Version                           | Steam Workshop                                                                 |
-| --------------------------------- | ------------------------------------------------------------------------------ |
-| Maintained (rebalanced resources) | [Subscribe](https://steamcommunity.com/sharedfiles/filedetails/?id=2111073562) |
-| Original Resources                | [Subscribe](https://steamcommunity.com/sharedfiles/filedetails/?id=3099489876) |
+| Version | Steam Workshop |
+| --- | --- |
+| (Maintained) - Nerfed Version | [Subscribe](https://steamcommunity.com/sharedfiles/filedetails/?id=2111073562) |
+| (Maintained) - Original Resources Version | [Subscribe](https://steamcommunity.com/sharedfiles/filedetails/?id=3099489876) |
 
 **Documentation:** [sko85.github.io/SE-Mods/Build-and-Repair-System/](https://sko85.github.io/SE-Mods/Build-and-Repair-System/)
 
 - [Configuration File](https://sko85.github.io/SE-Mods/Build-and-Repair-System/Config/) — all `ModSettings.xml` settings
-- [FAQ](https://sko85.github.io/SE-Mods/Build-and-Repair-System/FAQ/)
-- [Release Notes](https://sko85.github.io/SE-Mods/Build-and-Repair-System/Release-Notes/)
+- [FAQ](https://sko85.github.io/SE-Mods/Build-and-Repair-System/FAQ/) — common questions and troubleshooting
+- [Release Notes](https://sko85.github.io/SE-Mods/Build-and-Repair-System/Release-Notes/) — full version history
 
 ---
 
@@ -27,8 +27,8 @@ Automatically welds, repairs, grinds, and collects floating objects within range
 
 A Programmable Block script that handles automatic assembler queuing and multi-display status output for one or more Build and Repair System groups.
 
-| Steam Workshop                                                                 |
-| ------------------------------------------------------------------------------ |
+| Steam Workshop |
+| --- |
 | [Subscribe](https://steamcommunity.com/sharedfiles/filedetails/?id=3472701905) |
 
 ---
