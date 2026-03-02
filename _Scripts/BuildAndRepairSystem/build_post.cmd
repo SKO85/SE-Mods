@@ -13,7 +13,7 @@ rmdir "%ScriptFolder%\obj" /s /q
 rmdir "%ScriptFolder%\Properties" /s /q
 rmdir "%ScriptFolder%\packages" /s /q
 rmdir "%ScriptFolder%\.vs\" /s /q
-rmdir "%ModFolder%\Release Notes" /s /q
+rmdir "%ModFolder%\Docs" /s /q
 
 del /s /q "%ScriptFolder%\*.config"
 del /s /q "%ScriptFolder%\*.svn"

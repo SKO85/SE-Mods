@@ -18,7 +18,7 @@ const GIT_EMAIL  = process.env.GITHUB_EMAIL || 'noreply@github.com';
 
 const WIKI_REPO_URL    = `https://${GIT_USER}:${PAT}@github.com/SKO85/SE-Mods.wiki.git`;
 const REPO_ROOT        = path.resolve(__dirname, '../..');
-const RELEASE_NOTES_DIR = path.join(REPO_ROOT, 'SKO-Nanobot-BuildAndRepair-System', 'Release Notes');
+const RELEASE_NOTES_DIR = path.join(REPO_ROOT, 'SKO-Nanobot-BuildAndRepair-System', 'Docs', 'Release-Notes');
 
 // ---------------------------------------------------------------------------
 // Helpers
