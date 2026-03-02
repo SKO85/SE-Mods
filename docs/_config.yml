@@ -1,6 +1,7 @@
 title: SKO Space Engineers Mods
 description: Documentation for SKO Space Engineers mods
-theme: minima
 
-minima:
-  skin: classic
+remote_theme: just-the-docs/just-the-docs
+
+plugins:
+  - jekyll-remote-theme
