@@ -15,11 +15,11 @@ Automatically welds, repairs, grinds, and collects floating objects within range
 | Maintained (rebalanced resources) | [Subscribe](https://steamcommunity.com/sharedfiles/filedetails/?id=2111073562) |
 | Original Resources                | [Subscribe](https://steamcommunity.com/sharedfiles/filedetails/?id=3099489876) |
 
-**Documentation:**
+**Documentation:** [sko85.github.io/SE-Mods/Build-and-Repair-System/](https://sko85.github.io/SE-Mods/Build-and-Repair-System/)
 
-- [Configuration File](https://github.com/SKO85/SE-Mods/wiki/Configuration-File) — all `ModSettings.xml` settings
-- [FAQ](https://github.com/SKO85/SE-Mods/wiki/FAQ)
-- [Release Notes](https://github.com/SKO85/SE-Mods/wiki/Build-and-Repair-System-Release-Notes)
+- [Configuration File](https://sko85.github.io/SE-Mods/Build-and-Repair-System/Config/) — all `ModSettings.xml` settings
+- [FAQ](https://sko85.github.io/SE-Mods/Build-and-Repair-System/FAQ/)
+- [Release Notes](https://sko85.github.io/SE-Mods/Build-and-Repair-System/Release-Notes/)
 
 ---
 

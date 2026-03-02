@@ -3,7 +3,7 @@ layout: default
 title: "Release Notes – v2.4.2 — Hotfix #2"
 parent: Release Notes
 grand_parent: Build and Repair System
-nav_exclude: true
+nav_order: 3
 ---
 
 # Release Notes – v2.4.2 — Hotfix #2

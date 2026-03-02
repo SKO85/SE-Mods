@@ -345,3 +345,11 @@ healthchecksdb
 # IDE / tooling
 .vscode/
 .claude/
+
+# Jekyll (docs/)
+docs/_site/
+docs/.jekyll-cache/
+docs/.jekyll-metadata
+docs/Gemfile.lock
+docs/.bundle/
+docs/vendor/

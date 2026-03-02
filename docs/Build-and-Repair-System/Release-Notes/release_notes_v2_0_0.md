@@ -3,7 +3,7 @@ layout: default
 title: "Release Notes – v2.0.0 – v2.1.1 (Major Update)"
 parent: Release Notes
 grand_parent: Build and Repair System
-nav_exclude: true
+nav_order: 15
 ---
 
 # Release Notes – v2.0.0 – v2.1.1 (Major Update)

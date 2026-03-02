@@ -19,7 +19,7 @@ The mod can be configured through a `ModSettings.xml` file. All settings are opt
 
 1. Load your world as normal.
 2. Type the following command in chat:
-   ```
+   ```plaintext
    /nanobars -cwsf
    ```
 3. A confirmation message appears in chat with the file path:
@@ -38,7 +38,7 @@ The mod can be configured through a `ModSettings.xml` file. All settings are opt
 ### Dedicated Server (Torch)
 
 Place the `ModSettings.xml` file at:
-```
+```plaintext
 [TorchPath]\Instance\Storage\<Nanobot-Mod-Folder>\ModSettings.xml
 ```
 
