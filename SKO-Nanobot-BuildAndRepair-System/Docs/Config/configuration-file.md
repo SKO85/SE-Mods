@@ -50,8 +50,8 @@ You can generate a base file from a local game using the command above, then cop
 | `Range` | int | `100` m | `2` m | `2000` m | Operating range **radius** of each Build and Repair block. The actual working area diameter is twice this value (e.g. `100` → 200 m diameter). |
 | `MaximumOffset` | int | `200` m | `0` m | `2000` m | Maximum offset distance that players can configure per block. |
 | `MaxBackgroundTasks` | int | `4` | `1` | `10` | Number of background tasks the mod may run in parallel. Higher values can improve throughput but increase CPU load. |
-| `MaximumRequiredElectricPowerStandby` | float | `0.05` MW | — | — | Power draw of each block while idle (standby). |
-| `MaximumRequiredElectricPowerTransport` | float | `0.1` MW | — | — | Additional power draw while a block is transporting components. |
+| `MaximumRequiredElectricPowerStandby` | float | `0.05` MW | — | — | Power draw of each block while idle (standby). The XML value is in MW; in-game this is displayed as kW (e.g. `0.05` → 50 kW). |
+| `MaximumRequiredElectricPowerTransport` | float | `0.1` MW | — | — | Additional power draw while a block is transporting components. The XML value is in MW; in-game this is displayed as kW (e.g. `0.1` → 100 kW). |
 
 ---
 
@@ -93,8 +93,8 @@ These settings are nested inside a `<Welder>` element in the XML.
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
-| `MaximumRequiredElectricPowerWelding` | float | `0.2` MW | Power draw while actively welding. |
-| `MaximumRequiredElectricPowerGrinding` | float | `0.2` MW | Power draw while actively grinding. |
+| `MaximumRequiredElectricPowerWelding` | float | `0.2` MW | Power draw while actively welding. The XML value is in MW; in-game this is displayed as kW (e.g. `0.2` → 200 kW). |
+| `MaximumRequiredElectricPowerGrinding` | float | `0.2` MW | Power draw while actively grinding. The XML value is in MW; in-game this is displayed as kW (e.g. `0.2` → 200 kW). |
 
 #### Speed Multipliers
 
