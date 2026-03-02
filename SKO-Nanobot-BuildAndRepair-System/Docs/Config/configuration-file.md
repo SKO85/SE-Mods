@@ -175,28 +175,4 @@ These settings are nested inside a `<Welder>` element in the XML.
 
 ## Example File
 
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<SyncModSettings>
-  <Range>100</Range>
-  <MaximumOffset>200</MaximumOffset>
-  <MaxBackgroundTasks>4</MaxBackgroundTasks>
-  <SafeZoneCheckEnabled>true</SafeZoneCheckEnabled>
-  <ShieldCheckEnabled>true</ShieldCheckEnabled>
-  <DecreaseFactionReputationOnGrinding>true</DecreaseFactionReputationOnGrinding>
-  <DeleteBotsWhenDead>true</DeleteBotsWhenDead>
-  <DisableTickingSound>false</DisableTickingSound>
-  <DisableParticleEffects>false</DisableParticleEffects>
-  <AssignToSystemEnabled>true</AssignToSystemEnabled>
-  <MaxSystemsPerTargetGrid>10</MaxSystemsPerTargetGrid>
-  <DisableLimitSystemsPerTargetGrid>false</DisableLimitSystemsPerTargetGrid>
-  <Welder>
-    <WeldingMultiplier>1</WeldingMultiplier>
-    <GrindingMultiplier>1</GrindingMultiplier>
-    <AllowedWorkModes>WeldBeforeGrind GrindBeforeWeld GrindIfWeldGetStuck WeldOnly GrindOnly</AllowedWorkModes>
-    <WorkModeDefault>WeldBeforeGrind</WorkModeDefault>
-    <PriorityFixed>false</PriorityFixed>
-    <AllowedEffects>WeldingVisualEffect WeldingSoundEffect GrindingVisualEffect GrindingSoundEffect TransportVisualEffect</AllowedEffects>
-  </Welder>
-</SyncModSettings>
-```
+See [ModSettings.xml](ModSettings.xml) for a complete example showing all available settings with their default values.
