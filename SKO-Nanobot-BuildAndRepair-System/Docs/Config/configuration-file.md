@@ -47,7 +47,7 @@ You can generate a base file from a local game using the command above, then cop
 
 | Setting | Type | Default | Min | Max | Description |
 |---|---|---|---|---|---|
-| `Range` | int | `100` m | `2` m | `2000` m | Maximum operating range of each Build and Repair block. |
+| `Range` | int | `100` m | `2` m | `2000` m | Operating range **radius** of each Build and Repair block. The actual working area diameter is twice this value (e.g. `100` → 200 m diameter). |
 | `MaximumOffset` | int | `200` m | `0` m | `2000` m | Maximum offset distance that players can configure per block. |
 | `MaxBackgroundTasks` | int | `4` | `1` | `10` | Number of background tasks the mod may run in parallel. Higher values can improve throughput but increase CPU load. |
 | `MaximumRequiredElectricPowerStandby` | float | `0.05` MW | — | — | Power draw of each block while idle (standby). |
