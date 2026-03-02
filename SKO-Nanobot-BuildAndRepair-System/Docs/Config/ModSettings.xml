@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-16"?>
+<SyncModSettings xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Version>6</Version>
+  <DisableLocalization>false</DisableLocalization>
+  <LogLevel>Error</LogLevel>
+  <Range>100</Range>
+  <FriendlyDamageTimeoutTicks>600000000</FriendlyDamageTimeoutTicks>
+  <FriendlyDamageCleanupTicks>100000000</FriendlyDamageCleanupTicks>
+  <MaximumRequiredElectricPowerTransport>0.1</MaximumRequiredElectricPowerTransport>
+  <MaximumRequiredElectricPowerStandby>0.05</MaximumRequiredElectricPowerStandby>
+  <Welder>
+    <MaximumRequiredElectricPowerWelding>0.2</MaximumRequiredElectricPowerWelding>
+    <MaximumRequiredElectricPowerGrinding>0.2</MaximumRequiredElectricPowerGrinding>
+    <WeldingMultiplier>1</WeldingMultiplier>
+    <GrindingMultiplier>1</GrindingMultiplier>
+    <AllowedSearchModes>Grids BoundingBox</AllowedSearchModes>
+    <SearchModeDefault>Grids</SearchModeDefault>
+    <AllowBuildFixed>false</AllowBuildFixed>
+    <AllowBuildDefault>true</AllowBuildDefault>
+    <AllowedWorkModes>WeldBeforeGrind GrindBeforeWeld GrindIfWeldGetStuck WeldOnly GrindOnly</AllowedWorkModes>
+    <WorkModeDefault>WeldBeforeGrind</WorkModeDefault>
+    <UseIgnoreColorFixed>false</UseIgnoreColorFixed>
+    <UseIgnoreColorDefault>true</UseIgnoreColorDefault>
+    <IgnoreColorDefault>
+      <float>321</float>
+      <float>100</float>
+      <float>51</float>
+    </IgnoreColorDefault>
+    <UseGrindColorFixed>false</UseGrindColorFixed>
+    <UseGrindColorDefault>true</UseGrindColorDefault>
+    <GrindColorDefault>
+      <float>321</float>
+      <float>100</float>
+      <float>50</float>
+    </GrindColorDefault>
+    <UseGrindJanitorFixed>false</UseGrindJanitorFixed>
+    <UseGrindJanitorDefault>NoOwnership Enemies</UseGrindJanitorDefault>
+    <GrindJanitorOptionsDefault />
+    <AllowedGrindJanitorRelations>NoOwnership Neutral Enemies</AllowedGrindJanitorRelations>
+    <ShowAreaFixed>false</ShowAreaFixed>
+    <AreaSizeFixed>false</AreaSizeFixed>
+    <AreaOffsetFixed>false</AreaOffsetFixed>
+    <PriorityFixed>false</PriorityFixed>
+    <CollectPriorityFixed>false</CollectPriorityFixed>
+    <PushIngotOreImmediatelyFixed>false</PushIngotOreImmediatelyFixed>
+    <PushIngotOreImmediatelyDefault>true</PushIngotOreImmediatelyDefault>
+    <PushComponentImmediatelyFixed>false</PushComponentImmediatelyFixed>
+    <PushComponentImmediatelyDefault>true</PushComponentImmediatelyDefault>
+    <PushItemsImmediatelyFixed>false</PushItemsImmediatelyFixed>
+    <PushItemsImmediatelyDefault>true</PushItemsImmediatelyDefault>
+    <CollectIfIdleFixed>false</CollectIfIdleFixed>
+    <CollectIfIdleDefault>false</CollectIfIdleDefault>
+    <SoundVolumeFixed>false</SoundVolumeFixed>
+    <SoundVolumeDefault>1</SoundVolumeDefault>
+    <ScriptControllFixed>false</ScriptControllFixed>
+    <AllowedEffects>WeldingVisualEffect WeldingSoundEffect GrindingVisualEffect GrindingSoundEffect TransportVisualEffect</AllowedEffects>
+  </Welder>
+  <MaxBackgroundTasks>4</MaxBackgroundTasks>
+  <MaximumOffset>200</MaximumOffset>
+  <SafeZoneCheckEnabled>true</SafeZoneCheckEnabled>
+  <ShieldCheckEnabled>true</ShieldCheckEnabled>
+  <DecreaseFactionReputationOnGrinding>true</DecreaseFactionReputationOnGrinding>
+  <DeleteBotsWhenDead>true</DeleteBotsWhenDead>
+  <DisableTickingSound>false</DisableTickingSound>
+  <DisableParticleEffects>false</DisableParticleEffects>
+  <DisableLimitSystemsPerTargetGrid>false</DisableLimitSystemsPerTargetGrid>
+  <MaxSystemsPerTargetGrid>10</MaxSystemsPerTargetGrid>
+  <AssignToSystemEnabled>true</AssignToSystemEnabled>
+</SyncModSettings>

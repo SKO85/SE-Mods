@@ -68,6 +68,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"Priority_Disable",                "Deakt."},
             {"Priority_Up",                     "Priorität hoch"},
             {"Priority_Down",                   "Priorität runter"},
+            {"Priority_EnableAll",              "Alle aktivieren"},
+            {"Priority_DisableAll",             "Alle deaktivieren"},
 
             {"Color_PickCurrentColor",          "Aktuelle Farbe übernehmen"},
             {"Color_SetCurrentColor",           "Aktuelle Farbe setzen"},
@@ -87,6 +89,10 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"SoundVolume",                     "Lautstärke"},
             {"DisableTickingSound",             "Tickgeräusch deaktivieren"},
             {"DisableTickingSound_Tooltip",     "Wenn aktiv, wird das Tickgeräusch für diesen Block deaktiviert."},
+            {"DisableParticleEffects",          "Fliegende Nanobot-Effekte deaktivieren"},
+            {"DisableParticleEffects_Tooltip",  "Wenn aktiv, werden die fliegenden Nanobot-Spureffekte (Aufnahme und Lieferung) für diesen Block deaktiviert. Schweiß- und Schleiffunken sind davon nicht betroffen."},
+            {"ResetAllSettings",                "Alle Einstellungen zurücksetzen"},
+            {"ResetAllSettings_Tooltip",        "Setzt alle Einstellungen dieses Blocks auf ihre Standardwerte zurück, einschließlich der Prioritätslisten."},
             {"ScriptControlled",                "Vom Skript gesteuert"},
             {"ScriptControlled_Tooltip",        "Wenn diese Option aktiviert ist, bohrt / füllt das System nicht automatisch. Jede Aktion muss durch Aufrufen von Skriptfunktionen ausgewählt werden."},
 

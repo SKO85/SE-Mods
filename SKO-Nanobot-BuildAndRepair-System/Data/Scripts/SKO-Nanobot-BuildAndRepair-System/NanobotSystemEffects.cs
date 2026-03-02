@@ -31,6 +31,7 @@ namespace SKONanobotBuildAndRepairSystem
         public WorkingState WorkingStateSet = WorkingState.Invalid;
         public float SoundVolumeSet;
         private bool _DisableTickingSoundSet;
+        private bool _DisableParticleEffectsSet;
 
         private MyEntity3DSoundEmitter _SoundEmitter;
         private MyEntity3DSoundEmitter _SoundEmitterWorking;
@@ -62,8 +63,12 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         public void UpdateEffects(NanobotSystem system)
         {
+            var disableParticleEffects = Mod.Settings.DisableParticleEffects || ((system.Settings.Flags & SyncBlockSettings.Settings.DisableParticleEffects) != 0);
+            var particleEffectsChanged = disableParticleEffects != _DisableParticleEffectsSet;
+            _DisableParticleEffectsSet = disableParticleEffects;
+
             var transportState = system.State.Transporting && system.State.CurrentTransportTarget != null;
-            if (transportState != _TransportStateSet)
+            if (transportState != _TransportStateSet || particleEffectsChanged)
             {
                 SetTransportEffects(system, transportState);
             }
@@ -75,7 +80,7 @@ namespace SKONanobotBuildAndRepairSystem
             // Welding/Grinding state
             var workingState = system.GetWorkingState();
             var disableTickingSound = Mod.Settings.DisableTickingSound || ((system.Settings.Flags & SyncBlockSettings.Settings.DisableTickingSound) != 0);
-                                    
+
             if (workingState != WorkingStateSet || system.Settings.SoundVolume != SoundVolumeSet || disableTickingSound != _DisableTickingSoundSet)
             {
                 _DisableTickingSoundSet = disableTickingSound;
@@ -307,38 +312,29 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void SetTransportEffects(NanobotSystem system, bool active)
         {
-            if ((Mod.Settings.Welder.AllowedEffects & VisualAndSoundEffects.TransportVisualEffect) != 0)
+            // Always stop any running effect first so toggling the flag cleans up immediately.
+            if (_ParticleEffectTransport1 != null)
             {
-                if (active)
-                {
-                    if (_ParticleEffectTransport1 != null)
-                    {
-                        Interlocked.Decrement(ref _ActiveTransportEffects);
-                        _ParticleEffectTransport1.Stop();
-                        _ParticleEffectTransport1 = null;
-                    }
+                Interlocked.Decrement(ref _ActiveTransportEffects);
+                _ParticleEffectTransport1.Stop();
+                _ParticleEffectTransport1 = null;
+            }
 
-                    if (_ActiveTransportEffects < MaxTransportEffects)
-                    {
-                        MyParticlesManager.TryCreateParticleEffect(system.State.CurrentTransportIsPick ? PARTICLE_EFFECT_TRANSPORT1_PICK : PARTICLE_EFFECT_TRANSPORT1_DELIVER, ref MatrixD.Identity, ref Vector3D.Zero, uint.MaxValue, out _ParticleEffectTransport1);
-                        if (_ParticleEffectTransport1 != null)
-                        {
-                            Interlocked.Increment(ref _ActiveTransportEffects);
-                            _ParticleEffectTransport1.UserScale = 0.1f;
-                            UpdateTransportEffectPosition(system);
-                        }
-                    }
-                }
-                else
+            // Only create a new effect when active, not disabled, and globally allowed.
+            if (!_DisableParticleEffectsSet && active && (Mod.Settings.Welder.AllowedEffects & VisualAndSoundEffects.TransportVisualEffect) != 0)
+            {
+                if (_ActiveTransportEffects < MaxTransportEffects)
                 {
+                    MyParticlesManager.TryCreateParticleEffect(system.State.CurrentTransportIsPick ? PARTICLE_EFFECT_TRANSPORT1_PICK : PARTICLE_EFFECT_TRANSPORT1_DELIVER, ref MatrixD.Identity, ref Vector3D.Zero, uint.MaxValue, out _ParticleEffectTransport1);
                     if (_ParticleEffectTransport1 != null)
                     {
-                        Interlocked.Decrement(ref _ActiveTransportEffects);
-                        _ParticleEffectTransport1.Stop();
-                        _ParticleEffectTransport1 = null;
+                        Interlocked.Increment(ref _ActiveTransportEffects);
+                        _ParticleEffectTransport1.UserScale = 0.1f;
+                        UpdateTransportEffectPosition(system);
                     }
                 }
             }
+
             _TransportStateSet = active;
         }
 

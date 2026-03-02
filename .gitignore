@@ -341,3 +341,7 @@ ASALocalRun/
 healthchecksdb
 
 *.xcf
+
+# IDE / tooling
+.vscode/
+.claude/

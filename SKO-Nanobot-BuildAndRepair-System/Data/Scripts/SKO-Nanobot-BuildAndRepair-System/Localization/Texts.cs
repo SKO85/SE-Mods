@@ -76,6 +76,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId Priority_Disable;
         public static readonly MyStringId Priority_Up;
         public static readonly MyStringId Priority_Down;
+        public static readonly MyStringId Priority_EnableAll;
+        public static readonly MyStringId Priority_DisableAll;
 
         public static readonly MyStringId AreaShow;
         public static readonly MyStringId AreaShow_Tooltip;
@@ -95,6 +97,10 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId SoundVolume;
         public static readonly MyStringId DisableTickingSound;
         public static readonly MyStringId DisableTickingSound_Tooltip;
+        public static readonly MyStringId DisableParticleEffects;
+        public static readonly MyStringId DisableParticleEffects_Tooltip;
+        public static readonly MyStringId ResetAllSettings;
+        public static readonly MyStringId ResetAllSettings_Tooltip;
         public static readonly MyStringId ScriptControlled;
         public static readonly MyStringId ScriptControlled_Tooltip;
 
@@ -197,6 +203,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             Priority_Disable = LocalizationHelper.GetStringId(texts, "Priority_Disable");
             Priority_Up = LocalizationHelper.GetStringId(texts, "Priority_Up");
             Priority_Down = LocalizationHelper.GetStringId(texts, "Priority_Down");
+            Priority_EnableAll = LocalizationHelper.GetStringId(texts, "Priority_EnableAll");
+            Priority_DisableAll = LocalizationHelper.GetStringId(texts, "Priority_DisableAll");
 
             AreaShow = LocalizationHelper.GetStringId(texts, "AreaShow");
             AreaShow_Tooltip = LocalizationHelper.GetStringId(texts, "AreaShow_Tooltip", TextDefaultMaxTooltipLenght);
@@ -216,6 +224,10 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             SoundVolume = LocalizationHelper.GetStringId(texts, "SoundVolume");
             DisableTickingSound = LocalizationHelper.GetStringId(texts, "DisableTickingSound");
             DisableTickingSound_Tooltip = LocalizationHelper.GetStringId(texts, "DisableTickingSound_Tooltip", TextDefaultMaxTooltipLenght);
+            DisableParticleEffects = LocalizationHelper.GetStringId(texts, "DisableParticleEffects");
+            DisableParticleEffects_Tooltip = LocalizationHelper.GetStringId(texts, "DisableParticleEffects_Tooltip", TextDefaultMaxTooltipLenght);
+            ResetAllSettings = LocalizationHelper.GetStringId(texts, "ResetAllSettings");
+            ResetAllSettings_Tooltip = LocalizationHelper.GetStringId(texts, "ResetAllSettings_Tooltip", TextDefaultMaxTooltipLenght);
             ScriptControlled = LocalizationHelper.GetStringId(texts, "ScriptControlled");
             ScriptControlled_Tooltip = LocalizationHelper.GetStringId(texts, "ScriptControlled_Tooltip", TextDefaultMaxTooltipLenght);
 

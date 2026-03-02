@@ -84,6 +84,18 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(26), XmlElement]
         public bool DisableTickingSound { get; set; }
 
+        [ProtoMember(27), XmlElement]
+        public bool DisableParticleEffects { get; set; }
+
+        [ProtoMember(28), XmlElement]
+        public bool DisableLimitSystemsPerTargetGrid { get; set; }
+
+        [ProtoMember(29), XmlElement]
+        public int MaxSystemsPerTargetGrid { get; set; }
+
+        [ProtoMember(30), XmlElement]
+        public bool AssignToSystemEnabled { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -102,6 +114,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
             ShieldCheckEnabled = true;
             DecreaseFactionReputationOnGrinding = true;
             DeleteBotsWhenDead = true;
+            MaxSystemsPerTargetGrid = 10;
+            AssignToSystemEnabled = true;
         }
 
         public static SyncModSettings Load()
