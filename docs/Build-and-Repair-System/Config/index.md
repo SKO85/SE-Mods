@@ -53,8 +53,8 @@ You can generate a base file from a local game using the command above, then cop
 
 | Section | Description |
 | --- | --- |
-| [General Settings](general-settings/) | Range, power, background tasks, behaviour, system limits, sound and visuals |
-| [Welder Settings](welder-settings/) | Power, speed multipliers, work modes, search modes, locks, push/collect, grind janitor, colors, effects |
+| [General Settings](general-settings) | Range, power, background tasks, behaviour, system limits, sound and visuals |
+| [Welder Settings](welder-settings) | Power, speed multipliers, work modes, search modes, locks, push/collect, grind janitor, colors, effects |
 
 ---
 
