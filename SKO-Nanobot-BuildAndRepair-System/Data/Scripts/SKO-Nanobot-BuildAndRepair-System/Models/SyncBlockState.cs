@@ -445,6 +445,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _NeedWelding = newState.NeedWelding;
             _Grinding = newState.Grinding;
             _NeedGrinding = newState.NeedGrinding;
+            _Transporting = newState.Transporting;
             _InventoryFull = newState.InventoryFull;
             _LimitsExceeded = newState.LimitsExceeded;
             _CurrentTransportStartTime = MyAPIGateway.Session.ElapsedPlayTime - (newState.LastTransmitted - newState.CurrentTransportStartTime);

@@ -28,6 +28,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             GrindSmallestGridFirst = 0x00000200,
             GrindIgnorePriorityOrder = 0x00000400,
             DisableTickingSound = 0x00000800,
+            DisableParticleEffects = 0x00001000,
             ComponentCollectIfIdle = 0x00010000,
             PushIngotOreImmediately = 0x00020000,
             PushComponentImmediately = 0x00040000,

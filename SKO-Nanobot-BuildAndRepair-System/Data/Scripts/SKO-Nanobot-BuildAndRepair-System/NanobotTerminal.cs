@@ -110,10 +110,14 @@ namespace SKONanobotBuildAndRepairSystem
         internal static IMyTerminalControlOnOffSwitch _WeldEnableDisableSwitch;
         internal static IMyTerminalControlButton _WeldPriorityButtonUp;
         internal static IMyTerminalControlButton _WeldPriorityButtonDown;
+        internal static IMyTerminalControlButton _WeldPriorityButtonEnableAll;
+        internal static IMyTerminalControlButton _WeldPriorityButtonDisableAll;
         internal static IMyTerminalControlListbox _WeldPriorityListBox;
         internal static IMyTerminalControlOnOffSwitch _GrindEnableDisableSwitch;
         internal static IMyTerminalControlButton _GrindPriorityButtonUp;
         internal static IMyTerminalControlButton _GrindPriorityButtonDown;
+        internal static IMyTerminalControlButton _GrindPriorityButtonEnableAll;
+        internal static IMyTerminalControlButton _GrindPriorityButtonDisableAll;
         internal static IMyTerminalControlListbox _GrindPriorityListBox;
 
         internal static IMyTerminalControlOnOffSwitch _ComponentCollectEnableDisableSwitch;
@@ -284,6 +288,14 @@ namespace SKONanobotBuildAndRepairSystem
                             button = Buttons.CreateWeldPriorityDown(isWeldingAllowed);
                             _WeldPriorityButtonDown = button;
 
+                            // --- Weld Priority Enable All ---
+                            button = Buttons.CreateWeldPriorityEnableAll(isWeldingAllowed);
+                            _WeldPriorityButtonEnableAll = button;
+
+                            // --- Weld Priority Disable All ---
+                            button = Buttons.CreateWeldPriorityDisableAll(isWeldingAllowed);
+                            _WeldPriorityButtonDisableAll = button;
+
                             // --- List Weld Priority ---
                             var listbox = ListBoxes.CreateWeldPriority(weldingAllowed, isReadonly, isBaRSystem, isWeldingAllowed);
                             _WeldPriorityListBox = listbox;
@@ -369,6 +381,14 @@ namespace SKONanobotBuildAndRepairSystem
                             // --- GrindPriorityDown ---
                             button = Buttons.CreateGrindPriorityDown(isGrindingAllowed);
                             _GrindPriorityButtonDown = button;
+
+                            // --- Grind Priority Enable All ---
+                            button = Buttons.CreateGrindPriorityEnableAll(isGrindingAllowed);
+                            _GrindPriorityButtonEnableAll = button;
+
+                            // --- Grind Priority Disable All ---
+                            button = Buttons.CreateGrindPriorityDisableAll(isGrindingAllowed);
+                            _GrindPriorityButtonDisableAll = button;
 
                             // --- GrindPriority ---
                             var listbox = ListBoxes.CreateGrindPriority(grindingAllowed, isGrindingAllowed, isReadonly, isBaRSystem);
@@ -496,6 +516,13 @@ namespace SKONanobotBuildAndRepairSystem
                             onoffSwitch = OnOffSwitches.CreateDisableTickingSound(isReadonly, isBaRSystem);
                             CreateProperty(onoffSwitch);
                         }
+
+                        // --- DisableParticleEffects (per-block, only shown when not disabled globally) ---
+                        if (!Mod.Settings.DisableParticleEffects)
+                        {
+                            onoffSwitch = OnOffSwitches.CreateDisableParticleEffects(isReadonly, isBaRSystem);
+                            CreateProperty(onoffSwitch);
+                        }
                     }
 
                     // -- Script Control
@@ -506,6 +533,10 @@ namespace SKONanobotBuildAndRepairSystem
                         // --- ScriptControlled ---
                         onoffSwitch = OnOffSwitches.ScriptControlled(isBaRSystem);
                         CreateProperty(onoffSwitch);
+
+                        // --- Reset All Settings ---
+                        separateArea = Separators.Create("SeparateReset", (_) => true);
+                        button = Buttons.CreateResetAllSettings(isBaRSystem);
 
                         // =========== Properties ============
 

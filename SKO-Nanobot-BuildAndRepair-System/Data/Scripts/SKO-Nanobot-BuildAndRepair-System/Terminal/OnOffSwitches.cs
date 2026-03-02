@@ -1181,5 +1181,47 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
 
             return control;
         }
+
+        public static IMyTerminalControlOnOffSwitch CreateDisableParticleEffects(Func<IMyTerminalBlock, bool> isReadonly, Func<IMyTerminalBlock, bool> isBaRSystem)
+        {
+            var control = Create(
+                // Id:
+                "DisableParticleEffects",
+
+                // Texts
+                Texts.DisableParticleEffects,
+                Texts.DisableParticleEffects_Tooltip,
+                MySpaceTexts.SwitchText_On,
+                MySpaceTexts.SwitchText_Off,
+
+                // Visible:
+                isBaRSystem,
+
+                // Enabled:
+                isBaRSystem,
+
+                // Getter:
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    return system != null ? ((system.Settings.Flags & SyncBlockSettings.Settings.DisableParticleEffects) != 0) : false;
+                },
+
+                // Setter:
+                (block, value) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null)
+                    {
+                        system.Settings.Flags = (system.Settings.Flags & ~SyncBlockSettings.Settings.DisableParticleEffects) | (value ? SyncBlockSettings.Settings.DisableParticleEffects : 0);
+                    }
+                },
+
+                // Multiple blocks support.
+                true
+            );
+
+            return control;
+        }
     }
 }

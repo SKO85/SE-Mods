@@ -167,6 +167,70 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             return control;
         }
 
+        public static IMyTerminalControlButton CreateWeldPriorityEnableAll(Func<IMyTerminalBlock, bool> isWeldingAllowed)
+        {
+            var control = Create(
+                // Id:
+                "WeldPriorityEnableAll",
+
+                // Texts:
+                Texts.Priority_EnableAll,
+
+                // Visbile / Enabled:
+                isWeldingAllowed,
+                isWeldingAllowed,
+
+                // Action:
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null && !Mod.Settings.Welder.PriorityFixed)
+                    {
+                        system.BlockWeldPriority.SetAllEnabled(true);
+                        system.Settings.WeldPriority = system.BlockWeldPriority.GetEntries();
+                        NanobotTerminal.UpdateVisual(NanobotTerminal._WeldPriorityListBox);
+                    }
+                },
+
+                // Multiple blocks support.
+                true
+            );
+
+            return control;
+        }
+
+        public static IMyTerminalControlButton CreateWeldPriorityDisableAll(Func<IMyTerminalBlock, bool> isWeldingAllowed)
+        {
+            var control = Create(
+                // Id:
+                "WeldPriorityDisableAll",
+
+                // Texts:
+                Texts.Priority_DisableAll,
+
+                // Visbile / Enabled:
+                isWeldingAllowed,
+                isWeldingAllowed,
+
+                // Action:
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null && !Mod.Settings.Welder.PriorityFixed)
+                    {
+                        system.BlockWeldPriority.SetAllEnabled(false);
+                        system.Settings.WeldPriority = system.BlockWeldPriority.GetEntries();
+                        NanobotTerminal.UpdateVisual(NanobotTerminal._WeldPriorityListBox);
+                    }
+                },
+
+                // Multiple blocks support.
+                true
+            );
+
+            return control;
+        }
+
         public static IMyTerminalControlButton CreateGrindColorPickCurrent(Func<IMyTerminalBlock, bool> colorPickerEnabled, Func<IMyTerminalBlock, bool> isGrindingAllowed)
         {
             var control = Create(
@@ -306,6 +370,70 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             return control;
         }
 
+        public static IMyTerminalControlButton CreateGrindPriorityEnableAll(Func<IMyTerminalBlock, bool> isGrindingAllowed)
+        {
+            var control = Create(
+                // Id:
+                "GrindPriorityEnableAll",
+
+                // Texts:
+                Texts.Priority_EnableAll,
+
+                // Visbile / Enabled:
+                isGrindingAllowed,
+                isGrindingAllowed,
+
+                // Action:
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null && !Mod.Settings.Welder.PriorityFixed)
+                    {
+                        system.BlockGrindPriority.SetAllEnabled(true);
+                        system.Settings.GrindPriority = system.BlockGrindPriority.GetEntries();
+                        NanobotTerminal.UpdateVisual(NanobotTerminal._GrindPriorityListBox);
+                    }
+                },
+
+                // Multiple blocks support.
+                true
+            );
+
+            return control;
+        }
+
+        public static IMyTerminalControlButton CreateGrindPriorityDisableAll(Func<IMyTerminalBlock, bool> isGrindingAllowed)
+        {
+            var control = Create(
+                // Id:
+                "GrindPriorityDisableAll",
+
+                // Texts:
+                Texts.Priority_DisableAll,
+
+                // Visbile / Enabled:
+                isGrindingAllowed,
+                isGrindingAllowed,
+
+                // Action:
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null && !Mod.Settings.Welder.PriorityFixed)
+                    {
+                        system.BlockGrindPriority.SetAllEnabled(false);
+                        system.Settings.GrindPriority = system.BlockGrindPriority.GetEntries();
+                        NanobotTerminal.UpdateVisual(NanobotTerminal._GrindPriorityListBox);
+                    }
+                },
+
+                // Multiple blocks support.
+                true
+            );
+
+            return control;
+        }
+
         public static IMyTerminalControlButton CreateCollectPriorityUp(Func<IMyTerminalBlock, bool> isChangeCollectPriorityPossible)
         {
             var control = Create(
@@ -370,6 +498,41 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 // Multiple blocks support.
                 true
             );
+
+            return control;
+        }
+
+        public static IMyTerminalControlButton CreateResetAllSettings(Func<IMyTerminalBlock, bool> isBaRSystem)
+        {
+            var control = Create(
+                // Id:
+                "ResetAllSettings",
+
+                // Texts:
+                Texts.ResetAllSettings,
+
+                // Visbile / Enabled:
+                isBaRSystem,
+                isBaRSystem,
+
+                // Action:
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null)
+                    {
+                        system.ResetSettings();
+                        NanobotTerminal.UpdateVisual(NanobotTerminal._WeldPriorityListBox);
+                        NanobotTerminal.UpdateVisual(NanobotTerminal._GrindPriorityListBox);
+                        NanobotTerminal.UpdateVisual(NanobotTerminal._ComponentCollectPriorityListBox);
+                    }
+                },
+
+                // Multiple blocks support.
+                true
+            );
+
+            control.Tooltip = Texts.ResetAllSettings_Tooltip;
 
             return control;
         }

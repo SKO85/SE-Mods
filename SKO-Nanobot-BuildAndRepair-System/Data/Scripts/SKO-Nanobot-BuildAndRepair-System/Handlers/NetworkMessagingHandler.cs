@@ -166,6 +166,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     else if (!system._firstSettingsReceived)
                     {
                         system._firstSettingsReceived = true;
+                        system.Settings.AssignReceived(msgRcv.Settings, system.BlockWeldPriority, system.BlockGrindPriority, system.ComponentCollectPriority);
                         system.OnFirstSettingsReceived();
                     }
                     else

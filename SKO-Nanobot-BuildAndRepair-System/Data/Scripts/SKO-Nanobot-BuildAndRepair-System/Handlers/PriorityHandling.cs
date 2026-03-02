@@ -203,6 +203,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
         }
 
+        internal void SetAllEnabled(bool enabled)
+        {
+            foreach (var entry in this)
+            {
+                entry.Enabled = enabled;
+            }
+            _HashDirty = true;
+        }
+
         public bool AnyEnabled
         {
             get

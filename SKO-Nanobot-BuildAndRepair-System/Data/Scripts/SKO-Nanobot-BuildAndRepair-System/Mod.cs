@@ -31,7 +31,7 @@ namespace SKONanobotBuildAndRepairSystem
         private static TimeSpan _LastTtlCacheCleanerCheck;
         private static TimeSpan _LastSafeZoneUpdateCheck;
 
-        public const int MaxBackgroundTasks_Default = 3;
+        public const int MaxBackgroundTasks_Default = 4;
         public const int MaxBackgroundTasks_Max = 10;
         public const int MaxBackgroundTasks_Min = 1;
         public static Queue<Action> AsynActions = new Queue<Action>();
@@ -227,6 +227,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 try { InventoryHelper.Cleanup(); } catch { }
                                 try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
                                 try { BlockSystemAssigningHandler.Cleanup(); } catch { }
+                                try { DlcCheckHelper.CleanupOwnerCache(); } catch { }
                             });
                         }
 
