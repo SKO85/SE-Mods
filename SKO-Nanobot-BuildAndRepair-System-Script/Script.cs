@@ -1,11 +1,11 @@
-﻿// Version: v1.9 - 25.09.2025 23:16:00
+﻿// Version: v1.10 - 02.03.2026 12:08:00
 
-static double UpdateInvervalAssemblerQueues = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
-static double UpdateInvervalGrinding = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
+static double UpdateIntervalAssemblerQueues = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
+static double UpdateIntervalGrinding = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
 
 /// <summary> 
-/// Configure the groups with there block names and/or group names. 
-/// You can access screens from TextSurfaceProvider like Cockpits with there name followed by [screenindex] e.g. "Cockpit[0]" 
+/// Configure the groups with their block names and/or group names.
+/// You can access screens from TextSurfaceProvider like Cockpits with their name followed by [screenindex] e.g. "Cockpit[0]" 
 /// </summary> 
 static BuildAndRepairSystemQueuingGroup[] BuildAndRepairSystemQueuingGroups = {
    new BuildAndRepairSystemQueuingGroup() {
@@ -79,9 +79,7 @@ static BuildAndRepairSystemQueuingGroup[] BuildAndRepairSystemQueuingGroups = {
 }; 
 */
 
-/// <summary> 
-/// No user changeable settings behind this point 
-/// </summary> 
+// No user changeable settings behind this point 
 
 /// <summary> 
 /// Kind of Display 
@@ -109,11 +107,7 @@ public Program()
 void Main(string arg)
 {
     var infoOnly = arg != null && arg.Trim().Equals("info-only", StringComparison.OrdinalIgnoreCase);
-    if (infoOnly)
-    {
-        _AutoQueuing.SetInfoOnly(true);
-    }
-
+    _AutoQueuing.SetInfoOnly(infoOnly);
     _AutoQueuing.Handle();
 }
 
@@ -135,8 +129,8 @@ public class BuildAndRepairSystemQueuingGroup
     public DisplayDefinition[] Displays { get; set; }
 }
 
-/// <summary> 
-/// Definition for muliple Displays 
+/// <summary>
+/// Definition for multiple displays
 /// </summary> 
 public class DisplayDefinition
 {
@@ -146,7 +140,7 @@ public class DisplayDefinition
     public string[] DisplayNames { get; set; }
 
     /// <summary> 
-    /// You can the Display pages you need from enum DisplayKind. THey will be switch every DisplaySwitchTime seconds 
+    /// You can choose the display pages you need from enum DisplayKind. They will be switched every DisplaySwitchTime seconds 
     /// </summary> 
     public DisplayKind[] DisplayKinds { get; set; } = new[] { DisplayKind.Status };
 
@@ -176,11 +170,10 @@ public class BuildAndRepairAutoQueuing
 
     public string InitializationResultMessage { get; private set; }
 
-    public bool _InfoOnly = false;
+    private bool _InfoOnly = false;
     public BuildAndRepairAutoQueuing(Program program)
     {
         _Program = program;
-        _ElapsedTime = 0;
     }
 
     public void SetInfoOnly(bool infoOnly)
@@ -210,12 +203,12 @@ public class BuildAndRepairAutoQueuing
             if (_ElapsedTime > _NextUpdateGrinding)
             {
                 ScriptControlledGrinding();
-                _NextUpdateGrinding = _ElapsedTime + UpdateInvervalGrinding;
+                _NextUpdateGrinding = _ElapsedTime + UpdateIntervalGrinding;
             }
             if (!_InfoOnly && _ElapsedTime > _NextUpdateAssemblerQueues)
             {
                 CheckAssemblerQueues();
-                _NextUpdateAssemblerQueues = _ElapsedTime + UpdateInvervalAssemblerQueues;
+                _NextUpdateAssemblerQueues = _ElapsedTime + UpdateIntervalAssemblerQueues;
             }
             RefreshDisplays();
 
@@ -268,13 +261,12 @@ public class BuildAndRepairAutoQueuing
         }
 
         _IsInit = true;
-        return;
     }
 
     /// <summary> 
     /// Init the group/list of items handler 
     /// </summary> 
-    public T InitHandler<T>(BuildAndRepairSystemQueuingGroup queuingGroup) where T : EntityHandler, new()
+    private T InitHandler<T>(BuildAndRepairSystemQueuingGroup queuingGroup) where T : EntityHandler, new()
     {
         T handler = null;
         if (queuingGroup != null && !string.IsNullOrWhiteSpace(queuingGroup.BuildAndRepairSystemGroupName))
@@ -316,18 +308,14 @@ public class BuildAndRepairAutoQueuing
                     {
                         try
                         {
-                            var tb = blk as IMyTerminalBlock;
-                            if (tb == null) return false;
                             // Test for known BuildAndRepair properties; an exception likely means not our block
-                            var _ = tb.GetValueBool("BuildAndRepair.ScriptControlled");
+                            var _ = blk.GetValueBool("BuildAndRepair.ScriptControlled");
                             return true;
                         }
                         catch { }
                         try
                         {
-                            var tb = blk as IMyTerminalBlock;
-                            if (tb == null) return false;
-                            var mode = tb.GetValue<long>("BuildAndRepair.Mode");
+                            var _ = blk.GetValue<long>("BuildAndRepair.Mode");
                             return true;
                         }
                         catch { }
@@ -346,7 +334,7 @@ public class BuildAndRepairAutoQueuing
 
         if (handler == null || handler.Count == 0)
         {
-            InitializationResultMessage += string.Format("\nWarning: Group Repairsystems group empty/wrong types!");
+            InitializationResultMessage += "\nWarning: Group Repairsystems group empty/wrong types!";
             handler = null;
         }
 
@@ -357,7 +345,7 @@ public class BuildAndRepairAutoQueuing
     /// Build list of assemblers 
     /// </summary> 
     /// <returns></returns> 
-    public List<long> InitAssemblerList(BuildAndRepairSystemQueuingGroup queuingGroup)
+    private List<long> InitAssemblerList(BuildAndRepairSystemQueuingGroup queuingGroup)
     {
         List<long> assemblers = null;
 
@@ -394,7 +382,7 @@ public class BuildAndRepairAutoQueuing
 
         if (assemblers == null || assemblers.Count == 0)
         {
-            InitializationResultMessage += string.Format("Warning: Group Assemblers group empty/wrong types!");
+            InitializationResultMessage += "\nWarning: Group Assemblers group empty/wrong types!";
             assemblers = null;
         }
 
@@ -467,9 +455,6 @@ public class BuildAndRepairAutoQueuing
     }
 }
 
-/// <summary> 
-///  
-/// </summary> 
 public class BuildAndRepairSystemQueuingGroupData
 {
     public BuildAndRepairSystemQueuingGroup Settings { get; set; }
@@ -485,9 +470,6 @@ public class BuildAndRepairSystemQueuingGroupData
         NextSwitchTime = new double[count];
     }
 
-    /// <summary> 
-    ///  
-    /// </summary> 
     public void CheckAssemblerQueues()
     {
         if (RepairSystems != null && Assemblers != null)
@@ -495,11 +477,6 @@ public class BuildAndRepairSystemQueuingGroupData
             var missingItems = RepairSystems.MissingComponents();
             foreach (var item in missingItems)
             {
-                //Test -> 
-                //var blueprintDefinition = TryGetBlueprintDefinitionByResultId(materialId); 
-                //if (blueprintDefinition == null) return 0; 
-                //<- end test 
-
                 if (item.Value > 0)
                 {
                     RepairSystems.EnsureQueued(Assemblers, item.Key, item.Value);
@@ -525,7 +502,7 @@ public class BuildAndRepairSystemQueuingGroupData
                 display.Clear();
                 if (settings.DisplayKinds != null && RepairSystems != null)
                 {
-                    if (elapsedTime >= NextSwitchTime[idx])
+                    if (elapsedTime > NextSwitchTime[idx])
                     {
                         DisplayKindIdx[idx] = (DisplayKindIdx[idx] + 1) % settings.DisplayKinds.Length;
                         NextSwitchTime[idx] = elapsedTime + settings.DisplaySwitchTime;
@@ -578,7 +555,7 @@ public class BuildAndRepairSystemQueuingGroupData
         display.AddStatus(string.Format("Blocks to grind   : {0}", listB != null ? listB.Count : 0));
         var listF = RepairSystems.PossibleCollectTargets();
         display.AddStatus(string.Format("Floating items    : {0}", listF != null ? listF.Count : 0));
-        display.AddStatus(string.Format("Missing item kinds: {0}", StatusAndLogDisplay.BlockName(RepairSystems.MissingComponents().Count)));
+        display.AddStatus(string.Format("Missing item kinds: {0}", RepairSystems.MissingComponents().Count));
     }
 
     /// <summary> 
@@ -587,10 +564,10 @@ public class BuildAndRepairSystemQueuingGroupData
     private void DisplayStatus(DisplayDefinition settings, StatusAndLogDisplay display)
     {
         DisplayShortStatus(settings, display);
-        display.AddStatus(string.Format("Search mode       : {0}", StatusAndLogDisplay.BlockName(RepairSystems.SearchMode)));
-        display.AddStatus(string.Format("Work mode         : {0}", StatusAndLogDisplay.BlockName(RepairSystems.WorkMode)));
-        display.AddStatus(string.Format("Build projected   : {0}", StatusAndLogDisplay.BlockName(RepairSystems.AllowBuild)));
-        display.AddStatus(string.Format("UseIgnoreColor    : {0}", StatusAndLogDisplay.BlockName(RepairSystems.UseIgnoreColor)));
+        display.AddStatus(string.Format("Search mode       : {0}", RepairSystems.SearchMode));
+        display.AddStatus(string.Format("Work mode         : {0}", RepairSystems.WorkMode));
+        display.AddStatus(string.Format("Build projected   : {0}", RepairSystems.AllowBuild));
+        display.AddStatus(string.Format("UseIgnoreColor    : {0}", RepairSystems.UseIgnoreColor));
         display.AddStatus(string.Format("Script Controlled : {0}", RepairSystems.ScriptControlled));
     }
 
@@ -685,6 +662,7 @@ public class BuildAndRepairSystemQueuingGroupData
     {
         display.AddStatus("Weld Priority:");
         var list = RepairSystems.WeldPriorityList();
+        if (list == null) return;
         foreach (var entry in list)
         {
             display.AddStatus(string.Format("  {0}/{1}", entry.ItemClass, entry.Enabled));
@@ -698,24 +676,13 @@ public class BuildAndRepairSystemQueuingGroupData
     {
         display.AddStatus("Grind Priority:");
         var list = RepairSystems.GrindPriorityList();
+        if (list == null) return;
         foreach (var entry in list)
         {
             display.AddStatus(string.Format("  {0}/{1}", entry.ItemClass, entry.Enabled));
         }
     }
 
-    /// <summary> 
-    /// Show the List of component classes and there enabled state 
-    /// </summary> 
-    private void DisplayComponentClassesList(DisplayDefinition settings, StatusAndLogDisplay display)
-    {
-        display.AddStatus("ComponentClassList:");
-        var list = RepairSystems.ComponentClassList();
-        foreach (var entry in list)
-        {
-            display.AddStatus(string.Format("  {0}/{1}", entry.ItemClass, entry.Enabled));
-        }
-    }
 }
 
 /// <summary> 
@@ -733,7 +700,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     private Func<IEnumerable<long>, VRage.Game.MyDefinitionId, int, int> _EnsureQueued;
     private Func<IMyProjector, Dictionary<VRage.Game.MyDefinitionId, VRage.MyFixedPoint>, int> _NeededComponents4Blueprint;
     /// <summary> 
-    /// The block clases the system distinguish 
+    /// The block classes the system distinguish 
     /// </summary> 
     public enum BlockClass
     {
@@ -789,7 +756,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         WeldBeforeGrind = 0x0001,
 
         /// <summary> 
-        /// Weld onyl if nothing to grind 
+        /// Weld only if nothing to grind 
         /// </summary> 
         GrindBeforeWeld = 0x0002,
 
@@ -869,9 +836,9 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the search mode of the block 
-    /// </summary> 
+    /// <summary>
+    /// Set the work mode of the block
+    /// </summary>
     public WorkModes WorkMode
     {
         get
@@ -886,7 +853,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
 
     /// <summary> 
     /// Enable/Disable the use of the Ignore Color 
-    /// If enabled block's with with color 'IgnoreColor' 
+    /// If enabled block's with color 'IgnoreColor' 
     /// will be ignored. 
     /// You could use this do have intentionally unweldet block's 
     /// and still use autorepair of the rest. 
@@ -923,7 +890,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
 
     /// <summary> 
     /// Enable/Disable the use of the Grind Color 
-    /// If enabled block's with with color 'GrindColor' 
+    /// If enabled block's with color 'GrindColor' 
     /// will be grinded. 
     /// </summary> 
     public bool UseGrindColor
@@ -1032,7 +999,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     }
 
     /// <summary> 
-    /// If set block are only weldet to functional level 
+    /// If set block are only welded to functional level 
     /// </summary> 
     public bool WeldOptionFunctionalOnly
     {
@@ -1048,7 +1015,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
 
 
     /// <summary> 
-    /// Set the with of the working area 
+    /// Set the width of the working area 
     /// </summary> 
     public float AreaWidth
     {
@@ -1122,9 +1089,9 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the depth of the working area 
-    /// </summary> 
+    /// <summary>
+    /// Set the front/back offset of the working area from block center
+    /// </summary>
     public float AreaOffsetFrontBack
     {
         get
@@ -1221,12 +1188,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     /// Get a list with all known block classes and there 
     /// grind enabled state in descending order of priority. 
     /// </summary> 
-    public List<ClassState<BlockClass>> GrindPriorityList()
+    public MemorySafeList<ClassState<BlockClass>> GrindPriorityList()
     {
         if (_Entities.Count > 0)
         {
-            var list = GetValue<List<string>>("BuildAndRepair.GrindPriorityList");
-            var blockList = new List<ClassState<BlockClass>>();
+            var list = GetValue<MemorySafeList<string>>("BuildAndRepair.GrindPriorityList");
+            var blockList = new MemorySafeList<ClassState<BlockClass>>();
             foreach (var item in list)
             {
                 var values = item.Split(';');
@@ -1298,8 +1265,8 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     }
 
     /// <summary> 
-    /// Get a list with all known component classes and there 
-    /// enabeld state in descending order of priority. 
+    /// Get a list with all known component classes and their
+    /// enabled state in descending order of priority. 
     /// </summary> 
     public MemorySafeList<ClassState<ComponentClass>> ComponentClassList()
     {
@@ -1394,7 +1361,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     }
 
     /// <summary> 
-    /// Set if the Block should push all ore/ingot imemediately out of its inventory, 
+    /// Set if the Block should push all ore/ingot immediately out of its inventory, 
     /// else this will happen only if no more room to store the next items to be picked. 
     /// </summary> 
     public bool PushIngotOreImmediately
@@ -1432,7 +1399,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     }
 
     /// <summary> 
-    /// Set if the Block if controlled by script. 
+    /// Set if the Block is controlled by script. 
     /// (If controlled by script use PossibleTargets and CurrentPickedTarget  
     /// to set the block that should be build/repaired) 
     /// </summary> 
@@ -1508,7 +1475,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     }
 
     /// <summary> 
-    /// Get the Block that should currently repaired/build. 
+    /// Get the block that should currently be repaired/built. 
     /// In order to build the given block the property 'ScriptControlled' has to be true and 
     /// the block has to be in the list of 'PossibleTargets'. 
     /// If 'ScriptControlled' is true and the block is not in the 'PossibleTargets' 
@@ -1539,7 +1506,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     }
 
     /// <summary> 
-    /// Get the Block that should currently Grinded. 
+    /// Get the block that should currently be grinded. 
     /// In order to grind the given block the property 'ScriptControlled' has to be true and 
     /// the block has to be in the list of 'PossibleGrindTargets'. 
     /// If 'ScriptControlled' is true and the block is not in the 'PossibleGrindTargets' 
@@ -1557,9 +1524,9 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get a list of possible grind targets. 
-    /// </summary> 
+    /// <summary>
+    /// Get a list of possible collect targets.
+    /// </summary>
     public MemorySafeList<IMyEntity> PossibleCollectTargets()
     {
         if (_Entities.Count > 0)
@@ -1616,10 +1583,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return -2;
     }
 }
-/// <summary>
-/// Minimal memory-safe wrappers compatible with programmable block environment.
-/// If mod-provided types exist, these stand-ins provide equivalent API used by this script.
-/// </summary>
 // NOTE: Rely on mod-provided MemorySafeList/MemorySafeDictionary types exposed to PB; do not redefine here to avoid conflicts.
 
 /// <summary> 
@@ -1631,9 +1594,6 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
     protected readonly HashSet<MyDefinitionId> _DefinitionIdsInclude = new HashSet<MyDefinitionId>();
     protected readonly HashSet<MyDefinitionId> _DefinitionIdsExclude = new HashSet<MyDefinitionId>();
 
-    /// <summary> 
-    ///  
-    /// </summary> 
     public IEnumerable<T> Entities
     {
         get
@@ -1658,13 +1618,10 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         }
     }
 
-    /// <summary> 
-    ///  
-    /// </summary> 
     public bool AreEnabled { get; private set; }
 
     /// <summary> 
-    /// Count of Working Enties (on and functional) 
+    /// Count of Working Entities (on and functional) 
     /// </summary> 
     public int CountOfWorking
     {
@@ -1699,11 +1656,9 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         CheckEnabled();
     }
 
-    /// <summary> 
-    /// Load entity by name 
-    /// </summary> 
-    /// <param name="blocks"></param> 
-    /// <param name="name"></param> 
+    /// <summary>
+    /// Load entity by name
+    /// </summary>
     public override void Init(VRage.Game.ModAPI.Ingame.IMyEntity newEntity, bool add = false)
     {
         if (!add) { _Entities.Clear(); AreEnabled = false; }
@@ -1714,11 +1669,9 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         }
     }
 
-    /// <summary> 
-    /// Load entity filtered by given collect function 
-    /// </summary> 
-    /// <param name="blocks"></param> 
-    /// <param name="name"></param> 
+    /// <summary>
+    /// Load entity filtered by given collect function
+    /// </summary>
     public void Init(IMyGridTerminalSystem gridTerminalSystem, Func<T, bool> collect = null, bool add = false)
     {
         if (!add) { _Entities.Clear(); AreEnabled = false; }
@@ -1734,9 +1687,9 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         }
     }
 
-    /// <summary> 
-    ///    Starten/Stoppen 
-    /// </summary> 
+    /// <summary>
+    /// Add an entity to the handler's tracked list
+    /// </summary>
     protected virtual bool AddEntity(T entity)
     {
         if (entity == null || _Entities.IndexOf(entity) >= 0) return false;
@@ -1764,9 +1717,9 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         return true;
     }
 
-    /// <summary> 
-    ///    Starten/Stoppen 
-    /// </summary> 
+    /// <summary>
+    /// Enable or disable all tracked entities
+    /// </summary>
     public void Enabled(bool enabled)
     {
         foreach (var entity in _Entities)
@@ -1777,9 +1730,6 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         AreEnabled = enabled;
     }
 
-    /// <summary> 
-    ///  
-    /// </summary> 
     private void CheckEnabled()
     {
         foreach (var entity in _Entities)
@@ -1792,9 +1742,6 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         }
     }
 }
-/// <summary> 
-///  
-/// </summary> 
 public abstract class EntityHandler
 {
     public int Count { get { return GetCount(); } }
@@ -1802,9 +1749,6 @@ public abstract class EntityHandler
     public abstract void Init(VRage.Game.ModAPI.Ingame.IMyEntity entity, bool add = false);
     protected abstract int GetCount();
 
-    /// <summary> 
-    ///  
-    /// </summary> 
     public static string GetCustomData(string customData, string startTag, string endTag)
     {
         var start = customData.IndexOf(startTag);
@@ -1813,9 +1757,6 @@ public abstract class EntityHandler
         return customData.Substring(start + startTag.Length, end - start - startTag.Length);
     }
 
-    /// <summary> 
-    ///  
-    /// </summary> 
     public static string GetCustomValue(string customData, string name)
     {
         var tag = "<" + name + "=";
@@ -1861,7 +1802,7 @@ public class StatusAndLogDisplay
     }
 
     /// <summary> 
-    /// Reload the displayes (after renaming, adding) 
+    /// Reload the displays (after renaming, adding) 
     /// </summary> 
     public string ReloadDisplays()
     {
@@ -1887,8 +1828,8 @@ public class StatusAndLogDisplay
     /// </summary> 
     public void Log(string msg)
     {
-        var useHadline = !string.IsNullOrEmpty(_AIName);
-        var maxlines = MaxLogLines + (useHadline ? 0 : 1);
+        var useHeadline = !string.IsNullOrEmpty(_AIName);
+        var maxlines = MaxLogLines + (useHeadline ? 0 : 1);
         if (!string.IsNullOrEmpty(msg))
         {
             _LogText += "\n" + msg;
@@ -1936,17 +1877,11 @@ public class StatusAndLogDisplay
         if (!string.IsNullOrEmpty(_ErrorText)) text += _ErrorText;
         if (!string.IsNullOrEmpty(_StatusText)) text += _StatusText;
 
-        if (_StatusPanels != null)
-        {
-            foreach (var panel in _StatusPanels) if (panel != null) SetPanelText(panel, text);
-        }
+        foreach (var panel in _StatusPanels) if (panel != null) SetPanelText(panel, text);
         if (_Program != null) _Program.Echo(!string.IsNullOrEmpty(_ErrorText) ? _ErrorText : text);
 
         text = !string.IsNullOrEmpty(_AIName) ? _AIName + _LogText : _LogText;
-        if (_LogPanels != null)
-        {
-            foreach (var panel in _LogPanels) if (panel != null) SetPanelText(panel, text);
-        }
+        foreach (var panel in _LogPanels) if (panel != null) SetPanelText(panel, text);
     }
 
     /// <summary> 
@@ -2041,9 +1976,6 @@ public class StatusAndLogDisplay
         return unit.StartsWith("GW") ? 1000f : 1f;
     }
 
-    /// <summary> 
-    ///  
-    /// </summary> 
     public static string DisplayPowerValueUnit(float value)
     {
         if (Math.Abs(value) < 0.001) return Math.Round(value * 1000000f) + "W";
@@ -2052,19 +1984,11 @@ public class StatusAndLogDisplay
         return Math.Round(value / 1000f) + "GW";
     }
 
-    /// <summary> 
-    ///  
-    /// </summary> 
     public static string DisplayPowerRate(float current, float max, string ext = "")
     {
         return string.Format("{0:0.00}% {1}{3}/{2}{3}", max > 0 ? current * 100 / max : 0, DisplayPowerValueUnit(current), DisplayPowerValueUnit(max), ext);
     }
 
-    /// <summary> 
-    ///  
-    /// </summary> 
-    /// <param name="rad"></param> 
-    /// <returns></returns> 
     public static double ToDegree(double rad)
     {
         return rad * 180 / Math.PI;
@@ -2090,7 +2014,7 @@ public class StatusAndLogDisplay
             else
             {
                 if (includeGrid) return string.Format("{0}.{1}", slimBlock.CubeGrid != null ? slimBlock.CubeGrid.DisplayName : "Unknown Grid", slimBlock.BlockDefinition.SubtypeName);
-                return string.Format("{0}", slimBlock.BlockDefinition.SubtypeName);
+                return slimBlock.BlockDefinition.SubtypeName;
             }
         }
 
@@ -2098,14 +2022,14 @@ public class StatusAndLogDisplay
         if (terminalBlock != null)
         {
             if (includeGrid) return string.Format("{0}.{1}", terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid", terminalBlock.CustomName);
-            return string.Format("{0}", terminalBlock.CustomName);
+            return terminalBlock.CustomName;
         }
 
         var cubeBlock = block as IMyCubeBlock;
         if (cubeBlock != null)
         {
             if (includeGrid) return string.Format("{0} {1}/{2}", cubeBlock.CubeGrid != null ? cubeBlock.CubeGrid.DisplayName : "Unknown Grid", cubeBlock.BlockDefinition.TypeIdString, cubeBlock.BlockDefinition.SubtypeName);
-            return string.Format("{0}", cubeBlock.BlockDefinition.SubtypeName);
+            return cubeBlock.BlockDefinition.SubtypeName;
         }
 
         var entity = block as IMyEntity;
