@@ -1,3 +1,10 @@
+---
+layout: default
+title: FAQ
+parent: Build and Repair System
+nav_order: 2
+---
+
 # Frequently Asked Questions
 
 ---

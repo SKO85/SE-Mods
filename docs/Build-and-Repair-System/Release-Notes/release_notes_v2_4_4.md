@@ -1,3 +1,11 @@
+---
+layout: default
+title: "Release Notes – v2.4.4"
+parent: Release Notes
+grand_parent: Build and Repair System
+nav_exclude: true
+---
+
 # Release Notes – v2.4.4
 
 - Release date: 1 March 2026

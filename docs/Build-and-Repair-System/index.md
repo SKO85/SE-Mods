@@ -1,6 +1,8 @@
 ---
-layout: page
-title: Nanobot Build and Repair System
+layout: default
+title: Build and Repair System
+nav_order: 2
+has_children: true
 ---
 
 The SKO Nanobot Build and Repair System automatically welds, repairs, grinds, and collects
@@ -10,6 +12,6 @@ configuration file.
 
 ## Documentation
 
-- [Configuration File](Config/configuration-file) — All `ModSettings.xml` settings with defaults and descriptions
-- [FAQ](FAQ/faq) — Frequently asked questions and troubleshooting
-- [Release Notes](Release-Notes/release_notes) — Full version history
+- [Configuration File](Config/) — All `ModSettings.xml` settings with defaults and descriptions
+- [FAQ](FAQ/) — Frequently asked questions and troubleshooting
+- [Release Notes](Release-Notes/) — Full version history

@@ -1,6 +1,7 @@
 ---
-layout: home
-title: SKO Space Engineers Mods
+layout: default
+title: Home
+nav_order: 1
 ---
 
 Welcome to the documentation for SKO Space Engineers mods.

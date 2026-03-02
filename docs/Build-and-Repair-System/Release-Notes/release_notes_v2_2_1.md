@@ -1,3 +1,11 @@
+---
+layout: default
+title: "Release Notes – v2.2.1"
+parent: Release Notes
+grand_parent: Build and Repair System
+nav_exclude: true
+---
+
 # Release Notes – v2.2.1
 
 - Release date: 2 October 2025

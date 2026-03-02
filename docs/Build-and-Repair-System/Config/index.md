@@ -1,3 +1,10 @@
+---
+layout: default
+title: Configuration File
+parent: Build and Repair System
+nav_order: 1
+---
+
 # Configuration File
 
 The mod can be configured through a `ModSettings.xml` file. All settings are optional — any value omitted from the file will use its default. The file is shared across all Build and Repair blocks on the server.
