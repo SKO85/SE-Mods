@@ -1,0 +1,14 @@
+{
+  "name": "se-mods-wiki-publisher",
+  "version": "1.0.0",
+  "description": "Publishes SKO SE-Mods release notes to the GitHub Wiki.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "inquirer": "^8.2.6",
+    "simple-git": "^3.27.0"
+  }
+}
