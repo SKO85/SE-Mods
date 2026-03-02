@@ -28,8 +28,8 @@ This mod fully replaces the original. It uses the same block type, so you can si
 <details>
 <summary>What is the difference between the two versions of this mod?</summary>
 <div>
-<p><strong><a href="https://steamcommunity.com/sharedfiles/filedetails/?id=2111073562">Nanobot Build and Repair System (Maintained)</a></strong> — A rebalanced version where the block requires more resources and is heavier to build.</p>
-<p><strong><a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3099489876">Nanobot Build and Repair System - Original Resources</a></strong> — Identical in functionality and fixes, but uses the same build components as the original mod. Only the required build resources differ between the two.</p>
+<p><strong><a href="https://steamcommunity.com/sharedfiles/filedetails/?id=2111073562">Nanobot Build and Repair System (Maintained) - Nerfed Version</a></strong> — A rebalanced version where the block requires more resources and is heavier to build.</p>
+<p><strong><a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3099489876">Nanobot Build and Repair System (Maintained) - Original Resources Version</a></strong> — Identical in functionality and fixes, but uses the same build components as the original mod. Only the required build resources differ between the two.</p>
 </div>
 </details>
 
