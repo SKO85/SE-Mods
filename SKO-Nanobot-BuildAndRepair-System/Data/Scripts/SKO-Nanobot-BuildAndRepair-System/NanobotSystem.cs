@@ -2420,7 +2420,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             grids.Add(cubeGrid);
 
-            var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly;
+            var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly || Settings.WorkMode == WorkModes.GrindBeforeWeld;
             var isGrinding = State.Grinding || State.NeedGrinding || (State.Transporting && isGrindingMode) || isGrindingMode;
 
             // Use a cached list to avoid many GetBlocks calls from the API.
