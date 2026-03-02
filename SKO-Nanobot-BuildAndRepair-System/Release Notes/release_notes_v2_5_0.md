@@ -1,4 +1,4 @@
-# Release Notes – v2.4.5
+# Release Notes – v2.5.0
 
 - Release date: 2 March 2026
 - Notes: N/A

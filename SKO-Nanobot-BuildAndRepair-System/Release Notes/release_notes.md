@@ -4,7 +4,7 @@ This page lists all release notes for the SKO Nanobot Build and Repair System mo
 
 | Version | Date | Release Notes |
 |---|---|---|
-| v2.4.5 | 2 March 2026 | [View](https://github.com/SKO85/SE-Mods/wiki/Build-and-Repair-System-%E2%80%90-v2.4.5) |
+| v2.5.0 | 2 March 2026 | [View](https://github.com/SKO85/SE-Mods/wiki/Build-and-Repair-System-%E2%80%90-v2.5.0) |
 | v2.4.4 | 1 March 2026 | [View](https://github.com/SKO85/SE-Mods/wiki/Build-and-Repair-System-%E2%80%90-v2.4.4) |
 | v2.4.2 — Hotfix #2 | 19 February 2026 | [View](https://github.com/SKO85/SE-Mods/wiki/Build-and-Repair-System-%E2%80%90-v2.4.2) |
 | v2.4.1 — Hotfix | 19 February 2026 | [View](https://github.com/SKO85/SE-Mods/wiki/Build-and-Repair-System-%E2%80%90-v2.4.1) |
