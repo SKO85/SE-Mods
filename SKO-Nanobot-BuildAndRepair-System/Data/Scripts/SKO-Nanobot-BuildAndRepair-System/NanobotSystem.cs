@@ -950,7 +950,7 @@ namespace SKONanobotBuildAndRepairSystem
                         continue;
                     }
 
-                    if (!Mod.Settings.DisableLimitSystemsPerTargetGrid && Settings.CurrentPickedGrindingBlock == null &&
+                    if (!Mod.Settings.DisableLimitSystemsPerTargetGrid &&
                         CountSystemsOnGrid(targetData.Block.CubeGrid.EntityId) >= Mod.Settings.MaxSystemsPerTargetGrid)
                     {
                         continue;
@@ -1058,7 +1058,7 @@ namespace SKONanobotBuildAndRepairSystem
                             continue;
                         }
 
-                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid && Settings.CurrentPickedWeldingBlock == null &&
+                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid &&
                             CountSystemsOnGrid(targetData.Block.CubeGrid.EntityId) >= Mod.Settings.MaxSystemsPerTargetGrid)
                         {
                             continue;
