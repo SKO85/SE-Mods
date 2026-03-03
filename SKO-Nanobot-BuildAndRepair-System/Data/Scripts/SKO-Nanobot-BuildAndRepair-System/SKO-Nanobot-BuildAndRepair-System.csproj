@@ -169,6 +169,12 @@
     <Compile Include="Terminal\Sliders.cs" />
     <Compile Include="Utils\Logging.cs" />
     <Compile Include="NanobotSystem.cs" />
+    <Compile Include="NanobotSystem.Init.cs" />
+    <Compile Include="NanobotSystem.Update.cs" />
+    <Compile Include="NanobotSystem.Scanning.cs" />
+    <Compile Include="NanobotSystem.Operations.cs" />
+    <Compile Include="NanobotSystem.Inventory.cs" />
+    <Compile Include="NanobotSystem.Scripting.cs" />
     <Compile Include="Localization\Texts.cs" />
     <Compile Include="Mod.cs" />
     <Compile Include="Handlers\BlockPriorityHandling.cs" />
@@ -181,6 +187,7 @@
     <Compile Include="Utils\UtilsProductionBlock.cs" />
     <Compile Include="Utils\UtilsSorting.cs" />
     <Compile Include="Utils\UtilsSynchronization.cs" />
+    <Compile Include="Utils\SharedGridBlockCache.cs" />
     <Compile Include="Utils\SlimBlockUtils.cs" />
     <Compile Include="Utils\UtilsText.cs" />
   </ItemGroup>

@@ -130,6 +130,9 @@ namespace SKONanobotBuildAndRepairSystem
             // Clear block assigned handler.
             try { BlockSystemAssigningHandler.Clear(); } catch { }
 
+            // Clear the shared grid block cache.
+            try { SharedGridBlockCache.Clear(); } catch { }
+
             // Close the logging instance to release the log file.
             try { Logging.Instance.Close(); } catch { }
 
@@ -228,6 +231,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
                                 try { BlockSystemAssigningHandler.Cleanup(); } catch { }
                                 try { DlcCheckHelper.CleanupOwnerCache(); } catch { }
+                                try { SharedGridBlockCache.CleanupExpired(); } catch { }
                             });
                         }
 
