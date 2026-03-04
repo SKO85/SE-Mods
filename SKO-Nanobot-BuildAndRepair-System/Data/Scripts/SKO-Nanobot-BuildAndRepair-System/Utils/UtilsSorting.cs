@@ -9,6 +9,18 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 {
     public static class UtilsSorting
     {
+        /// <summary>
+        /// Priority-only sort used by SharedGridSortedCache — no distance/GetWorldBoundingBox calls.
+        /// Callers MUST NOT mutate the returned list after storing it in the shared cache.
+        /// </summary>
+        public static void SortByPriorityOnly(
+            this List<IMySlimBlock> list, BlockPriorityHandling handler, bool ignorePriority)
+        {
+            list.RemoveAll(b => !handler.GetEnabled(b));
+            if (!ignorePriority)
+                list.Sort((a, b) => handler.GetPriority(a) - handler.GetPriority(b));
+        }
+
         public static void SortWithPriorityAndDistance(this List<IMySlimBlock> list, NanobotSystem system, bool isGrinding = false)
         {
             if (list == null)

@@ -96,6 +96,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(30), XmlElement]
         public bool AssignToSystemEnabled { get; set; }
 
+        /// <summary>
+        /// Number of consecutive 5-second push cycles with a full inventory and no active welding
+        /// before the BaR automatically disables itself. Set to 0 to disable this behaviour.
+        /// </summary>
+        [ProtoMember(31), XmlElement]
+        public int MaxInventoryFullPushAttempts { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -116,6 +123,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             DeleteBotsWhenDead = true;
             MaxSystemsPerTargetGrid = 10;
             AssignToSystemEnabled = true;
+            MaxInventoryFullPushAttempts = 100;
         }
 
         public static SyncModSettings Load()

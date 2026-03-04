@@ -1,31 +1,16 @@
-using Sandbox.Common.ObjectBuilders;
 using Sandbox.Definitions;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
-using SKONanobotBuildAndRepairSystem.Handlers;
-using SKONanobotBuildAndRepairSystem.Helpers;
-using SKONanobotBuildAndRepairSystem.Localization;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using VRage;
 using VRage.Game;
-using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
-using VRage.Scripting.MemorySafeTypes;
-using VRage.Utils;
-using VRageMath;
 using static SKONanobotBuildAndRepairSystem.Utils.UtilsInventory;
-using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
-using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
-using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 
 namespace SKONanobotBuildAndRepairSystem
 {
@@ -55,7 +40,7 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         picked = ServerFindMissingComponents(targetData, ref remainingVolume);
 
-                        if (picked)
+                        if (picked && Settings.WeldOptions != AutoWeldOptions.WeldSkeleton)
                         {
                             if (((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) == 0) || !IsColorNearlyEquals(Settings.IgnoreColorPacked, targetData.Block.GetColorMask()))
                             {
@@ -63,7 +48,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 var keyValue = _TempMissingComponents.ElementAt(0);
                                 _TempMissingComponents.Clear();
 
-                                targetData.Block.GetMissingComponents(_TempMissingComponents, ((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) == 0) ? UtilsInventory.IntegrityLevel.Complete : UtilsInventory.IntegrityLevel.Functional);
+                                targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFull ? UtilsInventory.IntegrityLevel.Complete : UtilsInventory.IntegrityLevel.Functional);
 
                                 if (_TempMissingComponents.ContainsKey(keyValue.Key))
                                 {
@@ -78,11 +63,17 @@ namespace SKONanobotBuildAndRepairSystem
                                 }
                             }
                         }
+                        else if (picked)
+                        {
+                            // WeldSkeleton: only the 1 create-item was needed; clear so the
+                            // generic pick at line 74 does not fetch it a second time.
+                            _TempMissingComponents.Clear();
+                        }
                     }
                 }
                 else
                 {
-                    targetData.Block.GetMissingComponents(_TempMissingComponents, ((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) == 0) ? UtilsInventory.IntegrityLevel.Complete : UtilsInventory.IntegrityLevel.Functional);
+                    targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFull ? UtilsInventory.IntegrityLevel.Complete : UtilsInventory.IntegrityLevel.Functional);
                 }
 
                 if (_TempMissingComponents.Count > 0)
@@ -184,6 +175,23 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
+        /// Returns true if at least one source inventory has available volume.
+        /// Used to skip expensive PushComponents calls when all destinations are full.
+        /// </summary>
+        private bool HasSourcesWithSpace()
+        {
+            lock (_PossibleSources) // same lock guards _PossiblePushTargets
+            {
+                foreach (var src in _PossiblePushTargets)
+                {
+                    if (src.MaxVolume > src.CurrentVolume)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Check if the transport inventory is empty after delivering/grinding/collecting, if not move items back to welder inventory
         /// </summary>
         private bool ServerEmptyTranportInventory(bool push)
@@ -200,9 +208,14 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryPushInventoryLast).TotalSeconds > 5 && welderInventory.MaxVolume - welderInventory.CurrentVolume < _TransportInventory.CurrentVolume * 1.5f)
                             {
-                                if (!welderInventory.PushComponents(_PossibleSources, null))
+                                if (!HasSourcesWithSpace())
                                 {
-                                    // Failed retry after timeout
+                                    // No destination has room — skip the expensive push and back off
+                                    _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
+                                }
+                                else if (!welderInventory.PushComponents(_PossiblePushTargets, null))
+                                {
+                                    // Push attempted but nothing moved — back off
                                     _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
                                 }
                             }

@@ -189,6 +189,7 @@
     <Compile Include="Utils\UtilsSynchronization.cs" />
     <Compile Include="Utils\ScanCoordinator.cs" />
     <Compile Include="Utils\SharedGridBlockCache.cs" />
+    <Compile Include="Utils\SharedGridSortedCache.cs" />
     <Compile Include="Utils\SlimBlockUtils.cs" />
     <Compile Include="Utils\UtilsText.cs" />
   </ItemGroup>

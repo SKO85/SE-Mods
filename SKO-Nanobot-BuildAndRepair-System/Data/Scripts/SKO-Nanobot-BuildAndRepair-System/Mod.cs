@@ -130,8 +130,9 @@ namespace SKONanobotBuildAndRepairSystem
             // Clear block assigned handler.
             try { BlockSystemAssigningHandler.Clear(); } catch { }
 
-            // Clear the shared grid block cache.
+            // Clear the shared grid block cache and sorted cache.
             try { SharedGridBlockCache.Clear(); } catch { }
+            try { SharedGridSortedCache.Clear(); } catch { }
 
             // Clear the scan coordinator.
             try { ScanCoordinator.Clear(); } catch { }
@@ -235,6 +236,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 try { BlockSystemAssigningHandler.Cleanup(); } catch { }
                                 try { DlcCheckHelper.CleanupOwnerCache(); } catch { }
                                 try { SharedGridBlockCache.CleanupExpired(); } catch { }
+                                try { SharedGridSortedCache.CleanupExpired(); } catch { }
                                 try { ScanCoordinator.CleanupExpired(); } catch { }
                             });
                         }

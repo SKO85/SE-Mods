@@ -514,61 +514,6 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             return control;
         }
 
-        public static IMyTerminalControlOnOffSwitch CreateWeldOptionFunctionalOnly(bool weldingAllowed, Func<IMyTerminalBlock, bool> isWeldingAllowed, Func<IMyTerminalBlock, bool> isReadonly, Func<IMyTerminalBlock, bool> isBaRSystem)
-        {
-            var isEnabled = !weldingAllowed ? isReadonly : isBaRSystem;
-
-            var control = Create(
-                // Id:
-                "WeldOptionFunctionalOnly",
-
-                // Texts
-                Texts.WeldToFuncOnly,
-                Texts.WeldToFuncOnly_Tooltip,
-                MySpaceTexts.SwitchText_On,
-                MySpaceTexts.SwitchText_Off,
-
-                // Visible:
-                isWeldingAllowed,
-
-                // Enabled:
-                isEnabled,
-
-                // Getter:
-                (block) =>
-                {
-                    var system = NanobotTerminal.GetSystem(block);
-                    return system != null ? (system.Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0 : false;
-                },
-
-                // Setter:
-                (block, value) =>
-                {
-                    var system = NanobotTerminal.GetSystem(block);
-                    if (system != null && isWeldingAllowed(block))
-                    {
-                        if (value)
-                        {
-                            system.Settings.WeldOptions = system.Settings.WeldOptions | AutoWeldOptions.FunctionalOnly;
-                            foreach (var ctrl in NanobotTerminal.CustomControls)
-                            {
-                                if (ctrl.Id.Contains("WeldOption")) ctrl.UpdateVisual();
-                            }
-                        }
-                        else
-                        {
-                            system.Settings.WeldOptions = (system.Settings.WeldOptions & ~AutoWeldOptions.FunctionalOnly);
-                        }
-                    }
-                },
-
-                // Multiple blocks support.
-                true
-            );
-
-            return control;
-        }
-
         public static IMyTerminalControlOnOffSwitch CreateWeldPriority(Func<IMyTerminalBlock, bool> isWeldingAllowed, Func<IMyTerminalBlock, bool> isReadonly, Func<IMyTerminalBlock, bool> isBaRSystem)
         {
             Func<IMyTerminalBlock, bool> isEnabled = (block) =>

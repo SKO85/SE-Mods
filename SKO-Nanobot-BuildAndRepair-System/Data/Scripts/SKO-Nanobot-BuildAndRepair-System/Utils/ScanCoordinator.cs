@@ -35,6 +35,9 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             // Main-thread only.
             internal TimeSpan LastElectionTime;
 
+            // Main-thread only. Set when any BaR in this cluster claims the push slot.
+            internal TimeSpan LastPushTime;
+
             internal readonly object WriteLock = new object();
         }
 
@@ -85,6 +88,39 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             {
                 Elect(entry, clusterKey, welderGrid, systemsSnapshot);
             }
+        }
+
+        /// <summary>
+        /// Tries to claim the cluster-wide push slot. Returns true if this BaR should perform
+        /// the push; false if another BaR in the same cluster already pushed within the cooldown
+        /// window. When this returns true, the cluster's LastPushTime is updated.
+        /// Main-thread only.
+        /// </summary>
+        internal static bool TryClaimClusterPush(long clusterKey, TimeSpan now, double cooldownSeconds = 5.0)
+        {
+            ClusterEntry entry;
+            if (!_clusters.TryGetValue(clusterKey, out entry))
+                return true; // No cluster entry yet — allow the push
+
+            if ((now - entry.LastPushTime).TotalSeconds < cooldownSeconds)
+                return false; // Another BaR in this cluster already pushed recently
+
+            entry.LastPushTime = now;
+            return true;
+        }
+
+        /// <summary>
+        /// Releases the cluster push slot by resetting LastPushTime to zero.
+        /// Call when PushComponents successfully moved items, so other BaRs in the cluster
+        /// can push their own inventories immediately instead of waiting for the next window.
+        /// Main-thread only.
+        /// </summary>
+        internal static void ReleaseClusterPush(long clusterKey)
+        {
+            ClusterEntry entry;
+            if (!_clusters.TryGetValue(clusterKey, out entry))
+                return;
+            entry.LastPushTime = TimeSpan.Zero;
         }
 
         private static void Elect(

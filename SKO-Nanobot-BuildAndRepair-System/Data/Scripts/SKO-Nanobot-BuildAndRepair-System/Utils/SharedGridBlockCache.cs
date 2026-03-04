@@ -1,5 +1,6 @@
 namespace SKONanobotBuildAndRepairSystem.Utils
 {
+    using Sandbox.Game.Entities;
     using Sandbox.ModAPI;
     using System;
     using System.Collections.Concurrent;
@@ -13,6 +14,9 @@ namespace SKONanobotBuildAndRepairSystem.Utils
     internal static class SharedGridBlockCache
     {
         private const double TtlSeconds = 8.0;
+
+        private static readonly ConcurrentDictionary<long, bool> _subscribedGrids
+            = new ConcurrentDictionary<long, bool>();
 
         private static readonly ConcurrentDictionary<long, TimeSpan> _cacheTimestamps
             = new ConcurrentDictionary<long, TimeSpan>();
@@ -99,6 +103,33 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         }
 
         /// <summary>
+        /// Subscribe to structural change events for a non-projected grid.
+        /// Safe to call multiple times — subsequent calls for the same grid are no-ops.
+        /// </summary>
+        internal static void EnsureSubscribed(IMyCubeGrid grid)
+        {
+            // Skip projected/ghost grids — they have no real block add/remove events.
+            if (((MyCubeGrid)grid).Projector != null) return;
+
+            if (!_subscribedGrids.TryAdd(grid.EntityId, true)) return;
+
+            grid.OnBlockAdded   += b => InvalidateFull(b.CubeGrid.EntityId);
+            grid.OnBlockRemoved += b => InvalidateFull(b.CubeGrid.EntityId);
+            grid.OnMarkForClose += g =>
+            {
+                bool dummy;
+                _subscribedGrids.TryRemove(g.EntityId, out dummy);
+                InvalidateFull(g.EntityId);
+            };
+        }
+
+        private static void InvalidateFull(long gridId)
+        {
+            Invalidate(gridId);
+            SharedGridSortedCache.Invalidate(gridId);
+        }
+
+        /// <summary>
         /// Wipe the entire cache. Call from Mod.UnloadData().
         /// </summary>
         internal static void Clear()
@@ -106,6 +137,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             _cacheTimestamps.Clear();
             _cacheBlocks.Clear();
             _locks.Clear();
+            _subscribedGrids.Clear();
         }
     }
 }

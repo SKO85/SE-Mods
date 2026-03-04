@@ -25,6 +25,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"WeldBuildNew_Tooltip",            "Po zaznaczeniu, system będzie również budował bloki z projekcji."},
             {"WeldToFuncOnly",                  "Spawaj tylko do funkcjonalności"},
             {"WeldToFuncOnly_Tooltip",          "Po zaznaczeniu, bloki będą spawane tylko do stanu funkcjonalnego."},
+            {"WeldMode",            "Tryb spawania"},
+            {"WeldMode_Tooltip",    "Select how far the nanobots weld blocks."},
+            {"WeldMode_Full",       "Spawaj do pełna"},
+            {"WeldMode_Functional", "Spawaj tylko do funkcjonalności"},
+            {"WeldMode_Skeleton",   "Spawaj tylko szkielet"},
             {"WeldPriority",                    "Priorytet spawania"},
             {"WeldPriority_Tooltip",            "Włącz/Wyłącz naprawę/budowę wybranych typów przedmiotów"},
 

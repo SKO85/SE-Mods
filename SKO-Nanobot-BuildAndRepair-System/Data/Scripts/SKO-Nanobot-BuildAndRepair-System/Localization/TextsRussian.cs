@@ -25,6 +25,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"WeldBuildNew_Tooltip",            "Если этот флажок установлен, система также будет\nсоздавать проецируемые блоки."},
             {"WeldToFuncOnly",                  "Перестал быть активным"},
             {"WeldToFuncOnly_Tooltip",          "Сваривать только когда блок перестал функционировать\nиз за повреждений/распиливания."},
+            {"WeldMode",            "Режим сварки"},
+            {"WeldMode_Tooltip",    "Select how far the nanobots weld blocks."},
+            {"WeldMode_Full",       "Сварить полностью"},
+            {"WeldMode_Functional", "Только до функционального состояния"},
+            {"WeldMode_Skeleton",   "Только скелет"},
             {"WeldPriority",                    "Приоритет сварки"},
             {"WeldPriority_Tooltip",            "Включить/выключить сборку-ремонт выбранных видов предметов."},
 

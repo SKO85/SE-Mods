@@ -71,10 +71,11 @@ namespace SKONanobotBuildAndRepairSystem
         HackOnly = 0x0002
     }
 
-    [Flags]
     public enum AutoWeldOptions
     {
-        FunctionalOnly = 0x0001
+        WeldFull       = 0,   // weld to 100% integrity (default)
+        WeldFunctional = 1,   // weld to CriticalIntegrityRatio (was FunctionalOnly)
+        WeldSkeleton   = 2    // only place/build new blocks; don't repair existing
     }
 
     [Flags]
@@ -225,6 +226,10 @@ namespace SKONanobotBuildAndRepairSystem
                     // --- Welding ---
                     label = Labels.Create("WeldingSettings", Texts.WeldSettings_Headline);
                     {
+                        // --- Weld mode dropdown ---
+                        comboBox = ComboBoxes.CreateWeldMode(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
+                        CreateProperty(comboBox, !weldingAllowed);
+
                         // --- Set Color that marks blocks as 'ignore' ---
                         {
                             onoffSwitch = OnOffSwitches.CreateUseIgnoreColor(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
@@ -267,10 +272,6 @@ namespace SKONanobotBuildAndRepairSystem
                             // --- AllowBuild CheckBox ---
                             onoffSwitch = OnOffSwitches.CreateAllowBuild(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
                             CreateProperty(onoffSwitch, Mod.Settings.Welder.AllowBuildFixed || !weldingAllowed);
-
-                            // --Weld to functional only ---
-                            onoffSwitch = OnOffSwitches.CreateWeldOptionFunctionalOnly(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
-                            CreateProperty(onoffSwitch, !weldingAllowed);
                         }
 
                         // --- Priority Welding ---

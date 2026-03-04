@@ -3,7 +3,6 @@ using Sandbox.Game.Entities;
 using Sandbox.Game.Lights;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
-using System;
 using System.Threading;
 using VRage.Game;
 using VRage.Utils;

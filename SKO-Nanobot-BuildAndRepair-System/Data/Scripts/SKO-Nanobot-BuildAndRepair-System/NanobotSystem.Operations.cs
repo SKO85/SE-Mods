@@ -1,30 +1,15 @@
-using Sandbox.Common.ObjectBuilders;
 using Sandbox.Definitions;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
-using SKONanobotBuildAndRepairSystem.Localization;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using VRage;
 using VRage.Game;
-using VRage.Game.Components;
 using VRage.Game.ModAPI;
-using VRage.ModAPI;
-using VRage.ObjectBuilders;
-using VRage.Scripting.MemorySafeTypes;
-using VRage.Utils;
-using VRageMath;
 using static SKONanobotBuildAndRepairSystem.Utils.UtilsInventory;
-using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
-using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
 using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 
 namespace SKONanobotBuildAndRepairSystem
@@ -76,7 +61,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (transporting && State.CurrentTransportIsPick) needgrinding = true;
 
-                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
+                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting && !inventoryFull)
                     ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
 
                 if (!transporting)
@@ -92,15 +77,16 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         case WorkModes.WeldBeforeGrind:
                             ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
-                            if (State.PossibleWeldTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
+                            if (!inventoryFull && (State.PossibleWeldTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null)))
                             {
                                 ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
                             }
                             break;
 
                         case WorkModes.GrindBeforeWeld:
-                            ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
-                            if (State.PossibleGrindTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
+                            if (!inventoryFull)
+                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
+                            if (!grinding && !transporting && (inventoryFull || State.PossibleGrindTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null)))
                             {
                                 ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
                             }
@@ -108,7 +94,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                         case WorkModes.GrindIfWeldGetStuck:
                             ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
-                            if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
+                            if (!inventoryFull && (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null)))
                             {
                                 ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
                             }
@@ -119,13 +105,14 @@ namespace SKONanobotBuildAndRepairSystem
                             break;
 
                         case WorkModes.GrindOnly:
-                            ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
+                            if (!inventoryFull)
+                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
                             break;
                     }
                     State.MissingComponents.RebuildHash();
                 }
 
-                if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding)
+                if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding && !inventoryFull)
                     ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
             }
             else
@@ -246,47 +233,86 @@ namespace SKONanobotBuildAndRepairSystem
             if ((Settings.Flags & (SyncBlockSettings.Settings.PushIngotOreImmediately | SyncBlockSettings.Settings.PushComponentImmediately | SyncBlockSettings.Settings.PushItemsImmediately)) == 0)
                 return;
 
-            if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryAutoPushInventoryLast).TotalSeconds <= 5)
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            if ((now - _TryAutoPushInventoryLast).TotalSeconds <= 5)
                 return;
 
-            var welderInventory = _Welder.GetInventory(0);
-            if (welderInventory != null)
+            // Auto-disable: count consecutive 5-second push cycles where inventory is stuck full
+            // and no welding is consuming components. Transporting is excluded (in-progress work).
+            if (State.InventoryFull && !State.Welding && !State.Transporting)
             {
-                if (welderInventory.Empty()) return;
-                var lastPush = MyAPIGateway.Session.ElapsedPlayTime;
-
-                _TempInventoryItems.Clear();
-                welderInventory.GetItems(_TempInventoryItems);
-                for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                var maxAttempts = Mod.Settings.MaxInventoryFullPushAttempts;
+                if (maxAttempts > 0)
                 {
-                    var srcItem = _TempInventoryItems[srcItemIndex];
-                    if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Ore).Name || srcItem.Type.TypeId == typeof(MyObjectBuilder_Ingot).Name)
+                    _InventoryFullPushAttempts++;
+                    if (_InventoryFullPushAttempts >= maxAttempts)
                     {
-                        if ((Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0)
-                        {
-                            welderInventory.PushComponents(_PossibleSources, (IMyInventory destInventory, IMyInventory srcInventory, ref MyInventoryItem srcItemIn) => { return _Ignore4Ingot.Contains(destInventory); }, srcItemIndex, srcItem);
-                            _TryAutoPushInventoryLast = lastPush;
-                        }
-                    }
-                    else if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Component).Name)
-                    {
-                        if ((Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0)
-                        {
-                            welderInventory.PushComponents(_PossibleSources, (IMyInventory destInventory, IMyInventory srcInventory, ref MyInventoryItem srcItemIn) => { return _Ignore4Components.Contains(destInventory); }, srcItemIndex, srcItem);
-                            _TryAutoPushInventoryLast = lastPush;
-                        }
-                    }
-                    else
-                    {
-                        //Any kind of items (Tools, Weapons, Ammo, Bottles, ..)
-                        if ((Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0)
-                        {
-                            welderInventory.PushComponents(_PossibleSources, (IMyInventory destInventory, IMyInventory srcInventory, ref MyInventoryItem srcItemIn) => { return _Ignore4Items.Contains(destInventory); }, srcItemIndex, srcItem);
-                            _TryAutoPushInventoryLast = lastPush;
-                        }
+                        _InventoryFullPushAttempts = 0;
+                        _Welder.Enabled = false;
+                        Logging.Instance.Write(Logging.Level.Info,
+                            "BuildAndRepairSystemBlock {0}: Auto-disabled — inventory full for {1} consecutive push cycles without welding.",
+                            Logging.BlockName(_Welder, Logging.BlockNameOptions.None), maxAttempts);
+                        return;
                     }
                 }
-                _TempInventoryItems.Clear();
+            }
+            else
+            {
+                _InventoryFullPushAttempts = 0;
+            }
+
+            // Check space first using this BaR's own source list — if its conveyor network has
+            // no room there is nothing to do and no reason to claim the cluster slot, allowing
+            // BaRs on separate conveyor networks (same grid, different pipes) to push freely.
+            if (!HasSourcesWithSpace())
+            {
+                _TryAutoPushInventoryLast = now;
+                return;
+            }
+
+            // Sources have space. Claim the cluster push slot so that BaRs sharing the same
+            // conveyor network don't all traverse it simultaneously in the same tick.
+            if (!ScanCoordinator.TryClaimClusterPush(_ClusterKey, now))
+            {
+                _TryAutoPushInventoryLast = now;
+                return;
+            }
+
+            var welderInventory = _Welder.GetInventory(0);
+            if (welderInventory == null || welderInventory.Empty()) return;
+
+            // Pre-capture flags so the lambda doesn't re-read fields on every invocation.
+            // No ignore-set checks needed: _PossiblePushTargets contains only cargo containers,
+            // so non-cargo destinations (assemblers, BaR welders, etc.) are already excluded.
+            var flags = Settings.Flags;
+            var pushIngotOre  = (flags & SyncBlockSettings.Settings.PushIngotOreImmediately)  != 0;
+            var pushComponent = (flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0;
+            var pushItems     = (flags & SyncBlockSettings.Settings.PushItemsImmediately)      != 0;
+            var oreTypeId       = typeof(MyObjectBuilder_Ore).Name;
+            var ingotTypeId     = typeof(MyObjectBuilder_Ingot).Name;
+            var componentTypeId = typeof(MyObjectBuilder_Component).Name;
+
+            // Single PushComponents call to cargo containers only, with a type-aware filter.
+            // One conveyor traversal covers all item types instead of one traversal per item.
+            bool pushed = welderInventory.PushComponents(_PossiblePushTargets, (IMyInventory destInventory, IMyInventory srcInventory, ref MyInventoryItem srcItemIn) =>
+            {
+                var typeId = srcItemIn.Type.TypeId;
+                if (typeId == oreTypeId || typeId == ingotTypeId)
+                    return !pushIngotOre;
+                if (typeId == componentTypeId)
+                    return !pushComponent;
+                return !pushItems;
+            });
+
+            _TryAutoPushInventoryLast = now;
+
+            if (pushed)
+            {
+                // Items moved — release the cluster slot immediately so the next BaR can push
+                // its own inventory without waiting for the 5-second window. This is the key
+                // fix for slow drain when new cargo space becomes available.
+                _InventoryFullPushAttempts = 0;
+                ScanCoordinator.ReleaseClusterPush(_ClusterKey);
             }
         }
 
@@ -593,8 +619,7 @@ namespace SKONanobotBuildAndRepairSystem
                 return false;
             }
 
-            var isFunctionalOnly = (Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0;
-            var weld = (!IsWeldIntegrityReached(target) || target.NeedRepair(isFunctionalOnly)) && !IsFriendlyDamage(target);
+            var weld = (!IsWeldIntegrityReached(target) || target.NeedRepair(Settings.WeldOptions)) && !IsFriendlyDamage(target);
 
             targetData.Ignore = !weld;
             return weld;
@@ -604,13 +629,13 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                var isFunctionalOnly = (Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0;
-                if (!isFunctionalOnly)
-                {
-                    return target.IsFullIntegrity;
-                }
+                if (Settings.WeldOptions == AutoWeldOptions.WeldSkeleton)
+                    return true;
 
-                var requiredIntegrity = target.GetRequiredIntegrity(isFunctionalOnly);
+                if (Settings.WeldOptions == AutoWeldOptions.WeldFull)
+                    return target.IsFullIntegrity;
+
+                var requiredIntegrity = target.GetRequiredIntegrity(Settings.WeldOptions);
                 return target.Integrity >= requiredIntegrity;
             }
             catch
@@ -676,7 +701,7 @@ namespace SKONanobotBuildAndRepairSystem
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed))
                         {
                             var proj = cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector;
-                            proj.Build(target, _Welder.OwnerId, _Welder.EntityId, true, _Welder.SlimBlock.BuiltBy);
+                            proj.Build(target, _Welder.OwnerId, _Welder.EntityId, Settings.WeldOptions == AutoWeldOptions.WeldFull, _Welder.SlimBlock.BuiltBy);
                         }
 
                         // TODO Check this again.
@@ -723,9 +748,20 @@ namespace SKONanobotBuildAndRepairSystem
                     //Incomplete
                     welding = target.CanContinueBuild(_TransportInventory) || CreativeModeActive;
 
-                    if (welding)
+                    if (welding && !(Settings.WeldOptions == AutoWeldOptions.WeldSkeleton && created))
                     {
-                        target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
+                        var weldAmount = MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_AMOUNT_PER_SECOND;
+                        if (Settings.WeldOptions != AutoWeldOptions.WeldFull)
+                        {
+                            var requiredIntegrity = target.GetRequiredIntegrity(Settings.WeldOptions);
+                            var remaining = requiredIntegrity - target.Integrity;
+                            if (remaining <= 0f)
+                                welding = false;
+                            else
+                                weldAmount = Math.Min(weldAmount, remaining);
+                        }
+                        if (welding)
+                            target.IncreaseMountLevel(weldAmount, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
                     }
 
                     if (IsWeldIntegrityReached(target))

@@ -1,31 +1,13 @@
-using Sandbox.Common.ObjectBuilders;
-using Sandbox.Definitions;
-using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
-using SKONanobotBuildAndRepairSystem.Localization;
-using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using VRage;
 using VRage.Game;
-using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
-using VRage.ObjectBuilders;
-using VRage.Scripting.MemorySafeTypes;
-using VRage.Utils;
 using VRageMath;
-using static SKONanobotBuildAndRepairSystem.Utils.UtilsInventory;
-using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
-using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
-using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 
 namespace SKONanobotBuildAndRepairSystem
 {

@@ -1,31 +1,19 @@
-using Sandbox.Common.ObjectBuilders;
 using Sandbox.Definitions;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
-using SKONanobotBuildAndRepairSystem.Localization;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using VRage;
 using VRage.Game;
-using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
-using VRage.ObjectBuilders;
-using VRage.Scripting.MemorySafeTypes;
-using VRage.Utils;
 using VRageMath;
 using static SKONanobotBuildAndRepairSystem.Utils.UtilsInventory;
 using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
 using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
-using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 
 namespace SKONanobotBuildAndRepairSystem
 {
@@ -187,6 +175,7 @@ namespace SKONanobotBuildAndRepairSystem
                     _TempPossibleGrindTargets.Clear();
                     _TempPossibleFloatingTargets.Clear();
                     _TempPossibleSources.Clear();
+                    _TempPossiblePushTargets.Clear();
                     _TempIgnore4Ingot.Clear();
                     _TempIgnore4Components.Clear();
                     _TempIgnore4Items.Clear();
@@ -265,6 +254,14 @@ namespace SKONanobotBuildAndRepairSystem
 
                         foreach (var inventory in _TempPossibleSources)
                         {
+                            // Only cargo containers are valid push destinations.
+                            // Assemblers, refineries, welders, etc. are pull sources only.
+                            if (inventory.Owner is IMyCargoContainer)
+                            {
+                                _TempPossiblePushTargets.Add(inventory);
+                                continue;
+                            }
+
                             var block = inventory.Owner as IMyShipWelder;
                             if (block != null && block.BlockDefinition.SubtypeName.Contains("NanobotBuildAndRepairSystem") && block.GameLogic != null)
                             {
@@ -435,6 +432,8 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             _PossibleSources.Clear();
                             _PossibleSources.AddRange(_TempPossibleSources);
+                            _PossiblePushTargets.Clear();
+                            _PossiblePushTargets.AddRange(_TempPossiblePushTargets);
                             _Ignore4Ingot.Clear();
                             _Ignore4Ingot.UnionWith(_TempIgnore4Ingot);
                             _Ignore4Components.Clear();
@@ -443,6 +442,7 @@ namespace SKONanobotBuildAndRepairSystem
                             _Ignore4Items.UnionWith(_TempIgnore4Items);
                         }
                         _TempPossibleSources.Clear();
+                        _TempPossiblePushTargets.Clear();
                         _TempIgnore4Ingot.Clear();
                         _TempIgnore4Components.Clear();
                         _TempIgnore4Items.Clear();
@@ -591,8 +591,12 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             if (!floating.MarkedForClose && ComponentCollectPriority.GetEnabled(floating.Item.Content.GetObjectId()))
                             {
-                                var distance = (areaBox.Center - floating.WorldMatrix.Translation).Length();
-                                possibleFloatingTargets.Add(new TargetEntityData(floating, distance));
+                                var floatingPos = floating.WorldMatrix.Translation;
+                                if (areaBox.Contains(ref floatingPos))
+                                {
+                                    var distance = (areaBox.Center - floatingPos).Length();
+                                    possibleFloatingTargets.Add(new TargetEntityData(floating, distance));
+                                }
                             }
                             continue;
                         }
@@ -602,8 +606,12 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             if (character.IsDead && !character.InventoriesEmpty() && !((MyCharacterDefinition)character.Definition).EnableSpawnInventoryAsContainer)
                             {
-                                var distance = (areaBox.Center - character.WorldMatrix.Translation).Length();
-                                possibleFloatingTargets.Add(new TargetEntityData(character, distance));
+                                var charPos = character.WorldMatrix.Translation;
+                                if (areaBox.Contains(ref charPos))
+                                {
+                                    var distance = (areaBox.Center - charPos).Length();
+                                    possibleFloatingTargets.Add(new TargetEntityData(character, distance));
+                                }
                             }
                             continue;
                         }
@@ -613,8 +621,12 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             if (!inventoryBag.InventoriesEmpty())
                             {
-                                var distance = (areaBox.Center - inventoryBag.WorldMatrix.Translation).Length();
-                                possibleFloatingTargets.Add(new TargetEntityData(inventoryBag, distance));
+                                var bagPos = inventoryBag.WorldMatrix.Translation;
+                                if (areaBox.Contains(ref bagPos))
+                                {
+                                    var distance = (areaBox.Center - bagPos).Length();
+                                    possibleFloatingTargets.Add(new TargetEntityData(inventoryBag, distance));
+                                }
                             }
                             continue;
                         }
@@ -632,6 +644,7 @@ namespace SKONanobotBuildAndRepairSystem
             if (grids.Contains(cubeGrid)) return; //Allready parsed
 
             grids.Add(cubeGrid);
+            SharedGridBlockCache.EnsureSubscribed(cubeGrid);
 
             var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly || Settings.WorkMode == WorkModes.GrindBeforeWeld;
             var isGrinding = State.Grinding || State.NeedGrinding || (State.Transporting && isGrindingMode) || isGrindingMode;
@@ -698,28 +711,23 @@ namespace SKONanobotBuildAndRepairSystem
                             if (projectedCubeGrid != null && !grids.Contains(projectedCubeGrid))
                             {
                                 grids.Add(projectedCubeGrid);
+                                // Do NOT call EnsureSubscribed — projected grids are ghost grids.
 
-                                var projectedBlocks = GetBlocksFromCache(projectedCubeGrid, isGrinding);
+                                // Fetch only the buildable subset — avoids iterating the full projection.
+                                var buildableBlocks = new List<IMySlimBlock>();
+                                projectedCubeGrid.GetBlocks(buildableBlocks, b => b.CanBuild(false));
 
-                                // TODO: Use cached list.
-                                //var projectedBlocks = new List<IMySlimBlock>();
-                                //projectedCubeGrid.GetBlocks(projectedBlocks);
-                                //projectedBlocks.SortWithPriority(this, isGrinding);
-
-                                foreach (IMySlimBlock block in projectedBlocks)
+                                foreach (IMySlimBlock block in buildableBlocks)
                                 {
-                                    if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
-                                    {
-                                        break;
-                                    }
+                                    if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null)) break;
 
                                     double distance;
-                                    if (DlcCheckHelper.IsBlockDlcAvailableForOwner(block, _Welder.OwnerId) && BlockWeldPriority.GetEnabled(block) && block.IsInRange(ref areaBox, out distance) && block.CanBuild(false))
+                                    if (DlcCheckHelper.IsBlockDlcAvailableForOwner(block, _Welder.OwnerId)
+                                        && BlockWeldPriority.GetEnabled(block)
+                                        && block.IsInRange(ref areaBox, out distance))
                                     {
                                         if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
-                                        {
                                             possibleWeldTargets.Add(new TargetBlockData(block, distance, TargetBlockData.AttributeFlags.Projected));
-                                        }
                                     }
                                 }
                             }
@@ -843,7 +851,7 @@ namespace SKONanobotBuildAndRepairSystem
                    BlockWeldPriority.GetEnabled(block) &&
                    block.IsInRange(ref areaBox, out distance) &&
                    IsRelationAllowed4Welding(block) &&
-                   block.NeedRepair((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0))
+                   block.NeedRepair(Settings.WeldOptions))
                 {
                     if (possibleWeldTargets.Count < MaxPossibleWeldTargets)
                     {
@@ -946,7 +954,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
 
-            // 1. Check per-system sorted cache (avoids re-sort for repeated visits within one scan).
+            // Check per-system sorted cache (avoids re-sort for repeated visits within one scan).
             TimeSpan cachedTime;
             List<IMySlimBlock> cachedList;
             if (CachedBlocksTime.TryGetValue(grid.EntityId, out cachedTime)
@@ -956,14 +964,16 @@ namespace SKONanobotBuildAndRepairSystem
                 return cachedList;
             }
 
-            // 2. Fetch raw blocks from the global shared cache (eliminates N×M GetBlocks() calls).
+            // Fetch raw blocks from the global shared cache (eliminates N×M GetBlocks() calls).
             var rawBlocks = SharedGridBlockCache.GetBlocks(grid);
 
-            // 3. Make a per-system copy and sort (sort uses per-system priorities + welder distance).
+            // Make a per-system copy and sort (sort uses per-system priorities + welder distance).
+            // Full sort is required so that within-priority-tier distance/size ordering correctly
+            // determines which blocks make it into the 256-candidate list when there are more
+            // eligible blocks than the cap.
             var list = new List<IMySlimBlock>(rawBlocks);
             list.SortWithPriorityAndDistance(this, isGrinding);
 
-            // 4. Store sorted copy in per-system cache.
             CachedBlocksTime[grid.EntityId] = playTime;
             CachedBlocks[grid.EntityId] = list;
 

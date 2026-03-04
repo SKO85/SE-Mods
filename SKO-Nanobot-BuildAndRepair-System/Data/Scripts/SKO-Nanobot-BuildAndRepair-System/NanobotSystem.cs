@@ -1,28 +1,18 @@
 using Sandbox.Common.ObjectBuilders;
-using Sandbox.Definitions;
 using Sandbox.Game.Entities;
-using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
-using SKONanobotBuildAndRepairSystem.Helpers;
-using SKONanobotBuildAndRepairSystem.Localization;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using VRage;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
-using VRage.Scripting.MemorySafeTypes;
 using VRage.Utils;
 using VRageMath;
-using static SKONanobotBuildAndRepairSystem.Utils.UtilsInventory;
 using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
 using IMyTerminalBlock = Sandbox.ModAPI.IMyTerminalBlock;
 using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
@@ -90,7 +80,8 @@ namespace SKONanobotBuildAndRepairSystem
         // Reused in PullComponents to avoid per-call heap allocation
         private List<MyInventoryItem> _TempPullComponentItems = new List<MyInventoryItem>();
 
-        // Plain Dictionary is sufficient — only ever accessed from the single async worker task
+        // Per-system sorted block list cache — keyed by grid entity ID.
+        // Only ever accessed from the single async worker task; plain Dictionary is sufficient.
         private Dictionary<long, TimeSpan> CachedBlocksTime = new Dictionary<long, TimeSpan>();
         private Dictionary<long, List<IMySlimBlock>> CachedBlocks = new Dictionary<long, List<IMySlimBlock>>();
 
@@ -126,6 +117,10 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool _IsInit;
         private List<IMyInventory> _PossibleSources = new List<IMyInventory>();
+        // Subset of _PossibleSources containing only cargo containers — used as push destinations.
+        // Keeps pull sources (for welding) and push destinations (for offloading) cleanly separated.
+        private List<IMyInventory> _PossiblePushTargets = new List<IMyInventory>();
+        private List<IMyInventory> _TempPossiblePushTargets = new List<IMyInventory>();
         private HashSet<IMyInventory> _Ignore4Ingot = new HashSet<IMyInventory>();
         private HashSet<IMyInventory> _Ignore4Items = new HashSet<IMyInventory>();
         private HashSet<IMyInventory> _Ignore4Components = new HashSet<IMyInventory>();
@@ -151,6 +146,9 @@ namespace SKONanobotBuildAndRepairSystem
 
         public TimeSpan _TryAutoPushInventoryLast;
         public TimeSpan _TryPushInventoryLast;
+
+        // Consecutive 5-second push cycles where inventory was full and no welding occurred.
+        private int _InventoryFullPushAttempts;
 
         private Action<IMyTerminalBlock> _onEnabledChanged;
         private Action<IMyCubeBlock> _onIsWorkingChanged;
@@ -329,6 +327,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _TempPossibleGrindTargets?.Clear();
                 _TempPossibleFloatingTargets?.Clear();
                 _TempPossibleSources?.Clear();
+                _TempPossiblePushTargets?.Clear();
                 _TempIgnore4Ingot?.Clear();
                 _TempIgnore4Items?.Clear();
                 _TempIgnore4Components?.Clear();
