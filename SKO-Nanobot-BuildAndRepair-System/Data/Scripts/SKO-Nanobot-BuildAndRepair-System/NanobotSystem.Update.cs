@@ -46,13 +46,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if ((Settings.Flags & SyncBlockSettings.Settings.ShowArea) != 0)
                     {
-                        // GetColorMask() returns HSV offsets, not absolute HSV values.
-                        // Apply SE base values (S_base=0.8, V_base=0.55) before converting.
-                        var colorMask = _Welder.SlimBlock.GetColorMask();
-                        var hsv = new Vector3(colorMask.X,
-                            VRageMath.MathHelper.Clamp(0.8f + colorMask.Y, 0f, 1f),
-                            VRageMath.MathHelper.Clamp(0.55f + colorMask.Z, 0f, 1f));
-                        var color = hsv.HSVtoColor();
+                        var color = Color.Black;
                         var areaBoundingBox = Settings.CorrectedAreaBoundingBox;
                         var emitterMatrix = _Welder.WorldMatrix;
                         emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
