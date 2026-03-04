@@ -87,8 +87,16 @@ namespace SKONanobotBuildAndRepairSystem
         private HashSet<IMyInventory> _TempIgnore4Items = new HashSet<IMyInventory>();
         private HashSet<IMyInventory> _TempIgnore4Components = new HashSet<IMyInventory>();
 
-        private ConcurrentDictionary<long, TimeSpan> CachedBlocksTime = new ConcurrentDictionary<long, TimeSpan>();
-        private ConcurrentDictionary<long, List<IMySlimBlock>> CachedBlocks = new ConcurrentDictionary<long, List<IMySlimBlock>>();
+        // Reused in PullComponents to avoid per-call heap allocation
+        private List<MyInventoryItem> _TempPullComponentItems = new List<MyInventoryItem>();
+
+        // Plain Dictionary is sufficient — only ever accessed from the single async worker task
+        private Dictionary<long, TimeSpan> CachedBlocksTime = new Dictionary<long, TimeSpan>();
+        private Dictionary<long, List<IMySlimBlock>> CachedBlocks = new Dictionary<long, List<IMySlimBlock>>();
+
+        // Reused in AsyncAddBlocksOfBox (GrindSmallestGridFirst) to avoid per-scan allocations
+        private List<IMyEntity> _TempSortedGridEntities = new List<IMyEntity>();
+        private List<IMyEntity> _TempNonGridEntities = new List<IMyEntity>();
 
         private List<IMyEntity> _CachedEntitiesInRange;
         private TimeSpan _CachedEntitiesInRangeTime;
@@ -101,6 +109,16 @@ namespace SKONanobotBuildAndRepairSystem
         // Main-thread only — tracks when _ClusterKey was last computed via GetGroup.
         private TimeSpan _ClusterKeyLastRefreshTime;
         private static readonly TimeSpan ClusterKeyRefreshInterval = TimeSpan.FromSeconds(30.0);
+
+        // Dedicated lock object for the async scan guard — avoids locking on a game entity
+        private readonly object _asyncUpdateLock = new object();
+
+        // Cached session-level grind-block flag, set on main thread before each async scan
+        private bool _scanGrindBlockedByScenario;
+
+        // Cached list of friendly NanobotSystems for FriendlyDamage propagation
+        private List<NanobotSystem> _FriendlyNanobotSystems = new List<NanobotSystem>();
+        private TimeSpan _FriendlyNanobotSystemsLast;
 
         private IMyShipWelder _Welder;
         public IMyInventory _TransportInventory;
@@ -318,6 +336,7 @@ namespace SKONanobotBuildAndRepairSystem
                 CachedBlocksTime.Clear();
                 CachedBlocks.Clear();
                 _CachedEntitiesInRange = null;
+                _FriendlyNanobotSystems?.Clear();
 
                 _DelayWatch?.Stop();
 

@@ -2,6 +2,7 @@ using Sandbox.Common.ObjectBuilders;
 using Sandbox.Definitions;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
+using Sandbox.ModAPI.Interfaces;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Localization;
@@ -31,6 +32,9 @@ namespace SKONanobotBuildAndRepairSystem
 {
     partial class NanobotSystem
     {
+        // Cached reference to the "helpOthers" action — avoids a string lookup on every terminal refresh
+        private ITerminalAction _helpOthersAction;
+
         /// <summary>
         ///
         /// </summary>
@@ -137,6 +141,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                 _DelayWatch.Restart();
 
+                // Capture once per update — avoids repeated property-chain traversals
+                var playTime = MyAPIGateway.Session.ElapsedPlayTime;
 
                 if (MyAPIGateway.Session.IsServer)
                 {
@@ -149,9 +155,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                     ServerTryWeldingGrindingCollecting();
 
-                    if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PeriodicExtraChecksLast).TotalSeconds >= 2)
+                    if (State.Ready && (playTime - _PeriodicExtraChecksLast).TotalSeconds >= 2)
                     {
-                        _PeriodicExtraChecksLast = MyAPIGateway.Session.ElapsedPlayTime;
+                        _PeriodicExtraChecksLast = playTime;
                         try
                         {
                             if (SetSafeZoneAndShieldStates())
@@ -168,9 +174,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (!fast)
                     {
-                        if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdatePowerSinkLast).TotalSeconds >= 2)
+                        if (State.Ready && (playTime - _UpdatePowerSinkLast).TotalSeconds >= 2)
                         {
-                            _UpdatePowerSinkLast = MyAPIGateway.Session.ElapsedPlayTime;
+                            _UpdatePowerSinkLast = playTime;
                             var resourceSink = _Welder.ResourceSink as Sandbox.Game.EntityComponents.MyResourceSinkComponent;
                             if (resourceSink != null)
                             {
@@ -180,9 +186,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                         Settings.TrySave(Entity, Mod.ModGuid);
 
-                        if (State.IsTransmitNeeded() && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdateStateTransmitLast).TotalSeconds >= _UpdateStateTransmitInterval)
+                        if (State.IsTransmitNeeded() && (playTime - _UpdateStateTransmitLast).TotalSeconds >= _UpdateStateTransmitInterval)
                         {
-                            _UpdateStateTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
+                            _UpdateStateTransmitLast = playTime;
                             _UpdateStateTransmitInterval = _RandomDelay.Next(TransmitStateMinIntervalSeconds, TransmitStateMaxIntervalSeconds + 1);
                             NetworkMessagingHandler.MsgBlockStateSend(0, this);
                         }
@@ -197,9 +203,9 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                if (Settings.IsTransmitNeeded() && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdateSettingsTransmitLast).TotalSeconds >= TransmitSettingsIntervalSeconds)
+                if (Settings.IsTransmitNeeded() && (playTime - _UpdateSettingsTransmitLast).TotalSeconds >= TransmitSettingsIntervalSeconds)
                 {
-                    _UpdateSettingsTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
+                    _UpdateSettingsTransmitLast = playTime;
                     NetworkMessagingHandler.MsgBlockSettingsSend(0, this);
                 }
 
@@ -242,11 +248,13 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 try
                 {
-                    var action = _Welder.GetActionWithName("helpOthers");
-                    if (action != null)
+                    // Cache on first use to avoid repeated string-keyed lookups
+                    if (_helpOthersAction == null)
+                        _helpOthersAction = _Welder.GetActionWithName("helpOthers");
+                    if (_helpOthersAction != null)
                     {
-                        action.Apply(_Welder);
-                        action.Apply(_Welder);
+                        _helpOthersAction.Apply(_Welder);
+                        _helpOthersAction.Apply(_Welder);
                     }
                 }
                 catch (Exception)
@@ -287,33 +295,32 @@ namespace SKONanobotBuildAndRepairSystem
             // If mod is not yet initialized, show this in the info panel.
             if (State.Ready && !Mod.SettingsValid)
             {
-                customInfo.Append($"[color=#FFFFFF00]Mod not initialized![/color]" + Environment.NewLine);
-                customInfo.Append($"---" + Environment.NewLine);
-                customInfo.Append($"If this message remains:" + Environment.NewLine);
-                customInfo.Append($"- Try reopen this terminal in a few seconds." + Environment.NewLine + Environment.NewLine);
-
-                customInfo.Append($"If above does not work:" + Environment.NewLine);
-                customInfo.Append($"- Try cleanup the mod folder." + Environment.NewLine);
-                customInfo.Append($"- Re-Subscribe to the mod." + Environment.NewLine);
-                customInfo.Append($"- Check FAQ on workshop page." + Environment.NewLine);
+                // Split string + Environment.NewLine into two Append calls to avoid the intermediate string allocation
+                customInfo.Append("[color=#FFFFFF00]Mod not initialized![/color]").Append(Environment.NewLine);
+                customInfo.Append("---").Append(Environment.NewLine);
+                customInfo.Append("If this message remains:").Append(Environment.NewLine);
+                customInfo.Append("- Try reopen this terminal in a few seconds.").Append(Environment.NewLine).Append(Environment.NewLine);
+                customInfo.Append("If above does not work:").Append(Environment.NewLine);
+                customInfo.Append("- Try cleanup the mod folder.").Append(Environment.NewLine);
+                customInfo.Append("- Re-Subscribe to the mod.").Append(Environment.NewLine);
+                customInfo.Append("- Check FAQ on workshop page.").Append(Environment.NewLine);
                 return;
             }
 
             if (CreativeModeActive)
             {
-                customInfo.Append($"[color=#FFFFFF00]Creative Mode Active[/color]");
+                customInfo.Append("[color=#FFFFFF00]Creative Mode Active[/color]");
                 customInfo.Append(Environment.NewLine);
             }
 
-
-            customInfo.Append($"State: {GetStateString()}{Environment.NewLine}");
+            customInfo.Append("State: ").Append(GetStateString()).Append(Environment.NewLine);
 
             var resourceSink = _Welder.ResourceSink as Sandbox.Game.EntityComponents.MyResourceSinkComponent;
             if (resourceSink != null)
             {
-                customInfo.Append($"Power: ");
+                customInfo.Append("Power: ");
                 MyValueFormatter.AppendWorkInBestUnit(PowerHelper.ComputeRequiredElectricPower(this), customInfo);
-                customInfo.Append($" / ");
+                customInfo.Append(" / ");
                 MyValueFormatter.AppendWorkInBestUnit(resourceSink.MaxRequiredInputByType(ElectricityId), customInfo);
                 customInfo.Append(Environment.NewLine);
             }
@@ -322,26 +329,22 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (State.IsShielded)
             {
-                customInfo.Append($"[color=#FFFFFF00]Shields Active[/color]: Grinding disabled!");
-                customInfo.Append(Environment.NewLine);
+                customInfo.Append("[color=#FFFFFF00]Shields Active[/color]: Grinding disabled!").Append(Environment.NewLine);
             }
 
             if (!State.SafeZoneAllowsWelding)
             {
-                customInfo.Append($"[color=#FFFFFF00]SafeZone[/color]: Welding disabled!");
-                customInfo.Append(Environment.NewLine);
+                customInfo.Append("[color=#FFFFFF00]SafeZone[/color]: Welding disabled!").Append(Environment.NewLine);
             }
 
             if (!State.SafeZoneAllowsBuildingProjections)
             {
-                customInfo.Append($"[color=#FFFFFF00]SafeZone[/color]: Building projections disabled!");
-                customInfo.Append(Environment.NewLine);
+                customInfo.Append("[color=#FFFFFF00]SafeZone[/color]: Building projections disabled!").Append(Environment.NewLine);
             }
 
             if (!State.SafeZoneAllowsGrinding)
             {
-                customInfo.Append($"[color=#FFFFFF00]SafeZone[/color]: Grinding disabled!");
-                customInfo.Append(Environment.NewLine);
+                customInfo.Append("[color=#FFFFFF00]SafeZone[/color]: Grinding disabled!").Append(Environment.NewLine);
             }
 
             customInfo.Append(Environment.NewLine);
@@ -352,36 +355,36 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (Settings.CurrentPickedWeldingBlock != null)
                     {
-                        customInfo.Append(Texts.Info_CurentWeldEntity + Environment.NewLine);
-                        customInfo.Append(string.Format(" -{0}" + Environment.NewLine, Settings.CurrentPickedWeldingBlock.BlockName()));
+                        customInfo.Append(Texts.Info_CurentWeldEntity).Append(Environment.NewLine);
+                        customInfo.Append(" -").Append(Settings.CurrentPickedWeldingBlock.BlockName()).Append(Environment.NewLine);
                     }
 
                     if (Settings.CurrentPickedGrindingBlock != null)
                     {
-                        customInfo.Append(Texts.Info_CurentGrindEntity + Environment.NewLine);
-                        customInfo.Append(string.Format(" -{0}" + Environment.NewLine, Settings.CurrentPickedGrindingBlock.BlockName()));
+                        customInfo.Append(Texts.Info_CurentGrindEntity).Append(Environment.NewLine);
+                        customInfo.Append(" -").Append(Settings.CurrentPickedGrindingBlock.BlockName()).Append(Environment.NewLine);
                     }
                 }
 
-                if (State.InventoryFull) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_InventoryFull}[/color]{Environment.NewLine + Environment.NewLine}");
-                if (State.LimitsExceeded) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_LimitReached}[/color]{Environment.NewLine + Environment.NewLine}");
+                if (State.InventoryFull) customInfo.Append("[color=#FFFFFF00]").Append(Texts.Info_InventoryFull).Append("[/color]").Append(Environment.NewLine).Append(Environment.NewLine);
+                if (State.LimitsExceeded) customInfo.Append("[color=#FFFFFF00]").Append(Texts.Info_LimitReached).Append("[/color]").Append(Environment.NewLine).Append(Environment.NewLine);
 
                 var cnt = 0;
                 lock (State.MissingComponents)
                 {
                     if (State.MissingComponents?.Count > 0)
                     {
-                        customInfo.Append(Texts.Info_MissingItems + Environment.NewLine);
+                        customInfo.Append(Texts.Info_MissingItems).Append(Environment.NewLine);
                         foreach (var component in State.MissingComponents)
                         {
                             var componentId = new MyDefinitionId(typeof(MyObjectBuilder_Component), component.Key.SubtypeId);
                             MyComponentDefinition componentDefnition;
                             var name = MyDefinitionManager.Static.TryGetComponentDefinition(componentId, out componentDefnition) ? componentDefnition.DisplayNameText : component.Key.SubtypeName;
-                            customInfo.Append(string.Format(" -{0}: {1}" + Environment.NewLine, name, component.Value));
+                            customInfo.Append(" -").Append(name).Append(": ").Append(component.Value).Append(Environment.NewLine);
                             cnt++;
                             if (cnt >= SyncBlockState.MaxSyncItems)
                             {
-                                customInfo.Append(Texts.Info_More + Environment.NewLine);
+                                customInfo.Append(Texts.Info_More).Append(Environment.NewLine);
                                 break;
                             }
                         }
@@ -396,15 +399,15 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if (State.PossibleWeldTargets?.Count > 0)
                         {
-                            customInfo.Append(Texts.Info_BlocksToBuild + Environment.NewLine);
+                            customInfo.Append(Texts.Info_BlocksToBuild).Append(Environment.NewLine);
                             foreach (var blockData in State.PossibleWeldTargets)
                             {
                                 if (blockData.Block == null) continue;
-                                customInfo.Append(string.Format(" -{0}" + Environment.NewLine, blockData.Block.BlockName()));
+                                customInfo.Append(" -").Append(blockData.Block.BlockName()).Append(Environment.NewLine);
                                 cnt++;
                                 if (cnt >= SyncBlockState.MaxSyncItems)
                                 {
-                                    customInfo.Append(Texts.Info_More + Environment.NewLine);
+                                    customInfo.Append(Texts.Info_More).Append(Environment.NewLine);
                                     break;
                                 }
                             }
@@ -420,15 +423,15 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if (State.PossibleGrindTargets?.Count > 0)
                         {
-                            customInfo.Append(Texts.Info_BlocksToGrind + Environment.NewLine);
+                            customInfo.Append(Texts.Info_BlocksToGrind).Append(Environment.NewLine);
                             foreach (var blockData in State.PossibleGrindTargets)
                             {
                                 if (blockData.Block == null) continue;
-                                customInfo.Append(string.Format(" -{0}" + Environment.NewLine, blockData.Block.BlockName()));
+                                customInfo.Append(" -").Append(blockData.Block.BlockName()).Append(Environment.NewLine);
                                 cnt++;
                                 if (cnt >= SyncBlockState.MaxSyncItems)
                                 {
-                                    customInfo.Append(Texts.Info_More + Environment.NewLine);
+                                    customInfo.Append(Texts.Info_More).Append(Environment.NewLine);
                                     break;
                                 }
                             }
@@ -442,15 +445,15 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (State.PossibleFloatingTargets?.Count > 0)
                     {
-                        customInfo.Append(Texts.Info_ItemsToCollect + Environment.NewLine);
+                        customInfo.Append(Texts.Info_ItemsToCollect).Append(Environment.NewLine);
                         foreach (var entityData in State.PossibleFloatingTargets)
                         {
                             if (entityData.Entity == null) continue;
-                            customInfo.Append(string.Format(" -{0}" + Environment.NewLine, Logging.BlockName(entityData.Entity, Logging.BlockNameOptions.None)));
+                            customInfo.Append(" -").Append(Logging.BlockName(entityData.Entity, Logging.BlockNameOptions.None)).Append(Environment.NewLine);
                             cnt++;
                             if (cnt >= SyncBlockState.MaxSyncItems)
                             {
-                                customInfo.Append(Texts.Info_More + Environment.NewLine);
+                                customInfo.Append(Texts.Info_More).Append(Environment.NewLine);
                                 break;
                             }
                         }
@@ -459,9 +462,9 @@ namespace SKONanobotBuildAndRepairSystem
             }
             else
             {
-                if (!_Welder.Enabled) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_BlockSwitchedOff}[/color]{Environment.NewLine}");
-                else if (!_Welder.IsFunctional) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_BlockDamaged}[/color]{Environment.NewLine}");
-                else if (!_Welder.IsWorking) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_BlockUnpowered}[/color]{Environment.NewLine}");
+                if (!_Welder.Enabled) customInfo.Append("[color=#FFFFFF00]").Append(Texts.Info_BlockSwitchedOff).Append("[/color]").Append(Environment.NewLine);
+                else if (!_Welder.IsFunctional) customInfo.Append("[color=#FFFFFF00]").Append(Texts.Info_BlockDamaged).Append("[/color]").Append(Environment.NewLine);
+                else if (!_Welder.IsWorking) customInfo.Append("[color=#FFFFFF00]").Append(Texts.Info_BlockUnpowered).Append("[/color]").Append(Environment.NewLine);
             }
         }
 

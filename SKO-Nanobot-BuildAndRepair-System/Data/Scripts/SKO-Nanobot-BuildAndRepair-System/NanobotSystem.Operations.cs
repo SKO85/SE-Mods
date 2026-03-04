@@ -83,38 +83,43 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     State.MissingComponents.Clear();
                     State.LimitsExceeded = false;
+
+                    // Compute once here so WeldBeforeGrind / GrindBeforeWeld modes don't rebuild it twice
+                    var activeGridSystems = Mod.Settings.DisableLimitSystemsPerTargetGrid
+                        ? null : BuildActiveGridMap();
+
                     switch (Settings.WorkMode)
                     {
                         case WorkModes.WeldBeforeGrind:
-                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
                             if (State.PossibleWeldTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
                             {
-                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
                             }
                             break;
 
                         case WorkModes.GrindBeforeWeld:
-                            ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                            ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
                             if (State.PossibleGrindTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
                             {
-                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
                             }
                             break;
 
                         case WorkModes.GrindIfWeldGetStuck:
-                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
                             if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
                             {
-                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
                             }
                             break;
 
                         case WorkModes.WeldOnly:
-                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
                             break;
 
                         case WorkModes.GrindOnly:
-                            ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                            ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
                             break;
                     }
                     State.MissingComponents.RebuildHash();
@@ -323,7 +328,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         ///
         /// </summary>
-        private void ServerTryGrinding(out bool grinding, out bool needgrinding, out bool transporting, out IMySlimBlock currentGrindingBlock)
+        private void ServerTryGrinding(out bool grinding, out bool needgrinding, out bool transporting, out IMySlimBlock currentGrindingBlock, Dictionary<long, int> activeGridSystems)
         {
             grinding = false;
             needgrinding = false;
@@ -335,9 +340,21 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!PowerHelper.HasRequiredElectricPower(this)) return; //No power -> nothing to do
 
-            // Build once per call — O(N) — so the per-block check is O(1) instead of O(N).
-            var activeGridSystems = Mod.Settings.DisableLimitSystemsPerTargetGrid
-                ? null : BuildActiveGridMap();
+            // Rebuild friendly NanobotSystems cache if stale
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            if ((now - _FriendlyNanobotSystemsLast) >= Mod.Settings.SourcesUpdateInterval)
+            {
+                _FriendlyNanobotSystemsLast = now;
+                _FriendlyNanobotSystems.Clear();
+                foreach (var pair in Mod.NanobotSystems)
+                {
+                    var sys = pair.Value;
+                    if (sys == this) continue;
+                    var rel = sys.Welder.GetUserRelationToOwner(_Welder.OwnerId);
+                    if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(rel))
+                        _FriendlyNanobotSystems.Add(sys);
+                }
+            }
 
             lock (State.PossibleGrindTargets)
             {
@@ -437,7 +454,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         ///
         /// </summary>
-        private void ServerTryWelding(out bool welding, out bool needwelding, out bool transporting, out IMySlimBlock currentWeldingBlock)
+        private void ServerTryWelding(out bool welding, out bool needwelding, out bool transporting, out IMySlimBlock currentWeldingBlock, Dictionary<long, int> activeGridSystems)
         {
             welding = false;
             needwelding = false;
@@ -446,10 +463,6 @@ namespace SKONanobotBuildAndRepairSystem
 
             var hasRequiredPower = PowerHelper.HasRequiredElectricPower(this);
             if (!hasRequiredPower) return; //No power -> nothing to do
-
-            // Build once per call — O(N) — so the per-block check is O(1) instead of O(N).
-            var activeGridSystems = Mod.Settings.DisableLimitSystemsPerTargetGrid
-                ? null : BuildActiveGridMap();
 
             lock (State.PossibleWeldTargets)
             {
@@ -807,16 +820,16 @@ namespace SKONanobotBuildAndRepairSystem
                     //Not available in modding
                     //MyAPIGateway.Session.DamageSystem.RaiseBeforeDamageApplied(target, ref damageInfo);
 
-                    foreach (var entry in Mod.NanobotSystems)
+                    // Use pre-cached friendly systems list — avoids O(N) scan + relation checks every grind call
+                    var grindTime = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                    foreach (var sys in _FriendlyNanobotSystems)
                     {
-                        var relation = entry.Value.Welder.GetUserRelationToOwner(_Welder.OwnerId);
-                        if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
-                        {
-                            //A 'friendly' damage from grinder -> do not repair (for a while)
-                            //I don't check block relation here, because if it is enemy we won't repair it in any case and it just times out
-                            entry.Value.FriendlyDamage[target] = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
-                        }
+                        //A 'friendly' damage from grinder -> do not repair (for a while)
+                        //I don't check block relation here, because if it is enemy we won't repair it in any case and it just times out
+                        sys.FriendlyDamage[target] = grindTime;
                     }
+                    // Also register on this system itself (self-grind scenario)
+                    FriendlyDamage[target] = grindTime;
                 }
 
                 target.DecreaseMountLevel(damageInfo.Amount, _TransportInventory);

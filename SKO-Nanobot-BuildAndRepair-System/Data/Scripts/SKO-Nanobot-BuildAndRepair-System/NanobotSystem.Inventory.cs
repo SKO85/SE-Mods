@@ -372,8 +372,10 @@ namespace SKONanobotBuildAndRepairSystem
                     //Pre Test is 10 timers faster then get the whole list (as copy!) and iterate for nothing
                     if (srcInventory.FindItem(componentId) != null && srcInventory.CanTransferItemTo(welderInventory, componentId))
                     {
-                        var tempInventoryItems = new List<MyInventoryItem>();
-                        srcInventory.GetItems(tempInventoryItems);
+                        // Reuse pre-allocated list to avoid a new heap allocation per source inventory
+                        _TempPullComponentItems.Clear();
+                        srcInventory.GetItems(_TempPullComponentItems);
+                        var tempInventoryItems = _TempPullComponentItems;
                         for (int srcItemIndex = tempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                         {
                             var srcItem = tempInventoryItems[srcItemIndex];
@@ -407,7 +409,6 @@ namespace SKONanobotBuildAndRepairSystem
                             }
                             if (maxpossibleAmount <= 0) return picked;
                         }
-                        tempInventoryItems.Clear();
                     }
                     if (maxpossibleAmount <= 0) return picked;
                 }

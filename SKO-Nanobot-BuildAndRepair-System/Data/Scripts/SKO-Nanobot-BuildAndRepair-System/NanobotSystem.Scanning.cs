@@ -148,7 +148,12 @@ namespace SKONanobotBuildAndRepairSystem
                     _Welder.CubeGrid, worldAABB, systemsSnapshot);
             }
 
-            lock (_Welder)
+            // Cache session-level grind-block flag on main thread before launching the async task
+            _scanGrindBlockedByScenario = (MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode)
+                && !MyAPIGateway.Session.SessionSettings.DestructibleBlocks;
+
+            // Use dedicated lock object instead of a game entity
+            lock (_asyncUpdateLock)
             {
                 if (_AsyncUpdateSourcesAndTargetsRunning) return;
 
@@ -176,7 +181,8 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     pos = 1;
 
-                    var grids = new List<IMyCubeGrid>();
+                    // HashSet gives O(1) Contains/Add vs O(N) for List — avoids O(N²) in deep sub-grid trees
+                    var grids = new HashSet<IMyCubeGrid>();
                     _TempPossibleWeldTargets.Clear();
                     _TempPossibleGrindTargets.Clear();
                     _TempPossibleFloatingTargets.Clear();
@@ -210,6 +216,19 @@ namespace SKONanobotBuildAndRepairSystem
                         _Welder.SlimBlock.ComputeWorldCenter(out posWelder);
                         try
                         {
+                            // Pre-compute squared distances once to avoid O(N log N) ComputeWorldCenter calls inside the comparator
+                            var sourceDistances = new Dictionary<IMyInventory, double>(_TempPossibleSources.Count);
+                            foreach (var src in _TempPossibleSources)
+                            {
+                                var blk = src.Owner as IMyCubeBlock;
+                                if (blk != null)
+                                {
+                                    Vector3D blkPos;
+                                    blk.SlimBlock.ComputeWorldCenter(out blkPos);
+                                    sourceDistances[src] = (posWelder - blkPos).LengthSquared();
+                                }
+                            }
+
                             _TempPossibleSources.Sort((a, b) =>
                             {
                                 var blockA = a.Owner as IMyCubeBlock;
@@ -220,13 +239,10 @@ namespace SKONanobotBuildAndRepairSystem
                                     var welderB = blockB as IMyShipWelder;
                                     if ((welderA == null) == (welderB == null))
                                     {
-                                        Vector3D posA;
-                                        Vector3D posB;
-                                        blockA.SlimBlock.ComputeWorldCenter(out posA);
-                                        blockB.SlimBlock.ComputeWorldCenter(out posB);
-                                        var distanceA = (int)Math.Abs((posWelder - posA).Length());
-                                        var distanceB = (int)Math.Abs((posWelder - posB).Length());
-                                        return distanceA - distanceB;
+                                        double distA, distB;
+                                        sourceDistances.TryGetValue(a, out distA);
+                                        sourceDistances.TryGetValue(b, out distB);
+                                        return distA.CompareTo(distB);
                                     }
                                     else if (welderA == null)
                                     {
@@ -455,7 +471,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// Search for grids inside bounding box and add their damaged block also
         /// </summary>
-        private void AsyncAddBlocksOfBox(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, List<IMyCubeGrid> grids, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets, List<TargetEntityData> possibleFloatingTargets)
+        private void AsyncAddBlocksOfBox(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, HashSet<IMyCubeGrid> grids, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets, List<TargetEntityData> possibleFloatingTargets)
         {
             var emitterMatrix = _Welder.WorldMatrix;
             emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
@@ -507,8 +523,9 @@ namespace SKONanobotBuildAndRepairSystem
                 // Build a sorted copy to avoid mutating the cached list.
                 if (possibleGrindTargets != null && (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0)
                 {
-                    var sortedGrids = new List<IMyEntity>(entityInRange.Count);
-                    var nonGridEntities = new List<IMyEntity>();
+                    // Reuse pre-allocated instance lists to avoid per-scan heap allocations
+                    _TempSortedGridEntities.Clear();
+                    _TempNonGridEntities.Clear();
                     foreach (var e in entityInRange)
                     {
                         if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, possibleFloatingTargets))
@@ -517,14 +534,14 @@ namespace SKONanobotBuildAndRepairSystem
                         }
 
                         if (e is MyCubeGrid)
-                            sortedGrids.Add(e);
+                            _TempSortedGridEntities.Add(e);
                         else
-                            nonGridEntities.Add(e);
+                            _TempNonGridEntities.Add(e);
                     }
 
-                    sortedGrids.Sort((a, b) => ((MyCubeGrid)a).BlocksCount - ((MyCubeGrid)b).BlocksCount);
-                    sortedGrids.AddRange(nonGridEntities);
-                    entityInRange = sortedGrids;
+                    _TempSortedGridEntities.Sort((a, b) => ((MyCubeGrid)a).BlocksCount - ((MyCubeGrid)b).BlocksCount);
+                    _TempSortedGridEntities.AddRange(_TempNonGridEntities);
+                    entityInRange = _TempSortedGridEntities;
                 }
 
                 foreach (var entity in entityInRange)
@@ -609,7 +626,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         ///
         /// </summary>
-        private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, List<IMyCubeGrid> grids, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
+        private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, HashSet<IMyCubeGrid> grids, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
         {
             if (!State.Ready) return; //Block not ready
             if (grids.Contains(cubeGrid)) return; //Allready parsed
@@ -849,8 +866,8 @@ namespace SKONanobotBuildAndRepairSystem
                 return false;
             }
 
-            // Check if session allows destructible blocks or not. If not, we cannot grind anything.
-            if ((MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode) && !MyAPIGateway.Session.SessionSettings.DestructibleBlocks)
+            // Use value cached on main thread before the scan started — avoids per-block session property access
+            if (_scanGrindBlockedByScenario)
             {
                 return false;
             }
