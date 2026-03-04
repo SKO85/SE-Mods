@@ -96,6 +96,12 @@ namespace SKONanobotBuildAndRepairSystem
         private const double EntityCacheTtlSeconds = 5.0;
         private const double EntityCachePositionTolerance = 25.0; // metres
 
+        // Written on main thread (StartAsyncUpdateSourcesAndTargets); read on async worker thread.
+        private long _ClusterKey = 0L;
+        // Main-thread only — tracks when _ClusterKey was last computed via GetGroup.
+        private TimeSpan _ClusterKeyLastRefreshTime;
+        private static readonly TimeSpan ClusterKeyRefreshInterval = TimeSpan.FromSeconds(30.0);
+
         private IMyShipWelder _Welder;
         public IMyInventory _TransportInventory;
         private NanobotSystemEffects _Effects = new NanobotSystemEffects();
@@ -185,6 +191,11 @@ namespace SKONanobotBuildAndRepairSystem
 
         public IMyShipWelder Welder
         { get { return _Welder; } }
+
+        internal bool IsCoordinator
+        {
+            get { return Utils.ScanCoordinator.IsCoordinator(System.Threading.Interlocked.Read(ref _ClusterKey), _Welder.EntityId); }
+        }
 
         private SyncBlockState _State = new SyncBlockState();
 

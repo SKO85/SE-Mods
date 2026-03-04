@@ -72,21 +72,21 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         ///
         /// </summary>
-        public void UpdateSourcesAndTargetsTimer()
+        public void UpdateSourcesAndTargetsTimer(List<NanobotSystem> systemsSnapshot)
         {
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             var updateTargets = playTime.Subtract(_LastTargetsUpdate) >= Mod.Settings.TargetsUpdateInterval;
             var updateSources = updateTargets && playTime.Subtract(_LastSourceUpdate) >= Mod.Settings.SourcesUpdateInterval;
             if (updateTargets)
             {
-                StartAsyncUpdateSourcesAndTargets(updateSources);
+                StartAsyncUpdateSourcesAndTargets(updateSources, systemsSnapshot);
             }
         }
 
         /// <summary>
         /// Parse all the connected blocks and find the possible targets and sources of components
         /// </summary>
-        private void StartAsyncUpdateSourcesAndTargets(bool updateSource)
+        private void StartAsyncUpdateSourcesAndTargets(bool updateSource, List<NanobotSystem> systemsSnapshot)
         {
             if (!_Welder.UseConveyorSystem)
             {
@@ -123,6 +123,30 @@ namespace SKONanobotBuildAndRepairSystem
                 return;
             }
             ;
+
+            // Register with scan coordinator — WorldMatrix is safe on main thread.
+            // Runs even if _AsyncUpdateSourcesAndTargetsRunning is true so all active BaRs
+            // always contribute to the coordinator's union bounding box.
+            {
+                var emitterMatrix = _Welder.WorldMatrix;
+                emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
+                var worldAABB = Settings.CorrectedAreaBoundingBox.TransformFast(emitterMatrix);
+
+                // Refresh cluster key at most once per ClusterKeyRefreshInterval to avoid
+                // a GetGroup() call every tick.
+                var now = MyAPIGateway.Session.ElapsedPlayTime;
+                if (System.Threading.Interlocked.Read(ref _ClusterKey) == 0L
+                    || now - _ClusterKeyLastRefreshTime >= ClusterKeyRefreshInterval)
+                {
+                    var computedKey = ScanCoordinator.ComputeClusterKey(_Welder.CubeGrid);
+                    System.Threading.Interlocked.Exchange(ref _ClusterKey, computedKey);
+                    _ClusterKeyLastRefreshTime = now;
+                }
+
+                ScanCoordinator.AccumulateAndElect(
+                    System.Threading.Interlocked.Read(ref _ClusterKey),
+                    _Welder.CubeGrid, worldAABB, systemsSnapshot);
+            }
 
             lock (_Welder)
             {
@@ -439,22 +463,42 @@ namespace SKONanobotBuildAndRepairSystem
 
             var now = MyAPIGateway.Session.ElapsedPlayTime;
             var bboxCenter = areaBoundingBox.Center;
-            var cacheStale = _CachedEntitiesInRange == null
-                || (now - _CachedEntitiesInRangeTime).TotalSeconds > EntityCacheTtlSeconds
-                || (bboxCenter - _CachedEntitiesInRangeBBoxCenter).LengthSquared()
-                   > EntityCachePositionTolerance * EntityCachePositionTolerance;
+            List<IMyEntity> entityInRange = null;
 
-            if (cacheStale)
+            long clusterKey = System.Threading.Interlocked.Read(ref _ClusterKey);
+            bool isCoordinator = ScanCoordinator.IsCoordinator(clusterKey, _Welder.EntityId);
+
+            if (isCoordinator)
             {
-                lock (MyAPIGateway.Entities)
-                {
-                    // Use the top-most entities now as this should be faster than getting all entities.
-                    _CachedEntitiesInRange = MyAPIGateway.Entities.GetTopMostEntitiesInBox(ref areaBoundingBox);
-                }
-                _CachedEntitiesInRangeTime = now;
-                _CachedEntitiesInRangeBBoxCenter = bboxCenter;
+                entityInRange = ScanCoordinator.CoordinatorFetchEntities(clusterKey);
+                // null = cluster not ready yet; fall through to per-BaR fallback below
             }
-            var entityInRange = _CachedEntitiesInRange;
+            else
+            {
+                entityInRange = ScanCoordinator.TryGetCachedEntities(clusterKey);
+                // null = cache miss; fall through to per-BaR fallback below
+            }
+
+            if (entityInRange == null)
+            {
+                var cacheStale = _CachedEntitiesInRange == null
+                    || (now - _CachedEntitiesInRangeTime).TotalSeconds > EntityCacheTtlSeconds
+                    || (bboxCenter - _CachedEntitiesInRangeBBoxCenter).LengthSquared()
+                       > EntityCachePositionTolerance * EntityCachePositionTolerance;
+
+                if (cacheStale)
+                {
+                    lock (MyAPIGateway.Entities)
+                    {
+                        _CachedEntitiesInRange =
+                            MyAPIGateway.Entities.GetTopMostEntitiesInBox(ref areaBoundingBox);
+                    }
+                    _CachedEntitiesInRangeTime = now;
+                    _CachedEntitiesInRangeBBoxCenter = bboxCenter;
+                }
+                entityInRange = _CachedEntitiesInRange;
+            }
+            // All code below (GrindSmallestGridFirst, foreach loop) is unchanged.
 
             if (entityInRange != null)
             {
@@ -503,6 +547,14 @@ namespace SKONanobotBuildAndRepairSystem
                                 continue;
                             }
                         }
+
+                        // Quick pre-filter: skip grids whose AABB doesn't intersect this BaR's work
+                        // area. areaBoundingBox is already computed above. Avoids full block
+                        // iteration for out-of-range grids that entered the list via the
+                        // coordinator's union bbox.
+                        var gridAABB = grid.WorldAABB;
+                        if (!areaBoundingBox.Intersects(ref gridAABB))
+                            continue;
 
                         // Scan for target blocks of grid.
                         AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, grid, grids, null, possibleWeldTargets, possibleGrindTargets);

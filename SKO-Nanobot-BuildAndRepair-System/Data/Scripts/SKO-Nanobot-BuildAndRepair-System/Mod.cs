@@ -133,6 +133,9 @@ namespace SKONanobotBuildAndRepairSystem
             // Clear the shared grid block cache.
             try { SharedGridBlockCache.Clear(); } catch { }
 
+            // Clear the scan coordinator.
+            try { ScanCoordinator.Clear(); } catch { }
+
             // Close the logging instance to release the log file.
             try { Logging.Instance.Close(); } catch { }
 
@@ -232,6 +235,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 try { BlockSystemAssigningHandler.Cleanup(); } catch { }
                                 try { DlcCheckHelper.CleanupOwnerCache(); } catch { }
                                 try { SharedGridBlockCache.CleanupExpired(); } catch { }
+                                try { ScanCoordinator.CleanupExpired(); } catch { }
                             });
                         }
 
@@ -265,9 +269,12 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastSourcesAndTargetsUpdateTimer) > SourcesAndTargetsUpdateTimerInterval)
             {
-                foreach (var buildAndRepairSystem in NanobotSystems.Values)
+                ScanCoordinator.BeginFrame();   // reset union-bbox state before iterating BaRs
+
+                var snapshot = new List<NanobotSystem>(NanobotSystems.Values);
+                foreach (var buildAndRepairSystem in snapshot)
                 {
-                    buildAndRepairSystem.UpdateSourcesAndTargetsTimer();
+                    buildAndRepairSystem.UpdateSourcesAndTargetsTimer(snapshot);
                 }
                 _LastSourcesAndTargetsUpdateTimer = MyAPIGateway.Session.ElapsedPlayTime;
             }

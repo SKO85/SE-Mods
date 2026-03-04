@@ -90,8 +90,10 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 {
                     TimeSpan removedTs;
                     List<IMySlimBlock> removedBlocks;
+                    object removedLock;
                     _cacheTimestamps.TryRemove(key, out removedTs);
                     _cacheBlocks.TryRemove(key, out removedBlocks);
+                    _locks.TryRemove(key, out removedLock);
                 }
             }
         }

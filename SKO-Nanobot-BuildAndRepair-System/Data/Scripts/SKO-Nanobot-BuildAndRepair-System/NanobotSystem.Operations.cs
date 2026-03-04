@@ -161,7 +161,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (!isFullInventoryAndPicking && ready)
                 {
-                    StartAsyncUpdateSourcesAndTargets(false); //Scan immediately once for new targets
+                    StartAsyncUpdateSourcesAndTargets(false, new List<NanobotSystem>(Mod.NanobotSystems.Values)); //Scan immediately once for new targets
                 }
             }
 
@@ -335,6 +335,10 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!PowerHelper.HasRequiredElectricPower(this)) return; //No power -> nothing to do
 
+            // Build once per call — O(N) — so the per-block check is O(1) instead of O(N).
+            var activeGridSystems = Mod.Settings.DisableLimitSystemsPerTargetGrid
+                ? null : BuildActiveGridMap();
+
             lock (State.PossibleGrindTargets)
             {
                 //foreach (var targetData in State.PossibleGrindTargets)
@@ -350,10 +354,12 @@ namespace SKONanobotBuildAndRepairSystem
                         continue;
                     }
 
-                    if (!Mod.Settings.DisableLimitSystemsPerTargetGrid &&
-                        CountSystemsOnGrid(targetData.Block.CubeGrid.EntityId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+                    if (activeGridSystems != null)
                     {
-                        continue;
+                        int activeCount;
+                        activeGridSystems.TryGetValue(targetData.Block.CubeGrid.EntityId, out activeCount);
+                        if (activeCount >= Mod.Settings.MaxSystemsPerTargetGrid)
+                            continue;
                     }
 
                     if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && Settings.CurrentPickedGrindingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
@@ -402,25 +408,30 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Returns the number of OTHER NanobotSystem instances whose current welding or grinding
-        /// target belongs to the given grid entity. Used to enforce MaxSystemsPerTargetGrid.
+        /// Builds a map of gridEntityId → count of OTHER NanobotSystem instances currently
+        /// welding or grinding a block on that grid. Called once per grind/weld pass so the
+        /// per-block limit check is a O(1) dictionary lookup instead of an O(N) scan.
         /// </summary>
-        private int CountSystemsOnGrid(long gridEntityId)
+        private Dictionary<long, int> BuildActiveGridMap()
         {
-            int count = 0;
-            lock (Mod.NanobotSystems)
+            var map = new Dictionary<long, int>();
+            foreach (var system in Mod.NanobotSystems.Values)
             {
-                foreach (var system in Mod.NanobotSystems.Values)
+                if (system == this) continue;
+                long? weldGridId  = system.State.CurrentWeldingBlock?.CubeGrid?.EntityId;
+                long? grindGridId = system.State.CurrentGrindingBlock?.CubeGrid?.EntityId;
+                if (weldGridId.HasValue)
                 {
-                    if (system == this) continue;
-                    if (system.State.CurrentWeldingBlock?.CubeGrid?.EntityId == gridEntityId ||
-                        system.State.CurrentGrindingBlock?.CubeGrid?.EntityId == gridEntityId)
-                    {
-                        count++;
-                    }
+                    int c;
+                    map[weldGridId.Value] = map.TryGetValue(weldGridId.Value, out c) ? c + 1 : 1;
+                }
+                if (grindGridId.HasValue && grindGridId != weldGridId)
+                {
+                    int c;
+                    map[grindGridId.Value] = map.TryGetValue(grindGridId.Value, out c) ? c + 1 : 1;
                 }
             }
-            return count;
+            return map;
         }
 
         /// <summary>
@@ -435,6 +446,10 @@ namespace SKONanobotBuildAndRepairSystem
 
             var hasRequiredPower = PowerHelper.HasRequiredElectricPower(this);
             if (!hasRequiredPower) return; //No power -> nothing to do
+
+            // Build once per call — O(N) — so the per-block check is O(1) instead of O(N).
+            var activeGridSystems = Mod.Settings.DisableLimitSystemsPerTargetGrid
+                ? null : BuildActiveGridMap();
 
             lock (State.PossibleWeldTargets)
             {
@@ -458,10 +473,12 @@ namespace SKONanobotBuildAndRepairSystem
                             continue;
                         }
 
-                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid &&
-                            CountSystemsOnGrid(targetData.Block.CubeGrid.EntityId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+                        if (activeGridSystems != null)
                         {
-                            continue;
+                            int activeCount;
+                            activeGridSystems.TryGetValue(targetData.Block.CubeGrid.EntityId, out activeCount);
+                            if (activeCount >= Mod.Settings.MaxSystemsPerTargetGrid)
+                                continue;
                         }
 
                         if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers && Settings.CurrentPickedWeldingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
