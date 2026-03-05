@@ -9,7 +9,7 @@ nav_order: 1
 # Release Notes – v2.5.0
 
 - Release date: 2 March 2026
-- Notes: N/A
+- Code changes: 31 `.cs` files changed — 4,150 insertions, 3,170 deletions (~7,320 lines of code touched)
 
 ## New Features
 
