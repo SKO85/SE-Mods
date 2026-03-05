@@ -347,46 +347,27 @@ namespace SKONanobotBuildAndRepairSystem
                         var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
                         _TempPossibleGrindTargets.Sort((a, b) =>
                         {
-                            if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
+                            // Autogrind targets always come before non-autogrind targets
+                            var autoA = (a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0;
+                            var autoB = (b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0;
+                            if (autoA != autoB) return autoA ? -1 : 1;
+
+                            // Within the same group (both auto or both non-auto), sort by priority then distance
+                            if (grindUsePriority)
                             {
-                                if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0)
-                                {
-                                    if (grindUsePriority)
-                                    {
-                                        var priorityA = BlockGrindPriority.GetPriority(a.Block);
-                                        var priorityB = BlockGrindPriority.GetPriority(b.Block);
-                                        if (priorityA != priorityB)
-                                            return priorityA - priorityB;
-                                    }
-
-                                    if (grindSmallestGridFirst)
-                                    {
-                                        var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                                        return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                    }
-                                    if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                    return Utils.Utils.CompareDistance(b.Distance, a.Distance);
-                                }
-
-                                if (grindUsePriority)
-                                {
-                                    var priorityA = BlockGrindPriority.GetPriority(a.Block);
-                                    var priorityB = BlockGrindPriority.GetPriority(b.Block);
-                                    if (priorityA != priorityB)
-                                        return priorityA - priorityB;
-                                }
-
-                                if (grindSmallestGridFirst)
-                                {
-                                    var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                                    return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                }
-                                if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                return Utils.Utils.CompareDistance(b.Distance, a.Distance);
+                                var priorityA = BlockGrindPriority.GetPriority(a.Block);
+                                var priorityB = BlockGrindPriority.GetPriority(b.Block);
+                                if (priorityA != priorityB)
+                                    return priorityA - priorityB;
                             }
-                            else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
-                            else if ((b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return 1;
-                            return 0;
+
+                            if (grindSmallestGridFirst)
+                            {
+                                var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
+                                return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                            }
+                            if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                            return Utils.Utils.CompareDistance(b.Distance, a.Distance);
                         });
                     }
                     catch (Exception ex)

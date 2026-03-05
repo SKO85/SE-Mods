@@ -60,6 +60,10 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         private static readonly ConcurrentDictionary<long, ClusterEntry> _clusters
             = new ConcurrentDictionary<long, ClusterEntry>();
 
+        // Dedicated lock for entity queries — avoids locking on game-engine objects
+        // which could deadlock with internal SE synchronization.
+        private static readonly object _entityQueryLock = new object();
+
         private const double EntityCacheTtlSeconds = 5.0;
         private static readonly TimeSpan ElectionInterval = TimeSpan.FromSeconds(60.0);
 
@@ -301,7 +305,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
                 var bbox = entry.UnionBBox;
                 List<IMyEntity> fetched;
-                lock (MyAPIGateway.Entities)
+                lock (_entityQueryLock)
                 {
                     fetched = MyAPIGateway.Entities.GetTopMostEntitiesInBox(ref bbox);
                 }
