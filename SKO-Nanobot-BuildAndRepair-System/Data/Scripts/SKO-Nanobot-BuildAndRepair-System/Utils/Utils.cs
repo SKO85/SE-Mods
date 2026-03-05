@@ -32,9 +32,9 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             if (!hasReachedIntegrity) return true;
 
             // If deformation detected via MaxDeformation, just fix the bones and do not tell the BnR system to weld anything.
-            if (target.MaxDeformation > MinDeformation)
+            if (target.MaxDeformation > 0f)
             {
-                // Keep trackign the minimal deformation.
+                // Track the minimal observed deformation threshold.
                 if (target.MaxDeformation < MinDeformation)
                 {
                     MinDeformation = target.MaxDeformation;

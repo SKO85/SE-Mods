@@ -57,7 +57,7 @@ namespace SKONanobotBuildAndRepairSystem
         private const int TransmitStateMaxIntervalSeconds = 2;
         private const int TransmitSettingsIntervalSeconds = 1;
 
-        public static readonly int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
+        public const int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
 
         public static readonly MyDefinitionId ElectricityId = new MyDefinitionId(typeof(VRage.Game.ObjectBuilders.Definitions.MyObjectBuilder_GasProperties), "Electricity");
         internal bool CreativeModeActive = false;
@@ -73,6 +73,7 @@ namespace SKONanobotBuildAndRepairSystem
         private List<TargetBlockData> _TempPossibleGrindTargets = new List<TargetBlockData>();
         private List<TargetEntityData> _TempPossibleFloatingTargets = new List<TargetEntityData>();
         private List<IMyInventory> _TempPossibleSources = new List<IMyInventory>();
+        private HashSet<IMyInventory> _TempPossibleSourcesSet = new HashSet<IMyInventory>();
         private HashSet<IMyInventory> _TempIgnore4Ingot = new HashSet<IMyInventory>();
         private HashSet<IMyInventory> _TempIgnore4Items = new HashSet<IMyInventory>();
         private HashSet<IMyInventory> _TempIgnore4Components = new HashSet<IMyInventory>();
@@ -80,10 +81,23 @@ namespace SKONanobotBuildAndRepairSystem
         // Reused in PullComponents to avoid per-call heap allocation
         private List<MyInventoryItem> _TempPullComponentItems = new List<MyInventoryItem>();
 
-        // Per-system sorted block list cache — keyed by grid entity ID.
-        // Only ever accessed from the single async worker task; plain Dictionary is sufficient.
-        private Dictionary<long, TimeSpan> CachedBlocksTime = new Dictionary<long, TimeSpan>();
-        private Dictionary<long, List<IMySlimBlock>> CachedBlocks = new Dictionary<long, List<IMySlimBlock>>();
+        // Reused in AsyncUpdateSourcesAndTargets to avoid per-scan heap allocations
+        private HashSet<IMyCubeGrid> _TempGrids = new HashSet<IMyCubeGrid>();
+        private Dictionary<IMyInventory, double> _TempSourceDistances = new Dictionary<IMyInventory, double>();
+        // Reused in AsyncAddBlocksOfGrid (distance-pre-sort for NearFirst/FarFirst) — safe to share
+        // because the distance map is only read during sort setup, not during the foreach iteration.
+        private readonly Dictionary<IMySlimBlock, double> _TempBlockDistances = new Dictionary<IMySlimBlock, double>();
+
+        // Reused in BuildActiveGridMap to avoid per-call heap allocation
+        private readonly Dictionary<long, int> _ActiveGridMap = new Dictionary<long, int>();
+
+        // Static type-ID strings for item classification in ServerTryPushInventory
+        private static readonly string OreTypeId = typeof(MyObjectBuilder_Ore).Name;
+        private static readonly string IngotTypeId = typeof(MyObjectBuilder_Ingot).Name;
+        private static readonly string ComponentTypeId = typeof(MyObjectBuilder_Component).Name;
+
+        // Dedicated lock for entity query in AsyncAddBlocksOfBox — avoids locking on a game object
+        private static readonly object _entityQueryLock = new object();
 
         // Reused in AsyncAddBlocksOfBox (GrindSmallestGridFirst) to avoid per-scan allocations
         private List<IMyEntity> _TempSortedGridEntities = new List<IMyEntity>();
@@ -294,9 +308,6 @@ namespace SKONanobotBuildAndRepairSystem
             Mod.InitControls();
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public override void Close()
         {
             if (_IsInit)
@@ -332,18 +343,14 @@ namespace SKONanobotBuildAndRepairSystem
                 _TempIgnore4Items?.Clear();
                 _TempIgnore4Components?.Clear();
 
-                CachedBlocksTime.Clear();
-                CachedBlocks.Clear();
                 _CachedEntitiesInRange = null;
                 _FriendlyNanobotSystems?.Clear();
 
                 _DelayWatch?.Stop();
 
                 // Remove system from list.
-                lock (Mod.NanobotSystems)
-                {
-                    Mod.NanobotSystems.Remove(Entity.EntityId);
-                }
+                NanobotSystem removed;
+                Mod.NanobotSystems.TryRemove(Entity.EntityId, out removed);
 
                 // Save settings.
                 Settings.Save(Entity, Mod.ModGuid);

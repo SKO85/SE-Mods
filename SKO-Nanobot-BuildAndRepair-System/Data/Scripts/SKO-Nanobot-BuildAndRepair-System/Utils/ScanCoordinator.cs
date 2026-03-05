@@ -22,9 +22,10 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             // Interlocked access; long.MaxValue means no coordinator elected yet.
             internal long CoordinatorEntityId = long.MaxValue;
 
-            // Written on main thread only (BeginFrame / AccumulateAndElect).
+            // Written on main thread only (BeginFrame / AccumulateAndElect), under WriteLock.
+            // volatile so the async reader's flag test in CoordinatorFetchEntities is always fresh.
             internal BoundingBoxD UnionBBox;
-            internal bool UnionBBoxValid;
+            internal volatile bool UnionBBoxValid;
 
             // Coordinator writes inside WriteLock; non-coordinators read volatile reference.
             internal volatile List<IMyEntity> CachedEntities;
@@ -60,8 +61,11 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             foreach (var kvp in _clusters)
             {
                 var e = kvp.Value;
-                e.UnionBBoxValid = false;
-                e.UnionBBox = BoundingBoxD.CreateInvalid();
+                lock (e.WriteLock)
+                {
+                    e.UnionBBoxValid = false;
+                    e.UnionBBox = BoundingBoxD.CreateInvalid();
+                }
             }
         }
 
@@ -77,9 +81,12 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         {
             var entry = _clusters.GetOrAdd(clusterKey, _ => new ClusterEntry());
 
-            // Grow the union bounding box.
-            entry.UnionBBox.Include(worldAABB);
-            entry.UnionBBoxValid = true;
+            // Grow the union bounding box (under WriteLock to synchronise with the async CoordinatorFetchEntities reader).
+            lock (entry.WriteLock)
+            {
+                entry.UnionBBox.Include(worldAABB);
+                entry.UnionBBoxValid = true;
+            }
 
             // Elect when no coordinator is registered or when the interval has expired.
             var now = MyAPIGateway.Session.ElapsedPlayTime;

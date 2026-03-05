@@ -8,6 +8,7 @@ namespace SKONanobotBuildAndRepairSystem
     using SKONanobotBuildAndRepairSystem.Models;
     using SKONanobotBuildAndRepairSystem.Utils;
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Text;
     using VRage.Game.Components;
@@ -20,7 +21,7 @@ namespace SKONanobotBuildAndRepairSystem
         public static bool DisableLocalization = false;
         public static bool SettingsValid = false;
         public static SyncModSettings Settings = new SyncModSettings();
-        public static readonly Dictionary<long, NanobotSystem> NanobotSystems = new Dictionary<long, NanobotSystem>();
+        public static readonly ConcurrentDictionary<long, NanobotSystem> NanobotSystems = new ConcurrentDictionary<long, NanobotSystem>();
         public static ShieldApi Shield; // Centralized DefenseShields API instance
 
         private bool _initialized = false;
@@ -34,8 +35,9 @@ namespace SKONanobotBuildAndRepairSystem
         public const int MaxBackgroundTasks_Default = 4;
         public const int MaxBackgroundTasks_Max = 10;
         public const int MaxBackgroundTasks_Min = 1;
-        public static Queue<Action> AsynActions = new Queue<Action>();
+        public static Queue<Action> AsyncActions = new Queue<Action>();
         private static int ActualBackgroundTaskCount = 0;
+        private static volatile bool _unloading = false;
 
         public void Init()
         {
@@ -100,16 +102,26 @@ namespace SKONanobotBuildAndRepairSystem
 
         protected override void UnloadData()
         {
-            // Wait until tasks finish.
-            while (true)
+            // Signal background workers to stop accepting new work.
+            _unloading = true;
+
+            // Wait until running tasks finish, but no longer than 2 seconds.
+            var deadline = System.DateTime.UtcNow.AddSeconds(2);
+            while (System.DateTime.UtcNow < deadline)
             {
                 int actualBackgroundTaskCount;
-                lock (AsynActions)
+                lock (AsyncActions)
                 {
                     actualBackgroundTaskCount = ActualBackgroundTaskCount;
                 }
                 if (actualBackgroundTaskCount <= 0) break;
+                // Yield so background workers can re-acquire the AsyncActions lock
+                // to decrement ActualBackgroundTaskCount — without this the spin-wait
+                // starves them and the 2-second timeout always fires.
+                MyAPIGateway.Parallel.Sleep(1);
             }
+
+            _unloading = false;
 
             // Unregister Shield API message handler
             try { Shield?.Unload(); } catch { }
@@ -150,41 +162,13 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (MyAPIGateway.Session.IsServer)
             {
-                lock (NanobotSystems)
+                foreach (var entry in NanobotSystems)
                 {
-                    foreach (var entry in NanobotSystems)
-                    {
-                        try { entry.Value.Settings.Save(entry.Value.Entity, ModGuid); } catch { }
-                    }
+                    try { entry.Value.Settings.Save(entry.Value.Entity, ModGuid); } catch { }
                 }
             }
             base.SaveData();
         }
-
-        //public override void LoadData()
-        //{
-        //    try
-        //    {
-        //        var defId = new MyDefinitionId(typeof(MyObjectBuilder_ShipWelder), MyStringHash.Get("SELtdLargeNanobotBuildAndRepairSystem"));
-        //        var def = MyDefinitionManager.Static.GetCubeBlockDefinition(defId) as MyShipWelderDefinition;
-        //        var builderDef = MyDefinitionManager.Static.GetObjectBuilder(def) as MyObjectBuilder_ShipWelderDefinition;
-
-        //        builderDef.PCU = 1;
-        //        builderDef.Components = new List<MyObjectBuilder_CubeBlockDefinition.CubeBlockComponent>()
-        //        {
-        //            new MyObjectBuilder_CubeBlockDefinition.CubeBlockComponent()
-        //            {
-        //                Subtype = "SteelPlate",
-        //                Count = 1
-        //            }
-        //        }.ToArray();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //    }
-
-        //    base.LoadData();
-        //}
 
         public override void UpdateBeforeSimulation()
         {
@@ -307,15 +291,12 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         /// <param name="newAction"></param>
         public static void AddAsyncAction(Action newAction)
         {
-            lock (AsynActions)
+            lock (AsyncActions)
             {
-                AsynActions.Enqueue(newAction);
+                AsyncActions.Enqueue(newAction);
                 if (ActualBackgroundTaskCount < Settings.MaxBackgroundTasks)
                 {
                     ActualBackgroundTaskCount++;
@@ -325,12 +306,13 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             while (true)
                             {
+                                if (_unloading) break;
                                 Action pendingAction = null;
-                                lock (AsynActions)
+                                lock (AsyncActions)
                                 {
-                                    if (AsynActions.Count > 0)
+                                    if (AsyncActions.Count > 0)
                                     {
-                                        pendingAction = AsynActions.Dequeue();
+                                        pendingAction = AsyncActions.Dequeue();
                                     }
                                     if (pendingAction == null)
                                     {
@@ -344,14 +326,17 @@ namespace SKONanobotBuildAndRepairSystem
                                     {
                                         pendingAction();
                                     }
-                                    catch { }
-                                    ;
+                                    catch (Exception ex)
+                                    {
+                                        Logging.Instance.Error("BuildAndRepairSystemMod: AsyncAction exception: {0}", ex);
+                                    }
                                 }
                             }
                         }
-                        catch
+                        catch (Exception ex)
                         {
-                            lock (AsynActions)
+                            Logging.Instance.Error("BuildAndRepairSystemMod: AsyncWorker exception: {0}", ex);
+                            lock (AsyncActions)
                             {
                                 ActualBackgroundTaskCount--;
                             }

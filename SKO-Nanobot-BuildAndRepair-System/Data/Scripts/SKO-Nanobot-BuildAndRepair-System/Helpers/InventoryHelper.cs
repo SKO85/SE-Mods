@@ -15,7 +15,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             concurrencyLevel: 4,
             capacity: 1024);
 
-        public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources)
+        public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources, HashSet<IMyInventory> seenInventories = null)
         {
             if (terminalBlock == null || welder == null || possibleSources == null) return false;
             if (terminalBlock.EntityId == welder.EntityId) return false;
@@ -46,10 +46,17 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             {
                 var inventory = terminalBlock.GetInventory(i);
 
-                if (!possibleSources.Contains(inventory) && inventory.IsConnectedTo(welderInventory))
+                // Use the HashSet companion for O(1) duplicate check when available;
+                // fall back to the list's O(N) Contains when called without a seenInventories set.
+                var alreadySeen = seenInventories != null
+                    ? seenInventories.Contains(inventory)
+                    : possibleSources.Contains(inventory);
+
+                if (!alreadySeen && inventory.IsConnectedTo(welderInventory))
                 {
                     isConnected = true;
                     possibleSources.Add(inventory);
+                    if (seenInventories != null) seenInventories.Add(inventory);
                     ConnectionCache.Set(key, isConnected);
                 }
             }

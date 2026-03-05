@@ -13,9 +13,6 @@ namespace SKONanobotBuildAndRepairSystem
 {
     partial class NanobotSystem
     {
-        /// <summary>
-        ///
-        /// </summary>
         private void Init()
         {
             if (_IsInit) return;
@@ -26,13 +23,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // Register this block to the nanobot systems.
-            lock (Mod.NanobotSystems)
-            {
-                if (!Mod.NanobotSystems.ContainsKey(Entity.EntityId))
-                {
-                    Mod.NanobotSystems.Add(Entity.EntityId, this);
-                }
-            }
+            Mod.NanobotSystems.TryAdd(Entity.EntityId, this);
 
             // Initialize controls.
             Mod.InitControls();

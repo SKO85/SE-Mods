@@ -41,10 +41,19 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         /// </summary>
         public static bool PushComponents(this IMyInventory srcInventory, List<IMyInventory> destinations, ExcludeInventory exclude)
         {
+            var srcItems = new List<MyInventoryItem>();
+            return PushComponents(srcInventory, destinations, exclude, srcItems);
+        }
+
+        /// <summary>
+        /// Push all components into destinations, using a caller-supplied list buffer to avoid heap allocation.
+        /// </summary>
+        public static bool PushComponents(this IMyInventory srcInventory, List<IMyInventory> destinations, ExcludeInventory exclude, List<MyInventoryItem> srcItems)
+        {
             var moved = false;
             lock (destinations)
             {
-                var srcItems = new List<MyInventoryItem>();
+                srcItems.Clear();
                 srcInventory.GetItems(srcItems);
                 for (int srcItemIndex = srcItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                 {

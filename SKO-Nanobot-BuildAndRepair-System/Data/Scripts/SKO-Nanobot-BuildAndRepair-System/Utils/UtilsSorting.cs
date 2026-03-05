@@ -35,6 +35,16 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
                 var welderCenter = system.Welder.WorldAABB.Center;
 
+                // Pre-compute distances once (O(N)) so the sort comparator is O(1) per comparison
+                // instead of calling GetWorldBoundingBox inside the comparator (O(N log N) API calls).
+                var distCache = new Dictionary<IMySlimBlock, double>(list.Count);
+                foreach (var blk in list)
+                {
+                    BoundingBoxD bbox;
+                    blk.GetWorldBoundingBox(out bbox, false);
+                    distCache[blk] = (welderCenter - bbox.Center).Length();
+                }
+
                 if (isGrinding)
                 {
                     bool grindSmallestFirst = (system.Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
@@ -51,13 +61,9 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                                 return priorityA - priorityB;
                         }
 
-                        BoundingBoxD bboxA;
-                        a.GetWorldBoundingBox(out bboxA, false);
-                        var distA = (welderCenter - bboxA.Center).Length();
-
-                        BoundingBoxD bboxB;
-                        b.GetWorldBoundingBox(out bboxB, false);
-                        var distB = (welderCenter - bboxB.Center).Length();
+                        double distA, distB;
+                        distCache.TryGetValue(a, out distA);
+                        distCache.TryGetValue(b, out distB);
 
                         if (grindSmallestFirst)
                         {
@@ -78,13 +84,9 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                     if (priorityA != priorityB)
                         return priorityA - priorityB;
 
-                    BoundingBoxD bboxA;
-                    a.GetWorldBoundingBox(out bboxA, false);
-                    var distA = (welderCenter - bboxA.Center).Length();
-
-                    BoundingBoxD bboxB;
-                    b.GetWorldBoundingBox(out bboxB, false);
-                    var distB = (welderCenter - bboxB.Center).Length();
+                    double distA, distB;
+                    distCache.TryGetValue(a, out distA);
+                    distCache.TryGetValue(b, out distB);
 
                     var distCmp = Utils.CompareDistance(distA, distB);
                     if (distCmp != 0) return distCmp;

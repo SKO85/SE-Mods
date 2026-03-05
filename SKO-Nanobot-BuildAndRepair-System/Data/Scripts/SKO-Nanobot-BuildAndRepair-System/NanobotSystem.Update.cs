@@ -20,9 +20,6 @@ namespace SKONanobotBuildAndRepairSystem
         // Cached reference to the "helpOthers" action — avoids a string lookup on every terminal refresh
         private ITerminalAction _helpOthersAction;
 
-        /// <summary>
-        ///
-        /// </summary>
         public override void UpdateBeforeSimulation()
         {
             try
@@ -42,26 +39,6 @@ namespace SKONanobotBuildAndRepairSystem
                         MySimpleObjectDraw.DrawTransparentBox(ref emitterMatrix, ref areaBoundingBox, ref color, MySimpleObjectRasterizer.Solid, 1, 0.04f, RangeGridResourceId, null, false);
                     }
 
-                    //Debug draw target boxes
-                    //lock (_PossibleWeldTargets)
-                    //{
-                    //   var colorWelder = _Welder.SlimBlock.GetColorMask().HSVtoColor();
-                    //   var color = Color.FromNonPremultiplied(colorWelder.R, colorWelder.G, colorWelder.B, 255);
-
-                    //   foreach (var targetData in _PossibleWeldTargets)
-                    //   {
-                    //      BoundingBoxD box;
-                    //      Vector3 halfExtents;
-                    //      targetData.Block.ComputeScaledHalfExtents(out halfExtents);
-                    //      halfExtents *= 1.2f;
-                    //      var matrix = targetData.Block.CubeGrid.WorldMatrix;
-                    //      matrix.Translation = targetData.Block.CubeGrid.GridIntegerToWorld(targetData.Block.Position);
-
-                    //      box = new BoundingBoxD(-(halfExtents), (halfExtents));
-                    //      MySimpleObjectDraw.DrawTransparentBox(ref matrix, ref box, ref color, MySimpleObjectRasterizer.Solid, 1, 0.04f, "HoneyComb", null, false);
-                    //   }
-                    //}
-
                     _UpdateEffectsInterval = (++_UpdateEffectsInterval) % 2;
                     if (_UpdateEffectsInterval == 0) _Effects.UpdateEffects(this);
                 }
@@ -75,27 +52,18 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public override void UpdateBeforeSimulation10()
         {
             base.UpdateBeforeSimulation10();
             UpdateBeforeSimulation10_100(true);
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public override void UpdateBeforeSimulation100()
         {
             base.UpdateBeforeSimulation100();
             UpdateBeforeSimulation10_100(false);
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public override void UpdatingStopped()
         {
             if (_IsInit)

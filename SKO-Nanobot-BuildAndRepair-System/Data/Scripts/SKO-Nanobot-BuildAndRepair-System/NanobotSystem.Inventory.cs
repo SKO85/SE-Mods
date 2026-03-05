@@ -4,6 +4,7 @@ using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using VRage;
 using VRage.Game;
@@ -25,7 +26,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 var playTime = MyAPIGateway.Session.ElapsedPlayTime;
 
-                if (IsTransportRunnning(playTime))
+                if (IsTransportRunning(playTime))
                     return true;
 
                 var remainingVolume = _MaxTransportVolume;
@@ -99,9 +100,6 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         /// <param name="targetData"></param>
         /// <returns></returns>
         private bool ServerFindMissingComponents(TargetBlockData targetData, ref float remainingVolume)
@@ -213,10 +211,16 @@ namespace SKONanobotBuildAndRepairSystem
                                     // No destination has room — skip the expensive push and back off
                                     _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
                                 }
-                                else if (!welderInventory.PushComponents(_PossiblePushTargets, null))
+                                else
                                 {
-                                    // Push attempted but nothing moved — back off
-                                    _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
+                                    // Snapshot _PossiblePushTargets under lock to avoid a race with the async scan thread.
+                                    List<IMyInventory> pushTargetsSnapshot;
+                                    lock (_PossibleSources) { pushTargetsSnapshot = new List<IMyInventory>(_PossiblePushTargets); }
+                                    if (!welderInventory.PushComponents(pushTargetsSnapshot, null))
+                                    {
+                                        // Push attempted but nothing moved — back off
+                                        _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
+                                    }
                                 }
                             }
                         }
@@ -256,9 +260,6 @@ namespace SKONanobotBuildAndRepairSystem
             return empty;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         /// <param name="block"></param>
         /// <returns></returns>
         private bool EmptyBlockInventories(IMyEntity entity, IMyInventory dstInventory, out bool isEmpty)
@@ -308,9 +309,6 @@ namespace SKONanobotBuildAndRepairSystem
             return running;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         private bool EmptyFloatingObject(MyFloatingObject floating, IMyInventory dstInventory, out bool isEmpty)
         {
             var running = false;
@@ -347,9 +345,6 @@ namespace SKONanobotBuildAndRepairSystem
             return running;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         /// <param name="componentId"></param>
         /// <param name="neededAmount"></param>
         private void AddToMissingComponents(MyDefinitionId componentId, int neededAmount)

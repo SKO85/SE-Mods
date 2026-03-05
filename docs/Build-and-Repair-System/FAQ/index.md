@@ -197,10 +197,19 @@ Set <code>DisableParticleEffects</code> to <code>true</code> in <code>ModSetting
 <div>
 <p>Use the following settings in <code>ModSettings.xml</code>:</p>
 <ul>
-  <li><code>MaxSystemsPerTargetGrid</code> — the maximum number of systems allowed to work on the same target grid simultaneously (default: <code>10</code>).</li>
+  <li><code>MaxSystemsPerTargetGrid</code> — the maximum number of systems allowed to work on the same target grid simultaneously. Defaults to <code>20</code> in local and listen-server games and <code>10</code> on dedicated servers. Setting this in the config file overrides whichever default applies.</li>
   <li><code>DisableLimitSystemsPerTargetGrid</code> — set to <code>true</code> to remove the limit entirely.</li>
 </ul>
 <p>This prevents many systems piling onto a single grid while others nearby are ignored.</p>
+</div>
+</details>
+
+<details>
+<summary>My Build and Repair block turned itself off. Why?</summary>
+<div>
+<p>The block will automatically disable itself if its inventory stays full for too many consecutive push cycles with no active welding. This is a safety mechanism to prevent a block with a backed-up conveyor network from endlessly attempting futile push operations.</p>
+<p>To recover: clear space in a connected cargo container, or manually pull items out of the block's inventory, then re-enable the block from the terminal.</p>
+<p>The threshold is controlled by the <code>MaxInventoryFullPushAttempts</code> setting in <code>ModSettings.xml</code> (default: <code>100</code> cycles of 5 seconds each, roughly 8 minutes). Set it to <code>0</code> to disable this behaviour entirely.</p>
 </div>
 </details>
 
@@ -294,7 +303,7 @@ Open the block's terminal and click <strong>Reset All Settings</strong>. This re
 <details>
 <summary>Where can I get help or ask questions?</summary>
 <div>
-<p>Join the Discord server and ask in the <strong>#help</strong> channel:
+<p>Join the Discord server and ask in the <strong>#help-topics</strong> channel:
 <a href="https://discord.gg/5XkQW5tdQM">https://discord.gg/5XkQW5tdQM</a></p>
 <p>You can also open an issue on GitHub if you believe you have found a bug:
 <a href="https://github.com/SKO85/SE-Mods/issues">https://github.com/SKO85/SE-Mods/issues</a></p>

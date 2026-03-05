@@ -28,6 +28,7 @@ The mod can be configured through a `ModSettings.xml` file. All settings are opt
    <img width="611" height="70" alt="Chat confirmation message" src="https://github.com/user-attachments/assets/b433d5a6-2311-49d5-a679-0d1634574ce5" />
 
 4. The file is created at one of these paths depending on which mod version you use:
+
    > `C:\Users\[USERNAME]\AppData\Roaming\SpaceEngineers\Saves\[######]\MyWorldName\Storage\SKO-Nanobot-BuildAndRepair-System_SKO-Nanobot-BuildAndRepair-System\ModSettings.xml`
    >
    > `C:\Users\[USERNAME]\AppData\Roaming\SpaceEngineers\Saves\[######]\MyWorldName\Storage\SKO-Nanobot-BuildAndRepair-System-Original_SKO-Nanobot-BuildAndRepair-System\ModSettings.xml`
@@ -38,10 +39,13 @@ The mod can be configured through a `ModSettings.xml` file. All settings are opt
 
 ### Dedicated Server (Torch)
 
-Place the `ModSettings.xml` file at:
-```plaintext
-[TorchPath]\Instance\Storage\<Nanobot-Mod-Folder>\ModSettings.xml
-```
+Place the `ModSettings.xml` file in the storage folder that matches the mod version you have installed:
+
+| Version                    | Path                                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| Nerfed Version             | `[TorchPath]\Instance\Storage\2111073562.sbm_SKO-Nanobot-BuildAndRepair-System\ModSettings.xml` |
+| Original Resources Version | `[TorchPath]\Instance\Storage\3099489876.sbm_SKO-Nanobot-BuildAndRepair-System\ModSettings.xml` |
+| Testing Version            | `[TorchPath]\Instance\Storage\3461889745.sbm_SKO-Nanobot-BuildAndRepair-System\ModSettings.xml` |
 
 You can generate a base file from a local game using the command above, then copy and edit it for the server.
 
@@ -51,10 +55,10 @@ You can generate a base file from a local game using the command above, then cop
 
 ## Settings Reference
 
-| Section | Description |
-| --- | --- |
-| [General Settings](general-settings) | Range, power, background tasks, behaviour, system limits, sound and visuals |
-| [Welder Settings](welder-settings) | Power, speed multipliers, work modes, search modes, locks, push/collect, grind janitor, colors, effects |
+| Section                              | Description                                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| [General Settings](general-settings) | Range, power, background tasks, behaviour, system limits, sound and visuals                             |
+| [Welder Settings](welder-settings)   | Power, speed multipliers, work modes, search modes, locks, push/collect, grind janitor, colors, effects |
 
 ---
 

@@ -57,9 +57,6 @@ namespace SKONanobotBuildAndRepairSystem
             return changed;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void UpdateSourcesAndTargetsTimer(List<NanobotSystem> systemsSnapshot)
         {
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
@@ -110,7 +107,6 @@ namespace SKONanobotBuildAndRepairSystem
 
                 return;
             }
-            ;
 
             // Register with scan coordinator — WorldMatrix is safe on main thread.
             // The cluster key is always computed (needed for push-coalescing), but only
@@ -156,9 +152,6 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void AsyncUpdateSourcesAndTargets(bool updateSource)
         {
             try
@@ -176,11 +169,12 @@ namespace SKONanobotBuildAndRepairSystem
                     pos = 1;
 
                     // HashSet gives O(1) Contains/Add vs O(N) for List — avoids O(N²) in deep sub-grid trees
-                    var grids = new HashSet<IMyCubeGrid>();
+                    _TempGrids.Clear();
                     _TempPossibleWeldTargets.Clear();
                     _TempPossibleGrindTargets.Clear();
                     _TempPossibleFloatingTargets.Clear();
                     _TempPossibleSources.Clear();
+                    _TempPossibleSourcesSet.Clear();
                     _TempPossiblePushTargets.Clear();
                     _TempIgnore4Ingot.Clear();
                     _TempIgnore4Components.Clear();
@@ -192,7 +186,7 @@ namespace SKONanobotBuildAndRepairSystem
                     emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
                     var areaOrientedBox = new MyOrientedBoundingBoxD(Settings.CorrectedAreaBoundingBox, emitterMatrix);
 
-                    AsyncAddBlocksOfGrid(ref areaOrientedBox, ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0), ref ignoreColor, ((Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0), ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, _Welder.CubeGrid, grids, updateSource ? _TempPossibleSources : null, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null);
+                    AsyncAddBlocksOfGrid(ref areaOrientedBox, ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0), ref ignoreColor, ((Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0), ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, _Welder.CubeGrid, _TempGrids, updateSource ? _TempPossibleSources : null, updateSource ? _TempPossibleSourcesSet : null, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null);
 
                     switch (Settings.SearchMode)
                     {
@@ -200,7 +194,7 @@ namespace SKONanobotBuildAndRepairSystem
                             break;
 
                         case SearchModes.BoundingBox:
-                            AsyncAddBlocksOfBox(ref areaOrientedBox, ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0), ref ignoreColor, ((Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0), ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, grids, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null, _ComponentCollectPriority.AnyEnabled ? _TempPossibleFloatingTargets : null);
+                            AsyncAddBlocksOfBox(ref areaOrientedBox, ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0), ref ignoreColor, ((Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0), ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, _TempGrids, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null, _ComponentCollectPriority.AnyEnabled ? _TempPossibleFloatingTargets : null);
                             break;
                     }
 
@@ -212,7 +206,7 @@ namespace SKONanobotBuildAndRepairSystem
                         try
                         {
                             // Pre-compute squared distances once to avoid O(N log N) ComputeWorldCenter calls inside the comparator
-                            var sourceDistances = new Dictionary<IMyInventory, double>(_TempPossibleSources.Count);
+                            _TempSourceDistances.Clear();
                             foreach (var src in _TempPossibleSources)
                             {
                                 var blk = src.Owner as IMyCubeBlock;
@@ -220,7 +214,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 {
                                     Vector3D blkPos;
                                     blk.SlimBlock.ComputeWorldCenter(out blkPos);
-                                    sourceDistances[src] = (posWelder - blkPos).LengthSquared();
+                                    _TempSourceDistances[src] = (posWelder - blkPos).LengthSquared();
                                 }
                             }
 
@@ -235,8 +229,8 @@ namespace SKONanobotBuildAndRepairSystem
                                     if ((welderA == null) == (welderB == null))
                                     {
                                         double distA, distB;
-                                        sourceDistances.TryGetValue(a, out distA);
-                                        sourceDistances.TryGetValue(b, out distB);
+                                        _TempSourceDistances.TryGetValue(a, out distA);
+                                        _TempSourceDistances.TryGetValue(b, out distB);
                                         return distA.CompareTo(distB);
                                     }
                                     else if (welderA == null)
@@ -462,7 +456,6 @@ namespace SKONanobotBuildAndRepairSystem
                     if (_ContinuouslyError > 10 || Logging.Instance.ShouldLog(Logging.Level.Info) || Logging.Instance.ShouldLog(Logging.Level.Verbose))
                     {
                         Logging.Instance.Error("BuildAndRepairSystemBlock {0}: AsyncUpdateSourcesAndTargets exception at {1}: {2}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), pos, ex);
-                        _ContinuouslyError = 0;
                     }
                 }
             }
@@ -510,7 +503,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (cacheStale)
                 {
-                    lock (MyAPIGateway.Entities)
+                    lock (_entityQueryLock)
                     {
                         _CachedEntitiesInRange =
                             MyAPIGateway.Entities.GetTopMostEntitiesInBox(ref areaBoundingBox);
@@ -586,7 +579,7 @@ namespace SKONanobotBuildAndRepairSystem
                         var grindCountBefore = possibleGrindTargets?.Count ?? 0;
 
                         // Scan for target blocks of grid.
-                        AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, grid, grids, null, possibleWeldTargets, possibleGrindTargets);
+                        AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, grid, grids, null, null, possibleWeldTargets, possibleGrindTargets);
 
                         // Per-grid grind-candidate cap: each external grid may contribute at most
                         // MaxSystemsPerTargetGrid * 3 entries.  This ensures all grids in range are
@@ -664,10 +657,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
-        private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, HashSet<IMyCubeGrid> grids, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
+        private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, HashSet<IMyCubeGrid> grids, List<IMyInventory> possibleSources, HashSet<IMyInventory> seenSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
         {
             if (!State.Ready) return; //Block not ready
             if (grids.Contains(cubeGrid)) return; //Allready parsed
@@ -681,14 +671,54 @@ namespace SKONanobotBuildAndRepairSystem
             // Use a cached list to avoid many GetBlocks calls from the API.
             var newBlocks = GetBlocksFromCache(cubeGrid, isGrinding);
 
-            foreach (var slimBlock in newBlocks)
+            // The shared cache provides priority-only ordering.  For grind scans with NearFirst
+            // or FarFirst (default) settings, iterate blocks in distance order so the 256-slot
+            // candidate cap fills with the right blocks before pos=4 sorts the final sequence.
+            // GrindSmallestFirst is handled by the entity-level pre-sort in AsyncAddBlocksOfBox.
+            var blocksToIterate = newBlocks;
+            if (possibleGrindTargets != null && isGrinding)
+            {
+                var _grindSmallestFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
+                if (!_grindSmallestFirst)
+                {
+                    var _grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
+                    var _ignPriority = (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) != 0;
+                    var _areaCenter = areaBox.Center;
+
+                    // Pre-compute squared distances O(N) — avoids repeated world-transforms inside the comparator.
+                    _TempBlockDistances.Clear();
+                    foreach (var blk in newBlocks)
+                    {
+                        var blkPos = cubeGrid.GridIntegerToWorld(blk.Position);
+                        _TempBlockDistances[blk] = (_areaCenter - blkPos).LengthSquared();
+                    }
+
+                    var sortedCopy = new List<IMySlimBlock>(newBlocks);
+                    sortedCopy.Sort((sortA, sortB) =>
+                    {
+                        if (!_ignPriority)
+                        {
+                            var pa = BlockGrindPriority.GetPriority(sortA);
+                            var pb = BlockGrindPriority.GetPriority(sortB);
+                            if (pa != pb) return pa - pb;
+                        }
+                        double da, db;
+                        _TempBlockDistances.TryGetValue(sortA, out da);
+                        _TempBlockDistances.TryGetValue(sortB, out db);
+                        return _grindNearFirst ? da.CompareTo(db) : db.CompareTo(da);
+                    });
+                    blocksToIterate = sortedCopy;
+                }
+            }
+
+            foreach (var slimBlock in blocksToIterate)
             {
                 if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
                 {
                     break;
                 }
 
-                AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, possibleWeldTargets, possibleGrindTargets);
+                AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, seenSources, possibleWeldTargets, possibleGrindTargets);
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -698,7 +728,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (mechanicalConnectionBlock.TopGrid != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
                     {
-                        AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, mechanicalConnectionBlock.TopGrid, grids, possibleSources, possibleWeldTargets, possibleGrindTargets);
+                        AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, mechanicalConnectionBlock.TopGrid, grids, possibleSources, seenSources, possibleWeldTargets, possibleGrindTargets);
                     }
                     continue;
                 }
@@ -708,7 +738,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (attachableTopBlock.Base != null && attachableTopBlock.Base.CubeGrid != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
                     {
-                        AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, attachableTopBlock.Base.CubeGrid, grids, possibleSources, possibleWeldTargets, possibleGrindTargets);
+                        AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, attachableTopBlock.Base.CubeGrid, grids, possibleSources, seenSources, possibleWeldTargets, possibleGrindTargets);
                     }
                     continue;
                 }
@@ -718,7 +748,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (connector.Status == Sandbox.ModAPI.Ingame.MyShipConnectorStatus.Connected && connector.OtherConnector != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
                     {
-                        AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, connector.OtherConnector.CubeGrid, grids, possibleSources, possibleWeldTargets, possibleGrindTargets);
+                        AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, connector.OtherConnector.CubeGrid, grids, possibleSources, seenSources, possibleWeldTargets, possibleGrindTargets);
                     }
                     continue;
                 }
@@ -775,10 +805,7 @@ namespace SKONanobotBuildAndRepairSystem
             return weldFull && grindFull && floatingFull;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
-        private void AsyncAddBlockIfTargetOrSource(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMySlimBlock block, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
+        private void AsyncAddBlockIfTargetOrSource(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMySlimBlock block, List<IMyInventory> possibleSources, HashSet<IMyInventory> seenSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
         {
             try
             {
@@ -800,7 +827,7 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             try
                             {
-                                terminalBlock.AddIfConnectedToInventory(_Welder, possibleSources);
+                                terminalBlock.AddIfConnectedToInventory(_Welder, possibleSources, seenSources);
                             }
                             catch (Exception ex)
                             {
@@ -981,32 +1008,17 @@ namespace SKONanobotBuildAndRepairSystem
 
         private List<IMySlimBlock> GetBlocksFromCache(IMyCubeGrid grid, bool isGrinding = false)
         {
-            var playTime = MyAPIGateway.Session.ElapsedPlayTime;
-
-            // Check per-system sorted cache (avoids re-sort for repeated visits within one scan).
-            TimeSpan cachedTime;
-            List<IMySlimBlock> cachedList;
-            if (CachedBlocksTime.TryGetValue(grid.EntityId, out cachedTime)
-                && playTime.Subtract(cachedTime).TotalSeconds < 8
-                && CachedBlocks.TryGetValue(grid.EntityId, out cachedList))
-            {
-                return cachedList;
-            }
-
             // Fetch raw blocks from the global shared cache (eliminates N×M GetBlocks() calls).
             var rawBlocks = SharedGridBlockCache.GetBlocks(grid);
 
-            // Make a per-system copy and sort (sort uses per-system priorities + welder distance).
-            // Full sort is required so that within-priority-tier distance/size ordering correctly
-            // determines which blocks make it into the 256-candidate list when there are more
-            // eligible blocks than the cap.
-            var list = new List<IMySlimBlock>(rawBlocks);
-            list.SortWithPriorityAndDistance(this, isGrinding);
-
-            CachedBlocksTime[grid.EntityId] = playTime;
-            CachedBlocks[grid.EntityId] = list;
-
-            return list;
+            // Route through the shared sorted cache so multiple BaRs with the same priority
+            // configuration share one sorted list instead of each copying and re-sorting.
+            // The sort signature encodes the handler's enabled/order state plus the grind flag.
+            var handler = isGrinding ? (BlockPriorityHandling)BlockGrindPriority : BlockWeldPriority;
+            var sortSig = unchecked(handler.GetStateHash() * 397 ^ (isGrinding ? 1 : 0));
+            return SharedGridSortedCache.GetOrCreate(
+                grid.EntityId, sortSig, rawBlocks,
+                list => list.SortByPriorityOnly(handler, false));
         }
     }
 }

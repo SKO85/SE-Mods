@@ -121,7 +121,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             ShieldCheckEnabled = true;
             DecreaseFactionReputationOnGrinding = true;
             DeleteBotsWhenDead = true;
-            MaxSystemsPerTargetGrid = 10;
+            MaxSystemsPerTargetGrid = MyAPIGateway.Utilities?.IsDedicated == true ? 10 : 20;
             AssignToSystemEnabled = true;
             MaxInventoryFullPushAttempts = 100;
         }

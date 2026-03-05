@@ -1,6 +1,6 @@
 ---
 layout: default
-title: "Release Notes – v2.5.0"
+title: 'Release Notes – v2.5.0'
 parent: Release Notes
 grand_parent: Build and Repair System
 nav_order: 1
@@ -39,16 +39,18 @@ A new **"Reset All Settings"** button is available in the block terminal. It res
 
 Server admins can now cap how many Build and Repair systems are allowed to work on the same target grid at the same time. This helps prevent situations where dozens of systems pile onto a single grid while ignoring others. The following mod settings control this behaviour:
 
-- `MaxSystemsPerTargetGrid` – the maximum number of systems per target grid (default: **10**).
+- `MaxSystemsPerTargetGrid` – the maximum number of systems per target grid. Defaults to **20** in local/listen-server games and **10** on dedicated servers. The config file overrides whichever default applies.
 - `DisableLimitSystemsPerTargetGrid` – set to `true` to remove the limit entirely.
 
 ### Assign-To-System Toggle (server setting)
 
-A new `AssignToSystemEnabled` mod setting (default: **true**) lets server admins disable the exclusive block-ownership mechanism if it causes issues in their setup.
+When `AssignToSystemEnabled` is `true` (the default), target blocks for welding and grinding are assigned to individual Build and Repair systems so that work is divided efficiently across multiple systems — they no longer all pile onto the same target block at once. For welding, if a block has the **Help Others** option enabled, the assignment is ignored and multiple systems may weld the same target block simultaneously. Set to `false` to disable the mechanism server-wide if it causes issues in a specific setup.
 
-### Companion Script Updated
+### Cluster Scan Coordinator
 
-The companion programmable block script has been updated and is included in the repository. It handles automatic assembler queuing and multi-display status output for Build and Repair System groups.
+Build and Repair blocks that share the same working area now elect a single **cluster coordinator** responsible for scanning for targets on behalf of the whole cluster. This eliminates redundant scans that previously ran independently in every individual block, significantly reducing CPU load when many systems are active in the same area.
+
+The coordinator role is automatically re-elected whenever needed — for example, if the current coordinator block is disabled, destroyed, or powered off, another block in the cluster seamlessly takes over.
 
 ---
 
@@ -58,9 +60,11 @@ The companion programmable block script has been updated and is included in the 
 
 Fixed a bug where a client joining a server would sometimes overwrite the server-sent block settings with an older locally stored version. Settings received from the server are now correctly applied straight away.
 
-### Transport Animation Not Showing Correctly After Login
+### Flying Nanobot Effects Now Work on Dedicated Servers
 
-The transport (flying nanobot) animation could appear stuck or missing when a player joined a running session. The transport state is now properly synced to clients so the animation reflects the actual situation.
+Previously, the flying nanobot particle effects only worked in local games and were completely absent on dedicated servers. The effects are now fully client-side and work correctly on dedicated servers as well.
+
+Players can disable the effects per block from the terminal. Server admins can also disable them globally via the `DisableParticleEffects` setting in `ModSettings.xml`.
 
 ### Multiplayer Performance – Reduced Network Updates
 
