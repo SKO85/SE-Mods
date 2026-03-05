@@ -790,14 +790,19 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         /// <summary>Only place projected blocks; never repair or continue welding existing blocks.</summary>
         WeldSkeleton = 2
     }
+
+    /// <summary> 
+    /// Block/Component class and it's state 
+    /// </summary> 
+    public class ClassState<T> where T : struct
     {
         public T ItemClass { get; }
-    public bool Enabled { get; }
-    public ClassState(T itemClass, bool enabled)
-    {
-        ItemClass = itemClass;
-        Enabled = enabled;
-    }
+        public bool Enabled { get; }
+        public ClassState(T itemClass, bool enabled)
+        {
+            ItemClass = itemClass;
+            Enabled = enabled;
+        }
     }
 
     /// <summary> 
@@ -1118,479 +1123,479 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     /// weld enabled state in descending order of priority. 
     /// </summary> 
     public MemorySafeList<ClassState<BlockClass>> WeldPriorityList()
-{
-    if (_Entities.Count > 0)
     {
-        var list = GetValue<MemorySafeList<string>>("BuildAndRepair.WeldPriorityList");
-        var blockList = new MemorySafeList<ClassState<BlockClass>>();
-        foreach (var item in list)
+        if (_Entities.Count > 0)
         {
-            var values = item.Split(';');
-            BlockClass blockClass;
-            bool enabled;
-            if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
-               bool.TryParse(values[1], out enabled))
+            var list = GetValue<MemorySafeList<string>>("BuildAndRepair.WeldPriorityList");
+            var blockList = new MemorySafeList<ClassState<BlockClass>>();
+            foreach (var item in list)
             {
-                blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
-            }
-        }
-        return blockList;
-    }
-    return null;
-}
-
-/// <summary> 
-/// Get the weld priority of the given block class 
-/// </summary> 
-public int GetWeldPriority(BlockClass blockClass)
-{
-    if (_Entities.Count > 0)
-    {
-        var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetWeldPriority");
-        return getPriority((int)blockClass);
-    }
-    else return int.MaxValue;
-}
-
-/// <summary> 
-/// Set the weld priority of the given block class 
-/// (lower number higher priority) 
-/// </summary> 
-public void SetWeldPriority(BlockClass blockClass, int prio)
-{
-    foreach (var entity in _Entities)
-    {
-        var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetWeldPriority");
-        setPriority((int)blockClass, prio);
-    }
-}
-
-/// <summary> 
-/// Get the weld enabled state of the given block class 
-/// Enabled=True Block of that class will be repaired/build 
-/// Enabled=False Block's of that class will be ignored 
-/// </summary> 
-public bool GetWeldEnabled(BlockClass blockClass)
-{
-    if (_Entities.Count > 0)
-    {
-        var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetWeldEnabled");
-        return getEnabled((int)blockClass);
-    }
-    else return false;
-}
-
-/// <summary> 
-/// Set the weld enabled state of the given block class 
-/// (see GetEnabled) 
-/// </summary> 
-public void SetWeldEnabled(BlockClass blockClass, bool enabled)
-{
-    foreach (var entity in _Entities)
-    {
-        var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetWeldEnabled");
-        setEnabled((int)blockClass, enabled);
-    }
-}
-
-/// <summary> 
-/// Get a list with all known block classes and there 
-/// grind enabled state in descending order of priority. 
-/// </summary> 
-public MemorySafeList<ClassState<BlockClass>> GrindPriorityList()
-{
-    if (_Entities.Count > 0)
-    {
-        var list = GetValue<MemorySafeList<string>>("BuildAndRepair.GrindPriorityList");
-        var blockList = new MemorySafeList<ClassState<BlockClass>>();
-        foreach (var item in list)
-        {
-            var values = item.Split(';');
-            BlockClass blockClass;
-            bool enabled;
-            if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
-               bool.TryParse(values[1], out enabled))
-            {
-                blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
-            }
-        }
-        return blockList;
-    }
-    return null;
-}
-
-/// <summary> 
-/// Get the grind priority of the given block class 
-/// </summary> 
-public int GetGrindPriority(BlockClass blockClass)
-{
-    if (_Entities.Count > 0)
-    {
-        var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetGrindPriority");
-        return getPriority((int)blockClass);
-    }
-    else return int.MaxValue;
-}
-
-/// <summary> 
-/// Set the grind priority of the given block class 
-/// (lower number higher priority) 
-/// </summary> 
-public void SetGrindPriority(BlockClass blockClass, int prio)
-{
-    foreach (var entity in _Entities)
-    {
-        var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetGrindPriority");
-        setPriority((int)blockClass, prio);
-    }
-}
-
-/// <summary> 
-/// Get the grind enabled state of the given block class 
-/// Enabled=True Block of that class will be grinded 
-/// Enabled=False Block's of that class will be ignored 
-/// </summary> 
-public bool GetGrindEnabled(BlockClass blockClass)
-{
-    if (_Entities.Count > 0)
-    {
-        var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetGrindEnabled");
-        return getEnabled((int)blockClass);
-    }
-    else return false;
-}
-
-/// <summary> 
-/// Set the grind enabled state of the given block class 
-/// (see GetEnabled) 
-/// </summary> 
-public void SetGrindEnabled(BlockClass blockClass, bool enabled)
-{
-    foreach (var entity in _Entities)
-    {
-        var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetGrindEnabled");
-        setEnabled((int)blockClass, enabled);
-    }
-}
-
-/// <summary> 
-/// Get a list with all known component classes and their
-/// enabled state in descending order of priority. 
-/// </summary> 
-public MemorySafeList<ClassState<ComponentClass>> ComponentClassList()
-{
-    if (_Entities.Count > 0)
-    {
-        var list = GetValue<MemorySafeList<string>>("BuildAndRepair.ComponentClassList");
-        var compList = new MemorySafeList<ClassState<ComponentClass>>();
-        foreach (var item in list)
-        {
-            var values = item.Split(';');
-            ComponentClass compClass;
-            bool enabled;
-            if (Enum.TryParse<ComponentClass>(values[0], out compClass) &&
-               bool.TryParse(values[1], out enabled))
-            {
-                compList.Add(new ClassState<ComponentClass>(compClass, enabled));
-            }
-        }
-        return compList;
-    }
-    return null;
-}
-
-/// <summary> 
-/// Get the priority of the given component class 
-/// </summary> 
-public int GetCollectPriority(ComponentClass compClass)
-{
-    if (_Entities.Count > 0)
-    {
-        var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetCollectPriority");
-        return getPriority((int)compClass);
-    }
-    else return int.MaxValue;
-}
-
-/// <summary> 
-/// Set the priority of the given component class 
-/// (lower number higher priority) 
-/// </summary> 
-public void SetCollectPriority(ComponentClass compClass, int prio)
-{
-    foreach (var entity in _Entities)
-    {
-        var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetCollectPriority");
-        setPriority((int)compClass, prio);
-    }
-}
-
-/// <summary> 
-/// Get the enabled state of the given component class 
-/// Enabled=True Component of that class will be collected 
-/// Enabled=False Component's of that class will be ignored 
-/// </summary> 
-public bool GetCollectEnabled(ComponentClass compClass)
-{
-    if (_Entities.Count > 0)
-    {
-        var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetCollectEnabled");
-        return getEnabled((int)compClass);
-    }
-    else return false;
-}
-
-/// <summary> 
-/// Set the enabled state of the given component class 
-/// (see GetEnabled) 
-/// </summary> 
-public void SetCollectEnabled(ComponentClass compClass, bool enabled)
-{
-    foreach (var entity in _Entities)
-    {
-        var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetCollectEnabled");
-        setEnabled((int)compClass, enabled);
-    }
-}
-
-/// <summary> 
-/// Set if the Block should only collect floating items (ore/ingot/material) 
-/// if nothing else to do (no welding, no grinding, no material for welding) 
-/// </summary> 
-public bool CollectIfIdle
-{
-    get
-    {
-        return _Entities.Count > 0 ? _Entities[0].GetValueBool("BuildAndRepair.CollectIfIdle") : false;
-    }
-    set
-    {
-        foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.CollectIfIdle", value);
-    }
-}
-
-/// <summary> 
-/// Set if the Block should push all ore/ingot immediately out of its inventory, 
-/// else this will happen only if no more room to store the next items to be picked. 
-/// </summary> 
-public bool PushIngotOreImmediately
-{
-    get
-    {
-        return _Entities.Count > 0 ? _Entities[0].GetValueBool("BuildAndRepair.PushIngotOreImmediately") : false;
-    }
-    set
-    {
-        foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.PushIngotOreImmediately", value);
-    }
-}
-
-/// <summary> 
-/// Get the block that is currently being repaired/build. 
-/// </summary> 
-public IMySlimBlock CurrentTarget
-{
-    get
-    {
-        return _Entities.Count > 0 ? GetValue<IMySlimBlock>("BuildAndRepair.CurrentTarget") : null;
-    }
-}
-
-/// <summary> 
-/// Get the block that is currently being grinded. 
-/// </summary> 
-public IMySlimBlock CurrentGrindTarget
-{
-    get
-    {
-        return _Entities.Count > 0 ? GetValue<IMySlimBlock>("BuildAndRepair.CurrentGrindTarget") : null;
-    }
-}
-
-/// <summary> 
-/// Set if the Block is controlled by script. 
-/// (If controlled by script use PossibleTargets and CurrentPickedTarget  
-/// to set the block that should be build/repaired) 
-/// </summary> 
-public bool ScriptControlled
-{
-    get
-    {
-        return _Entities.Count > 0 ? _Entities[0].GetValueBool("BuildAndRepair.ScriptControlled") : false;
-    }
-    set
-    {
-        foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.ScriptControlled", value);
-    }
-}
-
-/// <summary> 
-/// Get a list of missing components. 
-/// </summary> 
-public MemorySafeDictionary<VRage.Game.MyDefinitionId, int> MissingComponents()
-{
-    var missingItems = new MemorySafeDictionary<VRage.Game.MyDefinitionId, int>();
-    foreach (var entity in _Entities)
-    {
-        var dict = entity.GetValue<MemorySafeDictionary<VRage.Game.MyDefinitionId, int>>("BuildAndRepair.MissingComponents");
-        //Merge dictionaries but only first report of an item or higher amount 
-        //(do not add up the missings, as overlapping systems report same missing items) 
-        if (dict != null && dict.Count > 0)
-        {
-            int value;
-            foreach (var newItem in dict)
-            {
-                if (missingItems.TryGetValue(newItem.Key, out value))
+                var values = item.Split(';');
+                BlockClass blockClass;
+                bool enabled;
+                if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
+                   bool.TryParse(values[1], out enabled))
                 {
-                    if (newItem.Value > value) missingItems[newItem.Key] = newItem.Value;
-                }
-                else
-                {
-                    missingItems.Add(newItem.Key, newItem.Value);
+                    blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
                 }
             }
+            return blockList;
         }
+        return null;
     }
-    return missingItems;
-}
 
-/// <summary> 
-/// Get a list of possible repair/build targets. 
-/// (Contains only damaged/deformed/new block's in range of the system) 
-/// </summary> 
-public MemorySafeList<IMySlimBlock> PossibleTargets()
-{
-    if (_Entities.Count > 0)
+    /// <summary> 
+    /// Get the weld priority of the given block class 
+    /// </summary> 
+    public int GetWeldPriority(BlockClass blockClass)
     {
-        return GetValue<MemorySafeList<IMySlimBlock>>("BuildAndRepair.PossibleTargets");
-    }
-    return null;
-}
-
-public T GetValue<T>(string propertyName)
-{
-    if (_Entities.Count > 0)
-    {
-        try
+        if (_Entities.Count > 0)
         {
-            return _Entities[0].GetValue<T>(propertyName);
+            var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetWeldPriority");
+            return getPriority((int)blockClass);
         }
-        catch (Exception)
+        else return int.MaxValue;
+    }
+
+    /// <summary> 
+    /// Set the weld priority of the given block class 
+    /// (lower number higher priority) 
+    /// </summary> 
+    public void SetWeldPriority(BlockClass blockClass, int prio)
+    {
+        foreach (var entity in _Entities)
         {
-            // ignored
+            var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetWeldPriority");
+            setPriority((int)blockClass, prio);
         }
     }
-    return default(T);
-}
 
-/// <summary> 
-/// Get the block that should currently be repaired/built. 
-/// In order to build the given block the property 'ScriptControlled' has to be true and 
-/// the block has to be in the list of 'PossibleTargets'. 
-/// If 'ScriptControlled' is true and the block is not in the 'PossibleTargets' 
-/// the system will do nothing. 
-/// </summary> 
-public IMySlimBlock CurrentPickedTarget
-{
-    get
+    /// <summary> 
+    /// Get the weld enabled state of the given block class 
+    /// Enabled=True Block of that class will be repaired/build 
+    /// Enabled=False Block's of that class will be ignored 
+    /// </summary> 
+    public bool GetWeldEnabled(BlockClass blockClass)
     {
-        return _Entities.Count > 0 ? GetValue<IMySlimBlock>("BuildAndRepair.CurrentPickedTarget") : null;
-    }
-    set
-    {
-        foreach (var entity in _Entities) entity.SetValue("BuildAndRepair.CurrentPickedTarget", value);
-    }
-}
-
-/// <summary> 
-/// Get a list of possible grind targets. 
-/// </summary> 
-public MemorySafeList<IMySlimBlock> PossibleGrindTargets()
-{
-    if (_Entities.Count > 0)
-    {
-        return GetValue<MemorySafeList<IMySlimBlock>>("BuildAndRepair.PossibleGrindTargets");
-    }
-    return null;
-}
-
-/// <summary> 
-/// Get the block that should currently be grinded. 
-/// In order to grind the given block the property 'ScriptControlled' has to be true and 
-/// the block has to be in the list of 'PossibleGrindTargets'. 
-/// If 'ScriptControlled' is true and the block is not in the 'PossibleGrindTargets' 
-/// the system will do nothing. 
-/// </summary> 
-public IMySlimBlock CurrentPickedGrindTarget
-{
-    get
-    {
-        return _Entities.Count > 0 ? GetValue<IMySlimBlock>("BuildAndRepair.CurrentPickedGrindTarget") : null;
-    }
-    set
-    {
-        foreach (var entity in _Entities) entity.SetValue("BuildAndRepair.CurrentPickedGrindTarget", value);
-    }
-}
-
-/// <summary>
-/// Get a list of possible collect targets.
-/// </summary>
-public MemorySafeList<IMyEntity> PossibleCollectTargets()
-{
-    if (_Entities.Count > 0)
-    {
-        return GetValue<MemorySafeList<IMyEntity>>("BuildAndRepair.PossibleCollectTargets");
-    }
-    return null;
-}
-
-/// <summary> 
-/// Ensures that the given amount is either in inventory or the production 
-/// queue of the given production blocks 
-/// </summary> 
-public int EnsureQueued(IEnumerable<long> productionBlockIds, VRage.Game.MyDefinitionId materialId, int amount)
-{
-    if (_Entities.Count > 0)
-    {
-        if (_EnsureQueued == null)
+        if (_Entities.Count > 0)
         {
-            _EnsureQueued = GetValue<Func<IEnumerable<long>, VRage.Game.MyDefinitionId, int, int>>("BuildAndRepair.ProductionBlock.EnsureQueued");
+            var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetWeldEnabled");
+            return getEnabled((int)blockClass);
         }
-
-        if (_EnsureQueued != null)
-        {
-            return _EnsureQueued(productionBlockIds, materialId, amount);
-        }
-        return -3;
+        else return false;
     }
-    return -2;
-}
 
-/// <summary> 
-/// Retrieve the total components amount needed to build the projected 
-/// blueprint 
-/// </summary> 
-/// <param name="projector"></param> 
-/// <param name="componentList"></param> 
-/// <returns></returns> 
-public int NeededComponents4Blueprint(IMyProjector projector, Dictionary<VRage.Game.MyDefinitionId, VRage.MyFixedPoint> componentList)
-{
-    if (_Entities.Count > 0)
+    /// <summary> 
+    /// Set the weld enabled state of the given block class 
+    /// (see GetEnabled) 
+    /// </summary> 
+    public void SetWeldEnabled(BlockClass blockClass, bool enabled)
     {
-        if (_NeededComponents4Blueprint == null)
+        foreach (var entity in _Entities)
         {
-            _NeededComponents4Blueprint = GetValue<Func<IMyProjector, Dictionary<VRage.Game.MyDefinitionId, VRage.MyFixedPoint>, int>>("BuildAndRepair.Inventory.NeededComponents4Blueprint");
+            var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetWeldEnabled");
+            setEnabled((int)blockClass, enabled);
         }
-
-        if (_NeededComponents4Blueprint != null)
-        {
-            return _NeededComponents4Blueprint(projector, componentList);
-        }
-        return -3;
     }
-    return -2;
-}
+
+    /// <summary> 
+    /// Get a list with all known block classes and there 
+    /// grind enabled state in descending order of priority. 
+    /// </summary> 
+    public MemorySafeList<ClassState<BlockClass>> GrindPriorityList()
+    {
+        if (_Entities.Count > 0)
+        {
+            var list = GetValue<MemorySafeList<string>>("BuildAndRepair.GrindPriorityList");
+            var blockList = new MemorySafeList<ClassState<BlockClass>>();
+            foreach (var item in list)
+            {
+                var values = item.Split(';');
+                BlockClass blockClass;
+                bool enabled;
+                if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
+                   bool.TryParse(values[1], out enabled))
+                {
+                    blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
+                }
+            }
+            return blockList;
+        }
+        return null;
+    }
+
+    /// <summary> 
+    /// Get the grind priority of the given block class 
+    /// </summary> 
+    public int GetGrindPriority(BlockClass blockClass)
+    {
+        if (_Entities.Count > 0)
+        {
+            var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetGrindPriority");
+            return getPriority((int)blockClass);
+        }
+        else return int.MaxValue;
+    }
+
+    /// <summary> 
+    /// Set the grind priority of the given block class 
+    /// (lower number higher priority) 
+    /// </summary> 
+    public void SetGrindPriority(BlockClass blockClass, int prio)
+    {
+        foreach (var entity in _Entities)
+        {
+            var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetGrindPriority");
+            setPriority((int)blockClass, prio);
+        }
+    }
+
+    /// <summary> 
+    /// Get the grind enabled state of the given block class 
+    /// Enabled=True Block of that class will be grinded 
+    /// Enabled=False Block's of that class will be ignored 
+    /// </summary> 
+    public bool GetGrindEnabled(BlockClass blockClass)
+    {
+        if (_Entities.Count > 0)
+        {
+            var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetGrindEnabled");
+            return getEnabled((int)blockClass);
+        }
+        else return false;
+    }
+
+    /// <summary> 
+    /// Set the grind enabled state of the given block class 
+    /// (see GetEnabled) 
+    /// </summary> 
+    public void SetGrindEnabled(BlockClass blockClass, bool enabled)
+    {
+        foreach (var entity in _Entities)
+        {
+            var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetGrindEnabled");
+            setEnabled((int)blockClass, enabled);
+        }
+    }
+
+    /// <summary> 
+    /// Get a list with all known component classes and their
+    /// enabled state in descending order of priority. 
+    /// </summary> 
+    public MemorySafeList<ClassState<ComponentClass>> ComponentClassList()
+    {
+        if (_Entities.Count > 0)
+        {
+            var list = GetValue<MemorySafeList<string>>("BuildAndRepair.ComponentClassList");
+            var compList = new MemorySafeList<ClassState<ComponentClass>>();
+            foreach (var item in list)
+            {
+                var values = item.Split(';');
+                ComponentClass compClass;
+                bool enabled;
+                if (Enum.TryParse<ComponentClass>(values[0], out compClass) &&
+                   bool.TryParse(values[1], out enabled))
+                {
+                    compList.Add(new ClassState<ComponentClass>(compClass, enabled));
+                }
+            }
+            return compList;
+        }
+        return null;
+    }
+
+    /// <summary> 
+    /// Get the priority of the given component class 
+    /// </summary> 
+    public int GetCollectPriority(ComponentClass compClass)
+    {
+        if (_Entities.Count > 0)
+        {
+            var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetCollectPriority");
+            return getPriority((int)compClass);
+        }
+        else return int.MaxValue;
+    }
+
+    /// <summary> 
+    /// Set the priority of the given component class 
+    /// (lower number higher priority) 
+    /// </summary> 
+    public void SetCollectPriority(ComponentClass compClass, int prio)
+    {
+        foreach (var entity in _Entities)
+        {
+            var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetCollectPriority");
+            setPriority((int)compClass, prio);
+        }
+    }
+
+    /// <summary> 
+    /// Get the enabled state of the given component class 
+    /// Enabled=True Component of that class will be collected 
+    /// Enabled=False Component's of that class will be ignored 
+    /// </summary> 
+    public bool GetCollectEnabled(ComponentClass compClass)
+    {
+        if (_Entities.Count > 0)
+        {
+            var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetCollectEnabled");
+            return getEnabled((int)compClass);
+        }
+        else return false;
+    }
+
+    /// <summary> 
+    /// Set the enabled state of the given component class 
+    /// (see GetEnabled) 
+    /// </summary> 
+    public void SetCollectEnabled(ComponentClass compClass, bool enabled)
+    {
+        foreach (var entity in _Entities)
+        {
+            var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetCollectEnabled");
+            setEnabled((int)compClass, enabled);
+        }
+    }
+
+    /// <summary> 
+    /// Set if the Block should only collect floating items (ore/ingot/material) 
+    /// if nothing else to do (no welding, no grinding, no material for welding) 
+    /// </summary> 
+    public bool CollectIfIdle
+    {
+        get
+        {
+            return _Entities.Count > 0 ? _Entities[0].GetValueBool("BuildAndRepair.CollectIfIdle") : false;
+        }
+        set
+        {
+            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.CollectIfIdle", value);
+        }
+    }
+
+    /// <summary> 
+    /// Set if the Block should push all ore/ingot immediately out of its inventory, 
+    /// else this will happen only if no more room to store the next items to be picked. 
+    /// </summary> 
+    public bool PushIngotOreImmediately
+    {
+        get
+        {
+            return _Entities.Count > 0 ? _Entities[0].GetValueBool("BuildAndRepair.PushIngotOreImmediately") : false;
+        }
+        set
+        {
+            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.PushIngotOreImmediately", value);
+        }
+    }
+
+    /// <summary> 
+    /// Get the block that is currently being repaired/build. 
+    /// </summary> 
+    public IMySlimBlock CurrentTarget
+    {
+        get
+        {
+            return _Entities.Count > 0 ? GetValue<IMySlimBlock>("BuildAndRepair.CurrentTarget") : null;
+        }
+    }
+
+    /// <summary> 
+    /// Get the block that is currently being grinded. 
+    /// </summary> 
+    public IMySlimBlock CurrentGrindTarget
+    {
+        get
+        {
+            return _Entities.Count > 0 ? GetValue<IMySlimBlock>("BuildAndRepair.CurrentGrindTarget") : null;
+        }
+    }
+
+    /// <summary> 
+    /// Set if the Block is controlled by script. 
+    /// (If controlled by script use PossibleTargets and CurrentPickedTarget  
+    /// to set the block that should be build/repaired) 
+    /// </summary> 
+    public bool ScriptControlled
+    {
+        get
+        {
+            return _Entities.Count > 0 ? _Entities[0].GetValueBool("BuildAndRepair.ScriptControlled") : false;
+        }
+        set
+        {
+            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.ScriptControlled", value);
+        }
+    }
+
+    /// <summary> 
+    /// Get a list of missing components. 
+    /// </summary> 
+    public MemorySafeDictionary<VRage.Game.MyDefinitionId, int> MissingComponents()
+    {
+        var missingItems = new MemorySafeDictionary<VRage.Game.MyDefinitionId, int>();
+        foreach (var entity in _Entities)
+        {
+            var dict = entity.GetValue<MemorySafeDictionary<VRage.Game.MyDefinitionId, int>>("BuildAndRepair.MissingComponents");
+            //Merge dictionaries but only first report of an item or higher amount 
+            //(do not add up the missings, as overlapping systems report same missing items) 
+            if (dict != null && dict.Count > 0)
+            {
+                int value;
+                foreach (var newItem in dict)
+                {
+                    if (missingItems.TryGetValue(newItem.Key, out value))
+                    {
+                        if (newItem.Value > value) missingItems[newItem.Key] = newItem.Value;
+                    }
+                    else
+                    {
+                        missingItems.Add(newItem.Key, newItem.Value);
+                    }
+                }
+            }
+        }
+        return missingItems;
+    }
+
+    /// <summary> 
+    /// Get a list of possible repair/build targets. 
+    /// (Contains only damaged/deformed/new block's in range of the system) 
+    /// </summary> 
+    public MemorySafeList<IMySlimBlock> PossibleTargets()
+    {
+        if (_Entities.Count > 0)
+        {
+            return GetValue<MemorySafeList<IMySlimBlock>>("BuildAndRepair.PossibleTargets");
+        }
+        return null;
+    }
+
+    public T GetValue<T>(string propertyName)
+    {
+        if (_Entities.Count > 0)
+        {
+            try
+            {
+                return _Entities[0].GetValue<T>(propertyName);
+            }
+            catch (Exception)
+            {
+                // ignored
+            }
+        }
+        return default(T);
+    }
+
+    /// <summary> 
+    /// Get the block that should currently be repaired/built. 
+    /// In order to build the given block the property 'ScriptControlled' has to be true and 
+    /// the block has to be in the list of 'PossibleTargets'. 
+    /// If 'ScriptControlled' is true and the block is not in the 'PossibleTargets' 
+    /// the system will do nothing. 
+    /// </summary> 
+    public IMySlimBlock CurrentPickedTarget
+    {
+        get
+        {
+            return _Entities.Count > 0 ? GetValue<IMySlimBlock>("BuildAndRepair.CurrentPickedTarget") : null;
+        }
+        set
+        {
+            foreach (var entity in _Entities) entity.SetValue("BuildAndRepair.CurrentPickedTarget", value);
+        }
+    }
+
+    /// <summary> 
+    /// Get a list of possible grind targets. 
+    /// </summary> 
+    public MemorySafeList<IMySlimBlock> PossibleGrindTargets()
+    {
+        if (_Entities.Count > 0)
+        {
+            return GetValue<MemorySafeList<IMySlimBlock>>("BuildAndRepair.PossibleGrindTargets");
+        }
+        return null;
+    }
+
+    /// <summary> 
+    /// Get the block that should currently be grinded. 
+    /// In order to grind the given block the property 'ScriptControlled' has to be true and 
+    /// the block has to be in the list of 'PossibleGrindTargets'. 
+    /// If 'ScriptControlled' is true and the block is not in the 'PossibleGrindTargets' 
+    /// the system will do nothing. 
+    /// </summary> 
+    public IMySlimBlock CurrentPickedGrindTarget
+    {
+        get
+        {
+            return _Entities.Count > 0 ? GetValue<IMySlimBlock>("BuildAndRepair.CurrentPickedGrindTarget") : null;
+        }
+        set
+        {
+            foreach (var entity in _Entities) entity.SetValue("BuildAndRepair.CurrentPickedGrindTarget", value);
+        }
+    }
+
+    /// <summary>
+    /// Get a list of possible collect targets.
+    /// </summary>
+    public MemorySafeList<IMyEntity> PossibleCollectTargets()
+    {
+        if (_Entities.Count > 0)
+        {
+            return GetValue<MemorySafeList<IMyEntity>>("BuildAndRepair.PossibleCollectTargets");
+        }
+        return null;
+    }
+
+    /// <summary> 
+    /// Ensures that the given amount is either in inventory or the production 
+    /// queue of the given production blocks 
+    /// </summary> 
+    public int EnsureQueued(IEnumerable<long> productionBlockIds, VRage.Game.MyDefinitionId materialId, int amount)
+    {
+        if (_Entities.Count > 0)
+        {
+            if (_EnsureQueued == null)
+            {
+                _EnsureQueued = GetValue<Func<IEnumerable<long>, VRage.Game.MyDefinitionId, int, int>>("BuildAndRepair.ProductionBlock.EnsureQueued");
+            }
+
+            if (_EnsureQueued != null)
+            {
+                return _EnsureQueued(productionBlockIds, materialId, amount);
+            }
+            return -3;
+        }
+        return -2;
+    }
+
+    /// <summary> 
+    /// Retrieve the total components amount needed to build the projected 
+    /// blueprint 
+    /// </summary> 
+    /// <param name="projector"></param> 
+    /// <param name="componentList"></param> 
+    /// <returns></returns> 
+    public int NeededComponents4Blueprint(IMyProjector projector, Dictionary<VRage.Game.MyDefinitionId, VRage.MyFixedPoint> componentList)
+    {
+        if (_Entities.Count > 0)
+        {
+            if (_NeededComponents4Blueprint == null)
+            {
+                _NeededComponents4Blueprint = GetValue<Func<IMyProjector, Dictionary<VRage.Game.MyDefinitionId, VRage.MyFixedPoint>, int>>("BuildAndRepair.Inventory.NeededComponents4Blueprint");
+            }
+
+            if (_NeededComponents4Blueprint != null)
+            {
+                return _NeededComponents4Blueprint(projector, componentList);
+            }
+            return -3;
+        }
+        return -2;
+    }
 }
 // NOTE: Rely on mod-provided MemorySafeList/MemorySafeDictionary types exposed to PB; do not redefine here to avoid conflicts.
 
