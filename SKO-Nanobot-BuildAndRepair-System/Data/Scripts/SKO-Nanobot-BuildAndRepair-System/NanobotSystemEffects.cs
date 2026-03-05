@@ -195,10 +195,12 @@ namespace SKONanobotBuildAndRepairSystem
                     break;
             }
 
-            var sound = _Sounds[(int)workingState];
+            var soundIndex = (int)workingState;
+            var sound = (soundIndex >= 0 && soundIndex < _Sounds.Length) ? _Sounds[soundIndex] : null;
 
             // If ticking sound is disabled globally or per-block, suppress it.
-            if (sound != null && sound.GetCueName() == "BaRUnable" && _DisableTickingSoundSet)
+            var cueName = sound?.GetCueName();
+            if (!string.IsNullOrEmpty(cueName) && cueName == "BaRUnable" && _DisableTickingSoundSet)
             {
                 if (_SoundEmitter != null)
                 {
@@ -216,26 +218,27 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // If sound is set for working state.
+            var soundLevel = (soundIndex >= 0 && soundIndex < _SoundLevels.Length) ? _SoundLevels[soundIndex] : 0f;
             if (sound != null)
             {
                 if (_SoundEmitter == null)
                 {
                     _SoundEmitter = new MyEntity3DSoundEmitter((VRage.Game.Entity.MyEntity)system.Welder);
                     _SoundEmitter.CustomMaxDistance = 30f;
-                    _SoundEmitter.CustomVolume = _SoundLevels[(int)workingState] * system.Settings.SoundVolume;
+                    _SoundEmitter.CustomVolume = soundLevel * system.Settings.SoundVolume;
                 }
                 if (_SoundEmitterWorking == null)
                 {
                     _SoundEmitterWorking = new MyEntity3DSoundEmitter((VRage.Game.Entity.MyEntity)system.Welder, true, 1f);
                     _SoundEmitterWorking.CustomMaxDistance = 30f;
-                    _SoundEmitterWorking.CustomVolume = _SoundLevels[(int)workingState] * system.Settings.SoundVolume;
+                    _SoundEmitterWorking.CustomVolume = soundLevel * system.Settings.SoundVolume;
                     _SoundEmitterWorkingPosition = null;
                 }
 
                 if (_SoundEmitter != null)
                 {
                     _SoundEmitter.StopSound(true);
-                    _SoundEmitter.CustomVolume = _SoundLevels[(int)workingState] * system.Settings.SoundVolume;
+                    _SoundEmitter.CustomVolume = soundLevel * system.Settings.SoundVolume;
                     _SoundEmitter.PlaySound(sound, true);
                 }
 

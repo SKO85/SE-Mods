@@ -504,7 +504,10 @@ public class BuildAndRepairSystemQueuingGroupData
                 {
                     if (elapsedTime > NextSwitchTime[idx])
                     {
-                        DisplayKindIdx[idx] = (DisplayKindIdx[idx] + 1) % settings.DisplayKinds.Length;
+                        // Only advance on subsequent timer fires; the first call (NextSwitchTime == 0)
+                        // should show the initial index (0) without skipping it.
+                        if (NextSwitchTime[idx] > 0)
+                            DisplayKindIdx[idx] = (DisplayKindIdx[idx] + 1) % settings.DisplayKinds.Length;
                         NextSwitchTime[idx] = elapsedTime + settings.DisplaySwitchTime;
                     }
                     switch (settings.DisplayKinds[DisplayKindIdx[idx]])
@@ -1905,6 +1908,7 @@ public class StatusAndLogDisplay
     private static string FindPanels(MyGridProgram caller, IReadOnlyList<string> names, ICollection<IMyTextSurface> list)
     {
         string res = string.Empty;
+        list.Clear();
         if (caller == null)
         {
             return res;
@@ -1985,10 +1989,11 @@ public class StatusAndLogDisplay
     /// </summary> 
     public static float PowerUnitMultiple(string unit)
     {
-        if (unit.StartsWith("W")) return 0.000001f;
-        if (unit.StartsWith("kW")) return 0.001f;
+        if (unit.StartsWith("GW")) return 1000f;
         if (unit.StartsWith("MW")) return 1f;
-        return unit.StartsWith("GW") ? 1000f : 1f;
+        if (unit.StartsWith("kW")) return 0.001f;
+        if (unit.StartsWith("W")) return 0.000001f;
+        return 1f;
     }
 
     public static string DisplayPowerValueUnit(float value)
@@ -2047,14 +2052,14 @@ public class StatusAndLogDisplay
             return cubeBlock.BlockDefinition.SubtypeName;
         }
 
+        var cubeGrid = block as IMyCubeGrid;
+        if (cubeGrid != null) return cubeGrid.DisplayName;
+
         var entity = block as IMyEntity;
         if (entity != null)
         {
             return string.Format("{0} ({1})", entity.DisplayName, entity.EntityId);
         }
-
-        var cubeGrid = block as IMyCubeGrid;
-        if (cubeGrid != null) return cubeGrid.DisplayName;
 
         return block != null ? block.ToString() : "NULL";
     }

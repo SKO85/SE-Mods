@@ -31,7 +31,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 var remainingVolume = _MaxTransportVolume;
                 _TempMissingComponents.Clear();
-                var picked = false; ;
+                var picked = false;
                 var cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;
 
                 if ((targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0)
@@ -109,6 +109,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 var componentId = new MyDefinitionId(typeof(MyObjectBuilder_Component), keyValue.Key);
                 var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(componentId);
+                if (definition == null) continue;
                 int neededAmount = keyValue.Value;
 
                 picked = ServerPickFromWelder(componentId, definition.Volume, ref neededAmount, ref remainingVolume) || picked;
@@ -283,6 +284,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (srcItem == null) continue;
 
                     var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(srcItem.Content.GetId());
+                    if (definition == null || definition.Volume <= 0) continue;
 
                     var maxpossibleAmountFP = Math.Min((float)srcItem.Amount, (remainingVolume / definition.Volume));
                     //Real Transport Volume is always bigger than logical _MaxTransportVolume so ceiling is no problem
@@ -318,6 +320,11 @@ namespace SKONanobotBuildAndRepairSystem
                 var remainingVolume = _MaxTransportVolume - (double)dstInventory.CurrentVolume;
 
                 var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(floating.Item.Content.GetId());
+                if (definition == null || definition.Volume <= 0)
+                {
+                    isEmpty = floating.WasRemovedFromWorld || floating.MarkedForClose;
+                    return running;
+                }
                 var startAmount = floating.Item.Amount;
 
                 var maxremainAmount = (MyFixedPoint)(remainingVolume / definition.Volume);

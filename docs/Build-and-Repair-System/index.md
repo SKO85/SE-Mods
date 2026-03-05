@@ -128,6 +128,7 @@ _Applies to the (Maintained) - Nerfed Version only. See the [Original Resources 
 ## Documentation
 
 - [Configuration File](Config/) — all `ModSettings.xml` settings with defaults and descriptions
+- [Scripting API](Scripting/) — terminal properties available to Programmable Block scripts
 - [FAQ](FAQ/) — common questions and troubleshooting steps
 - [Release Notes](Release-Notes/) — full version history
 

@@ -140,7 +140,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
             catch (Exception e)
             {
-                Logging.Instance.Error("BuildAndRepairSystemMod: Exception in BeforeDamageHandlerNoDamageByBuildAndRepairSystem: Source={0}, Message={1}", e.Source, e.Message);
+                Logging.Instance.Error("BuildAndRepairSystemMod: Exception in OnAfterDamage: Source={0}, Message={1}", e.Source, e.Message);
             }
         }
     }

@@ -73,9 +73,9 @@ namespace SKONanobotBuildAndRepairSystem
 
     public enum AutoWeldOptions
     {
-        WeldFull       = 0,   // weld to 100% integrity (default)
+        WeldFull = 0,   // weld to 100% integrity (default)
         WeldFunctional = 1,   // weld to CriticalIntegrityRatio (was FunctionalOnly)
-        WeldSkeleton   = 2    // only place/build new blocks; don't repair existing
+        WeldSkeleton = 2    // only place/build new blocks; don't repair existing
     }
 
     [Flags]
@@ -527,7 +527,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
 
                     // -- Script Control
-                    if (!Mod.Settings.Welder.ScriptControllFixed)
+                    if (!Mod.Settings.Welder.ScriptControlFixed)
                     {
                         separateArea = Separators.Create("SeparateScriptControl", (_) => true);
 

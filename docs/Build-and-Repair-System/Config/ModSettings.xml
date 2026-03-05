@@ -53,7 +53,7 @@
         <CollectIfIdleDefault>false</CollectIfIdleDefault>
         <SoundVolumeFixed>false</SoundVolumeFixed>
         <SoundVolumeDefault>1</SoundVolumeDefault>
-        <ScriptControllFixed>false</ScriptControllFixed>
+        <ScriptControlFixed>false</ScriptControlFixed>
         <AllowedEffects>WeldingVisualEffect WeldingSoundEffect GrindingVisualEffect
             GrindingSoundEffect TransportVisualEffect</AllowedEffects>
     </Welder>

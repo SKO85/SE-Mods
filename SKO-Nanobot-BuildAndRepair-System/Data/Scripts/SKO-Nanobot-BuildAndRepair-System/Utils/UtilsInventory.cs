@@ -143,14 +143,19 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             VRage.MyFixedPoint maxPossible = 0;
             VRage.MyFixedPoint currentStep = (VRage.MyFixedPoint)((float)maxNeeded / 2);
             VRage.MyFixedPoint currentTry = 0;
-            while (currentStep > VRage.MyFixedPoint.SmallestPossibleValue)
+            int iterations = 0;
+            const int maxIterations = 64; // Safety guard against infinite loop
+            while (currentStep > VRage.MyFixedPoint.SmallestPossibleValue && iterations < maxIterations)
             {
+                iterations++;
                 currentTry = maxPossible + currentStep;
                 if (destInventory.CanItemsBeAdded(currentTry, itemType))
                 {
                     maxPossible = currentTry;
                 }
-                currentStep = (VRage.MyFixedPoint)((float)currentStep / 2);
+                var nextStep = (VRage.MyFixedPoint)((float)currentStep / 2);
+                if (nextStep == currentStep) break; // Prevent stall when halving no longer decreases
+                currentStep = nextStep;
             }
             return maxPossible;
         }

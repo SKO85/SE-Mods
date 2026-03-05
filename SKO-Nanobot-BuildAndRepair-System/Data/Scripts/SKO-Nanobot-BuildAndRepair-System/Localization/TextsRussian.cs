@@ -26,7 +26,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"WeldToFuncOnly",                  "Перестал быть активным"},
             {"WeldToFuncOnly_Tooltip",          "Сваривать только когда блок перестал функционировать\nиз за повреждений/распиливания."},
             {"WeldMode",            "Режим сварки"},
-            {"WeldMode_Tooltip",    "Select how far the nanobots weld blocks."},
+            {"WeldMode_Tooltip",    "Выберите, насколько далеко наноботы сваривают блоки."},
             {"WeldMode_Full",       "Сварить полностью"},
             {"WeldMode_Functional", "Только до функционального состояния"},
             {"WeldMode_Skeleton",   "Только скелет"},
