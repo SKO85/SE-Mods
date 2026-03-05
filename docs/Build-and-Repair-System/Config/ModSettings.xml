@@ -74,4 +74,8 @@
     before the system
          auto-disables itself. Set to 0 to disable this behaviour. -->
     <MaxInventoryFullPushAttempts>100</MaxInventoryFullPushAttempts>
+    <!-- After a grid is found to have no weld or grind targets, skip scanning it for this many
+         seconds. Set to 0 to disable. Sub-grid connections (connectors, pistons, rotors) are
+         always traversed so newly docked ships are never missed. -->
+    <EmptyGridScanIgnoreSeconds>60</EmptyGridScanIgnoreSeconds>
 </SyncModSettings>

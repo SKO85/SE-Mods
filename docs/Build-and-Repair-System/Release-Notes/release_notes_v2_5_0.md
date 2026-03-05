@@ -52,6 +52,14 @@ Build and Repair blocks that share the same working area now elect a single **cl
 
 The coordinator role is automatically re-elected whenever needed — for example, if the current coordinator block is disabled, destroyed, or powered off, another block in the cluster seamlessly takes over.
 
+### Empty-Grid Scan Ignore (server setting)
+
+After scanning a grid and finding no welding or grinding targets, the system now skips that grid for a configurable amount of time before scanning it again. All Build and Repair blocks in the same cluster share a single ignore list, so a grid confirmed empty by one block is automatically skipped by all others in that cluster — avoiding redundant work.
+
+Sub-grid connections (connectors, pistons, rotors) are always traversed regardless of the ignore state, so a newly docked or spawned ship is never missed.
+
+The timeout is controlled by the `EmptyGridScanIgnoreSeconds` mod setting (default: **60 seconds**). Set it to `0` to disable the behaviour entirely.
+
 ---
 
 ## Fixes

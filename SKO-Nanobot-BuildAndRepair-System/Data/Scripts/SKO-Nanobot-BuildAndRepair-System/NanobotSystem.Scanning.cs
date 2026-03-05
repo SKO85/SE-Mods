@@ -665,6 +665,19 @@ namespace SKONanobotBuildAndRepairSystem
             grids.Add(cubeGrid);
             SharedGridBlockCache.EnsureSubscribed(cubeGrid);
 
+            // Empty-grid ignore: skip non-own grids confirmed empty by any BaR in this cluster.
+            // We set a flag rather than doing an early return so that sub-grid connections
+            // (connectors, pistons, hinges, rotors) are still traversed — a newly docked/spawned
+            // ship past an "empty" intermediate grid must not be missed.
+            var emptyGridIgnoreSeconds = Mod.Settings.EmptyGridScanIgnoreSeconds;
+            var isOwnGrid = cubeGrid.EntityId == _Welder.CubeGrid.EntityId;
+            var clusterKey = System.Threading.Interlocked.Read(ref _ClusterKey);
+            var isIgnored = false;
+            if (!isOwnGrid && emptyGridIgnoreSeconds > 0 && clusterKey != 0)
+            {
+                isIgnored = ScanCoordinator.IsGridIgnored(clusterKey, cubeGrid.EntityId, MyAPIGateway.Session.ElapsedPlayTime);
+            }
+
             var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly || Settings.WorkMode == WorkModes.GrindBeforeWeld;
             var isGrinding = State.Grinding || State.NeedGrinding || (State.Transporting && isGrindingMode) || isGrindingMode;
 
@@ -676,7 +689,9 @@ namespace SKONanobotBuildAndRepairSystem
             // candidate cap fills with the right blocks before pos=4 sorts the final sequence.
             // GrindSmallestFirst is handled by the entity-level pre-sort in AsyncAddBlocksOfBox.
             var blocksToIterate = newBlocks;
-            if (possibleGrindTargets != null && isGrinding)
+            var emptyIgnoreWeldBefore = possibleWeldTargets?.Count ?? 0;
+            var emptyIgnoreGrindBefore = possibleGrindTargets?.Count ?? 0;
+            if (!isIgnored && possibleGrindTargets != null && isGrinding)
             {
                 var _grindSmallestFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
                 if (!_grindSmallestFirst)
@@ -718,7 +733,9 @@ namespace SKONanobotBuildAndRepairSystem
                     break;
                 }
 
-                AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, seenSources, possibleWeldTargets, possibleGrindTargets);
+                // For ignored grids, skip block target/source checks — only sub-grid connections matter.
+                if (!isIgnored)
+                    AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, seenSources, possibleWeldTargets, possibleGrindTargets);
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -794,6 +811,23 @@ namespace SKONanobotBuildAndRepairSystem
                         continue;
                     }
                 }
+            }
+
+            // Empty-grid ignore: update the cluster-wide ignore entry for this non-own grid.
+            // We only WRITE when both possibleWeldTargets and possibleGrindTargets were provided
+            // (i.e. this BaR checked both), so we never mark a grid empty based on a partial check.
+            // A GrindOnly or WeldOnly BaR can still READ the shared ignore (set by a full-mode BaR)
+            // but cannot contaminate it with a one-sided verdict.
+            if (!isIgnored && !isOwnGrid && emptyGridIgnoreSeconds > 0 && clusterKey != 0
+                && possibleWeldTargets != null && possibleGrindTargets != null)
+            {
+                var anyTargets = possibleWeldTargets.Count > emptyIgnoreWeldBefore
+                              || possibleGrindTargets.Count > emptyIgnoreGrindBefore;
+                if (anyTargets)
+                    ScanCoordinator.ClearGridIgnored(clusterKey, cubeGrid.EntityId);
+                else
+                    ScanCoordinator.SetGridIgnored(clusterKey, cubeGrid.EntityId,
+                        MyAPIGateway.Session.ElapsedPlayTime + TimeSpan.FromSeconds(emptyGridIgnoreSeconds));
             }
         }
 

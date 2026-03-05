@@ -103,6 +103,14 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(31), XmlElement]
         public int MaxInventoryFullPushAttempts { get; set; }
 
+        /// <summary>
+        /// How long (in seconds) a grid with no weld or grind targets will be excluded from
+        /// scanning after being found empty. This reduces repeated scans of grids that have
+        /// nothing for the BaR to do. Set to 0 to disable this behaviour.
+        /// </summary>
+        [ProtoMember(32), XmlElement]
+        public int EmptyGridScanIgnoreSeconds { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -124,6 +132,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             MaxSystemsPerTargetGrid = MyAPIGateway.Utilities?.IsDedicated == true ? 10 : 20;
             AssignToSystemEnabled = true;
             MaxInventoryFullPushAttempts = 100;
+            EmptyGridScanIgnoreSeconds = 60;
         }
 
         public static SyncModSettings Load()
