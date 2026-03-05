@@ -33,6 +33,17 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             Cache.Remove(block);
         }
 
+        /// <summary>
+        /// Releases this block's assignment only if it is currently assigned to the given system.
+        /// Safe to call when another system may own the assignment.
+        /// </summary>
+        public static void ReleaseIfMine(this IMySlimBlock block, long systemId)
+        {
+            long assignedSystemId;
+            if (Cache.TryGet(block, out assignedSystemId) && assignedSystemId == systemId)
+                Cache.Remove(block);
+        }
+
         public static void Cleanup()
         {
             Cache.CleanupExpired();

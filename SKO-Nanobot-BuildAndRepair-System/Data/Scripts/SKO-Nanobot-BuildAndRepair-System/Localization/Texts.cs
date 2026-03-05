@@ -27,8 +27,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId WeldUseIgnoreColor_Tooltip;
         public static readonly MyStringId WeldBuildNew;
         public static readonly MyStringId WeldBuildNew_Tooltip;
-        public static readonly MyStringId WeldToFuncOnly;
-        public static readonly MyStringId WeldToFuncOnly_Tooltip;
+        public static readonly MyStringId WeldMode;
+        public static readonly MyStringId WeldMode_Tooltip;
+        public static readonly MyStringId WeldMode_Full;
+        public static readonly MyStringId WeldMode_Functional;
+        public static readonly MyStringId WeldMode_Skeleton;
         public static readonly MyStringId WeldPriority;
         public static readonly MyStringId WeldPriority_Tooltip;
 
@@ -152,8 +155,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             WeldUseIgnoreColor_Tooltip = LocalizationHelper.GetStringId(texts, "WeldUseIgnoreColor_Tooltip", TextDefaultMaxTooltipLenght);
             WeldBuildNew = LocalizationHelper.GetStringId(texts, "WeldBuildNew");
             WeldBuildNew_Tooltip = LocalizationHelper.GetStringId(texts, "WeldBuildNew_Tooltip", TextDefaultMaxTooltipLenght);
-            WeldToFuncOnly = LocalizationHelper.GetStringId(texts, "WeldToFuncOnly");
-            WeldToFuncOnly_Tooltip = LocalizationHelper.GetStringId(texts, "WeldToFuncOnly_Tooltip", TextDefaultMaxTooltipLenght);
+            WeldMode = LocalizationHelper.GetStringId(texts, "WeldMode");
+            WeldMode_Tooltip = LocalizationHelper.GetStringId(texts, "WeldMode_Tooltip", TextDefaultMaxTooltipLenght);
+            WeldMode_Full = LocalizationHelper.GetStringId(texts, "WeldMode_Full");
+            WeldMode_Functional = LocalizationHelper.GetStringId(texts, "WeldMode_Functional");
+            WeldMode_Skeleton = LocalizationHelper.GetStringId(texts, "WeldMode_Skeleton");
             WeldPriority = LocalizationHelper.GetStringId(texts, "WeldPriority");
             WeldPriority_Tooltip = LocalizationHelper.GetStringId(texts, "WeldPriority_Tooltip", TextDefaultMaxTooltipLenght);
 

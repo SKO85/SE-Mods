@@ -763,7 +763,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             if (Mod.Settings.Welder.PushItemsImmediatelyFixed || init) Flags = (Flags & ~Settings.PushItemsImmediately) | (Mod.Settings.Welder.PushItemsImmediatelyDefault ? Settings.PushItemsImmediately : 0);
             if (Mod.Settings.Welder.CollectIfIdleFixed || init) Flags = (Flags & ~Settings.ComponentCollectIfIdle) | (Mod.Settings.Welder.CollectIfIdleDefault ? Settings.ComponentCollectIfIdle : 0);
             if (Mod.Settings.Welder.SoundVolumeFixed || init) SoundVolume = Mod.Settings.Welder.SoundVolumeDefault;
-            if (Mod.Settings.Welder.ScriptControllFixed || init) Flags = (Flags & ~Settings.ScriptControlled);
+            if (Mod.Settings.Welder.ScriptControlFixed || init) Flags = (Flags & ~Settings.ScriptControlled);
             if ((Mod.Settings.Welder.AllowedSearchModes & SearchMode) == 0 || init)
             {
                 if ((Mod.Settings.Welder.AllowedSearchModes & Mod.Settings.Welder.SearchModeDefault) != 0)

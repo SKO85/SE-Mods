@@ -25,6 +25,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"WeldBuildNew_Tooltip",            "Wenn diese Option markiert ist, wird das System auch projizierte Blöcke erzeugen und schweißen."},
             {"WeldToFuncOnly",                  "Nur bis Funktionsstufe schweißen"},
             {"WeldToFuncOnly_Tooltip",          "Wenn diese Option markiert ist, werden Blöcke nur bis zur der Stufe geschweißt in der sie bereits arbeiten können."},
+            {"WeldMode",            "Schweißmodus"},
+            {"WeldMode_Tooltip",    "Select how far the nanobots weld blocks."},
+            {"WeldMode_Full",       "Vollständig schweißen"},
+            {"WeldMode_Functional", "Nur bis Funktionsstufe schweißen"},
+            {"WeldMode_Skeleton",   "Nur Grundstruktur schweißen"},
             {"WeldPriority",                    "Schweiß Priorität"},
             {"WeldPriority_Tooltip",            "Schaltet das Erzeugen/Reparieren der selektierten Typen von Blöcken ein/aus"},
 

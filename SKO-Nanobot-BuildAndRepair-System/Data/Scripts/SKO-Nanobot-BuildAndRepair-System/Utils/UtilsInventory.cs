@@ -41,10 +41,19 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         /// </summary>
         public static bool PushComponents(this IMyInventory srcInventory, List<IMyInventory> destinations, ExcludeInventory exclude)
         {
+            var srcItems = new List<MyInventoryItem>();
+            return PushComponents(srcInventory, destinations, exclude, srcItems);
+        }
+
+        /// <summary>
+        /// Push all components into destinations, using a caller-supplied list buffer to avoid heap allocation.
+        /// </summary>
+        public static bool PushComponents(this IMyInventory srcInventory, List<IMyInventory> destinations, ExcludeInventory exclude, List<MyInventoryItem> srcItems)
+        {
             var moved = false;
             lock (destinations)
             {
-                var srcItems = new List<MyInventoryItem>();
+                srcItems.Clear();
                 srcInventory.GetItems(srcItems);
                 for (int srcItemIndex = srcItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                 {
@@ -134,14 +143,19 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             VRage.MyFixedPoint maxPossible = 0;
             VRage.MyFixedPoint currentStep = (VRage.MyFixedPoint)((float)maxNeeded / 2);
             VRage.MyFixedPoint currentTry = 0;
-            while (currentStep > VRage.MyFixedPoint.SmallestPossibleValue)
+            int iterations = 0;
+            const int maxIterations = 64; // Safety guard against infinite loop
+            while (currentStep > VRage.MyFixedPoint.SmallestPossibleValue && iterations < maxIterations)
             {
+                iterations++;
                 currentTry = maxPossible + currentStep;
                 if (destInventory.CanItemsBeAdded(currentTry, itemType))
                 {
                     maxPossible = currentTry;
                 }
-                currentStep = (VRage.MyFixedPoint)((float)currentStep / 2);
+                var nextStep = (VRage.MyFixedPoint)((float)currentStep / 2);
+                if (nextStep == currentStep) break; // Prevent stall when halving no longer decreases
+                currentStep = nextStep;
             }
             return maxPossible;
         }

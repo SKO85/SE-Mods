@@ -23,8 +23,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"WeldUseIgnoreColor_Tooltip",      "When checked, the system will ignore blocks with the color defined further down."},
             {"WeldBuildNew",                    "Build new"},
             {"WeldBuildNew_Tooltip",            "When checked, the System will also construct projected blocks."},
-            {"WeldToFuncOnly",                  "Weld to functional only"},
-            {"WeldToFuncOnly_Tooltip",          "When checked, bock only welded to functional state."},
+            {"WeldMode",            "Weld mode"},
+            {"WeldMode_Tooltip",    "Select how far the nanobots weld blocks."},
+            {"WeldMode_Full",       "Weld to full"},
+            {"WeldMode_Functional", "Weld to functional only"},
+            {"WeldMode_Skeleton",   "Weld to skeleton"},
             {"WeldPriority",                    "Welding Priority"},
             {"WeldPriority_Tooltip",            "Enable/Disable build-repair of selected items kinds"},
 

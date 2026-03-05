@@ -96,6 +96,21 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(30), XmlElement]
         public bool AssignToSystemEnabled { get; set; }
 
+        /// <summary>
+        /// Number of consecutive 5-second push cycles with a full inventory and no active welding
+        /// before the BaR automatically disables itself. Set to 0 to disable this behaviour.
+        /// </summary>
+        [ProtoMember(31), XmlElement]
+        public int MaxInventoryFullPushAttempts { get; set; }
+
+        /// <summary>
+        /// How long (in seconds) a grid with no weld or grind targets will be excluded from
+        /// scanning after being found empty. This reduces repeated scans of grids that have
+        /// nothing for the BaR to do. Set to 0 to disable this behaviour.
+        /// </summary>
+        [ProtoMember(32), XmlElement]
+        public int EmptyGridScanIgnoreSeconds { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -114,8 +129,10 @@ namespace SKONanobotBuildAndRepairSystem.Models
             ShieldCheckEnabled = true;
             DecreaseFactionReputationOnGrinding = true;
             DeleteBotsWhenDead = true;
-            MaxSystemsPerTargetGrid = 10;
+            MaxSystemsPerTargetGrid = MyAPIGateway.Utilities?.IsDedicated == true ? 10 : 20;
             AssignToSystemEnabled = true;
+            MaxInventoryFullPushAttempts = 100;
+            EmptyGridScanIgnoreSeconds = 60;
         }
 
         public static SyncModSettings Load()

@@ -112,7 +112,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         public float SoundVolumeDefault { get; set; }
 
         [ProtoMember(170), XmlElement]
-        public bool ScriptControllFixed { get; set; }
+        public bool ScriptControlFixed { get; set; }
 
         [ProtoMember(200), XmlElement]
         public VisualAndSoundEffects AllowedEffects { get; set; }
@@ -165,7 +165,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             SoundVolumeFixed = false;
             SoundVolumeDefault = NanobotSystem.WELDER_SOUND_VOLUME / 2;
 
-            ScriptControllFixed = false;
+            ScriptControlFixed = false;
             AllowedEffects = VisualAndSoundEffects.WeldingVisualEffect | VisualAndSoundEffects.WeldingSoundEffect
                      | VisualAndSoundEffects.GrindingVisualEffect | VisualAndSoundEffects.GrindingSoundEffect
                      | VisualAndSoundEffects.TransportVisualEffect;

@@ -74,7 +74,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 ProtectedFromGindingCache.CleanupExpired();
                 BlockIntersectingZones.CleanupExpired();
             }
-            catch { }
+            catch (Exception e)
+            {
+                Logging.Instance.Error("SafeZoneHandler.GetSafeZones: {0}", e.Message);
+            }
         }
 
         public static void Unregister()
@@ -108,24 +111,27 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Zones[sz.EntityId] = sz;
                 }
             }
-            catch { }
+            catch (Exception e)
+            {
+                Logging.Instance.Error("SafeZoneHandler.OnEntityAdd: {0}", e.Message);
+            }
         }
 
         private static void OnEntityRemove(IMyEntity ent)
         {
             try
             {
-                if (ent is MySafeZone)
+                var sz = ent as MySafeZone;
+                if (sz != null)
                 {
-                    var sz = ent as MySafeZone;
-                    if (sz != null)
-                    {
-                        MySafeZone removed;
-                        Zones.TryRemove(sz.EntityId, out removed);
-                    }
+                    MySafeZone removed;
+                    Zones.TryRemove(sz.EntityId, out removed);
                 }
             }
-            catch { }
+            catch (Exception e)
+            {
+                Logging.Instance.Error("SafeZoneHandler.OnEntityRemove: {0}", e.Message);
+            }
         }
 
         /// <summary>
@@ -353,7 +359,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     }
                 }
             }
-            catch { }
+            catch (Exception e)
+            {
+                Logging.Instance.Error("SafeZoneHandler.GetActionsAllowedForSystem: {0}", e.Message);
+            }
 
             return response;
         }
@@ -407,6 +416,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     if (safeZone.SafeZoneBlockId > 0)
                     {
                         var safeZoneBlock = MyEntities.GetEntityByName(safeZone.SafeZoneBlockId.ToString()) as IMySafeZoneBlock;
+                        if (safeZoneBlock == null)
+                        {
+                            // Safe zone block entity not found — treat target as protected to be safe.
+                            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, true);
+                            return true;
+                        }
 
                         // Relation between safeZone owner and attacker.
                         var relationSafeZoneAttacker = attackerBlock.CubeGrid.GetRelationBetweenGridAndPlayer(safeZoneBlock.OwnerId);
@@ -468,7 +483,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, true);
                 return true;
             }
-            catch { }
+            catch (Exception e)
+            {
+                Logging.Instance.Error("SafeZoneHandler.IsProtectedFromGrinding: {0}", e.Message);
+            }
 
             SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
             return false;
