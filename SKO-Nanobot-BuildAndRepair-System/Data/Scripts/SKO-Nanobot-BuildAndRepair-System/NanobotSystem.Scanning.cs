@@ -113,8 +113,11 @@ namespace SKONanobotBuildAndRepairSystem
             ;
 
             // Register with scan coordinator — WorldMatrix is safe on main thread.
-            // Runs even if _AsyncUpdateSourcesAndTargetsRunning is true so all active BaRs
-            // always contribute to the coordinator's union bounding box.
+            // The cluster key is always computed (needed for push-coalescing), but only
+            // BoundingBox (Fly) mode BaRs participate in the union-bbox accumulation and
+            // coordinator election.  Walk (Grids) mode BaRs never call AsyncAddBlocksOfBox
+            // so they neither produce nor consume the coordinator's cached entity list;
+            // including their work area in the union bbox would needlessly widen the query.
             {
                 var emitterMatrix = _Welder.WorldMatrix;
                 emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
@@ -131,9 +134,12 @@ namespace SKONanobotBuildAndRepairSystem
                     _ClusterKeyLastRefreshTime = now;
                 }
 
-                ScanCoordinator.AccumulateAndElect(
-                    System.Threading.Interlocked.Read(ref _ClusterKey),
-                    _Welder.CubeGrid, worldAABB, systemsSnapshot);
+                if (Settings.SearchMode == SearchModes.BoundingBox)
+                {
+                    ScanCoordinator.AccumulateAndElect(
+                        System.Threading.Interlocked.Read(ref _ClusterKey),
+                        _Welder.CubeGrid, worldAABB, systemsSnapshot);
+                }
             }
 
             // Cache session-level grind-block flag on main thread before launching the async task
@@ -573,8 +579,31 @@ namespace SKONanobotBuildAndRepairSystem
                         if (!areaBoundingBox.Intersects(ref gridAABB))
                             continue;
 
+                        // Snapshot count before scanning so we can cap this grid's contribution to
+                        // grind targets.  Without this, a single large grid can fill all 256 slots
+                        // and leave no room for other target grids.  BaRs blocked by the per-grid
+                        // BaR limit would then have no fallback targets and go idle.
+                        var grindCountBefore = possibleGrindTargets?.Count ?? 0;
+
                         // Scan for target blocks of grid.
                         AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, grid, grids, null, possibleWeldTargets, possibleGrindTargets);
+
+                        // Per-grid grind-candidate cap: each external grid may contribute at most
+                        // MaxSystemsPerTargetGrid * 3 entries.  This ensures all grids in range are
+                        // represented in the candidate list so that BaRs which are over the limit on
+                        // one grid can always find work on another.  The 3× factor gives a generous
+                        // buffer for AssignToSystem round-trips without monopolising the 256-slot list.
+                        // The cap is skipped when the per-grid BaR limit is disabled.
+                        if (possibleGrindTargets != null
+                            && !Mod.Settings.DisableLimitSystemsPerTargetGrid
+                            && Mod.Settings.MaxSystemsPerTargetGrid > 0)
+                        {
+                            var grindAdded = possibleGrindTargets.Count - grindCountBefore;
+                            var maxGrindPerGrid = Mod.Settings.MaxSystemsPerTargetGrid * 3;
+                            if (grindAdded > maxGrindPerGrid)
+                                possibleGrindTargets.RemoveRange(grindCountBefore + maxGrindPerGrid, grindAdded - maxGrindPerGrid);
+                        }
+
                         continue;
                     }
 

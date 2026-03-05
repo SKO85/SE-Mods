@@ -77,7 +77,11 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         case WorkModes.WeldBeforeGrind:
                             ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
-                            if (!inventoryFull && (State.PossibleWeldTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null)))
+                            // Fall through to grinding when no weld work was found this tick.
+                            // !needwelding covers both "no targets in scan" and "all targets blocked
+                            // by per-grid BaR limit / AssignToSystem" — either way this BaR is idle
+                            // for welding and should try grinding rather than sitting idle.
+                            if (!inventoryFull && (!needwelding || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null)))
                             {
                                 ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
                             }
@@ -86,7 +90,11 @@ namespace SKONanobotBuildAndRepairSystem
                         case WorkModes.GrindBeforeWeld:
                             if (!inventoryFull)
                                 ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
-                            if (!grinding && !transporting && (inventoryFull || State.PossibleGrindTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null)))
+                            // Fall through to welding when no grind work was found this tick.
+                            // !needgrinding covers both "no targets in scan" and "all targets blocked
+                            // by per-grid BaR limit / AssignToSystem" — either way this BaR is idle
+                            // for grinding and should try welding rather than sitting idle.
+                            if (!grinding && !transporting && (inventoryFull || !needgrinding || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null)))
                             {
                                 ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
                             }
@@ -285,11 +293,11 @@ namespace SKONanobotBuildAndRepairSystem
             // No ignore-set checks needed: _PossiblePushTargets contains only cargo containers,
             // so non-cargo destinations (assemblers, BaR welders, etc.) are already excluded.
             var flags = Settings.Flags;
-            var pushIngotOre  = (flags & SyncBlockSettings.Settings.PushIngotOreImmediately)  != 0;
+            var pushIngotOre = (flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0;
             var pushComponent = (flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0;
-            var pushItems     = (flags & SyncBlockSettings.Settings.PushItemsImmediately)      != 0;
-            var oreTypeId       = typeof(MyObjectBuilder_Ore).Name;
-            var ingotTypeId     = typeof(MyObjectBuilder_Ingot).Name;
+            var pushItems = (flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0;
+            var oreTypeId = typeof(MyObjectBuilder_Ore).Name;
+            var ingotTypeId = typeof(MyObjectBuilder_Ingot).Name;
             var componentTypeId = typeof(MyObjectBuilder_Component).Name;
 
             // Single PushComponents call to cargo containers only, with a type-aware filter.
@@ -402,7 +410,13 @@ namespace SKONanobotBuildAndRepairSystem
                         int activeCount;
                         activeGridSystems.TryGetValue(targetData.Block.CubeGrid.EntityId, out activeCount);
                         if (activeCount >= Mod.Settings.MaxSystemsPerTargetGrid)
+                        {
+                            // Release our OWN prior assignment on this block so another BaR can
+                            // claim it when a slot opens up on this grid. ReleaseIfMine is used
+                            // to avoid clearing another BaR's live assignment.
+                            if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseIfMine(_Welder.EntityId);
                             continue;
+                        }
                     }
 
                     if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && Settings.CurrentPickedGrindingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
@@ -461,7 +475,7 @@ namespace SKONanobotBuildAndRepairSystem
             foreach (var system in Mod.NanobotSystems.Values)
             {
                 if (system == this) continue;
-                long? weldGridId  = system.State.CurrentWeldingBlock?.CubeGrid?.EntityId;
+                long? weldGridId = system.State.CurrentWeldingBlock?.CubeGrid?.EntityId;
                 long? grindGridId = system.State.CurrentGrindingBlock?.CubeGrid?.EntityId;
                 if (weldGridId.HasValue)
                 {
@@ -517,7 +531,18 @@ namespace SKONanobotBuildAndRepairSystem
                             int activeCount;
                             activeGridSystems.TryGetValue(targetData.Block.CubeGrid.EntityId, out activeCount);
                             if (activeCount >= Mod.Settings.MaxSystemsPerTargetGrid)
+                            {
+                                // If we were locked onto this block but its grid is now at the BaR limit,
+                                // release our assignment and clear the lock so the loop can find a target
+                                // on another grid within this same tick rather than staying idle.
+                                if (State.CurrentWeldingBlock == targetData.Block)
+                                {
+                                    if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
+                                    State.CurrentWeldingBlock = null;
+                                    lookingForNext = true;
+                                }
                                 continue;
+                            }
                         }
 
                         if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers && Settings.CurrentPickedWeldingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))

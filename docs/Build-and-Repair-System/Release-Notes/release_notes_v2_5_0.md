@@ -101,3 +101,15 @@ When a Build and Repair block's inventory is full, the system no longer attempts
 ### Auto-Disable When Inventory Is Stuck Full (server setting)
 
 A new `MaxInventoryFullPushAttempts` mod setting (default: **100**) controls how many consecutive 5-second push cycles with a full inventory and no active welding the system will tolerate before automatically disabling itself. Set to **0** to disable this behaviour entirely. This prevents a system with a backed-up conveyor network from continuously attempting futile push operations indefinitely.
+
+### Systems No Longer Idle When Per-Grid Limit Is Reached and Other Grids Are Available
+
+When many Build and Repair systems are in range of multiple target grids, each grid's BaR count is capped by `MaxSystemsPerTargetGrid`. Previously, systems that were over the limit on one grid would fill their entire candidate list with targets from that same grid, leaving no room in the scan for other grids — causing them to show as idle. The scan now caps each individual grid's contribution to the candidate list, so all grids in range are represented and systems blocked on one grid can pick up work on another.
+
+### Walk (Grids) Mode Systems No Longer Inflate the Scan Coordinator's Bounding Box
+
+Build and Repair systems in **Walk** (Grids) search mode never use the cluster scan coordinator's shared entity list — only **Fly** (BoundingBox) mode systems do. Despite this, Walk-mode systems were still contributing their work area to the coordinator's union bounding box, causing it to issue larger-than-needed `GetTopMostEntitiesInBox` queries. Walk-mode systems are now excluded from the union bbox accumulation while still participating in the push-coalescing mechanism.
+
+### GrindBeforeWeld / WeldBeforeGrind – Idle Systems Now Fall Through to the Secondary Mode
+
+In **GrindBeforeWeld** mode, a Build and Repair system was only allowed to start welding if its scanned grind-target list was completely empty. When many systems shared the same targets and the per-grid BaR limit or the assign-to-system mechanism meant some systems genuinely had no grind work available, they stayed idle instead of welding. The same issue existed for **WeldBeforeGrind** in the opposite direction. Both modes now fall through to the secondary work type whenever the system finds no actionable targets for its primary mode, regardless of whether the scan returned candidates.
