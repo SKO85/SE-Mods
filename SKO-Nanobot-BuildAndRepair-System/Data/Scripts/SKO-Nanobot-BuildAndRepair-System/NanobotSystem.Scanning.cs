@@ -186,7 +186,32 @@ namespace SKONanobotBuildAndRepairSystem
                     emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
                     var areaOrientedBox = new MyOrientedBoundingBoxD(Settings.CorrectedAreaBoundingBox, emitterMatrix);
 
-                    AsyncAddBlocksOfGrid(ref areaOrientedBox, ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0), ref ignoreColor, ((Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0), ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, _Welder.CubeGrid, _TempGrids, updateSource ? _TempPossibleSources : null, updateSource ? _TempPossibleSourcesSet : null, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null);
+                    // Fast path: use the coordinator's cached mechanical grid snapshot to avoid
+                    // per-BaR DFS traversal of piston/rotor chains.  Each grid is scanned with
+                    // skipMechanicalTraversal=true so recursive piston/rotor walking is suppressed;
+                    // connector-linked grids are still discovered inside each call as before.
+                    // Slow path (null list): first cycle after startup, Walk-mode-only clusters, or
+                    // any BaR whose election hasn't run yet — fall back to full DFS from home grid.
+                    var mechanicalGridIds = ScanCoordinator.TryGetMechanicalGridIds(
+                        System.Threading.Interlocked.Read(ref _ClusterKey));
+                    if (mechanicalGridIds != null)
+                    {
+                        // Always scan own grid first so sources on the home grid are discovered.
+                        AsyncAddBlocksOfGrid(ref areaOrientedBox, ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0), ref ignoreColor, ((Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0), ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, _Welder.CubeGrid, _TempGrids, updateSource ? _TempPossibleSources : null, updateSource ? _TempPossibleSourcesSet : null, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null, skipMechanicalTraversal: true);
+
+                        foreach (var mechGridId in mechanicalGridIds)
+                        {
+                            if (mechGridId == _Welder.CubeGrid.EntityId) continue;
+                            var subGrid = MyAPIGateway.Entities.GetEntityById(mechGridId) as IMyCubeGrid;
+                            if (subGrid == null) continue;
+                            AsyncAddBlocksOfGrid(ref areaOrientedBox, ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0), ref ignoreColor, ((Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0), ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, subGrid, _TempGrids, updateSource ? _TempPossibleSources : null, updateSource ? _TempPossibleSourcesSet : null, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null, skipMechanicalTraversal: true);
+                        }
+                    }
+                    else
+                    {
+                        // Slow path: full DFS — first cycle, Walk-mode-only cluster, or no election yet.
+                        AsyncAddBlocksOfGrid(ref areaOrientedBox, ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0), ref ignoreColor, ((Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0), ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, _Welder.CubeGrid, _TempGrids, updateSource ? _TempPossibleSources : null, updateSource ? _TempPossibleSourcesSet : null, weldingEnabled ? _TempPossibleWeldTargets : null, grindingEnabled ? _TempPossibleGrindTargets : null);
+                    }
 
                     switch (Settings.SearchMode)
                     {
@@ -522,25 +547,35 @@ namespace SKONanobotBuildAndRepairSystem
                 // Build a sorted copy to avoid mutating the cached list.
                 if (possibleGrindTargets != null && (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0)
                 {
-                    // Reuse pre-allocated instance lists to avoid per-scan heap allocations
-                    _TempSortedGridEntities.Clear();
-                    _TempNonGridEntities.Clear();
-                    foreach (var e in entityInRange)
+                    // Try to reuse the coordinator's pre-sorted list (built once per cluster per TTL).
+                    var coordSorted = ScanCoordinator.TryGetSizeSortedEntities(clusterKey);
+                    if (coordSorted != null)
                     {
-                        if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, possibleFloatingTargets))
+                        entityInRange = coordSorted;
+                    }
+                    else
+                    {
+                        // Fallback: sort locally — coordinator not ready or TTL expired.
+                        // Reuse pre-allocated instance lists to avoid per-scan heap allocations.
+                        _TempSortedGridEntities.Clear();
+                        _TempNonGridEntities.Clear();
+                        foreach (var e in entityInRange)
                         {
-                            break;
+                            if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, possibleFloatingTargets))
+                            {
+                                break;
+                            }
+
+                            if (e is MyCubeGrid)
+                                _TempSortedGridEntities.Add(e);
+                            else
+                                _TempNonGridEntities.Add(e);
                         }
 
-                        if (e is MyCubeGrid)
-                            _TempSortedGridEntities.Add(e);
-                        else
-                            _TempNonGridEntities.Add(e);
+                        _TempSortedGridEntities.Sort((a, b) => ((MyCubeGrid)a).BlocksCount - ((MyCubeGrid)b).BlocksCount);
+                        _TempSortedGridEntities.AddRange(_TempNonGridEntities);
+                        entityInRange = _TempSortedGridEntities;
                     }
-
-                    _TempSortedGridEntities.Sort((a, b) => ((MyCubeGrid)a).BlocksCount - ((MyCubeGrid)b).BlocksCount);
-                    _TempSortedGridEntities.AddRange(_TempNonGridEntities);
-                    entityInRange = _TempSortedGridEntities;
                 }
 
                 foreach (var entity in entityInRange)
@@ -657,7 +692,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, HashSet<IMyCubeGrid> grids, List<IMyInventory> possibleSources, HashSet<IMyInventory> seenSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
+        private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, HashSet<IMyCubeGrid> grids, List<IMyInventory> possibleSources, HashSet<IMyInventory> seenSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets, bool skipMechanicalTraversal = false)
         {
             if (!State.Ready) return; //Block not ready
             if (grids.Contains(cubeGrid)) return; //Allready parsed
@@ -743,7 +778,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var mechanicalConnectionBlock = fatBlock as Sandbox.ModAPI.IMyMechanicalConnectionBlock;
                 if (mechanicalConnectionBlock != null)
                 {
-                    if (mechanicalConnectionBlock.TopGrid != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
+                    if (!skipMechanicalTraversal && mechanicalConnectionBlock.TopGrid != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
                     {
                         AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, mechanicalConnectionBlock.TopGrid, grids, possibleSources, seenSources, possibleWeldTargets, possibleGrindTargets);
                     }
@@ -753,7 +788,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var attachableTopBlock = fatBlock as Sandbox.ModAPI.IMyAttachableTopBlock;
                 if (attachableTopBlock != null)
                 {
-                    if (attachableTopBlock.Base != null && attachableTopBlock.Base.CubeGrid != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
+                    if (!skipMechanicalTraversal && attachableTopBlock.Base != null && attachableTopBlock.Base.CubeGrid != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
                     {
                         AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, attachableTopBlock.Base.CubeGrid, grids, possibleSources, seenSources, possibleWeldTargets, possibleGrindTargets);
                     }

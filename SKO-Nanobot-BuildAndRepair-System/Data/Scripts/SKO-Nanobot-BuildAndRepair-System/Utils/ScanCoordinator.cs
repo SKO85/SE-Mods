@@ -30,6 +30,11 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             // Coordinator writes inside WriteLock; non-coordinators read volatile reference.
             internal volatile List<IMyEntity> CachedEntities;
 
+            // Pre-sorted by grid size (BlocksCount ascending, non-grids appended at end).
+            // Populated whenever CachedEntities is refreshed. Same TTL as CachedEntities.
+            // Coordinator writes inside WriteLock; non-coordinators read volatile reference.
+            internal volatile List<IMyEntity> CachedEntitiesSortedBySize;
+
             // Written inside WriteLock; worst-case stale read just triggers one extra fallback.
             internal TimeSpan CachedEntitiesTime;
 
@@ -45,6 +50,11 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             // have no targets. Keyed by grid EntityId, value is the expiry timestamp.
             // Guarded by WriteLock. Written only by BaRs that checked both weld and grind lists.
             internal readonly Dictionary<long, TimeSpan> EmptyGridIgnoreExpiry = new Dictionary<long, TimeSpan>();
+
+            // Snapshot of all grid EntityIds in this cluster's mechanical group.
+            // Written on main thread inside Elect(); volatile so async readers see updates.
+            // Refreshed every election cycle (~60 s). null until the first election.
+            internal volatile long[] CachedMechanicalGridIds;
         }
 
         private static readonly ConcurrentDictionary<long, ClusterEntry> _clusters
@@ -224,6 +234,14 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             Interlocked.Exchange(ref entry.CoordinatorEntityId, bestId);
             entry.LastElectionTime = MyAPIGateway.Session.ElapsedPlayTime;
 
+            // Cache the flat list of mechanical grid EntityIds for use in AsyncUpdateSourcesAndTargets.
+            // Written here (main thread); read from async thread via volatile field.
+            var gridIdArr = new long[groupGridIds.Count];
+            var arrIdx = 0;
+            foreach (var gid in groupGridIds)
+                gridIdArr[arrIdx++] = gid;
+            entry.CachedMechanicalGridIds = gridIdArr;
+
             Logging.Instance.Write(Logging.Level.Verbose,
                 "ScanCoordinator: Cluster key={0} elected coordinator EntityId={1}",
                 clusterKey,
@@ -291,6 +309,29 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 entry.CachedEntities = fetched;
                 entry.CachedEntitiesTime = MyAPIGateway.Session.ElapsedPlayTime;
 
+                // Build the size-sorted copy for GrindSmallestGridFirst consumers.
+                if (fetched != null)
+                {
+                    var sortedGrids = new List<IMyEntity>();
+                    var nonGrids = new List<IMyEntity>();
+                    foreach (var ent in fetched)
+                    {
+                        if (ent is Sandbox.Game.Entities.MyCubeGrid)
+                            sortedGrids.Add(ent);
+                        else
+                            nonGrids.Add(ent);
+                    }
+                    sortedGrids.Sort((a, b) =>
+                        ((Sandbox.Game.Entities.MyCubeGrid)a).BlocksCount -
+                        ((Sandbox.Game.Entities.MyCubeGrid)b).BlocksCount);
+                    sortedGrids.AddRange(nonGrids);
+                    entry.CachedEntitiesSortedBySize = sortedGrids;
+                }
+                else
+                {
+                    entry.CachedEntitiesSortedBySize = null;
+                }
+
                 Logging.Instance.Write(Logging.Level.Verbose,
                     "ScanCoordinator: Cluster key={0} coordinator fetched {1} entities.",
                     clusterKey, fetched != null ? fetched.Count : 0);
@@ -323,6 +364,45 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 clusterKey, cached.Count);
 
             return cached;
+        }
+
+        /// <summary>
+        /// Returns the coordinator's cached entity list pre-sorted by grid size (BlocksCount ascending,
+        /// non-grid entities appended at the end). Used by BaRs with GrindSmallestGridFirst active
+        /// to avoid re-sorting the shared entity list on every scan cycle.
+        /// Returns null on cache miss or TTL expiry; caller falls back to a local sort.
+        /// No lock taken — reads the volatile reference atomically on x64.
+        /// </summary>
+        internal static List<IMyEntity> TryGetSizeSortedEntities(long clusterKey)
+        {
+            ClusterEntry entry;
+            if (!_clusters.TryGetValue(clusterKey, out entry))
+                return null;
+
+            var cached = entry.CachedEntitiesSortedBySize;   // volatile read
+            if (cached == null)
+                return null;
+
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            if ((now - entry.CachedEntitiesTime).TotalSeconds > EntityCacheTtlSeconds)
+                return null;
+
+            return cached;
+        }
+
+        /// <summary>
+        /// Returns the cached flat array of grid EntityIds in the mechanical group for
+        /// <paramref name="clusterKey"/>. Returns null until the first election runs.
+        /// Refreshed every ~60 s on the main thread; safe to call from async threads
+        /// (volatile read, no lock required).
+        /// </summary>
+        internal static long[] TryGetMechanicalGridIds(long clusterKey)
+        {
+            ClusterEntry entry;
+            if (!_clusters.TryGetValue(clusterKey, out entry))
+                return null;
+
+            return entry.CachedMechanicalGridIds;   // volatile read
         }
 
         // ──────────────────────────────────────────────────────────────────────
