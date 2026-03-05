@@ -500,7 +500,7 @@ public class BuildAndRepairSystemQueuingGroupData
             if (display != null && settings != null)
             {
                 display.Clear();
-                if (settings.DisplayKinds != null && RepairSystems != null)
+                if (settings.DisplayKinds != null && settings.DisplayKinds.Length > 0 && RepairSystems != null)
                 {
                     if (elapsedTime > NextSwitchTime[idx])
                     {
@@ -1133,7 +1133,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 BlockClass blockClass;
                 bool enabled;
-                if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
+                if (values.Length >= 2 && Enum.TryParse<BlockClass>(values[0], out blockClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
@@ -1213,7 +1213,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 BlockClass blockClass;
                 bool enabled;
-                if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
+                if (values.Length >= 2 && Enum.TryParse<BlockClass>(values[0], out blockClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
@@ -1293,7 +1293,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 ComponentClass compClass;
                 bool enabled;
-                if (Enum.TryParse<ComponentClass>(values[0], out compClass) &&
+                if (values.Length >= 2 && Enum.TryParse<ComponentClass>(values[0], out compClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     compList.Add(new ClassState<ComponentClass>(compClass, enabled));
@@ -1746,9 +1746,10 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
 
     private void CheckEnabled()
     {
+        AreEnabled = false;
         foreach (var entity in _Entities)
         {
-            if (entity.IsWorking && entity.IsFunctional)
+            if (entity.IsWorking)
             {
                 AreEnabled = true;
                 break;
@@ -1878,7 +1879,7 @@ public class StatusAndLogDisplay
     /// </summary> 
     internal void AddError(string line)
     {
-        _ErrorText = line + "\n";
+        _ErrorText += line + "\n";
     }
 
     /// <summary> 
