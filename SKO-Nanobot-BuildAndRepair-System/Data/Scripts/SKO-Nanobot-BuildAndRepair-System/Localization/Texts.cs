@@ -51,6 +51,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId GrindJanitorHackOnly_Tooltip;
         public static readonly MyStringId GrindPriority;
         public static readonly MyStringId GrindPriority_Tooltip;
+        public static readonly MyStringId GrindPriority_SectionLabel;
         public static readonly MyStringId GrindOrderNearest;
         public static readonly MyStringId GrindOrderNearest_Tooltip;
         public static readonly MyStringId GrindOrderFarthest;
@@ -75,6 +76,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId Color_PickCurrentColor;
         public static readonly MyStringId Color_SetCurrentColor;
 
+        public static readonly MyStringId Priority_ToggleItem;
         public static readonly MyStringId Priority_Enable;
         public static readonly MyStringId Priority_Disable;
         public static readonly MyStringId Priority_Up;
@@ -180,6 +182,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
 
             GrindPriority = LocalizationHelper.GetStringId(texts, "GrindPriority");
             GrindPriority_Tooltip = LocalizationHelper.GetStringId(texts, "GrindPriority_Tooltip", TextDefaultMaxTooltipLenght);
+            GrindPriority_SectionLabel = LocalizationHelper.GetStringId(texts, "GrindPriority_SectionLabel");
 
             GrindOrderNearest = LocalizationHelper.GetStringId(texts, "GrindOrderNearest");
             GrindOrderNearest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderNearest_Tooltip", TextDefaultMaxTooltipLenght);
@@ -205,6 +208,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             Color_PickCurrentColor = LocalizationHelper.GetStringId(texts, "Color_PickCurrentColor");
             Color_SetCurrentColor = LocalizationHelper.GetStringId(texts, "Color_SetCurrentColor");
 
+            Priority_ToggleItem = LocalizationHelper.GetStringId(texts, "Priority_ToggleItem");
             Priority_Enable = LocalizationHelper.GetStringId(texts, "Priority_Enable");
             Priority_Disable = LocalizationHelper.GetStringId(texts, "Priority_Disable");
             Priority_Up = LocalizationHelper.GetStringId(texts, "Priority_Up");

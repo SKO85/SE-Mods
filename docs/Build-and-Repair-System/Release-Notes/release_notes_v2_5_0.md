@@ -8,7 +8,7 @@ nav_order: 1
 
 # Release Notes – v2.5.0
 
-- Release date: 2 March 2026
+- Release date: 2 March 2026 (updated 9 March 2026)
 - Code changes: 31 `.cs` files changed — 4,150 insertions, 3,170 deletions (~7,320 lines of code touched)
 
 ## New Features
@@ -30,6 +30,10 @@ You can now turn off the flying nanobot trace animations individually per block 
 ### Priority List – Enable All / Disable All
 
 The Weld Priority and Grind Priority lists now have **Enable All** and **Disable All** buttons, so you no longer have to toggle every entry one by one.
+
+### Priority List – Connector and Merge Block
+
+**Connector** blocks and **Merge Blocks** are now separate entries in both the Weld Priority and Grind Priority lists. Previously, both block types were grouped under the generic **FunctionalBlock** category with no way to control their priority individually. They now appear as **ShipConnector** and **ShipMergeBlock** and can be enabled, disabled, and reordered independently.
 
 ### Reset All Settings
 
@@ -125,3 +129,19 @@ Build and Repair systems in **Walk** (Grids) search mode never use the cluster s
 ### GrindBeforeWeld / WeldBeforeGrind – Idle Systems Now Fall Through to the Secondary Mode
 
 In **GrindBeforeWeld** mode, a Build and Repair system was only allowed to start welding if its scanned grind-target list was completely empty. When many systems shared the same targets and the per-grid BaR limit or the assign-to-system mechanism meant some systems genuinely had no grind work available, they stayed idle instead of welding. The same issue existed for **WeldBeforeGrind** in the opposite direction. Both modes now fall through to the secondary work type whenever the system finds no actionable targets for its primary mode, regardless of whether the scan returned candidates.
+
+### Welding Blocked When All Cargo Containers Were Full
+
+When all connected cargo containers were full, a Build and Repair system could enter a deadlock where it refused to weld even if it had all required components in its own inventory. Two separate bugs combined to cause this:
+
+1. **Welding was skipped entirely when inventory was full.** When grinding or collecting filled the inventory, the system cancelled the pick transport and then did nothing else — including no welding. Since welding consumes components it is exactly the operation that can break the deadlock, so it is now always attempted regardless of inventory state. Grinding and collecting are still correctly blocked when the inventory is full.
+
+2. **Push operations only targeted cargo containers.** With no cargo space available, grinding loot could not be pushed anywhere, the welder stayed full, and the transport inventory could not drain. The system now falls back to pushing to all available destinations (for example, ore to a connected refinery) when all cargo containers are full.
+
+### Grinding Order Toggles Now Work as Proper Radio Buttons
+
+The **Nearest First**, **Farthest First**, and **Smallest Grid First** options in the terminal now behave as a mutually exclusive set — exactly one is always active. Previously, clicking the currently active option to deactivate it would leave all three buttons in the off state. The correct behaviour is now enforced:
+
+- Deactivating **Nearest First** → activates **Farthest First**
+- Deactivating **Farthest First** → activates **Nearest First**
+- Deactivating **Smallest Grid First** → activates **Farthest First**

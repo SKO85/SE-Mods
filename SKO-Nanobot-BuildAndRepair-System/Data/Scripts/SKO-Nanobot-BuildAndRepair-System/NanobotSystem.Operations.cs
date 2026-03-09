@@ -49,77 +49,80 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (isFullInventoryAndPicking)
                 {
+                    // Cancel the stuck pick transport. Inventory is full and the grind/collect
+                    // loot can't be delivered. We do NOT skip the work loop below — welding is
+                    // still attempted because it consumes components and can break the deadlock.
+                    // Grinding and collecting are individually gated on !inventoryFull and will
+                    // correctly skip themselves.
                     State.LastTransportTarget = State.CurrentTransportTarget;
                     State.CurrentTransportTarget = null;
                     State.CurrentTransportStartTime = TimeSpan.Zero;
                     transporting = false;
                 }
-                else
+
+                transporting = IsTransportRunning(playTime);
+
+                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting && !inventoryFull)
+                    ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
+
+                if (!transporting)
                 {
-                    transporting = IsTransportRunning(playTime);
+                    State.MissingComponents.Clear();
+                    State.LimitsExceeded = false;
 
-                    if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting && !inventoryFull)
-                        ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
+                    // Compute once here so WeldBeforeGrind / GrindBeforeWeld modes don't rebuild it twice
+                    var activeGridSystems = Mod.Settings.DisableLimitSystemsPerTargetGrid
+                        ? null : BuildActiveGridMap();
 
-                    if (!transporting)
+                    switch (Settings.WorkMode)
                     {
-                        State.MissingComponents.Clear();
-                        State.LimitsExceeded = false;
+                        case WorkModes.WeldBeforeGrind:
+                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
+                            // Fall through to grinding when no weld work was found this tick.
+                            // !needwelding covers both "no targets in scan" and "all targets blocked
+                            // by per-grid BaR limit / AssignToSystem" — either way this BaR is idle
+                            // for welding and should try grinding rather than sitting idle.
+                            if (!inventoryFull && (!needwelding || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null)))
+                            {
+                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
+                            }
+                            break;
 
-                        // Compute once here so WeldBeforeGrind / GrindBeforeWeld modes don't rebuild it twice
-                        var activeGridSystems = Mod.Settings.DisableLimitSystemsPerTargetGrid
-                            ? null : BuildActiveGridMap();
-
-                        switch (Settings.WorkMode)
-                        {
-                            case WorkModes.WeldBeforeGrind:
+                        case WorkModes.GrindBeforeWeld:
+                            if (!inventoryFull)
+                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
+                            // Fall through to welding when no grind work was found this tick.
+                            // !needgrinding covers both "no targets in scan" and "all targets blocked
+                            // by per-grid BaR limit / AssignToSystem" — either way this BaR is idle
+                            // for grinding and should try welding rather than sitting idle.
+                            if (!grinding && !transporting && (inventoryFull || !needgrinding || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null)))
+                            {
                                 ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
-                                // Fall through to grinding when no weld work was found this tick.
-                                // !needwelding covers both "no targets in scan" and "all targets blocked
-                                // by per-grid BaR limit / AssignToSystem" — either way this BaR is idle
-                                // for welding and should try grinding rather than sitting idle.
-                                if (!inventoryFull && (!needwelding || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null)))
-                                {
-                                    ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
-                                }
-                                break;
+                            }
+                            break;
 
-                            case WorkModes.GrindBeforeWeld:
-                                if (!inventoryFull)
-                                    ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
-                                // Fall through to welding when no grind work was found this tick.
-                                // !needgrinding covers both "no targets in scan" and "all targets blocked
-                                // by per-grid BaR limit / AssignToSystem" — either way this BaR is idle
-                                // for grinding and should try welding rather than sitting idle.
-                                if (!grinding && !transporting && (inventoryFull || !needgrinding || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null)))
-                                {
-                                    ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
-                                }
-                                break;
+                        case WorkModes.GrindIfWeldGetStuck:
+                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
+                            if (!inventoryFull && (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null)))
+                            {
+                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
+                            }
+                            break;
 
-                            case WorkModes.GrindIfWeldGetStuck:
-                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
-                                if (!inventoryFull && (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null)))
-                                {
-                                    ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
-                                }
-                                break;
+                        case WorkModes.WeldOnly:
+                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
+                            break;
 
-                            case WorkModes.WeldOnly:
-                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock, activeGridSystems);
-                                break;
-
-                            case WorkModes.GrindOnly:
-                                if (!inventoryFull)
-                                    ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
-                                break;
-                        }
-                        State.MissingComponents.RebuildHash();
+                        case WorkModes.GrindOnly:
+                            if (!inventoryFull)
+                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock, activeGridSystems);
+                            break;
                     }
-
-                    if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding && !inventoryFull)
-                        ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
+                    State.MissingComponents.RebuildHash();
                 }
+
+                if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding && !inventoryFull)
+                    ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
             }
             else
             {

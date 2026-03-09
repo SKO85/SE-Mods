@@ -48,6 +48,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindJanitorHackOnly_Tooltip",    "Po zaznaczeniu, tylko funkcjonalne bloki będą rozbierane do momentu, aż będzie można je zhakować."},
             {"GrindPriority",                   "Priorytet rozbiórki"},
             {"GrindPriority_Tooltip",           "Włącz/Wyłącz rozbiórkę wybranych przedmiotów i ustaw ich priorytet\n(Jeśli rozbiórka według koloru – priorytet i status są ignorowane)"},
+            {"GrindPriority_SectionLabel",      "Priorytet rozbiórki"},
             {"GrindOrderNearest",               "Najpierw najbliższe"},
             {"GrindOrderNearest_Tooltip",       "Po zaznaczeniu, jeśli bloki mają ten sam priorytet, najbliższy będzie rozbierany pierwszy."},
             {"GrindOrderFarthest",              "Najpierw najdalsze"},
@@ -69,6 +70,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"CollectPushComp",                 "Wpierw zbierz komponenty"},
             {"CollectPushComp_Tooltip",         "Po zaznaczeniu, system natychmiast przesyła komponenty do pojemnika."},
 
+            {"Priority_ToggleItem",              "Przełącz element"},
             {"Priority_Enable",                 "Wł"},
             {"Priority_Disable",                "Wył"},
             {"Priority_Up",                     "Zwiększ priorytet"},

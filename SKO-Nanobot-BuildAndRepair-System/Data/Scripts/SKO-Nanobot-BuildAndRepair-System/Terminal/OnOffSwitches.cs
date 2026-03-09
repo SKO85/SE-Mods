@@ -527,10 +527,10 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 "WeldPriority",
 
                 // Texts
-                Texts.WeldPriority,
+                Texts.Priority_ToggleItem,
                 Texts.WeldPriority_Tooltip,
-                Texts.Priority_Enable,
-                Texts.Priority_Disable,
+                MySpaceTexts.SwitchText_On,
+                MySpaceTexts.SwitchText_Off,
 
                 // Visible:
                 isWeldingAllowed,
@@ -751,10 +751,10 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 "GrindPriority",
 
                 // Texts
-                Texts.GrindPriority,
+                Texts.Priority_ToggleItem,
                 Texts.GrindPriority_Tooltip,
-                Texts.Priority_Enable,
-                Texts.Priority_Disable,
+                MySpaceTexts.SwitchText_On,
+                MySpaceTexts.SwitchText_Off,
 
                 // Visible:
                 isGrindingAllowed,

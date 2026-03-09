@@ -48,6 +48,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindJanitorHackOnly_Tooltip",    "Wenn diese Option markiert ist, wird das System Blöcke nur solange demontieren bis sie übernehmbar (Hackbar) sind."},
             {"GrindPriority",                   "Zerlege Priorität"},
             {"GrindPriority_Tooltip",           "Schlaltet das Demontieren des selektierten Blocktypes ein/aus und legt die Priorität fest.\n(Wenn das Demontieren per festgelegter Farbe erfolgt, wird die Priorät und die Freigabe ignorierd)"},
+            {"GrindPriority_SectionLabel",      "Zerlege Priorität"},
             {"GrindOrderNearest",               "Nächstgelegen zurerst"},
             {"GrindOrderNearest_Tooltip",       "Wenn diese Option markiert ist und Blöcke die gleiche Priorität besitzen, wird der nächgelegen Block zuerst demontiert."},
             {"GrindOrderFarthest",              "Enferntester zuerst"},
@@ -69,6 +70,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"CollectPushComp",                 "Komponenten sofort auslagern"},
             {"CollectPushComp_Tooltip",         "Wenn diese Option markiert ist, wird das System sofort versuchen Komponenten in angschlosse Container auszulagern."},
 
+            {"Priority_ToggleItem",              "Eintrag umschalten"},
             {"Priority_Enable",                 "Aktiv."},
             {"Priority_Disable",                "Deakt."},
             {"Priority_Up",                     "Priorität hoch"},
