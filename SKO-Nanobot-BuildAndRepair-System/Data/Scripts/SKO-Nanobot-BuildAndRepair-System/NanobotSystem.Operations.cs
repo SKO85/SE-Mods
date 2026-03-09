@@ -268,17 +268,29 @@ namespace SKONanobotBuildAndRepairSystem
                 _InventoryFullPushAttempts = 0;
             }
 
-            // Check space first using this BaR's own source list — if its conveyor network has
-            // no room there is nothing to do and no reason to claim the cluster slot, allowing
-            // BaRs on separate conveyor networks (same grid, different pipes) to push freely.
-            if (!HasSourcesWithSpace())
+            // Choose push targets: prefer cargo containers; if cargo is full fall back to all
+            // possible sources (e.g. ore → refineries) so the welder can drain and break the
+            // inventory-full deadlock that would block welding.
+            List<IMyInventory> pushTargetsSnapshot;
+            lock (_PossibleSources)
+            {
+                bool cargoHasSpace = false;
+                foreach (var inv in _PossiblePushTargets)
+                    if (inv.MaxVolume > inv.CurrentVolume) { cargoHasSpace = true; break; }
+                pushTargetsSnapshot = cargoHasSpace
+                    ? new List<IMyInventory>(_PossiblePushTargets)
+                    : new List<IMyInventory>(_PossibleSources);
+            }
+
+            if (pushTargetsSnapshot.Count == 0)
             {
                 _TryAutoPushInventoryLast = now;
                 return;
             }
 
-            // Sources have space. Claim the cluster push slot so that BaRs sharing the same
-            // conveyor network don't all traverse it simultaneously in the same tick.
+            // Claim the cluster push slot so that BaRs sharing the same conveyor network
+            // don't all traverse it simultaneously in the same tick. BaRs on separate
+            // conveyor networks (same grid, different pipes) can push freely.
             if (!ScanCoordinator.TryClaimClusterPush(_ClusterKey, now))
             {
                 _TryAutoPushInventoryLast = now;
@@ -289,21 +301,13 @@ namespace SKONanobotBuildAndRepairSystem
             if (welderInventory == null || welderInventory.Empty()) return;
 
             // Pre-capture flags so the lambda doesn't re-read fields on every invocation.
-            // No ignore-set checks needed: _PossiblePushTargets contains only cargo containers,
-            // so non-cargo destinations (assemblers, BaR welders, etc.) are already excluded.
             var flags = Settings.Flags;
             var pushIngotOre = (flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0;
             var pushComponent = (flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0;
             var pushItems = (flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0;
 
-            // Single PushComponents call to cargo containers only, with a type-aware filter.
+            // Single PushComponents call with a type-aware filter.
             // One conveyor traversal covers all item types instead of one traversal per item.
-            // Snapshot _PossiblePushTargets under _PossibleSources lock to avoid a data race with the async scan thread.
-            List<IMyInventory> pushTargetsSnapshot;
-            lock (_PossibleSources)
-            {
-                pushTargetsSnapshot = new List<IMyInventory>(_PossiblePushTargets);
-            }
             bool pushed = welderInventory.PushComponents(pushTargetsSnapshot, (IMyInventory destInventory, IMyInventory srcInventory, ref MyInventoryItem srcItemIn) =>
             {
                 var typeId = srcItemIn.Type.TypeId;

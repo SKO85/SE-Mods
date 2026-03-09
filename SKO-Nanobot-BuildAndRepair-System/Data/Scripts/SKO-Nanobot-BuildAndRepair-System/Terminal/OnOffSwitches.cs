@@ -931,6 +931,11 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                         {
                             system.Settings.Flags = (system.Settings.Flags & ~(SyncBlockSettings.Settings.GrindSmallestGridFirst | SyncBlockSettings.Settings.GrindNearFirst));
                         }
+                        else
+                        {
+                            // Deactivating FarFirst activates NearFirst.
+                            system.Settings.Flags = (system.Settings.Flags & ~SyncBlockSettings.Settings.GrindSmallestGridFirst) | SyncBlockSettings.Settings.GrindNearFirst;
+                        }
                         foreach (var ctrl in NanobotTerminal.CustomControls)
                         {
                             if (ctrl.Id.Contains("GrindNearFirst")) ctrl.UpdateVisual();
@@ -983,6 +988,11 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                         if (value)
                         {
                             system.Settings.Flags = (system.Settings.Flags & ~SyncBlockSettings.Settings.GrindNearFirst) | SyncBlockSettings.Settings.GrindSmallestGridFirst;
+                        }
+                        else
+                        {
+                            // Deactivating SmallestGridFirst activates FarFirst (the default: no flags set).
+                            system.Settings.Flags = (system.Settings.Flags & ~SyncBlockSettings.Settings.GrindSmallestGridFirst);
                         }
                         foreach (var ctrl in NanobotTerminal.CustomControls)
                         {

@@ -174,23 +174,6 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Returns true if at least one source inventory has available volume.
-        /// Used to skip expensive PushComponents calls when all destinations are full.
-        /// </summary>
-        private bool HasSourcesWithSpace()
-        {
-            lock (_PossibleSources) // same lock guards _PossiblePushTargets
-            {
-                foreach (var src in _PossiblePushTargets)
-                {
-                    if (src.MaxVolume > src.CurrentVolume)
-                        return true;
-                }
-            }
-            return false;
-        }
-
-        /// <summary>
         /// Check if the transport inventory is empty after delivering/grinding/collecting, if not move items back to welder inventory
         /// </summary>
         private bool ServerEmptyTranportInventory(bool push)
@@ -207,21 +190,23 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryPushInventoryLast).TotalSeconds > 5 && welderInventory.MaxVolume - welderInventory.CurrentVolume < _TransportInventory.CurrentVolume * 1.5f)
                             {
-                                if (!HasSourcesWithSpace())
+                                // Prefer cargo containers; fall back to all possible sources
+                                // (e.g. ore → refineries) when cargo is full so the welder
+                                // can drain and break the inventory-full deadlock.
+                                List<IMyInventory> pushTargetsSnapshot;
+                                lock (_PossibleSources)
                                 {
-                                    // No destination has room — skip the expensive push and back off
-                                    _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
+                                    bool cargoHasSpace = false;
+                                    foreach (var inv in _PossiblePushTargets)
+                                        if (inv.MaxVolume > inv.CurrentVolume) { cargoHasSpace = true; break; }
+                                    pushTargetsSnapshot = cargoHasSpace
+                                        ? new List<IMyInventory>(_PossiblePushTargets)
+                                        : new List<IMyInventory>(_PossibleSources);
                                 }
-                                else
+                                if (!welderInventory.PushComponents(pushTargetsSnapshot, null))
                                 {
-                                    // Snapshot _PossiblePushTargets under lock to avoid a race with the async scan thread.
-                                    List<IMyInventory> pushTargetsSnapshot;
-                                    lock (_PossibleSources) { pushTargetsSnapshot = new List<IMyInventory>(_PossiblePushTargets); }
-                                    if (!welderInventory.PushComponents(pushTargetsSnapshot, null))
-                                    {
-                                        // Push attempted but nothing moved — back off
-                                        _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
-                                    }
+                                    // Push attempted but nothing moved — back off
+                                    _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
                                 }
                             }
                         }
