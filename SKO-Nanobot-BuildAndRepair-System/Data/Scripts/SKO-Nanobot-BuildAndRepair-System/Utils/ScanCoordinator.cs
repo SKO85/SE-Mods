@@ -46,11 +46,6 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
             internal readonly object WriteLock = new object();
 
-            // Grids that were scanned by a full-mode BaR (weld+grind both checked) and found to
-            // have no targets. Keyed by grid EntityId, value is the expiry timestamp.
-            // Guarded by WriteLock. Written only by BaRs that checked both weld and grind lists.
-            internal readonly Dictionary<long, TimeSpan> EmptyGridIgnoreExpiry = new Dictionary<long, TimeSpan>();
-
             // Snapshot of all grid EntityIds in this cluster's mechanical group.
             // Written on main thread inside Elect(); volatile so async readers see updates.
             // Refreshed every election cycle (~60 s). null until the first election.
@@ -122,57 +117,12 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         /// window. When this returns true, the cluster's LastPushTime is updated.
         /// Main-thread only.
         /// </summary>
-        // ──────────────────────────────────────────────────────────────────────
+        // ------------------------------------------------------------------
         // Shared empty-grid ignore API
-        // ──────────────────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Returns true when <paramref name="gridEntityId"/> is currently in the cluster-wide
-        /// empty-grid ignore list and the ignore window has not yet expired.
-        /// Safe to call from async worker threads.
-        /// </summary>
-        internal static bool IsGridIgnored(long clusterKey, long gridEntityId, TimeSpan now)
-        {
-            ClusterEntry entry;
-            if (!_clusters.TryGetValue(clusterKey, out entry))
-                return false;
-            lock (entry.WriteLock)
-            {
-                TimeSpan expiry;
-                return entry.EmptyGridIgnoreExpiry.TryGetValue(gridEntityId, out expiry)
-                       && now < expiry;
-            }
-        }
-
-        /// <summary>
-        /// Records <paramref name="gridEntityId"/> as empty until <paramref name="expiry"/>.
-        /// Only call when both weld and grind target lists were checked and found empty.
-        /// Safe to call from async worker threads.
-        /// </summary>
-        internal static void SetGridIgnored(long clusterKey, long gridEntityId, TimeSpan expiry)
-        {
-            var entry = _clusters.GetOrAdd(clusterKey, _ => new ClusterEntry());
-            lock (entry.WriteLock)
-            {
-                entry.EmptyGridIgnoreExpiry[gridEntityId] = expiry;
-            }
-        }
-
-        /// <summary>
-        /// Removes <paramref name="gridEntityId"/> from the cluster-wide ignore list.
-        /// Call when targets are found for the grid so other BaRs stop skipping it.
-        /// Safe to call from async worker threads.
-        /// </summary>
-        internal static void ClearGridIgnored(long clusterKey, long gridEntityId)
-        {
-            ClusterEntry entry;
-            if (!_clusters.TryGetValue(clusterKey, out entry))
-                return;
-            lock (entry.WriteLock)
-            {
-                entry.EmptyGridIgnoreExpiry.Remove(gridEntityId);
-            }
-        }
+        // (Removed — empty-grid ignore is now per-system, tracked on each
+        // NanobotSystem instance to prevent one BaR from suppressing targets
+        // that only another BaR with a different work area can reach.)
+        // ------------------------------------------------------------------
 
         internal static bool TryClaimClusterPush(long clusterKey, TimeSpan now, double cooldownSeconds = 5.0)
         {
@@ -438,19 +388,6 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                     ClusterEntry removed;
                     _clusters.TryRemove(key, out removed);
                     continue;
-                }
-
-                // Purge expired empty-grid ignore entries for active clusters.
-                lock (entry.WriteLock)
-                {
-                    if (entry.EmptyGridIgnoreExpiry.Count > 0)
-                    {
-                        var toRemove = new List<long>();
-                        foreach (var kv in entry.EmptyGridIgnoreExpiry)
-                            if (now >= kv.Value) toRemove.Add(kv.Key);
-                        foreach (var id in toRemove)
-                            entry.EmptyGridIgnoreExpiry.Remove(id);
-                    }
                 }
             }
         }

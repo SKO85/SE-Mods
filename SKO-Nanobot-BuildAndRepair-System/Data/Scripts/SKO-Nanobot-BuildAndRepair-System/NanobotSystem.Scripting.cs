@@ -1,6 +1,6 @@
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Utils;
-using System.Collections.Generic;
+using System;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -77,15 +77,13 @@ namespace SKONanobotBuildAndRepairSystem
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             if (playTime.Subtract(_LastFriendlyDamageCleanup) > Mod.Settings.FriendlyDamageCleanup)
             {
-                //Cleanup
-                var timedout = new List<IMySlimBlock>();
                 foreach (var entry in FriendlyDamage)
                 {
-                    if (entry.Value < playTime) timedout.Add(entry.Key);
-                }
-                for (var idx = timedout.Count - 1; idx >= 0; idx--)
-                {
-                    FriendlyDamage.Remove(timedout[idx]);
+                    if (entry.Value < playTime)
+                    {
+                        TimeSpan removed;
+                        FriendlyDamage.TryRemove(entry.Key, out removed);
+                    }
                 }
                 _LastFriendlyDamageCleanup = playTime;
             }

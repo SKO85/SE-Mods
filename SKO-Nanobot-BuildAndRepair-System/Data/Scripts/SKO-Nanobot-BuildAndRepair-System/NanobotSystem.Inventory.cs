@@ -416,8 +416,6 @@ namespace SKONanobotBuildAndRepairSystem
                                     else
                                     {
                                         //No (more) space in welder
-                                        neededAmount -= availAmount;
-                                        remainingVolume -= availAmount * volume;
                                         return picked;
                                     }
                                 }

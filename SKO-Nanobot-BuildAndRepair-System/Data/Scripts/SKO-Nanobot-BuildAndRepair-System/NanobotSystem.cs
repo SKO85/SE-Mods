@@ -4,6 +4,7 @@ using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using VRage.Game;
@@ -107,6 +108,11 @@ namespace SKONanobotBuildAndRepairSystem
         private TimeSpan _CachedEntitiesInRangeTime;
         private Vector3D _CachedEntitiesInRangeBBoxCenter;
         private const double EntityCacheTtlSeconds = 5.0;
+
+        // Per-system empty-grid ignore cache. Each BaR independently tracks which grids it
+        // scanned and found to have no targets. Keyed by grid EntityId, value is expiry timestamp.
+        // Only accessed from the single async scan thread per instance — no locking needed.
+        private readonly Dictionary<long, TimeSpan> _emptyGridIgnoreExpiry = new Dictionary<long, TimeSpan>();
         private const double EntityCachePositionTolerance = 25.0; // metres
 
         // Written on main thread (StartAsyncUpdateSourcesAndTargets); read on async worker thread.
@@ -233,9 +239,11 @@ namespace SKONanobotBuildAndRepairSystem
         { get { return _State; } }
 
         /// <summary>
-        /// Currently friendly damaged blocks
+        /// Currently friendly damaged blocks.
+        /// ConcurrentDictionary because DamageHandler.OnAfterDamage writes from the
+        /// damage-system thread while the main thread reads/cleans up.
         /// </summary>
-        public readonly Dictionary<IMySlimBlock, TimeSpan> FriendlyDamage = new Dictionary<IMySlimBlock, TimeSpan>();
+        public readonly ConcurrentDictionary<IMySlimBlock, TimeSpan> FriendlyDamage = new ConcurrentDictionary<IMySlimBlock, TimeSpan>();
 
         /// <summary>
         /// Initialize logical component
@@ -332,7 +340,7 @@ namespace SKONanobotBuildAndRepairSystem
                 lock (State.PossibleGrindTargets) State.PossibleGrindTargets?.Clear();
                 lock (State.PossibleFloatingTargets) State.PossibleFloatingTargets?.Clear();
                 lock (State.MissingComponents) State.MissingComponents?.Clear();
-                lock (FriendlyDamage) FriendlyDamage?.Clear();
+                FriendlyDamage?.Clear();
 
                 _TempPossibleWeldTargets?.Clear();
                 _TempPossibleGrindTargets?.Clear();
