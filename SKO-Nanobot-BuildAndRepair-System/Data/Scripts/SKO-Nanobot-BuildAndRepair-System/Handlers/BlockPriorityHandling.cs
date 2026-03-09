@@ -23,7 +23,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         DisplayPanel,
         Lighting,
         SensorDevice,
-        CommunicationBlock
+        CommunicationBlock,
+        ShipConnector,
+        ShipMergeBlock
     }
 
     public enum ComponentClass
@@ -65,7 +67,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             // Check cache.
             int result = 14;
-            if (!_HashDirty && GetItemKeyCache.TryGet(block.EntityId, out result))
+            // Pack 'real' into the cache key so that the same entity with different 'real' values
+            // doesn't collide (e.g. a Thruster with real=true vs. real=false is classed differently).
+            var cacheKey = block.EntityId * 2L + (real ? 1L : 0L);
+            if (!_HashDirty && GetItemKeyCache.TryGet(cacheKey, out result))
             {
                 return result;
             }
@@ -92,10 +97,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             else if (block is Sandbox.ModAPI.IMyLightingBlock) result = (int)BlockClass.Lighting;
             else if (block is Sandbox.ModAPI.IMySensorBlock || block is Sandbox.ModAPI.IMyCameraBlock) result = (int)BlockClass.SensorDevice;
             else if (block is Sandbox.ModAPI.IMyRadioAntenna || block is Sandbox.ModAPI.IMyLaserAntenna) result = (int)BlockClass.CommunicationBlock;
+            else if (block is Sandbox.ModAPI.IMyShipConnector) result = (int)BlockClass.ShipConnector;
+            else if (block is SpaceEngineers.Game.ModAPI.IMyShipMergeBlock) result = (int)BlockClass.ShipMergeBlock;
             else if (functionalBlock != null) result = (int)BlockClass.FunctionalBlock;
             else result = (int)BlockClass.ArmorBlock;
 
-            GetItemKeyCache.Set(block.EntityId, result);
+            GetItemKeyCache.Set(cacheKey, result);
             return result;
         }
 

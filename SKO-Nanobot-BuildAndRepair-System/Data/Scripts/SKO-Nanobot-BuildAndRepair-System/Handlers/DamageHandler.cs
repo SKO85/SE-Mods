@@ -15,6 +15,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static bool _registered = false;
 
+        // Reused per damage event to cache relation lookups by barOwnerId.
+        // Avoids redundant GetUserRelationToOwner calls when many BaRs share the same owner.
+        // OnAfterDamage is invoked on the game logic thread (single-threaded), so no lock needed.
+        private static readonly Dictionary<long, bool> _eventRelationCache = new Dictionary<long, bool>();
+
         public static void Register()
         {
             if (_registered || MyAPIGateway.Session == null)
@@ -50,13 +55,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         /// </summary>
         public static void OnBeforeDamage(object target, ref MyDamageInformation info)
         {
+            // Guard: no-op if the handler has been logically unregistered (SE has no unregister API).
+            if (!_registered) return;
             try
             {
                 if (info.Type == MyDamageType.Weld)
                 {
                     if (target is IMyCharacter)
                     {
-                        var logicalComponent = Mod.NanobotSystems.GetValueOrDefault(info.AttackerId);
+                        NanobotSystem logicalComponent;
+                        Mod.NanobotSystems.TryGetValue(info.AttackerId, out logicalComponent);
                         if (logicalComponent != null)
                         {
                             var terminalBlock = logicalComponent.Entity as IMyTerminalBlock;
@@ -76,6 +84,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         /// </summary>
         public static void OnAfterDamage(object target, MyDamageInformation info)
         {
+            // Guard: no-op if the handler has been logically unregistered (SE has no unregister API).
+            if (!_registered) return;
             try
             {
                 if (info.Type == MyDamageType.Grind && info.Amount > 0)
@@ -104,23 +114,33 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                         if (attackerId != 0)
                         {
+                            var expiry = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                            _eventRelationCache.Clear();
                             foreach (var entry in Mod.NanobotSystems)
                             {
-                                var relation = entry.Value.Welder.GetUserRelationToOwner(attackerId);
+                                var barOwnerId = entry.Value.Welder.OwnerId;
+                                bool isFriendly;
+                                if (!_eventRelationCache.TryGetValue(barOwnerId, out isFriendly))
+                                {
+                                    var relation = entry.Value.Welder.GetUserRelationToOwner(attackerId);
+                                    isFriendly = MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation);
+                                    _eventRelationCache[barOwnerId] = isFriendly;
+                                }
 
-                                if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
+                                if (isFriendly)
                                 {
                                     // A 'friendly' damage from grinder -> do not repair (for a while)
-                                    entry.Value.FriendlyDamage[targetBlock] = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                                    entry.Value.FriendlyDamage[targetBlock] = expiry;
                                 }
                             }
+                            _eventRelationCache.Clear();
                         }
                     }
                 }
             }
             catch (Exception e)
             {
-                Logging.Instance.Error("BuildAndRepairSystemMod: Exception in BeforeDamageHandlerNoDamageByBuildAndRepairSystem: Source={0}, Message={1}", e.Source, e.Message);
+                Logging.Instance.Error("BuildAndRepairSystemMod: Exception in OnAfterDamage: Source={0}, Message={1}", e.Source, e.Message);
             }
         }
     }

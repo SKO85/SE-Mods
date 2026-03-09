@@ -71,10 +71,11 @@ namespace SKONanobotBuildAndRepairSystem
         HackOnly = 0x0002
     }
 
-    [Flags]
     public enum AutoWeldOptions
     {
-        FunctionalOnly = 0x0001
+        WeldFull = 0,   // weld to 100% integrity (default)
+        WeldFunctional = 1,   // weld to CriticalIntegrityRatio (was FunctionalOnly)
+        WeldSkeleton = 2    // only place/build new blocks; don't repair existing
     }
 
     [Flags]
@@ -225,6 +226,10 @@ namespace SKONanobotBuildAndRepairSystem
                     // --- Welding ---
                     label = Labels.Create("WeldingSettings", Texts.WeldSettings_Headline);
                     {
+                        // --- Weld mode dropdown ---
+                        comboBox = ComboBoxes.CreateWeldMode(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
+                        CreateProperty(comboBox, !weldingAllowed);
+
                         // --- Set Color that marks blocks as 'ignore' ---
                         {
                             onoffSwitch = OnOffSwitches.CreateUseIgnoreColor(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
@@ -267,18 +272,13 @@ namespace SKONanobotBuildAndRepairSystem
                             // --- AllowBuild CheckBox ---
                             onoffSwitch = OnOffSwitches.CreateAllowBuild(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
                             CreateProperty(onoffSwitch, Mod.Settings.Welder.AllowBuildFixed || !weldingAllowed);
-
-                            // --Weld to functional only ---
-                            onoffSwitch = OnOffSwitches.CreateWeldOptionFunctionalOnly(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
-                            CreateProperty(onoffSwitch, !weldingAllowed);
                         }
 
                         // --- Priority Welding ---
                         separateArea = Separators.Create("SeparateWeldPrio", isWeldingAllowed);
                         {
-                            // --- WeldPriority ---
-                            onoffSwitch = OnOffSwitches.CreateWeldPriority(isWeldingAllowed, isReadonly, isBaRSystem);
-                            _WeldEnableDisableSwitch = onoffSwitch;
+                            // --- Welding Priority label ---
+                            Labels.Create("WeldPriorityLabel", Texts.WeldPriority);
 
                             // --- Weld Priority Button Up ---
                             button = Buttons.CreateWeldPriorityUp(isWeldingAllowed);
@@ -295,6 +295,10 @@ namespace SKONanobotBuildAndRepairSystem
                             // --- Weld Priority Disable All ---
                             button = Buttons.CreateWeldPriorityDisableAll(isWeldingAllowed);
                             _WeldPriorityButtonDisableAll = button;
+
+                            // --- WeldPriority (Toggle list item On/Off) ---
+                            onoffSwitch = OnOffSwitches.CreateWeldPriority(isWeldingAllowed, isReadonly, isBaRSystem);
+                            _WeldEnableDisableSwitch = onoffSwitch;
 
                             // --- List Weld Priority ---
                             var listbox = ListBoxes.CreateWeldPriority(weldingAllowed, isReadonly, isBaRSystem, isWeldingAllowed);
@@ -370,9 +374,8 @@ namespace SKONanobotBuildAndRepairSystem
                         // --- Grind Priority ---
                         separateArea = Separators.Create("SeparateGrindPrio", isGrindingAllowed);
                         {
-                            // --- GrindPriority ---
-                            onoffSwitch = OnOffSwitches.CreateGrindPriority(isGrindingAllowed, isReadonly, isBaRSystem);
-                            _GrindEnableDisableSwitch = onoffSwitch;
+                            // --- Grinding Priority label ---
+                            Labels.Create("GrindPriorityLabel", Texts.GrindPriority_SectionLabel);
 
                             // --- GrindPriorityUp ---
                             button = Buttons.CreateGrindPriorityUp(isGrindingAllowed);
@@ -389,6 +392,10 @@ namespace SKONanobotBuildAndRepairSystem
                             // --- Grind Priority Disable All ---
                             button = Buttons.CreateGrindPriorityDisableAll(isGrindingAllowed);
                             _GrindPriorityButtonDisableAll = button;
+
+                            // --- GrindPriority (Toggle list item On/Off) ---
+                            onoffSwitch = OnOffSwitches.CreateGrindPriority(isGrindingAllowed, isReadonly, isBaRSystem);
+                            _GrindEnableDisableSwitch = onoffSwitch;
 
                             // --- GrindPriority ---
                             var listbox = ListBoxes.CreateGrindPriority(grindingAllowed, isGrindingAllowed, isReadonly, isBaRSystem);
@@ -417,7 +424,7 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         // --- Collect floating objects ---
                         {
-                            // --- CollectPriority ---
+                            // --- CollectPriority (Enable/Disable selected) ---
                             onoffSwitch = OnOffSwitches.CreateCollectPriority(isChangeCollectPriorityPossible, isReadonly, isBaRSystem);
                             _ComponentCollectEnableDisableSwitch = onoffSwitch;
 
@@ -425,7 +432,7 @@ namespace SKONanobotBuildAndRepairSystem
                             button = Buttons.CreateCollectPriorityUp(isChangeCollectPriorityPossible);
                             _ComponentCollectPriorityButtonUp = button;
 
-                            // --- CollectPriorityUp ---
+                            // --- CollectPriorityDown ---
                             button = Buttons.CreateCollectPriorityDown(isChangeCollectPriorityPossible);
                             _ComponentCollectPriorityButtonDown = button;
 
@@ -526,7 +533,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
 
                     // -- Script Control
-                    if (!Mod.Settings.Welder.ScriptControllFixed)
+                    if (!Mod.Settings.Welder.ScriptControlFixed)
                     {
                         separateArea = Separators.Create("SeparateScriptControl", (_) => true);
 

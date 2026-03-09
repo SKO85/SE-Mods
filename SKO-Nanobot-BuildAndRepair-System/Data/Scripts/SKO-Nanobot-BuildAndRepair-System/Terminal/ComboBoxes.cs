@@ -112,6 +112,42 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             return control;
         }
 
+        public static IMyTerminalControlCombobox CreateWeldMode(
+            bool weldingAllowed,
+            Func<IMyTerminalBlock, bool> isWeldingAllowed,
+            Func<IMyTerminalBlock, bool> isReadonly,
+            Func<IMyTerminalBlock, bool> isBaRSystem)
+        {
+            var isEnabled = !weldingAllowed ? isReadonly : isBaRSystem;
+
+            var control = Create(
+                "WeldMode",
+                Texts.WeldMode,
+                Texts.WeldMode_Tooltip,
+                isEnabled,
+                (list) =>
+                {
+                    list.Add(new MyTerminalControlComboBoxItem() { Key = (long)AutoWeldOptions.WeldFull,       Value = Texts.WeldMode_Full });
+                    list.Add(new MyTerminalControlComboBoxItem() { Key = (long)AutoWeldOptions.WeldFunctional, Value = Texts.WeldMode_Functional });
+                    list.Add(new MyTerminalControlComboBoxItem() { Key = (long)AutoWeldOptions.WeldSkeleton,   Value = Texts.WeldMode_Skeleton });
+                },
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    return system != null ? (long)system.Settings.WeldOptions : 0L;
+                },
+                (block, value) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null && isWeldingAllowed(block))
+                        system.Settings.WeldOptions = (AutoWeldOptions)value;
+                },
+                true
+            );
+
+            return control;
+        }
+
         public static IMyTerminalControlCombobox CreateWorkMode(bool onlyOneAllowed, Func<IMyTerminalBlock, bool> isReadonly, Func<IMyTerminalBlock, bool> isBaRSystem)
         {
             var isEnabled = onlyOneAllowed ? isReadonly : isBaRSystem;

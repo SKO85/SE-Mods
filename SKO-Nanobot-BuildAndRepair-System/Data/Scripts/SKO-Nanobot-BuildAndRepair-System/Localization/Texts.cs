@@ -27,8 +27,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId WeldUseIgnoreColor_Tooltip;
         public static readonly MyStringId WeldBuildNew;
         public static readonly MyStringId WeldBuildNew_Tooltip;
-        public static readonly MyStringId WeldToFuncOnly;
-        public static readonly MyStringId WeldToFuncOnly_Tooltip;
+        public static readonly MyStringId WeldMode;
+        public static readonly MyStringId WeldMode_Tooltip;
+        public static readonly MyStringId WeldMode_Full;
+        public static readonly MyStringId WeldMode_Functional;
+        public static readonly MyStringId WeldMode_Skeleton;
         public static readonly MyStringId WeldPriority;
         public static readonly MyStringId WeldPriority_Tooltip;
 
@@ -48,6 +51,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId GrindJanitorHackOnly_Tooltip;
         public static readonly MyStringId GrindPriority;
         public static readonly MyStringId GrindPriority_Tooltip;
+        public static readonly MyStringId GrindPriority_SectionLabel;
         public static readonly MyStringId GrindOrderNearest;
         public static readonly MyStringId GrindOrderNearest_Tooltip;
         public static readonly MyStringId GrindOrderFarthest;
@@ -72,6 +76,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId Color_PickCurrentColor;
         public static readonly MyStringId Color_SetCurrentColor;
 
+        public static readonly MyStringId Priority_ToggleItem;
         public static readonly MyStringId Priority_Enable;
         public static readonly MyStringId Priority_Disable;
         public static readonly MyStringId Priority_Up;
@@ -152,8 +157,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             WeldUseIgnoreColor_Tooltip = LocalizationHelper.GetStringId(texts, "WeldUseIgnoreColor_Tooltip", TextDefaultMaxTooltipLenght);
             WeldBuildNew = LocalizationHelper.GetStringId(texts, "WeldBuildNew");
             WeldBuildNew_Tooltip = LocalizationHelper.GetStringId(texts, "WeldBuildNew_Tooltip", TextDefaultMaxTooltipLenght);
-            WeldToFuncOnly = LocalizationHelper.GetStringId(texts, "WeldToFuncOnly");
-            WeldToFuncOnly_Tooltip = LocalizationHelper.GetStringId(texts, "WeldToFuncOnly_Tooltip", TextDefaultMaxTooltipLenght);
+            WeldMode = LocalizationHelper.GetStringId(texts, "WeldMode");
+            WeldMode_Tooltip = LocalizationHelper.GetStringId(texts, "WeldMode_Tooltip", TextDefaultMaxTooltipLenght);
+            WeldMode_Full = LocalizationHelper.GetStringId(texts, "WeldMode_Full");
+            WeldMode_Functional = LocalizationHelper.GetStringId(texts, "WeldMode_Functional");
+            WeldMode_Skeleton = LocalizationHelper.GetStringId(texts, "WeldMode_Skeleton");
             WeldPriority = LocalizationHelper.GetStringId(texts, "WeldPriority");
             WeldPriority_Tooltip = LocalizationHelper.GetStringId(texts, "WeldPriority_Tooltip", TextDefaultMaxTooltipLenght);
 
@@ -174,6 +182,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
 
             GrindPriority = LocalizationHelper.GetStringId(texts, "GrindPriority");
             GrindPriority_Tooltip = LocalizationHelper.GetStringId(texts, "GrindPriority_Tooltip", TextDefaultMaxTooltipLenght);
+            GrindPriority_SectionLabel = LocalizationHelper.GetStringId(texts, "GrindPriority_SectionLabel");
 
             GrindOrderNearest = LocalizationHelper.GetStringId(texts, "GrindOrderNearest");
             GrindOrderNearest_Tooltip = LocalizationHelper.GetStringId(texts, "GrindOrderNearest_Tooltip", TextDefaultMaxTooltipLenght);
@@ -199,6 +208,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             Color_PickCurrentColor = LocalizationHelper.GetStringId(texts, "Color_PickCurrentColor");
             Color_SetCurrentColor = LocalizationHelper.GetStringId(texts, "Color_SetCurrentColor");
 
+            Priority_ToggleItem = LocalizationHelper.GetStringId(texts, "Priority_ToggleItem");
             Priority_Enable = LocalizationHelper.GetStringId(texts, "Priority_Enable");
             Priority_Disable = LocalizationHelper.GetStringId(texts, "Priority_Disable");
             Priority_Up = LocalizationHelper.GetStringId(texts, "Priority_Up");

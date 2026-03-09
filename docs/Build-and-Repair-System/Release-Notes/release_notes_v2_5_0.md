@@ -1,6 +1,6 @@
 ---
 layout: default
-title: "Release Notes – v2.5.0"
+title: 'Release Notes – v2.5.0'
 parent: Release Notes
 grand_parent: Build and Repair System
 nav_order: 1
@@ -8,10 +8,20 @@ nav_order: 1
 
 # Release Notes – v2.5.0
 
-- Release date: 2 March 2026
-- Notes: N/A
+- Release date: 2 March 2026 (updated 9 March 2026)
+- Code changes: 31 `.cs` files changed — 4,150 insertions, 3,170 deletions (~7,320 lines of code touched)
 
 ## New Features
+
+### Weld Mode Dropdown
+
+The old "Weld to Functional Only" toggle has been replaced by a three-option **Weld Mode** dropdown:
+
+- **Weld to Full** – weld blocks to 100% integrity (default).
+- **Weld to Functional Only** – stop welding once a block reaches functional threshold (roughly `CriticalIntegrityRatio`). Useful when you want blocks online quickly without spending extra components finishing them.
+- **Weld to Skeleton** – only build projected blocks into existence; never repair or continue welding existing blocks. Ideal for rapid initial construction where you want the structure placed before finishing each block individually.
+
+Existing saves that had "Weld to Functional Only" enabled will automatically load as **Weld to Functional Only**, so no settings migration is needed.
 
 ### Disable Flying Nanobot Effects (per-block)
 
@@ -21,6 +31,10 @@ You can now turn off the flying nanobot trace animations individually per block 
 
 The Weld Priority and Grind Priority lists now have **Enable All** and **Disable All** buttons, so you no longer have to toggle every entry one by one.
 
+### Priority List – Connector and Merge Block
+
+**Connector** blocks and **Merge Blocks** are now separate entries in both the Weld Priority and Grind Priority lists. Previously, both block types were grouped under the generic **FunctionalBlock** category with no way to control their priority individually. They now appear as **ShipConnector** and **ShipMergeBlock** and can be enabled, disabled, and reordered independently.
+
 ### Reset All Settings
 
 A new **"Reset All Settings"** button is available in the block terminal. It resets everything for that block back to defaults in one click, including the priority list states.
@@ -29,16 +43,26 @@ A new **"Reset All Settings"** button is available in the block terminal. It res
 
 Server admins can now cap how many Build and Repair systems are allowed to work on the same target grid at the same time. This helps prevent situations where dozens of systems pile onto a single grid while ignoring others. The following mod settings control this behaviour:
 
-- `MaxSystemsPerTargetGrid` – the maximum number of systems per target grid (default: **10**).
+- `MaxSystemsPerTargetGrid` – the maximum number of systems per target grid. Defaults to **20** in local/listen-server games and **10** on dedicated servers. The config file overrides whichever default applies.
 - `DisableLimitSystemsPerTargetGrid` – set to `true` to remove the limit entirely.
 
 ### Assign-To-System Toggle (server setting)
 
-A new `AssignToSystemEnabled` mod setting (default: **true**) lets server admins disable the exclusive block-ownership mechanism if it causes issues in their setup.
+When `AssignToSystemEnabled` is `true` (the default), target blocks for welding and grinding are assigned to individual Build and Repair systems so that work is divided efficiently across multiple systems — they no longer all pile onto the same target block at once. For welding, if a block has the **Help Others** option enabled, the assignment is ignored and multiple systems may weld the same target block simultaneously. Set to `false` to disable the mechanism server-wide if it causes issues in a specific setup.
 
-### Companion Script Updated
+### Cluster Scan Coordinator
 
-The companion programmable block script has been updated and is included in the repository. It handles automatic assembler queuing and multi-display status output for Build and Repair System groups.
+Build and Repair blocks that share the same working area now elect a single **cluster coordinator** responsible for scanning for targets on behalf of the whole cluster. This eliminates redundant scans that previously ran independently in every individual block, significantly reducing CPU load when many systems are active in the same area.
+
+The coordinator role is automatically re-elected whenever needed — for example, if the current coordinator block is disabled, destroyed, or powered off, another block in the cluster seamlessly takes over.
+
+### Empty-Grid Scan Ignore (server setting)
+
+After scanning a grid and finding no welding or grinding targets, the system now skips that grid for a configurable amount of time before scanning it again. All Build and Repair blocks in the same cluster share a single ignore list, so a grid confirmed empty by one block is automatically skipped by all others in that cluster — avoiding redundant work.
+
+Sub-grid connections (connectors, pistons, rotors) are always traversed regardless of the ignore state, so a newly docked or spawned ship is never missed.
+
+The timeout is controlled by the `EmptyGridScanIgnoreSeconds` mod setting (default: **60 seconds**). Set it to `0` to disable the behaviour entirely.
 
 ---
 
@@ -48,9 +72,11 @@ The companion programmable block script has been updated and is included in the 
 
 Fixed a bug where a client joining a server would sometimes overwrite the server-sent block settings with an older locally stored version. Settings received from the server are now correctly applied straight away.
 
-### Transport Animation Not Showing Correctly After Login
+### Flying Nanobot Effects Now Work on Dedicated Servers
 
-The transport (flying nanobot) animation could appear stuck or missing when a player joined a running session. The transport state is now properly synced to clients so the animation reflects the actual situation.
+Previously, the flying nanobot particle effects only worked in local games and were completely absent on dedicated servers. The effects are now fully client-side and work correctly on dedicated servers as well.
+
+Players can disable the effects per block from the terminal. Server admins can also disable them globally via the `DisableParticleEffects` setting in `ModSettings.xml`.
 
 ### Multiplayer Performance – Reduced Network Updates
 
@@ -71,3 +97,51 @@ The system now checks whether the owner of a Build and Repair block actually own
 ### Minor Performance Improvements
 
 Reduced the number of floating objects the system tracks at once, and tightened up several internal update intervals for slightly snappier response.
+
+### Server Performance – Push Operations Restricted to Cargo Containers
+
+Inventory push operations (moving items out of a Build and Repair block when collecting grinding spoils or offloading a full inventory) now only target **cargo containers**. Previously the system could push to any connected inventory, including other Build and Repair blocks. This caused a cascade effect where each BaR would push to nearby BaRs, which would then try to push to their neighbours, and so on — multiplying conveyor traversals with every additional system on the network. Restricting push targets to cargo containers eliminates the cascade and significantly reduces server load when many systems are active.
+
+### Server Performance – Single Conveyor Traversal Per Push Cycle
+
+Each push cycle now makes a single `PushComponents` call covering all item types at once, instead of one call per item type. This reduces conveyor network traversals from several per cycle to one, regardless of how many item categories are in the inventory.
+
+### Server Performance – Cluster-Level Push Throttle
+
+All Build and Repair systems that share the same mechanical grid cluster are now coordinated so that only one system pushes per 5-second window. Systems on separate conveyor networks within the same cluster are unaffected — each sub-network can push independently. This prevents several systems from simultaneously flooding the conveyor network with redundant traversals.
+
+### Inventory Full – Skip Collecting and Grinding
+
+When a Build and Repair block's inventory is full, the system no longer attempts to collect floating objects or grind blocks, as doing so would only add more items to an already full inventory. Welding is still allowed while full, since it consumes components and can free up space.
+
+### Auto-Disable When Inventory Is Stuck Full (server setting)
+
+A new `MaxInventoryFullPushAttempts` mod setting (default: **100**) controls how many consecutive 5-second push cycles with a full inventory and no active welding the system will tolerate before automatically disabling itself. Set to **0** to disable this behaviour entirely. This prevents a system with a backed-up conveyor network from continuously attempting futile push operations indefinitely.
+
+### Systems No Longer Idle When Per-Grid Limit Is Reached and Other Grids Are Available
+
+When many Build and Repair systems are in range of multiple target grids, each grid's BaR count is capped by `MaxSystemsPerTargetGrid`. Previously, systems that were over the limit on one grid would fill their entire candidate list with targets from that same grid, leaving no room in the scan for other grids — causing them to show as idle. The scan now caps each individual grid's contribution to the candidate list, so all grids in range are represented and systems blocked on one grid can pick up work on another.
+
+### Walk (Grids) Mode Systems No Longer Inflate the Scan Coordinator's Bounding Box
+
+Build and Repair systems in **Walk** (Grids) search mode never use the cluster scan coordinator's shared entity list — only **Fly** (BoundingBox) mode systems do. Despite this, Walk-mode systems were still contributing their work area to the coordinator's union bounding box, causing it to issue larger-than-needed `GetTopMostEntitiesInBox` queries. Walk-mode systems are now excluded from the union bbox accumulation while still participating in the push-coalescing mechanism.
+
+### GrindBeforeWeld / WeldBeforeGrind – Idle Systems Now Fall Through to the Secondary Mode
+
+In **GrindBeforeWeld** mode, a Build and Repair system was only allowed to start welding if its scanned grind-target list was completely empty. When many systems shared the same targets and the per-grid BaR limit or the assign-to-system mechanism meant some systems genuinely had no grind work available, they stayed idle instead of welding. The same issue existed for **WeldBeforeGrind** in the opposite direction. Both modes now fall through to the secondary work type whenever the system finds no actionable targets for its primary mode, regardless of whether the scan returned candidates.
+
+### Welding Blocked When All Cargo Containers Were Full
+
+When all connected cargo containers were full, a Build and Repair system could enter a deadlock where it refused to weld even if it had all required components in its own inventory. Two separate bugs combined to cause this:
+
+1. **Welding was skipped entirely when inventory was full.** When grinding or collecting filled the inventory, the system cancelled the pick transport and then did nothing else — including no welding. Since welding consumes components it is exactly the operation that can break the deadlock, so it is now always attempted regardless of inventory state. Grinding and collecting are still correctly blocked when the inventory is full.
+
+2. **Push operations only targeted cargo containers.** With no cargo space available, grinding loot could not be pushed anywhere, the welder stayed full, and the transport inventory could not drain. The system now falls back to pushing to all available destinations (for example, ore to a connected refinery) when all cargo containers are full.
+
+### Grinding Order Toggles Now Work as Proper Radio Buttons
+
+The **Nearest First**, **Farthest First**, and **Smallest Grid First** options in the terminal now behave as a mutually exclusive set — exactly one is always active. Previously, clicking the currently active option to deactivate it would leave all three buttons in the off state. The correct behaviour is now enforced:
+
+- Deactivating **Nearest First** → activates **Farthest First**
+- Deactivating **Farthest First** → activates **Nearest First**
+- Deactivating **Smallest Grid First** → activates **Farthest First**

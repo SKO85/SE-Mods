@@ -25,6 +25,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"WeldBuildNew_Tooltip",            "Если этот флажок установлен, система также будет\nсоздавать проецируемые блоки."},
             {"WeldToFuncOnly",                  "Перестал быть активным"},
             {"WeldToFuncOnly_Tooltip",          "Сваривать только когда блок перестал функционировать\nиз за повреждений/распиливания."},
+            {"WeldMode",            "Режим сварки"},
+            {"WeldMode_Tooltip",    "Выберите, насколько далеко наноботы сваривают блоки."},
+            {"WeldMode_Full",       "Сварить полностью"},
+            {"WeldMode_Functional", "Только до функционального состояния"},
+            {"WeldMode_Skeleton",   "Только скелет"},
             {"WeldPriority",                    "Приоритет сварки"},
             {"WeldPriority_Tooltip",            "Включить/выключить сборку-ремонт выбранных видов предметов."},
 
@@ -43,6 +48,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindJanitorHackOnly_Tooltip",    "Если этот флажок установлен, распиливаются только\nфункционирующие блоки, и только до тех пор, пока они не будут взломаны."},
             {"GrindPriority",                   "Приоритет распиливания"},
             {"GrindPriority_Tooltip",           "Включить/выключить распиливание выбранных видов\nэлементов и установить приоритет во время распиливания (Если распиливать по цвету распиливания, приоритет и статус игнорируются)."},
+            {"GrindPriority_SectionLabel",      "Приоритет распиливания"},
             {"GrindOrderNearest",               "Сначала ближайший блок"},
             {"GrindOrderNearest_Tooltip",       "Если блоки имеют одинаковый приоритет, ближайший распиливается первым."},
             {"GrindOrderFarthest",              "Сначала самый дальний блок"},
@@ -64,6 +70,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"CollectPushComp",                 "Отправить компоненты"},
             {"CollectPushComp_Tooltip",         "Если этот флажок установлен, система немедленно\nотправит компоненты в подключенный контейнер."},
 
+            {"Priority_ToggleItem",              "Переключить элемент"},
             {"Priority_Enable",                 "Вкл"},
             {"Priority_Disable",                "Откл"},
             {"Priority_Up",                     "Приоритет вверх"},

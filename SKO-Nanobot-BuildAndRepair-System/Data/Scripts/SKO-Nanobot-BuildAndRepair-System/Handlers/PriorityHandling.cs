@@ -42,6 +42,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         protected bool _HashDirty = true;
         private MemorySafeList<string> _ClassList = new MemorySafeList<string>();
         private Dictionary<int, int> _PrioHash = new Dictionary<int, int>();
+        private int _StateHash;
 
         public C Selected { get; private set; } //Visual
 
@@ -281,9 +282,20 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         _PrioHash.Add(item.PrioItem.Key, item.Enabled ? prio : int.MaxValue);
                         prio++;
                     }
+                    int h = 0;
+                    foreach (var kv in _PrioHash)
+                        h = h * 31 + (kv.Key * 397 ^ kv.Value);
+                    _StateHash = h;
+
                     _HashDirty = false;
                 }
             }
+        }
+
+        internal int GetStateHash()
+        {
+            if (_HashDirty) UpdateHash();
+            return _StateHash;
         }
     }
 }

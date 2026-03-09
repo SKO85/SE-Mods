@@ -1,4 +1,4 @@
-﻿// Version: v1.10 - 02.03.2026 12:08:00
+﻿// Version: v1.11 - 05.03.2026 12:00:00
 
 static double UpdateIntervalAssemblerQueues = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
 static double UpdateIntervalGrinding = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
@@ -500,11 +500,14 @@ public class BuildAndRepairSystemQueuingGroupData
             if (display != null && settings != null)
             {
                 display.Clear();
-                if (settings.DisplayKinds != null && RepairSystems != null)
+                if (settings.DisplayKinds != null && settings.DisplayKinds.Length > 0 && RepairSystems != null)
                 {
                     if (elapsedTime > NextSwitchTime[idx])
                     {
-                        DisplayKindIdx[idx] = (DisplayKindIdx[idx] + 1) % settings.DisplayKinds.Length;
+                        // Only advance on subsequent timer fires; the first call (NextSwitchTime == 0)
+                        // should show the initial index (0) without skipping it.
+                        if (NextSwitchTime[idx] > 0)
+                            DisplayKindIdx[idx] = (DisplayKindIdx[idx] + 1) % settings.DisplayKinds.Length;
                         NextSwitchTime[idx] = elapsedTime + settings.DisplaySwitchTime;
                     }
                     switch (settings.DisplayKinds[DisplayKindIdx[idx]])
@@ -567,6 +570,7 @@ public class BuildAndRepairSystemQueuingGroupData
         display.AddStatus(string.Format("Search mode       : {0}", RepairSystems.SearchMode));
         display.AddStatus(string.Format("Work mode         : {0}", RepairSystems.WorkMode));
         display.AddStatus(string.Format("Build projected   : {0}", RepairSystems.AllowBuild));
+        display.AddStatus(string.Format("Weld mode         : {0}", RepairSystems.WeldMode));
         display.AddStatus(string.Format("UseIgnoreColor    : {0}", RepairSystems.UseIgnoreColor));
         display.AddStatus(string.Format("Script Controlled : {0}", RepairSystems.ScriptControlled));
     }
@@ -775,6 +779,19 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         /// Only grinding is allowed 
         /// </summary> 
         GrindOnly = 0x0010
+    }
+
+    /// <summary> 
+    /// The weld modes (how far blocks are welded) 
+    /// </summary> 
+    public enum AutoWeldOptions
+    {
+        /// <summary>Weld blocks to 100% integrity (default).</summary>
+        WeldFull = 0,
+        /// <summary>Weld only to functional threshold (CriticalIntegrityRatio). Was 'WeldOptionFunctionalOnly'.</summary>
+        WeldFunctional = 1,
+        /// <summary>Only place projected blocks; never repair or continue welding existing blocks.</summary>
+        WeldSkeleton = 2
     }
 
     /// <summary> 
@@ -999,17 +1016,17 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     }
 
     /// <summary> 
-    /// If set block are only welded to functional level 
+    /// Controls how far blocks are welded: WeldFull (100%), WeldFunctional (functional threshold), or WeldSkeleton (place only). 
     /// </summary> 
-    public bool WeldOptionFunctionalOnly
+    public AutoWeldOptions WeldMode
     {
         get
         {
-            return _Entities.Count > 0 ? _Entities[0].GetValueBool("BuildAndRepair.WeldOptionFunctionalOnly") : false;
+            return _Entities.Count > 0 ? (AutoWeldOptions)GetValue<long>("BuildAndRepair.WeldMode") : AutoWeldOptions.WeldFull;
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.WeldOptionFunctionalOnly", value);
+            foreach (var entity in _Entities) entity.SetValue<long>("BuildAndRepair.WeldMode", (long)value);
         }
     }
 
@@ -1119,7 +1136,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 BlockClass blockClass;
                 bool enabled;
-                if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
+                if (values.Length >= 2 && Enum.TryParse<BlockClass>(values[0], out blockClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
@@ -1199,7 +1216,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 BlockClass blockClass;
                 bool enabled;
-                if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
+                if (values.Length >= 2 && Enum.TryParse<BlockClass>(values[0], out blockClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
@@ -1279,7 +1296,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 ComponentClass compClass;
                 bool enabled;
-                if (Enum.TryParse<ComponentClass>(values[0], out compClass) &&
+                if (values.Length >= 2 && Enum.TryParse<ComponentClass>(values[0], out compClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     compList.Add(new ClassState<ComponentClass>(compClass, enabled));
@@ -1732,9 +1749,10 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
 
     private void CheckEnabled()
     {
+        AreEnabled = false;
         foreach (var entity in _Entities)
         {
-            if (entity.IsWorking && entity.IsFunctional)
+            if (entity.IsWorking)
             {
                 AreEnabled = true;
                 break;
@@ -1864,7 +1882,7 @@ public class StatusAndLogDisplay
     /// </summary> 
     internal void AddError(string line)
     {
-        _ErrorText = line + "\n";
+        _ErrorText += line + "\n";
     }
 
     /// <summary> 
@@ -1890,6 +1908,7 @@ public class StatusAndLogDisplay
     private static string FindPanels(MyGridProgram caller, IReadOnlyList<string> names, ICollection<IMyTextSurface> list)
     {
         string res = string.Empty;
+        list.Clear();
         if (caller == null)
         {
             return res;
@@ -1970,10 +1989,11 @@ public class StatusAndLogDisplay
     /// </summary> 
     public static float PowerUnitMultiple(string unit)
     {
-        if (unit.StartsWith("W")) return 0.000001f;
-        if (unit.StartsWith("kW")) return 0.001f;
+        if (unit.StartsWith("GW")) return 1000f;
         if (unit.StartsWith("MW")) return 1f;
-        return unit.StartsWith("GW") ? 1000f : 1f;
+        if (unit.StartsWith("kW")) return 0.001f;
+        if (unit.StartsWith("W")) return 0.000001f;
+        return 1f;
     }
 
     public static string DisplayPowerValueUnit(float value)
@@ -2032,14 +2052,14 @@ public class StatusAndLogDisplay
             return cubeBlock.BlockDefinition.SubtypeName;
         }
 
+        var cubeGrid = block as IMyCubeGrid;
+        if (cubeGrid != null) return cubeGrid.DisplayName;
+
         var entity = block as IMyEntity;
         if (entity != null)
         {
             return string.Format("{0} ({1})", entity.DisplayName, entity.EntityId);
         }
-
-        var cubeGrid = block as IMyCubeGrid;
-        if (cubeGrid != null) return cubeGrid.DisplayName;
 
         return block != null ? block.ToString() : "NULL";
     }
