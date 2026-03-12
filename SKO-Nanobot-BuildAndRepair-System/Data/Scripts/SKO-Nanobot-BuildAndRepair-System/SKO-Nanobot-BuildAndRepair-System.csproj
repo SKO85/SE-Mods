@@ -159,6 +159,7 @@
     <Compile Include="Models\TargetEntityData.cs" />
     <Compile Include="Mods\ShieldApi.cs" />
     <Compile Include="Effects.cs" />
+    <Compile Include="Profiling\MethodProfiler.cs" />
     <Compile Include="Terminal\Buttons.cs" />
     <Compile Include="Terminal\ComboBoxes.cs" />
     <Compile Include="Terminal\Labels.cs" />

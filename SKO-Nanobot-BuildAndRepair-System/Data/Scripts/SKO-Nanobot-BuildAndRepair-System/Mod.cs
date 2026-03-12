@@ -6,6 +6,7 @@ namespace SKONanobotBuildAndRepairSystem
     using SKONanobotBuildAndRepairSystem.Handlers;
     using SKONanobotBuildAndRepairSystem.Helpers;
     using SKONanobotBuildAndRepairSystem.Models;
+    using SKONanobotBuildAndRepairSystem.Profiling;
     using SKONanobotBuildAndRepairSystem.Utils;
     using System;
     using System.Collections.Generic;
@@ -133,6 +134,9 @@ namespace SKONanobotBuildAndRepairSystem
             // Clear block assigned handler.
             try { BlockSystemAssigningHandler.Clear(); } catch { }
 
+            // Close the profiler to release any open log files.
+            try { MethodProfiler.Close(); } catch { }
+
             // Close the logging instance to release the log file.
             try { Logging.Instance.Close(); } catch { }
 
@@ -178,6 +182,8 @@ namespace SKONanobotBuildAndRepairSystem
                     // Start processing.
                     if (MyAPIGateway.Session.IsServer)
                     {
+                        MethodProfiler.TickAutoStop();
+
                         // Periodic ownership cache refresh
                         if (now.Subtract(_LastGeneralPeriodicCheck) >= TimeSpan.FromSeconds(10))
                         {

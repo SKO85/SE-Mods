@@ -1,5 +1,6 @@
 ﻿using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using System.Text;
 
@@ -8,8 +9,13 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
     public class ChatHandler
     {
         private const string CmdKey = "/nanobars";
+        private const string CmdKeyAlias = "/nanoboars";
         private const string CmdHelp = "-help";
         private const string CmdCwsf = "-cwsf";
+        private const string CmdProfile = "profile";
+        private const string CmdProfileStart = "start";
+        private const string CmdProfileStop = "stop";
+        private const string CmdProfileStatus = "status";
 
         #region Registration
 
@@ -58,10 +64,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             if (string.IsNullOrWhiteSpace(messageText)) return;
             var cmd = messageText.ToLower();
-            if (!cmd.StartsWith(CmdKey)) return;
+            if (!cmd.StartsWith(CmdKey) && !cmd.StartsWith(CmdKeyAlias)) return;
 
             sendToOthers = false;
-            var args = cmd.Remove(0, CmdKey.Length).Trim().Split(' ');
+            var keyLength = cmd.StartsWith(CmdKeyAlias) ? CmdKeyAlias.Length : CmdKey.Length;
+            var args = cmd.Remove(0, keyLength).Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             var console = MyAPIGateway.Utilities;
 
             if (args.Length == 0 || args[0] == CmdHelp)
@@ -84,6 +91,66 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     }
                     break;
 
+                case CmdProfile:
+                    if (!MyAPIGateway.Session.IsServer)
+                    {
+                        console.ShowMessage("Nanobars", "Command not allowed on client");
+                        break;
+                    }
+
+                    var player = MyAPIGateway.Session.Player;
+                    if (player != null)
+                    {
+                        var promoteLevel = player.PromoteLevel.ToString();
+                        var isAdmin = promoteLevel == "Admin" || promoteLevel == "SpaceMaster" || promoteLevel == "Owner";
+                        if (!isAdmin)
+                        {
+                            console.ShowMessage("Nanobars", "Command requires admin permissions");
+                            break;
+                        }
+                    }
+
+                    if (!MethodProfiler.IsConfigured)
+                    {
+                        console.ShowMessage("Nanobars", "Profiling is not enabled in ModSettings.xml (EnableMethodProfiling=false).");
+                        break;
+                    }
+
+                    if (args.Length < 2)
+                    {
+                        console.ShowMessage("Nanobars", "Usage: /nanobars profile start [seconds]|stop|status");
+                        break;
+                    }
+
+                    if (args[1] == CmdProfileStart)
+                    {
+                        var autoStopSeconds = MethodProfiler.DefaultAutoStopDurationSeconds;
+                        if (args.Length >= 3 && !int.TryParse(args[2], out autoStopSeconds))
+                        {
+                            console.ShowMessage("Nanobars", "Invalid seconds. Usage: /nanobars profile start [seconds]");
+                            break;
+                        }
+
+                        string message;
+                        MethodProfiler.StartSession(autoStopSeconds, out message);
+                        console.ShowMessage("Nanobars", message);
+                    }
+                    else if (args[1] == CmdProfileStop)
+                    {
+                        string message;
+                        MethodProfiler.StopSession(out message);
+                        console.ShowMessage("Nanobars", message);
+                    }
+                    else if (args[1] == CmdProfileStatus)
+                    {
+                        console.ShowMessage("Nanobars", MethodProfiler.GetStatusMessage());
+                    }
+                    else
+                    {
+                        console.ShowMessage("Nanobars", "Usage: /nanobars profile start [seconds]|stop|status");
+                    }
+                    break;
+
                 default:
                     ShowHelp();
                     break;
@@ -97,6 +164,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             sb.AppendLine($"Version: {Constants.ModVersion}");
             sb.AppendLine();
             sb.AppendLine($"[-cwsf]: Creates a settings file inside your current world folder (local-only)");
+            sb.AppendLine($"[profile start [seconds]]: Starts profiling (defaults to auto-stop after {MethodProfiler.DefaultAutoStopDurationSeconds}s)");
+            sb.AppendLine($"[profile stop]: Stops profiling and closes profiler files");
+            sb.AppendLine($"[profile status]: Shows whether profiling is enabled/running and current settings");
             sb.AppendLine();
             sb.AppendLine($"Issues: Report issues or suggestions (GitHub)");
             sb.AppendLine($"https://github.com/SKO85/SE-Mods/issues");
