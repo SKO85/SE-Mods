@@ -111,6 +111,9 @@ namespace SKONanobotBuildAndRepairSystem
                 if (actualBackgroundTaskCount <= 0) break;
             }
 
+            // Unregister terminal controls.
+            try { NanobotTerminal.Cleanup(); } catch { }
+
             // Unregister Shield API message handler
             try { Shield?.Unload(); } catch { }
             Shield = null;
@@ -153,31 +156,6 @@ namespace SKONanobotBuildAndRepairSystem
             }
             base.SaveData();
         }
-
-        //public override void LoadData()
-        //{
-        //    try
-        //    {
-        //        var defId = new MyDefinitionId(typeof(MyObjectBuilder_ShipWelder), MyStringHash.Get("SELtdLargeNanobotBuildAndRepairSystem"));
-        //        var def = MyDefinitionManager.Static.GetCubeBlockDefinition(defId) as MyShipWelderDefinition;
-        //        var builderDef = MyDefinitionManager.Static.GetObjectBuilder(def) as MyObjectBuilder_ShipWelderDefinition;
-
-        //        builderDef.PCU = 1;
-        //        builderDef.Components = new List<MyObjectBuilder_CubeBlockDefinition.CubeBlockComponent>()
-        //        {
-        //            new MyObjectBuilder_CubeBlockDefinition.CubeBlockComponent()
-        //            {
-        //                Subtype = "SteelPlate",
-        //                Count = 1
-        //            }
-        //        }.ToArray();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //    }
-
-        //    base.LoadData();
-        //}
 
         public override void UpdateBeforeSimulation()
         {
@@ -294,10 +272,6 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
-        /// <param name="newAction"></param>
         public static void AddAsyncAction(Action newAction)
         {
             lock (AsynActions)

@@ -197,12 +197,10 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     }
 
                     Logging.Instance.Write(Logging.Level.Info, "NanobotBuildAndRepairSystemSettings: Settings {0}", settings);
-                    //if (adjusted) Save(settings, world); don't save file
                 }
                 else
                 {
                     settings = new SyncModSettings() { Version = CurrentSettingsVersion };
-                    //Save(settings, world); don't save file with default values
                 }
             }
             catch (Exception ex)

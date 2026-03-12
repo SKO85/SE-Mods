@@ -78,9 +78,6 @@
                     return true;
                 }
 
-                // Purge on read (optional, but keeps memory tidy)
-                //CacheItem removed;
-                //Entries.TryRemove(key, out removed);
             }
 
             value = default(TValue);

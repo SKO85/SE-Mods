@@ -115,9 +115,6 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var cubeGrid = target.CubeGrid as MyCubeGrid;
             if (cubeGrid == null || cubeGrid.Projector == null) return false;
 
-            //Doesn't work reliable as projector does not update Dithering
-            //return gui ? ((IMyProjector)cubeGrid.Projector).CanBuild(target, true) == BuildCheckResult.OK : target.Dithering >= -MyGridConstants.BUILDER_TRANSPARENCY;
-
             return ((IMyProjector)cubeGrid.Projector).CanBuild(target, gui) == BuildCheckResult.OK;
         }
 

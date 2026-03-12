@@ -148,7 +148,7 @@ namespace SKONanobotBuildAndRepairSystem
                 CustomControlsInit = true;
                 try
                 {
-                    // As CustomControlGetter is only called if the Terminal is opened,
+                    // As CustomControlGetter is only called if the NanobotTerminal is opened,
                     // I add also some properties immediately and permanent to support scripting.
                     // !! As we can't subtype here they will be also available in every Shipwelder but without function !!
 
@@ -594,6 +594,19 @@ namespace SKONanobotBuildAndRepairSystem
             property.Getter = control.Getter;
             if (!readOnly) property.Setter = control.Setter;
             MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(property);
+        }
+
+        /// <summary>
+        /// Cleanup terminal controls and unsubscribe events on session unload.
+        /// </summary>
+        public static void Cleanup()
+        {
+            if (CustomControlsInit)
+            {
+                MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter;
+                CustomControls.Clear();
+                CustomControlsInit = false;
+            }
         }
 
         internal static Vector3 CheckConvertToHSVColor(Vector3 value)

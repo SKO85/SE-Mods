@@ -398,12 +398,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 if (isAllowed)
                 {
-                    //if (!BlockIntersects(targetBlock, safeZone))
-                    //{
-                    //    SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
-                    //    return false;
-                    //}
-
                     if (safeZone.SafeZoneBlockId > 0)
                     {
                         var safeZoneBlock = MyEntities.GetEntityByName(safeZone.SafeZoneBlockId.ToString()) as IMySafeZoneBlock;

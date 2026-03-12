@@ -37,8 +37,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             if (!_registered || MyAPIGateway.Session == null)
                 return;
 
-            // No specific unregister calls available.
-            // TODO: Check with Devs if there is a unregister call for this somewhere else.
+            // SE API limitation: No unregister methods available for damage handlers.
+            // RegisterBeforeDamageHandler/RegisterAfterDamageHandler are permanent for the session lifetime.
+            // Setting _registered = false prevents duplicate registration on reload.
 
             _registered = false;
         }

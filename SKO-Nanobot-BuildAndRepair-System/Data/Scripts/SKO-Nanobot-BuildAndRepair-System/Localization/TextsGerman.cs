@@ -96,8 +96,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"ScriptControlled",                "Vom Skript gesteuert"},
             {"ScriptControlled_Tooltip",        "Wenn diese Option aktiviert ist, bohrt / füllt das System nicht automatisch. Jede Aktion muss durch Aufrufen von Skriptfunktionen ausgewählt werden."},
 
-            {"Info_CurentWeldEntity",           "Aktuell geschweißter Block:"},
-            {"Info_CurentGrindEntity",          "Aktuell demontierter Block:"},
+            {"Info_CurrentWeldEntity",           "Aktuell geschweißter Block:"},
+            {"Info_CurrentGrindEntity",          "Aktuell demontierter Block:"},
             {"Info_InventoryFull",              "Blockinventar ist voll!"},
             {"Info_LimitReached",               "PCU Limit erreicht!"},
             {"Info_DisabledByRemote",           "Durch Fernbedienung deaktiviert!"},

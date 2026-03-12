@@ -3,16 +3,17 @@ using Sandbox.Game.Entities;
 using Sandbox.Game.Lights;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
-using System;
+using System.Collections.Generic;
 using System.Threading;
 using VRage.Game;
+using VRage.Game.ModAPI;
 using VRage.Utils;
 using VRageMath;
 using static SKONanobotBuildAndRepairSystem.NanobotSystem;
 
 namespace SKONanobotBuildAndRepairSystem
 {
-    public class NanobotSystemEffects
+    public class Effects
     {
         public static MySoundPair[] _Sounds = new[] { null, null, null, new MySoundPair("ToolLrgWeldMetal"), new MySoundPair("BlockModuleProductivity"), new MySoundPair("BaRUnable"), new MySoundPair("ToolLrgGrindMetal"), new MySoundPair("BlockModuleProductivity"), new MySoundPair("BaRUnable"), new MySoundPair("BaRUnable") };
         public static float[] _SoundLevels = new[] { 0f, 0f, 0f, 1f, 0.5f, 0.4f, 1f, 0.5f, 0.4f, 0.4f };
@@ -22,9 +23,9 @@ namespace SKONanobotBuildAndRepairSystem
         public const string PARTICLE_EFFECT_TRANSPORT1_PICK = "GrindNanobotTrace1";
         public const string PARTICLE_EFFECT_TRANSPORT1_DELIVER = "WeldNanobotTrace1";
 
-        public static readonly int MaxTransportEffects = 50;
+        public const int MaxTransportEffects = 50;
         public static int _ActiveTransportEffects = 0;
-        public static readonly int MaxWorkingEffects = 80;
+        public const int MaxWorkingEffects = 80;
         public static int _ActiveWorkingEffects = 0;
 
         public Vector3 EmitterPosition;
@@ -55,6 +56,23 @@ namespace SKONanobotBuildAndRepairSystem
                 _SoundEmitterWorking.StopSound(false);
                 _SoundEmitterWorking.SetPosition(null);
                 _SoundEmitterWorkingPosition = null;
+            }
+        }
+
+        /// <summary>
+        /// Initialize the emitter position from the welder model's dummy.
+        /// </summary>
+        public void InitEmitterPosition(Sandbox.ModAPI.IMyShipWelder welder)
+        {
+            var dummies = new Dictionary<string, IMyModelDummy>();
+            welder.Model.GetDummies(dummies);
+            foreach (var dummy in dummies)
+            {
+                if (dummy.Key.ToLower().Contains("detector_emitter"))
+                {
+                    EmitterPosition = dummy.Value.Matrix.Translation;
+                    break;
+                }
             }
         }
 
