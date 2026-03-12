@@ -70,6 +70,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Zones[entity.EntityId] = entity as MySafeZone;
                 }
 
+                CleanupStaleZones();
                 GridIntersectingZones.CleanupExpired();
                 ProtectedFromGindingCache.CleanupExpired();
                 BlockIntersectingZones.CleanupExpired();
@@ -115,17 +116,35 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
-                if (ent is MySafeZone)
+                var sz = ent as MySafeZone;
+                if (sz != null)
                 {
-                    var sz = ent as MySafeZone;
-                    if (sz != null)
-                    {
-                        MySafeZone removed;
-                        Zones.TryRemove(sz.EntityId, out removed);
-                    }
+                    MySafeZone removed;
+                    Zones.TryRemove(sz.EntityId, out removed);
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Removes stale entries from the Zones dictionary (closed or marked-for-close).
+        /// Call periodically (e.g., every 100 ticks) to guard against missed OnEntityRemove events.
+        /// </summary>
+        public static void CleanupStaleZones()
+        {
+            var staleKeys = new List<long>();
+            foreach (var pair in Zones)
+            {
+                if (pair.Value == null || pair.Value.MarkedForClose || pair.Value.Closed)
+                {
+                    staleKeys.Add(pair.Key);
+                }
+            }
+            MySafeZone removed;
+            foreach (var key in staleKeys)
+            {
+                Zones.TryRemove(key, out removed);
+            }
         }
 
         /// <summary>

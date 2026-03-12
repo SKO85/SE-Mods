@@ -12,6 +12,7 @@ Filename: `TICKET-[number]-[short-name].md`
 ## Source: Workshop | Discord | GitHub
 ## Reporter: [Player name / anonymous]
 ## Date Reported: [YYYY-MM-DD]
+## Version: [target version]
 ## Description
 [What the player reported]
 ## Steps to Reproduce
@@ -21,3 +22,7 @@ Filename: `TICKET-[number]-[short-name].md`
 ## Resolution
 [Once resolved]
 ```
+
+## Rules
+
+(none yet)

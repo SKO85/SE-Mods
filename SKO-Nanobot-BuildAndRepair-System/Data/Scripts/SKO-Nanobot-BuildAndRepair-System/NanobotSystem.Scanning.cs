@@ -368,7 +368,10 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 if (updateSource) _LastSourceUpdate = _LastTargetsUpdate;
-                _AsyncUpdateSourcesAndTargetsRunning = false;
+                lock (_Welder)
+                {
+                    _AsyncUpdateSourcesAndTargetsRunning = false;
+                }
             }
         }
 

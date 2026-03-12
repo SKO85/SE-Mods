@@ -11,6 +11,7 @@ Filename: `REVIEW-[phase]-[file-or-topic].md`
 ## Phase: [1-4]
 ## Reviewer: [Name / AI]
 ## Date: [YYYY-MM-DD]
+## Version: [target version]
 ## Findings
 - [Finding 1]
 - [Finding 2]
@@ -19,3 +20,8 @@ Filename: `REVIEW-[phase]-[file-or-topic].md`
 ## Action Items
 - [ ] [Item 1]
 ```
+
+## Rules
+
+- Recommendations must be performance-conscious. This mod runs every tick in a game loop — avoid suggesting changes that add allocations, LINQ in hot paths, or unnecessary complexity.
+- Do not recommend over-engineering. Suggestions should target the minimum change needed. No refactoring for its own sake, no speculative abstractions.

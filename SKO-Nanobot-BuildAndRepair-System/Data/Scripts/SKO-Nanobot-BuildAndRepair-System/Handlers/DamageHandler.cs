@@ -57,7 +57,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     if (target is IMyCharacter)
                     {
-                        var logicalComponent = Mod.NanobotSystems.GetValueOrDefault(info.AttackerId);
+                        NanobotSystem logicalComponent;
+                        Mod.NanobotSystems.TryGetValue(info.AttackerId, out logicalComponent);
                         if (logicalComponent != null)
                         {
                             var terminalBlock = logicalComponent.Entity as IMyTerminalBlock;

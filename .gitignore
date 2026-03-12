@@ -345,3 +345,12 @@ healthchecksdb
 # IDE / tooling
 .vscode/
 .claude/
+
+# Planning / tracking docs (local only)
+docs/plan/
+
+# Temporary files from testing / debugging
+_temp/
+
+# Ignore Claude MD file for now.
+CLAUDE.md

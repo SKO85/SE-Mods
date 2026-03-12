@@ -101,13 +101,18 @@
         public void CleanupExpired()
         {
             var now = MyAPIGateway.Session.ElapsedPlayTime;
+            var expiredKeys = new List<TKey>();
             foreach (var pair in Entries)
             {
                 if (pair.Value.IsExpired(now))
                 {
-                    CacheItem removed;
-                    Entries.TryRemove(pair.Key, out removed);
+                    expiredKeys.Add(pair.Key);
                 }
+            }
+            CacheItem removed;
+            foreach (var key in expiredKeys)
+            {
+                Entries.TryRemove(key, out removed);
             }
         }
     }
