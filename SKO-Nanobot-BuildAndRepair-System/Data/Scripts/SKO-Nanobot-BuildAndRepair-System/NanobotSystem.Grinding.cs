@@ -31,6 +31,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             lock (State.PossibleGrindTargets)
             {
+                long lastRejectedGridId = 0;
                 foreach (var targetData in State.PossibleGrindTargets)
                 {
                     if (targetData.Block != null && targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed)
@@ -38,10 +39,14 @@ namespace SKONanobotBuildAndRepairSystem
                         continue;
                     }
 
-                    if (!Mod.Settings.DisableLimitSystemsPerTargetGrid && Settings.CurrentPickedGrindingBlock == null &&
-                        CountSystemsOnGrid(targetData.Block.CubeGrid.EntityId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+                    if (!Mod.Settings.DisableLimitSystemsPerTargetGrid && Settings.CurrentPickedGrindingBlock == null)
                     {
-                        continue;
+                        var gridId = targetData.Block.CubeGrid.EntityId;
+                        if (gridId == lastRejectedGridId || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+                        {
+                            lastRejectedGridId = gridId;
+                            continue;
+                        }
                     }
 
                     if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && Settings.CurrentPickedGrindingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))

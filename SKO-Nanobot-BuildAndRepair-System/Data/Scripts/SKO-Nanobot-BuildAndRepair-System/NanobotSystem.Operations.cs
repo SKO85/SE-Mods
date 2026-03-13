@@ -64,6 +64,10 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     State.MissingComponents.Clear();
                     State.LimitsExceeded = false;
+
+                    if (!Mod.Settings.DisableLimitSystemsPerTargetGrid)
+                        BuildGridSystemCountCache();
+
                     switch (Settings.WorkMode)
                     {
                         case WorkModes.WeldBeforeGrind:
@@ -224,13 +228,13 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Returns the number of OTHER NanobotSystem instances whose current welding or grinding
-        /// target belongs to the given grid entity. Used to enforce MaxSystemsPerTargetGrid.
+        /// Builds a per-tick cache of how many OTHER NanobotSystem instances are actively
+        /// welding or grinding on each grid. Called once per tick before the weld/grind loops.
         /// </summary>
-        private int CountSystemsOnGrid(long gridEntityId)
+        private void BuildGridSystemCountCache()
         {
             var profilerTs = MethodProfiler.Start();
-            int count = 0;
+            _gridSystemCountCache.Clear();
             try
             {
             lock (Mod.NanobotSystems)
@@ -238,22 +242,57 @@ namespace SKONanobotBuildAndRepairSystem
                 foreach (var system in Mod.NanobotSystems.Values)
                 {
                     if (system == this) continue;
-                    if (system.State.CurrentWeldingBlock?.CubeGrid?.EntityId == gridEntityId ||
-                        system.State.CurrentGrindingBlock?.CubeGrid?.EntityId == gridEntityId)
+
+                    long weldGridId = 0;
+                    long grindGridId = 0;
+
+                    var weldBlock = system.State.CurrentWeldingBlock;
+                    if (weldBlock != null && weldBlock.CubeGrid != null)
+                        weldGridId = weldBlock.CubeGrid.EntityId;
+
+                    var grindBlock = system.State.CurrentGrindingBlock;
+                    if (grindBlock != null && grindBlock.CubeGrid != null)
+                        grindGridId = grindBlock.CubeGrid.EntityId;
+
+                    if (weldGridId != 0)
                     {
-                        count++;
+                        int existing;
+                        if (_gridSystemCountCache.TryGetValue(weldGridId, out existing))
+                            _gridSystemCountCache[weldGridId] = existing + 1;
+                        else
+                            _gridSystemCountCache[weldGridId] = 1;
+                    }
+
+                    if (grindGridId != 0 && grindGridId != weldGridId)
+                    {
+                        int existing;
+                        if (_gridSystemCountCache.TryGetValue(grindGridId, out existing))
+                            _gridSystemCountCache[grindGridId] = existing + 1;
+                        else
+                            _gridSystemCountCache[grindGridId] = 1;
                     }
                 }
             }
-            return count;
             }
             finally
             {
-                var _count = count;
-                MethodProfiler.StopAndLog("CountSystemsOnGrid", profilerTs, () =>
-                    string.Format("entityId={0};gridEntityId={1};count={2};totalSystems={3}",
-                        _Welder.EntityId, gridEntityId, _count, Mod.NanobotSystems.Count));
+                var _cacheSize = _gridSystemCountCache.Count;
+                MethodProfiler.StopAndLog("BuildGridSystemCountCache", profilerTs, () =>
+                    string.Format("entityId={0};cachedGrids={1};totalSystems={2}",
+                        _Welder.EntityId, _cacheSize, Mod.NanobotSystems.Count));
             }
+        }
+
+        /// <summary>
+        /// Returns the cached count of other systems targeting the given grid.
+        /// Must call BuildGridSystemCountCache() first in the same tick.
+        /// </summary>
+        private int GetCachedSystemCountOnGrid(long gridEntityId)
+        {
+            int count;
+            if (_gridSystemCountCache.TryGetValue(gridEntityId, out count))
+                return count;
+            return 0;
         }
     }
 }

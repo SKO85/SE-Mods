@@ -90,6 +90,7 @@ namespace SKONanobotBuildAndRepairSystem
         private List<IMyInventory> _PossibleSources = new List<IMyInventory>();
         private List<IMyInventory> _PossiblePushTargets = new List<IMyInventory>();
         private Dictionary<string, int> _TempMissingComponents = new Dictionary<string, int>();
+        private Dictionary<long, int> _gridSystemCountCache = new Dictionary<long, int>();
         private List<MyInventoryItem> _TempInventoryItems = new List<MyInventoryItem>();
 
         private int _UpdateEffectsInterval;

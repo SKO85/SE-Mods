@@ -38,6 +38,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // (only one block is welded per tick). The next target is returned as
                 // currentWeldingBlock so it starts welding on the very next update cycle.
                 var lookingForNext = false;
+                long lastRejectedGridId = 0;
                 foreach (var targetData in State.PossibleWeldTargets)
                 {
                     if (!lookingForNext && State.CurrentWeldingBlock != null && State.CurrentWeldingBlock != targetData.Block)
@@ -53,10 +54,14 @@ namespace SKONanobotBuildAndRepairSystem
                             continue;
                         }
 
-                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid && Settings.CurrentPickedWeldingBlock == null &&
-                            CountSystemsOnGrid(targetData.Block.CubeGrid.EntityId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid && Settings.CurrentPickedWeldingBlock == null)
                         {
-                            continue;
+                            var gridId = targetData.Block.CubeGrid.EntityId;
+                            if (gridId == lastRejectedGridId || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+                            {
+                                lastRejectedGridId = gridId;
+                                continue;
+                            }
                         }
 
                         if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers && Settings.CurrentPickedWeldingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
