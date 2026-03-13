@@ -23,9 +23,9 @@ namespace SKONanobotBuildAndRepairSystem
         public const string PARTICLE_EFFECT_TRANSPORT1_PICK = "GrindNanobotTrace1";
         public const string PARTICLE_EFFECT_TRANSPORT1_DELIVER = "WeldNanobotTrace1";
 
-        public const int MaxTransportEffects = 50;
+        public static readonly int MaxTransportEffects = 50;
         public static int _ActiveTransportEffects = 0;
-        public const int MaxWorkingEffects = 80;
+        public static readonly int MaxWorkingEffects = 80;
         public static int _ActiveWorkingEffects = 0;
 
         public Vector3 EmitterPosition;
@@ -214,10 +214,12 @@ namespace SKONanobotBuildAndRepairSystem
                     break;
             }
 
-            var sound = _Sounds[(int)workingState];
+            var soundIndex = (int)workingState;
+            var sound = (soundIndex >= 0 && soundIndex < _Sounds.Length) ? _Sounds[soundIndex] : null;
 
             // If ticking sound is disabled globally or per-block, suppress it.
-            if (sound != null && sound.GetCueName() == "BaRUnable" && _DisableTickingSoundSet)
+            var cueName = sound != null ? sound.GetCueName() : null;
+            if (!string.IsNullOrEmpty(cueName) && cueName == "BaRUnable" && _DisableTickingSoundSet)
             {
                 if (_SoundEmitter != null)
                 {
@@ -235,26 +237,27 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // If sound is set for working state.
+            var soundLevel = (soundIndex >= 0 && soundIndex < _SoundLevels.Length) ? _SoundLevels[soundIndex] : 0f;
             if (sound != null)
             {
                 if (_SoundEmitter == null)
                 {
                     _SoundEmitter = new MyEntity3DSoundEmitter((VRage.Game.Entity.MyEntity)system.Welder);
                     _SoundEmitter.CustomMaxDistance = 30f;
-                    _SoundEmitter.CustomVolume = _SoundLevels[(int)workingState] * system.Settings.SoundVolume;
+                    _SoundEmitter.CustomVolume = soundLevel * system.Settings.SoundVolume;
                 }
                 if (_SoundEmitterWorking == null)
                 {
                     _SoundEmitterWorking = new MyEntity3DSoundEmitter((VRage.Game.Entity.MyEntity)system.Welder, true, 1f);
                     _SoundEmitterWorking.CustomMaxDistance = 30f;
-                    _SoundEmitterWorking.CustomVolume = _SoundLevels[(int)workingState] * system.Settings.SoundVolume;
+                    _SoundEmitterWorking.CustomVolume = soundLevel * system.Settings.SoundVolume;
                     _SoundEmitterWorkingPosition = null;
                 }
 
                 if (_SoundEmitter != null)
                 {
                     _SoundEmitter.StopSound(true);
-                    _SoundEmitter.CustomVolume = _SoundLevels[(int)workingState] * system.Settings.SoundVolume;
+                    _SoundEmitter.CustomVolume = soundLevel * system.Settings.SoundVolume;
                     _SoundEmitter.PlaySound(sound, true);
                 }
 
@@ -291,17 +294,19 @@ namespace SKONanobotBuildAndRepairSystem
 
             Vector3D position;
             MatrixD matrix;
-            if (system.State.CurrentWeldingBlock != null)
+            var weldBlock = system.State.CurrentWeldingBlock;
+            var grindBlock = system.State.CurrentGrindingBlock;
+            if (weldBlock != null && !weldBlock.IsDestroyed && weldBlock.CubeGrid != null && !weldBlock.CubeGrid.Closed)
             {
                 BoundingBoxD box;
-                system.State.CurrentWeldingBlock.GetWorldBoundingBox(out box, false);
+                weldBlock.GetWorldBoundingBox(out box, false);
                 matrix = box.Matrix;
                 position = matrix.Translation;
             }
-            else if (system.State.CurrentGrindingBlock != null)
+            else if (grindBlock != null && !grindBlock.IsDestroyed && grindBlock.CubeGrid != null && !grindBlock.CubeGrid.Closed)
             {
                 BoundingBoxD box;
-                system.State.CurrentGrindingBlock.GetWorldBoundingBox(out box, false);
+                grindBlock.GetWorldBoundingBox(out box, false);
                 matrix = box.Matrix;
                 position = matrix.Translation;
             }
@@ -390,9 +395,11 @@ namespace SKONanobotBuildAndRepairSystem
             _SoundEmitterWorking?.Cleanup();
             _SoundEmitterWorking = null;
 
-            // Stop and dispose particle effects
+            // Stop and dispose particle effects, decrementing the global counters
+            // so other BaRs are not blocked from creating new effects.
             if (_ParticleEffectWorking1 != null)
             {
+                Interlocked.Decrement(ref _ActiveWorkingEffects);
                 _ParticleEffectWorking1.Stop();
                 _ParticleEffectWorking1.Clear();
                 _ParticleEffectWorking1 = null;
@@ -400,6 +407,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (_ParticleEffectTransport1 != null)
             {
+                Interlocked.Decrement(ref _ActiveTransportEffects);
                 _ParticleEffectTransport1.Stop();
                 _ParticleEffectTransport1.Clear();
                 _ParticleEffectTransport1 = null;
