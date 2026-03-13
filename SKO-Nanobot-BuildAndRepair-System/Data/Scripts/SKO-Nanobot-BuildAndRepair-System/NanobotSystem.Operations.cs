@@ -106,7 +106,7 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             case WorkModes.WeldBeforeGrind:
                                 ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
-                                if (State.PossibleWeldTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
+                                if (!needwelding || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
                                 {
                                     ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
                                 }
@@ -114,7 +114,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                             case WorkModes.GrindBeforeWeld:
                                 ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                                if (State.PossibleGrindTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
+                                if (!needgrinding || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
                                 {
                                     ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
                                 }

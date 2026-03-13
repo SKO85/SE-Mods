@@ -87,13 +87,13 @@ namespace SKONanobotBuildAndRepairSystem
                     // runs the weld/grind/collect logic each cycle. UI, state sync, and power
                     // updates always run (not staggered).
                     // Only stagger when cluster is large enough to cause load issues.
-                    // Gradual ramp: 1-4 no stagger, 5→2, 6→3, 7→4, 8+→5 groups.
+                    // Gradual ramp: 1-4 no stagger, 5→2, 6+→3 groups (max ~500ms interval).
                     // When sim-speed drops, increase stagger to help the server recover.
                     var cycle = MyAPIGateway.Session.GameplayFrameCounter / (fast ? 10 : 100);
                     var clusterSize = AssignedCluster != null ? AssignedCluster.Members.Count : 1;
                     var effectiveGroups = clusterSize < 5 ? 1 : Math.Min(Mod.StaggerGroupCount, clusterSize - 3);
 
-                    var simSpeed = MyAPIGateway.Physics != null ? MyAPIGateway.Physics.ServerSimulationRatio : 1.0f;
+                    var simSpeed = Mod.GetEffectiveSimSpeed();
                     if (simSpeed < 0.9f)
                     {
                         var simPenalty = (int)Math.Ceiling((1.0 - simSpeed) * Mod.StaggerGroupCount);
@@ -101,6 +101,17 @@ namespace SKONanobotBuildAndRepairSystem
                     }
 
                     var isMyTurn = _staggerSlot < 0 || effectiveGroups <= 1 || (cycle % effectiveGroups) == (_staggerSlot % effectiveGroups);
+
+                    // When sim-speed override is active, simulate the reduced tick rate.
+                    // Real low sim-speed naturally halves ticks; the override must replicate that.
+                    if (isMyTurn && Mod.SimSpeedOverride.HasValue && Mod.SimSpeedOverride.Value < 1.0f)
+                    {
+                        var skipInterval = (int)Math.Round(1.0 / Mod.SimSpeedOverride.Value);
+                        if (skipInterval > 1)
+                        {
+                            isMyTurn = (cycle % skipInterval) == 0;
+                        }
+                    }
 
                     if (isMyTurn)
                     {

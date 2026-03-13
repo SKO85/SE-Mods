@@ -54,7 +54,8 @@ namespace SKONanobotBuildAndRepairSystem
         // --- OPT 2: BaR update staggering ---
         // Distributes ServerTryWeldingGrindingCollecting() calls across StaggerGroupCount groups
         // so only ~N/StaggerGroupCount BaRs fire per tick instead of all N.
-        public const int StaggerGroupCount = 5;
+        // Capped at 3 to keep max interval ~500ms (3 x ~167ms per 10-frame cycle).
+        public const int StaggerGroupCount = 3;
         private static int _nextStaggerSlot;
 
         public static int ClaimStaggerSlot()
@@ -62,6 +63,17 @@ namespace SKONanobotBuildAndRepairSystem
             var slot = _nextStaggerSlot % StaggerGroupCount;
             _nextStaggerSlot++;
             return slot;
+        }
+
+        // --- Sim-speed override for testing ---
+        // When set (not null), overrides MyAPIGateway.Physics.ServerSimulationRatio.
+        // Controlled via /nanobars sim <value|reset> command (admin-only).
+        public static float? SimSpeedOverride = null;
+
+        public static float GetEffectiveSimSpeed()
+        {
+            if (SimSpeedOverride.HasValue) return SimSpeedOverride.Value;
+            return MyAPIGateway.Physics != null ? MyAPIGateway.Physics.ServerSimulationRatio : 1.0f;
         }
 
         // --- OPT 3: Global grind budget per tick ---

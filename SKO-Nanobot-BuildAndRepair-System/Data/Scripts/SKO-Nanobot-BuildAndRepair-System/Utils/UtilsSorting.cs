@@ -22,8 +22,11 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 {
                 BlockPriorityHandling priorityHandler = isGrinding ? system.BlockGrindPriority : system.BlockWeldPriority;
 
-                // Filter in-place so the caller's list is actually modified.
-                list.RemoveAll(i => !priorityHandler.GetEnabled(i));
+                // Keep blocks enabled in either handler so grind targets aren't excluded
+                // when sorting for welding (and vice versa) in mixed work modes.
+                var weldPriority = system.BlockWeldPriority;
+                var grindPriority = system.BlockGrindPriority;
+                list.RemoveAll(i => !weldPriority.GetEnabled(i) && !grindPriority.GetEnabled(i));
 
                 var welderCenter = system.Welder.WorldAABB.Center;
 

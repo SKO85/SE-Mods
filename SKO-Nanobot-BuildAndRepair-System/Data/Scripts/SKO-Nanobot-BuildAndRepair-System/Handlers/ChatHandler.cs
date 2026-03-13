@@ -16,6 +16,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private const string CmdProfileStart = "start";
         private const string CmdProfileStop = "stop";
         private const string CmdProfileStatus = "status";
+        private const string CmdSim = "sim";
+        private const string CmdSimReset = "reset";
 
         #region Registration
 
@@ -91,24 +93,48 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     }
                     break;
 
-                case CmdProfile:
-                    if (!MyAPIGateway.Session.IsServer)
+                case CmdSim:
+                    if (!IsAdminOnServer(console)) break;
+
+                    if (args.Length < 2)
                     {
-                        console.ShowMessage("Nanobars", "Command not allowed on client");
+                        // Show current setting
+                        if (Mod.SimSpeedOverride.HasValue)
+                            console.ShowMessage("Nanobars", string.Format("Sim-speed override: {0:F2} (real: {1:F2})",
+                                Mod.SimSpeedOverride.Value,
+                                MyAPIGateway.Physics != null ? MyAPIGateway.Physics.ServerSimulationRatio : 1.0f));
+                        else
+                            console.ShowMessage("Nanobars", string.Format("Sim-speed override: off (real: {0:F2})",
+                                MyAPIGateway.Physics != null ? MyAPIGateway.Physics.ServerSimulationRatio : 1.0f));
                         break;
                     }
 
-                    var player = MyAPIGateway.Session.Player;
-                    if (player != null)
+                    if (args[1] == CmdSimReset)
                     {
-                        var promoteLevel = player.PromoteLevel.ToString();
-                        var isAdmin = promoteLevel == "Admin" || promoteLevel == "SpaceMaster" || promoteLevel == "Owner";
-                        if (!isAdmin)
-                        {
-                            console.ShowMessage("Nanobars", "Command requires admin permissions");
-                            break;
-                        }
+                        Mod.SimSpeedOverride = null;
+                        console.ShowMessage("Nanobars", "Sim-speed override removed. Using server sim-speed.");
+                        break;
                     }
+
+                    float simValue;
+                    if (!float.TryParse(args[1], out simValue))
+                    {
+                        console.ShowMessage("Nanobars", "Invalid value. Usage: /nanobars sim <0.1-1.0|reset>");
+                        break;
+                    }
+
+                    if (simValue < 0.1f || simValue > 1.0f)
+                    {
+                        console.ShowMessage("Nanobars", "Value must be between 0.1 and 1.0");
+                        break;
+                    }
+
+                    Mod.SimSpeedOverride = simValue;
+                    console.ShowMessage("Nanobars", string.Format("Sim-speed override set to {0:F2}", simValue));
+                    break;
+
+                case CmdProfile:
+                    if (!IsAdminOnServer(console)) break;
 
                     if (!MethodProfiler.IsConfigured)
                     {
@@ -155,6 +181,29 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     ShowHelp();
                     break;
             }
+        }
+
+        private static bool IsAdminOnServer(VRage.Game.ModAPI.IMyUtilities console)
+        {
+            if (!MyAPIGateway.Session.IsServer)
+            {
+                console.ShowMessage("Nanobars", "Command not allowed on client");
+                return false;
+            }
+
+            var player = MyAPIGateway.Session.Player;
+            if (player != null)
+            {
+                var promoteLevel = player.PromoteLevel.ToString();
+                var isAdmin = promoteLevel == "Admin" || promoteLevel == "SpaceMaster" || promoteLevel == "Owner";
+                if (!isAdmin)
+                {
+                    console.ShowMessage("Nanobars", "Command requires admin permissions");
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static void ShowHelp()

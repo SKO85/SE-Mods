@@ -375,10 +375,10 @@ namespace SKONanobotBuildAndRepairSystem
 
             grids.Add(cubeGrid);
 
-            var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly;
-            // OPT 4: In GrindOnly mode, always sort for grinding. The momentary false from
+            var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly || Settings.WorkMode == WorkModes.GrindBeforeWeld;
+            // In GrindOnly/GrindBeforeWeld, always sort for grinding. The momentary false from
             // State.Grinding/NeedGrinding triggers the 2x-slower weld sort for no benefit.
-            var isGrinding = isGrindingMode || State.Grinding || State.NeedGrinding || (State.Transporting && isGrindingMode);
+            var isGrinding = isGrindingMode || State.Grinding || State.NeedGrinding;
             var newBlocks = GetBlocksFromCache(cubeGrid, isGrinding);
 
             foreach (var slimBlock in newBlocks)
@@ -832,6 +832,8 @@ namespace SKONanobotBuildAndRepairSystem
         private void ApplyClusterResultToSelf(ScanClusterResult result, bool updateSource)
         {
             var profilerTs = MethodProfiler.Start();
+            var preTruncateWeld = 0;
+            var preTruncateGrind = 0;
             try
             {
                 var emitterMatrix = _Welder.WorldMatrix;
@@ -842,12 +844,11 @@ namespace SKONanobotBuildAndRepairSystem
                 _TempPossibleGrindTargets.Clear();
                 _TempPossibleFloatingTargets.Clear();
 
-                // Filter weld candidates by own range
+                // Filter weld candidates by own range (no pre-sort cap; truncated after sort)
                 if (result.WeldCandidates != null)
                 {
                     for (int i = 0; i < result.WeldCandidates.Count; i++)
                     {
-                        if (_TempPossibleWeldTargets.Count >= MaxPossibleWeldTargets) break;
                         var candidate = result.WeldCandidates[i];
                         double distance;
                         if (candidate.Block.IsInRange(ref areaOrientedBox, out distance))
@@ -857,12 +858,11 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                // Filter grind candidates by own range
+                // Filter grind candidates by own range (no pre-sort cap; truncated after sort)
                 if (result.GrindCandidates != null)
                 {
                     for (int i = 0; i < result.GrindCandidates.Count; i++)
                     {
-                        if (_TempPossibleGrindTargets.Count >= MaxPossibleGrindTargets) break;
                         var candidate = result.GrindCandidates[i];
                         double distance;
                         if (candidate.Block.IsInRange(ref areaOrientedBox, out distance))
@@ -910,6 +910,11 @@ namespace SKONanobotBuildAndRepairSystem
                     Logging.Instance.Error("Error on .Sort for cluster _TempPossibleWeldTargets. Exception: {0}", ex);
                 }
 
+                // Truncate after sorting so the correct blocks (by priority+distance) survive the cap.
+                preTruncateWeld = _TempPossibleWeldTargets.Count;
+                if (preTruncateWeld > MaxPossibleWeldTargets)
+                    _TempPossibleWeldTargets.RemoveRange(MaxPossibleWeldTargets, preTruncateWeld - MaxPossibleWeldTargets);
+
                 // Sort grind targets
                 try
                 {
@@ -945,6 +950,11 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     Logging.Instance.Error("Error on .Sort for cluster _TempPossibleGrindTargets. Exception: {0}", ex);
                 }
+
+                // Truncate after sorting so the desired sort order determines which blocks survive the cap.
+                preTruncateGrind = _TempPossibleGrindTargets.Count;
+                if (preTruncateGrind > MaxPossibleGrindTargets)
+                    _TempPossibleGrindTargets.RemoveRange(MaxPossibleGrindTargets, preTruncateGrind - MaxPossibleGrindTargets);
 
                 // Sort floating targets
                 try
@@ -1050,10 +1060,10 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 MethodProfiler.StopAndLog("ApplyClusterResultToSelf", profilerTs, () =>
-                    string.Format("entityId={0};weldTargets={1};grindTargets={2};floatingTargets={3}",
+                    string.Format("entityId={0};weldTargets={1}(pre={2});grindTargets={3}(pre={4});floatingTargets={5}",
                         _Welder.EntityId,
-                        State.PossibleWeldTargets.CurrentCount,
-                        State.PossibleGrindTargets.CurrentCount,
+                        State.PossibleWeldTargets.CurrentCount, preTruncateWeld,
+                        State.PossibleGrindTargets.CurrentCount, preTruncateGrind,
                         State.PossibleFloatingTargets.CurrentCount));
             }
         }
