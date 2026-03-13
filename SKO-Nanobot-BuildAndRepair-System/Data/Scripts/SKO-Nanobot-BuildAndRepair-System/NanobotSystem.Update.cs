@@ -23,8 +23,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if ((Settings.Flags & SyncBlockSettings.Settings.ShowArea) != 0)
                     {
-                        var colorWelder = _Welder.SlimBlock.GetColorMask().HSVtoColor();
-                        var color = Color.FromNonPremultiplied(colorWelder.R, colorWelder.G, colorWelder.B, 255);
+                        var color = Color.Black;
                         var areaBoundingBox = Settings.CorrectedAreaBoundingBox;
                         var emitterMatrix = _Welder.WorldMatrix;
                         emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);

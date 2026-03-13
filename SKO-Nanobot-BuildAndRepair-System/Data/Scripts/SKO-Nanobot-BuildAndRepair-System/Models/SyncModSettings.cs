@@ -242,7 +242,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 // 0 = no explicit value set → use 30 for local, 15 for multiplayer.
                 if (settings.MaxSystemsPerTargetGrid <= 0)
                 {
-                    settings.MaxSystemsPerTargetGrid = MyAPIGateway.Multiplayer.MultiplayerActive ? 15 : 30;
+                    settings.MaxSystemsPerTargetGrid = MyAPIGateway.Multiplayer.MultiplayerActive ? 10 : 20;
                 }
             }
             catch (Exception ex)

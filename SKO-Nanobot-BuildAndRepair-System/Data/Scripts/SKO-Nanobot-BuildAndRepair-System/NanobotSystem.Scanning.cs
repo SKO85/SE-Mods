@@ -872,13 +872,18 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                // Filter floating candidates by distance to own area center
+                // Filter floating candidates by own working area (OBB containment check)
                 if (result.FloatingCandidates != null)
                 {
+                    var invRotation = MatrixD.Transpose(MatrixD.CreateFromQuaternion(areaOrientedBox.Orientation));
+                    var he = areaOrientedBox.HalfExtent;
                     for (int i = 0; i < result.FloatingCandidates.Count; i++)
                     {
                         if (_TempPossibleFloatingTargets.Count >= MaxPossibleFloatingTargets) break;
                         var candidate = result.FloatingCandidates[i];
+                        var localPos = Vector3D.TransformNormal(candidate.WorldPosition - areaOrientedBox.Center, invRotation);
+                        if (Math.Abs(localPos.X) > he.X || Math.Abs(localPos.Y) > he.Y || Math.Abs(localPos.Z) > he.Z)
+                            continue;
                         var distance = (areaOrientedBox.Center - candidate.WorldPosition).Length();
                         _TempPossibleFloatingTargets.Add(new TargetEntityData(candidate.Entity, distance));
                     }

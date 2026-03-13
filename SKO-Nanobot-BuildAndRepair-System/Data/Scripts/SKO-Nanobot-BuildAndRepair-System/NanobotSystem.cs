@@ -49,7 +49,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private const int MaxPossibleWeldTargets = 128;
         private const int MaxPossibleGrindTargets = 128;
-        private const int MaxPossibleFloatingTargets = 32;
+        private const int MaxPossibleFloatingTargets = 16;
 
         private const int TransmitStateMinIntervalSeconds = 1;
         private const int TransmitStateMaxIntervalSeconds = 2;
