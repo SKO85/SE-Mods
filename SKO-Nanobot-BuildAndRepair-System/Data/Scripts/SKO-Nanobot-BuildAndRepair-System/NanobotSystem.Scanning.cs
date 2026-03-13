@@ -69,6 +69,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
 
                 _AsyncUpdateSourcesAndTargetsRunning = false;
+                _InitialScanCompleted = false;
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 _LastSourceUpdate = _LastTargetsUpdate;
 
@@ -357,8 +358,10 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                         _TempPossibleSources.Clear();
                         _TempPossiblePushTargets.Clear();
+                        _PushTargetsFull = false;
                     }
 
+                    _InitialScanCompleted = true;
                     _ContinuouslyError = 0;
                 }
                 catch (Exception ex)

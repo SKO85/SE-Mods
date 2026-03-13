@@ -41,76 +41,100 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (ready)
             {
-                ServerTryPushInventory();
-
-                if (isFullInventoryAndPicking)
+                // BUG-014: On first ready tick (or after re-enable), trigger an immediate
+                // scan WITH sources so the BaR doesn't operate with empty source/push lists.
+                // Skip operations this tick — they'll start once the scan completes.
+                if (!_InitialScanCompleted)
                 {
-                    State.LastTransportTarget = State.CurrentTransportTarget;
-                    State.CurrentTransportTarget = null;
-                    State.CurrentTransportStartTime = TimeSpan.Zero;
-                    transporting = false;
+                    _LastSourceUpdate = -Mod.Settings.SourcesUpdateInterval;
+                    _LastTargetsUpdate = TimeSpan.Zero;
+                    StartAsyncUpdateSourcesAndTargets(true);
                 }
                 else
                 {
-                    transporting = IsTransportRunning(playTime);
-                }
+                    ServerTryPushInventory();
 
-                if (transporting && State.CurrentTransportIsPick)
-                {
-                    if (State.CurrentTransportIsCollecting) needcollecting = true;
-                    else needgrinding = true;
-                }
-
-                if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
-                    ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
-
-                if (!transporting)
-                {
-                    State.MissingComponents.Clear();
-                    State.LimitsExceeded = false;
-
-                    if (!Mod.Settings.DisableLimitSystemsPerTargetGrid)
-                        BuildGridSystemCountCache();
-
-                    switch (Settings.WorkMode)
+                    // BUG-015: Proactively detect full welder inventory after push attempt.
+                    // If welder is full and we couldn't push, mark inventory full early
+                    // so grinding/collecting are blocked before wasting a cycle.
+                    if (!State.InventoryFull && !CreativeModeActive)
                     {
-                        case WorkModes.WeldBeforeGrind:
-                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
-                            if (State.PossibleWeldTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
-                            {
-                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                            }
-                            break;
-
-                        case WorkModes.GrindBeforeWeld:
-                            ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                            if (State.PossibleGrindTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
-                            {
-                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
-                            }
-                            break;
-
-                        case WorkModes.GrindIfWeldGetStuck:
-                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
-                            if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
-                            {
-                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                            }
-                            break;
-
-                        case WorkModes.WeldOnly:
-                            ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
-                            break;
-
-                        case WorkModes.GrindOnly:
-                            ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                            break;
+                        var welderInventory = _Welder.GetInventory(0);
+                        if (welderInventory != null && (float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
+                        {
+                            State.InventoryFull = true;
+                        }
                     }
-                    State.MissingComponents.RebuildHash();
-                }
 
-                if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding)
-                    ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
+                    if (isFullInventoryAndPicking)
+                    {
+                        State.LastTransportTarget = State.CurrentTransportTarget;
+                        State.CurrentTransportTarget = null;
+                        State.CurrentTransportStartTime = TimeSpan.Zero;
+                        transporting = false;
+                    }
+                    else
+                    {
+                        transporting = IsTransportRunning(playTime);
+                    }
+
+                    if (transporting && State.CurrentTransportIsPick)
+                    {
+                        if (State.CurrentTransportIsCollecting) needcollecting = true;
+                        else needgrinding = true;
+                    }
+
+                    if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
+                        ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
+
+                    if (!transporting)
+                    {
+                        State.MissingComponents.Clear();
+                        State.LimitsExceeded = false;
+
+                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid)
+                            BuildGridSystemCountCache();
+
+                        switch (Settings.WorkMode)
+                        {
+                            case WorkModes.WeldBeforeGrind:
+                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                if (State.PossibleWeldTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
+                                {
+                                    ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                }
+                                break;
+
+                            case WorkModes.GrindBeforeWeld:
+                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                if (State.PossibleGrindTargets.CurrentCount == 0 || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
+                                {
+                                    ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                }
+                                break;
+
+                            case WorkModes.GrindIfWeldGetStuck:
+                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
+                                {
+                                    ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                }
+                                break;
+
+                            case WorkModes.WeldOnly:
+                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                break;
+
+                            case WorkModes.GrindOnly:
+                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                break;
+                        }
+                        State.MissingComponents.RebuildHash();
+                    }
+
+                    if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding)
+                        ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
+                }
             }
             else
             {
@@ -228,11 +252,12 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 MethodProfiler.StopAndLog("ServerTryWeldingGrindingCollecting", profilerTs, () =>
-                    string.Format("entityId={0};workMode={1};welding={2};grinding={3};needCollecting={4};transporting={5};transportIsCollecting={6};weldTargets={7};grindTargets={8};floatingTargets={9};inventoryFull={10}",
+                    string.Format("entityId={0};workMode={1};welding={2};grinding={3};needCollecting={4};transporting={5};transportIsCollecting={6};weldTargets={7};grindTargets={8};floatingTargets={9};inventoryFull={10};scanReady={11};pushFull={12}",
                         _Welder.EntityId, Settings.WorkMode, State.Welding, State.Grinding,
                         State.NeedCollecting, State.Transporting, State.CurrentTransportIsCollecting,
                         State.PossibleWeldTargets.CurrentCount, State.PossibleGrindTargets.CurrentCount,
-                        State.PossibleFloatingTargets.CurrentCount, State.InventoryFull));
+                        State.PossibleFloatingTargets.CurrentCount, State.InventoryFull,
+                        _InitialScanCompleted, _PushTargetsFull));
             }
         }
 

@@ -22,6 +22,20 @@ namespace SKONanobotBuildAndRepairSystem
             try
             {
             if (!PowerHelper.HasRequiredElectricPower(this)) return; //-> Not enough power
+
+            // BUG-018: Guard against collecting when welder inventory is full.
+            // State.InventoryFull may not reflect the actual welder state yet (e.g. after
+            // world reload or when the welder is nearly-full but not at exact MaxVolume).
+            if (!State.InventoryFull && !CreativeModeActive)
+            {
+                var welderInventory = _Welder.GetInventory(0);
+                if (welderInventory != null && (float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
+                {
+                    State.InventoryFull = true;
+                }
+            }
+            if (State.InventoryFull) return;
+
             lock (State.PossibleFloatingTargets)
             {
                 TargetEntityData collectingFirstTarget = null;

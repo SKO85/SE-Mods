@@ -123,6 +123,16 @@ namespace SKONanobotBuildAndRepairSystem
             if (welderInventory == null) return;
             _TransportInventory = new Sandbox.Game.MyInventory((float)welderInventory.MaxVolume / MyAPIGateway.Session.BlocksInventorySizeMultiplier, Vector3.MaxValue, MyInventoryFlags.CanSend);
 
+            // BUG-018: Initialize inventory state from current welder inventory.
+            // On world reload, State.InventoryFull defaults to false even when the welder
+            // is full from the previous session. This allows one round of collecting/grinding
+            // before the proactive check in ServerTryWeldingGrindingCollecting catches it,
+            // consuming floating items from the world that can't actually be stored.
+            if ((float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
+            {
+                State.InventoryFull = true;
+            }
+
             // Trigger settings changed.
             SettingsChanged();
 
@@ -165,6 +175,8 @@ namespace SKONanobotBuildAndRepairSystem
                 // Stop effects
                 State.CurrentTransportTarget = null;
                 State.Ready = false;
+                _InitialScanCompleted = false;
+                _PushTargetsFull = false;
 
                 _Effects.UpdateEffects(this);
                 _Effects.Close(this);

@@ -66,6 +66,8 @@ namespace SKONanobotBuildAndRepairSystem
         private int _Delay = 0;
 
         private bool _AsyncUpdateSourcesAndTargetsRunning = false;
+        private bool _InitialScanCompleted = false;
+        private bool _PushTargetsFull = false;
         private List<TargetBlockData> _TempPossibleWeldTargets = new List<TargetBlockData>();
         private List<TargetBlockData> _TempPossibleGrindTargets = new List<TargetBlockData>();
         private List<TargetEntityData> _TempPossibleFloatingTargets = new List<TargetEntityData>();

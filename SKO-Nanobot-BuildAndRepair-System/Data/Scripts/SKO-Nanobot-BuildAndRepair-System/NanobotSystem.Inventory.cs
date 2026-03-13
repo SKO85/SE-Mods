@@ -30,11 +30,18 @@ namespace SKONanobotBuildAndRepairSystem
             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryAutoPushInventoryLast).TotalSeconds <= 5)
                 return;
 
+            // BUG-016: Skip push if all push targets are known to be full.
+            // The flag is reset when push targets are rescanned.
+            if (_PushTargetsFull)
+                return;
+
             var welderInventory = _Welder.GetInventory(0);
             if (welderInventory != null)
             {
                 if (welderInventory.Empty()) return;
                 var lastPush = MyAPIGateway.Session.ElapsedPlayTime;
+                var anyPushed = false;
+                var anyAttempted = false;
 
                 _TempInventoryItems.Clear();
                 welderInventory.GetItems(_TempInventoryItems);
@@ -45,7 +52,8 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if ((Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0)
                         {
-                            welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem);
+                            anyAttempted = true;
+                            anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
                             _TryAutoPushInventoryLast = lastPush;
                         }
                     }
@@ -53,7 +61,8 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if ((Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0)
                         {
-                            welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem);
+                            anyAttempted = true;
+                            anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
                             _TryAutoPushInventoryLast = lastPush;
                         }
                     }
@@ -62,12 +71,25 @@ namespace SKONanobotBuildAndRepairSystem
                         //Any kind of items (Tools, Weapons, Ammo, Bottles, ..)
                         if ((Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0)
                         {
-                            welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem);
+                            anyAttempted = true;
+                            anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
                             _TryAutoPushInventoryLast = lastPush;
                         }
                     }
                 }
                 _TempInventoryItems.Clear();
+
+                // BUG-016: If we attempted to push but nothing moved, mark push targets as full.
+                // This prevents constant iteration over full containers every tick.
+                // The flag is reset when push targets are rescanned (~30s).
+                if (anyAttempted && !anyPushed)
+                {
+                    _PushTargetsFull = true;
+                }
+                else if (anyPushed)
+                {
+                    _PushTargetsFull = false;
+                }
             }
 
             }
@@ -97,14 +119,19 @@ namespace SKONanobotBuildAndRepairSystem
                     var welderInventory = _Welder.GetInventory(0);
                     if (welderInventory != null)
                     {
-                        if (push && !welderInventory.Empty())
+                        if (push && !welderInventory.Empty() && !_PushTargetsFull)
                         {
                             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryPushInventoryLast).TotalSeconds > 5 && welderInventory.MaxVolume - welderInventory.CurrentVolume < _TransportInventory.CurrentVolume * 1.5f)
                             {
                                 if (!welderInventory.PushComponents(_PossiblePushTargets, null))
                                 {
-                                    // Failed retry after timeout
+                                    // BUG-016: Mark push targets as full to avoid retrying every tick.
+                                    _PushTargetsFull = true;
                                     _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
+                                }
+                                else
+                                {
+                                    _PushTargetsFull = false;
                                 }
                             }
                         }
