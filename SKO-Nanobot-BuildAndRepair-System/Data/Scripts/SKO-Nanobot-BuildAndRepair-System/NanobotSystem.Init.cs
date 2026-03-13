@@ -58,7 +58,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var electricPowerTransport = Settings.MaximumRequiredElectricPowerTransport;
                 if ((Mod.Settings.Welder.AllowedSearchModes & SearchModes.BoundingBox) == 0) electricPowerTransport /= 10;
                 var maxPowerWorking = Math.Max(Settings.MaximumRequiredElectricPowerWelding, Settings.MaximumRequiredElectricPowerGrinding);
-                resourceSink.SetMaxRequiredInputByType(ElectricityId, maxPowerWorking + electricPowerTransport + Settings.MaximumRequiredElectricPowerStandby);
+                resourceSink.SetMaxRequiredInputByType(ElectricityId, Math.Max(maxPowerWorking, electricPowerTransport));
                 resourceSink.SetRequiredInputFuncByType(ElectricityId, ComputeRequiredElectricPower);
                 resourceSink.Update();
             }

@@ -48,12 +48,15 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             // Grinding Power.
             required += system.State.Grinding ? system.Settings.MaximumRequiredElectricPowerGrinding - system.Settings.MaximumRequiredElectricPowerStandby : 0f;
 
-            // Transport Power.
-            required += system.State.Transporting
-                ? (system.Settings.SearchMode == SearchModes.Grids
-                    ? (system.Settings.MaximumRequiredElectricPowerTransport - system.Settings.MaximumRequiredElectricPowerStandby) / 10
-                    : (system.Settings.MaximumRequiredElectricPowerTransport - system.Settings.MaximumRequiredElectricPowerStandby))
-                : 0f;
+            // Transport Power (only when not welding/grinding, since those already include transport).
+            if (!system.State.Welding && !system.State.Grinding)
+            {
+                required += system.State.Transporting
+                    ? (system.Settings.SearchMode == SearchModes.Grids
+                        ? (system.Settings.MaximumRequiredElectricPowerTransport - system.Settings.MaximumRequiredElectricPowerStandby) / 10
+                        : (system.Settings.MaximumRequiredElectricPowerTransport - system.Settings.MaximumRequiredElectricPowerStandby))
+                    : 0f;
+            }
 
             return required;
         }
