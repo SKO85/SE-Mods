@@ -174,12 +174,15 @@ namespace SKONanobotBuildAndRepairSystem
 
                         foreach (var inventory in _TempPossibleSources)
                         {
-                            // Only cargo containers are valid push targets — prevents BaR-to-BaR circular transfers
-                            if (inventory.Owner is IMyCargoContainer)
+                            // Only cargo containers and refineries are valid push targets — prevents BaR-to-BaR circular transfers
+                            if (inventory.Owner is IMyCargoContainer || inventory.Owner is IMyRefinery)
                             {
                                 _TempPossiblePushTargets.Add(inventory);
                             }
                         }
+
+                        // Refineries are push-only targets, not sources — remove them from the source list
+                        _TempPossibleSources.RemoveAll(inv => inv.Owner is IMyRefinery);
                     }
 
                     pos = 3;

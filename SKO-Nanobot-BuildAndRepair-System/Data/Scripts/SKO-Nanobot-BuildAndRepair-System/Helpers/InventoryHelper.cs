@@ -22,16 +22,18 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             if (terminalBlock == null || welder == null || possibleSources == null) return false;
             if (terminalBlock.EntityId == welder.EntityId) return false;
 
-            // Only the following types for containers/inventories as valid external sources to reduce scanning of all types.
+            // Only the following types for containers/inventories as valid external sources or push targets to reduce scanning of all types.
             var isCargo = terminalBlock is IMyCargoContainer;
             var isAssembler = terminalBlock is IMyAssembler;
             var isWelder = terminalBlock is IMyShipWelder;
             var isGrinder = terminalBlock is IMyShipGrinder;
             var isSorter = terminalBlock is IMyConveyorSorter;
             var isConnector = terminalBlock is IMyShipConnector;
+            var isCryo = terminalBlock is IMyCryoChamber;
+            var isRefinery = terminalBlock is IMyRefinery;
 
             // Just return false if the terminal block is none of the above types.
-            if (!(isCargo || isAssembler || isWelder || isGrinder || isSorter || isConnector)) return false;
+            if (!(isCargo || isAssembler || isWelder || isGrinder || isSorter || isConnector || isCryo || isRefinery)) return false;
 
             // All blocks (same-grid and cross-grid): use cached IsConnectedTo check.
             var key = new MyTuple<long, long>(terminalBlock.EntityId, welder.EntityId);
