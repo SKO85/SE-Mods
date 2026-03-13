@@ -528,11 +528,6 @@ namespace SKONanobotBuildAndRepairSystem
             if (!State.Ready) return; //Block not ready
             if (grids.Contains(cubeGrid)) return; //Already parsed
 
-            // Determine if this is the welder's own grid BEFORE adding to the visited list.
-            // grids is empty only on the first call, which is always _Welder.CubeGrid.
-            // This avoids accessing CubeGrid.EntityId from background threads (unreliable).
-            var isWelderGrid = possibleSources != null && grids.Count == 0;
-
             grids.Add(cubeGrid);
 
             var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly;
@@ -552,7 +547,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // When target lists are full, still scan for sources but skip target evaluation
                 if (scanStopped && possibleSources == null) break;
 
-                AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, scanStopped ? null : possibleWeldTargets, scanStopped ? null : possibleGrindTargets, isWelderGrid);
+                AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, scanStopped ? null : possibleWeldTargets, scanStopped ? null : possibleGrindTargets);
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -645,7 +640,7 @@ namespace SKONanobotBuildAndRepairSystem
             return weldFull && grindFull && floatingFull;
         }
 
-        private void AsyncAddBlockIfTargetOrSource(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMySlimBlock block, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets, bool isSameGrid)
+        private void AsyncAddBlockIfTargetOrSource(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMySlimBlock block, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
         {
             try
             {
@@ -662,7 +657,7 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             try
                             {
-                                terminalBlock.AddIfConnectedToInventory(_Welder, possibleSources, isSameGrid);
+                                terminalBlock.AddIfConnectedToInventory(_Welder, possibleSources);
                             }
                             catch (Exception ex)
                             {

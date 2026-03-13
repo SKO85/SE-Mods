@@ -155,7 +155,6 @@ namespace SKONanobotBuildAndRepairSystem
                     MyAPIGateway.TerminalControls.CustomControlGetter += CustomControlGetter;
 
                     IMyTerminalControlLabel label;
-                    IMyTerminalControlCheckbox checkbox;
                     IMyTerminalControlCombobox comboBox;
                     IMyTerminalControlSeparator separateArea;
                     IMyTerminalControlSlider slider;

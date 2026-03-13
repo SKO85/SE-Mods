@@ -1,5 +1,6 @@
 ﻿using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using System.Collections.Generic;
 using VRage;
@@ -13,10 +14,11 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             defaultTtl: TimeSpan.FromSeconds(15),
             comparer: new MyTupleComparer<long, long>(),
             concurrencyLevel: 4,
-            capacity: 1024);
+            capacity: 2048);
 
-        public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources, bool isSameGrid)
+        public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources)
         {
+            var profilerTs = MethodProfiler.Start();
             if (terminalBlock == null || welder == null || possibleSources == null) return false;
             if (terminalBlock.EntityId == welder.EntityId) return false;
 
@@ -31,25 +33,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             // Just return false if the terminal block is none of the above types.
             if (!(isCargo || isAssembler || isWelder || isGrinder || isSorter || isConnector)) return false;
 
-            // Same-grid blocks: skip IsConnectedTo which is unreliable from background threads.
-            // CubeGrid.EntityId is also unreliable from background threads, so the caller passes
-            // this flag based on which grid is being scanned (known from the call context).
-            // The actual TransferItemFrom call handles real connectivity failures gracefully.
-            if (isSameGrid)
-            {
-                var maxInv = terminalBlock.InventoryCount;
-                for (var i = 0; i < maxInv; i++)
-                {
-                    var inventory = terminalBlock.GetInventory(i);
-                    if (!possibleSources.Contains(inventory))
-                    {
-                        possibleSources.Add(inventory);
-                    }
-                }
-                return maxInv > 0;
-            }
-
-            // Cross-grid blocks (via connectors/mechanical connections): use cached IsConnectedTo check.
+            // All blocks (same-grid and cross-grid): use cached IsConnectedTo check.
             var key = new MyTuple<long, long>(terminalBlock.EntityId, welder.EntityId);
             var cachedConnected = false;
 
@@ -67,6 +51,8 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
                         }
                     }
                 }
+                MethodProfiler.StopAndLog("AddIfConnectedToInventory", profilerTs, () =>
+                    string.Format("blockId={0};welderId={1};cached=true;connected={2}", terminalBlock.EntityId, welder.EntityId, cachedConnected));
                 return cachedConnected;
             }
 
@@ -86,6 +72,8 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             }
 
             ConnectionCache.Set(key, isConnected);
+            MethodProfiler.StopAndLog("AddIfConnectedToInventory", profilerTs, () =>
+                string.Format("blockId={0};welderId={1};cached=false;connected={2}", terminalBlock.EntityId, welder.EntityId, isConnected));
             return isConnected;
         }
 
