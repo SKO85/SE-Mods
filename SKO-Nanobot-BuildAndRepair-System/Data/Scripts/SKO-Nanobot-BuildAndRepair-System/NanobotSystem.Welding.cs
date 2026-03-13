@@ -25,6 +25,13 @@ namespace SKONanobotBuildAndRepairSystem
             needwelding = false;
             transporting = false;
             currentWeldingBlock = null;
+            var hadLockOn = State.CurrentWeldingBlock != null;
+            var skippedByLockOn = 0;
+            var checkedByWeldable = 0;
+            var skippedByIgnore = 0;
+            var skippedByGridLimit = 0;
+            var skippedByAssign = 0;
+            var lockOnFound = false;
             try
             {
 
@@ -43,11 +50,31 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (!lookingForNext && State.CurrentWeldingBlock != null && State.CurrentWeldingBlock != targetData.Block)
                     {
+                        skippedByLockOn++;
                         continue;
                     }
 
+                    if (!lookingForNext && State.CurrentWeldingBlock != null && State.CurrentWeldingBlock == targetData.Block)
+                    {
+                        lockOnFound = true;
+                    }
+
                     if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && targetData.Block != Settings.CurrentPickedWeldingBlock) continue;
-                    if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) || (!targetData.Ignore && Weldable(targetData)))
+
+                    if (Mod.Settings.AssignToSystemEnabled && !_Welder.HelpOthers
+                        && Settings.CurrentPickedWeldingBlock == null
+                        && targetData.Block.IsAssignedToOtherSystem(_Welder.EntityId))
+                    {
+                        skippedByAssign++;
+                        continue;
+                    }
+
+                    var isIgnored = targetData.Ignore;
+                    var isWeldable = !isIgnored && Weldable(targetData);
+                    if (!isIgnored) checkedByWeldable++;
+                    else skippedByIgnore++;
+
+                    if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) || isWeldable)
                     {
                         if (targetData.Block != null && targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed)
                         {
@@ -60,12 +87,14 @@ namespace SKONanobotBuildAndRepairSystem
                             if (gridId == lastRejectedGridId || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
                             {
                                 lastRejectedGridId = gridId;
+                                skippedByGridLimit++;
                                 continue;
                             }
                         }
 
                         if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers && Settings.CurrentPickedWeldingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
                         {
+                            skippedByAssign++;
                             continue;
                         }
 
@@ -131,35 +160,59 @@ namespace SKONanobotBuildAndRepairSystem
                 var _needwelding = needwelding;
                 var _transporting = transporting;
                 var _targetCount = State.PossibleWeldTargets.CurrentCount;
+                var _hadLockOn = hadLockOn;
+                var _lockOnFound = lockOnFound;
+                var _skippedByLockOn = skippedByLockOn;
+                var _checkedByWeldable = checkedByWeldable;
+                var _skippedByIgnore = skippedByIgnore;
+                var _skippedByGridLimit = skippedByGridLimit;
+                var _skippedByAssign = skippedByAssign;
                 MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                    string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5}",
+                    string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};skipLock={8};weldChecked={9};skipIgnore={10};skipGrid={11};skipAssign={12}",
                         _Welder.EntityId, _welding, _needwelding, _transporting, _targetCount,
-                        State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none"));
+                        State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
+                        _hadLockOn, _lockOnFound, _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign));
             }
         }
 
         private bool Weldable(TargetBlockData targetData)
         {
+            var profilerTs = MethodProfiler.Start();
             var target = targetData.Block;
-
-            if ((targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0)
+            var isProjected = (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0;
+            var result = false;
+            try
             {
-                // Keep this at false, otherwise it will not work with Multigrid Projections.
-                if (target.CanBuild(false))
+                if (isProjected)
                 {
-                    targetData.Ignore = false;
-                    return true;
+                    // Keep this at false, otherwise it will not work with Multigrid Projections.
+                    if (target.CanBuild(false))
+                    {
+                        targetData.Ignore = false;
+                        result = true;
+                        return true;
+                    }
+
+                    targetData.Ignore = true;
+                    return false;
                 }
 
-                targetData.Ignore = true;
-                return false;
+                var isFunctionalOnly = (Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0;
+                var weld = (!IsWeldIntegrityReached(target) || target.NeedRepair(isFunctionalOnly)) && !IsFriendlyDamage(target);
+
+                targetData.Ignore = !weld;
+                result = weld;
+                return weld;
             }
-
-            var isFunctionalOnly = (Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0;
-            var weld = (!IsWeldIntegrityReached(target) || target.NeedRepair(isFunctionalOnly)) && !IsFriendlyDamage(target);
-
-            targetData.Ignore = !weld;
-            return weld;
+            finally
+            {
+                var _result = result;
+                MethodProfiler.StopAndLog("Weldable", profilerTs, () =>
+                    string.Format("entityId={0};block={1};projected={2};result={3}",
+                        _Welder.EntityId,
+                        target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                        isProjected, _result));
+            }
         }
 
         internal bool IsWeldIntegrityReached(IMySlimBlock target)

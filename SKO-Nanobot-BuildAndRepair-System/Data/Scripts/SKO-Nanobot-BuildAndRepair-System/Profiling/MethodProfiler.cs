@@ -14,6 +14,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
         private const int MaxDetailLength = 4096;
         private const int WarmupCallsPerMethod = 20;
         private const int DefaultAutoStopSeconds = 5 * 60;
+        private const string ManifestFileName = "NanobotProfiler.manifest";
         private static readonly object _syncRoot = new object();
         private static readonly Dictionary<string, TextWriter> _writers = new Dictionary<string, TextWriter>();
         private static readonly Dictionary<string, MethodStats> _methodStats = new Dictionary<string, MethodStats>();
@@ -111,6 +112,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                     return false;
                 }
 
+                DeletePreviousLogs();
                 CloseInternal();
                 _methodStats.Clear();
                 _isRunning = true;
@@ -137,6 +139,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 var duration = DateTime.UtcNow - _startedUtc;
                 _autoStopUtc = null;
                 WriteSummary(duration);
+                WriteManifest();
                 CloseInternal();
                 message = string.Format("Profiling done. Session duration: {0:F1}s. Logs are in local mod storage as NanobotProfiler.<MethodName>.log.", duration.TotalSeconds);
                 return true;
@@ -169,6 +172,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 var duration = DateTime.UtcNow - _startedUtc;
                 _autoStopUtc = null;
                 WriteSummary(duration);
+                WriteManifest();
                 CloseInternal();
                 message = string.Format("Profiling auto-stopped after {0:F1}s.", duration.TotalSeconds);
                 return true;
@@ -462,7 +466,81 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             {
                 _isRunning = false;
                 _autoStopUtc = null;
+                WriteManifest();
                 CloseInternal();
+            }
+        }
+
+        private static void DeletePreviousLogs()
+        {
+            try
+            {
+                if (MyAPIGateway.Utilities == null) return;
+                if (!MyAPIGateway.Utilities.FileExistsInLocalStorage(ManifestFileName, typeof(Mod))) return;
+
+                var files = new List<string>();
+                var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage(ManifestFileName, typeof(Mod));
+                try
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        line = line.Trim();
+                        if (!string.IsNullOrEmpty(line))
+                            files.Add(line);
+                    }
+                }
+                finally
+                {
+                    reader.Close();
+                }
+
+                foreach (var file in files)
+                {
+                    try
+                    {
+                        if (MyAPIGateway.Utilities.FileExistsInLocalStorage(file, typeof(Mod)))
+                        {
+                            var w = MyAPIGateway.Utilities.WriteFileInLocalStorage(file, typeof(Mod));
+                            w.Flush();
+                            w.Close();
+                            w.Dispose();
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                MyLog.Default.WriteLineAndConsole("MethodProfiler: Failed to delete previous logs: " + ex.Message);
+            }
+        }
+
+        private static void WriteManifest()
+        {
+            try
+            {
+                if (MyAPIGateway.Utilities == null || _writers.Count == 0) return;
+
+                var writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(ManifestFileName, typeof(Mod));
+                try
+                {
+                    writer.WriteLine("NanobotProfiler.Summary.log");
+                    foreach (var methodName in _writers.Keys)
+                    {
+                        writer.WriteLine("NanobotProfiler." + SanitizeMethodName(methodName) + ".log");
+                    }
+                    writer.Flush();
+                }
+                finally
+                {
+                    writer.Close();
+                    writer.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                MyLog.Default.WriteLineAndConsole("MethodProfiler: Failed to write manifest: " + ex.Message);
             }
         }
 

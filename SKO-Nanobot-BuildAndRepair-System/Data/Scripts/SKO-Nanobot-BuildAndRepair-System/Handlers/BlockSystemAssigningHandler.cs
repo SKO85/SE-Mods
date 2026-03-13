@@ -13,6 +13,17 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             return string.Format("{0}:{1}", block.CubeGrid.EntityId, block.Position);
         }
 
+        public static bool IsAssignedToOtherSystem(this IMySlimBlock block, long systemId)
+        {
+            var key = GetBlockKey(block);
+            long assignedSystemId;
+            if (Cache.TryGet(key, out assignedSystemId))
+            {
+                return assignedSystemId != systemId;
+            }
+            return false;
+        }
+
         public static bool AssignToSystem(this IMySlimBlock block, long systemId)
         {
             var key = GetBlockKey(block);

@@ -297,8 +297,31 @@ namespace SKONanobotBuildAndRepairSystem
                     pos = 6;
                     lock (State.PossibleWeldTargets)
                     {
+                        // Snapshot Ignore state from old targets
+                        HashSet<IMySlimBlock> ignoredBlocks = null;
+                        foreach (var old in State.PossibleWeldTargets)
+                        {
+                            if (old.Ignore)
+                            {
+                                if (ignoredBlocks == null)
+                                    ignoredBlocks = new HashSet<IMySlimBlock>();
+                                ignoredBlocks.Add(old.Block);
+                            }
+                        }
+
                         State.PossibleWeldTargets.Clear();
                         State.PossibleWeldTargets.AddRange(_TempPossibleWeldTargets);
+
+                        // Restore Ignore for blocks still at full integrity
+                        if (ignoredBlocks != null)
+                        {
+                            foreach (var target in State.PossibleWeldTargets)
+                            {
+                                if (ignoredBlocks.Contains(target.Block) && target.Block.IsFullIntegrity)
+                                    target.Ignore = true;
+                            }
+                        }
+
                         State.PossibleWeldTargets.RebuildHash();
                     }
                     _TempPossibleWeldTargets.Clear();
