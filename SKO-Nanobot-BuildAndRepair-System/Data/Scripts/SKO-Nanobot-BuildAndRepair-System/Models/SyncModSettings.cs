@@ -128,7 +128,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             ShieldCheckEnabled = true;
             DecreaseFactionReputationOnGrinding = true;
             DeleteBotsWhenDead = true;
-            MaxSystemsPerTargetGrid = 5;
+            MaxSystemsPerTargetGrid = 0;
             AssignToSystemEnabled = true;
             EnableMethodProfiling = true;
             MethodProfilingMinDurationMs = 1;
@@ -228,6 +228,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 else
                 {
                     settings = new SyncModSettings() { Version = CurrentSettingsVersion };
+                }
+
+                // Apply dynamic default for MaxSystemsPerTargetGrid based on game type.
+                // 0 = no explicit value set → use 30 for local, 15 for multiplayer.
+                if (settings.MaxSystemsPerTargetGrid <= 0)
+                {
+                    settings.MaxSystemsPerTargetGrid = MyAPIGateway.Multiplayer.MultiplayerActive ? 15 : 30;
                 }
             }
             catch (Exception ex)
