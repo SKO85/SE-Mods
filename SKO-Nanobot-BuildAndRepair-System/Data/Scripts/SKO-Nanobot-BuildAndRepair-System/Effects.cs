@@ -36,7 +36,6 @@ namespace SKONanobotBuildAndRepairSystem
 
         private MyEntity3DSoundEmitter _SoundEmitter;
         private MyEntity3DSoundEmitter _SoundEmitterWorking;
-        private Vector3D? _SoundEmitterWorkingPosition;
         private MyParticleEffect _ParticleEffectWorking1;
         private MyParticleEffect _ParticleEffectTransport1;
         private MyLight _LightEffect;
@@ -55,7 +54,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 _SoundEmitterWorking.StopSound(false);
                 _SoundEmitterWorking.SetPosition(null);
-                _SoundEmitterWorkingPosition = null;
+
             }
         }
 
@@ -230,7 +229,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _SoundEmitterWorking.StopSound(true);
                     _SoundEmitterWorking.SetPosition(null); //Reset
-                    _SoundEmitterWorkingPosition = null;
+    
                 }
 
                 sound = null;
@@ -251,7 +250,7 @@ namespace SKONanobotBuildAndRepairSystem
                     _SoundEmitterWorking = new MyEntity3DSoundEmitter((VRage.Game.Entity.MyEntity)system.Welder, true, 1f);
                     _SoundEmitterWorking.CustomMaxDistance = 30f;
                     _SoundEmitterWorking.CustomVolume = soundLevel * system.Settings.SoundVolume;
-                    _SoundEmitterWorkingPosition = null;
+    
                 }
 
                 if (_SoundEmitter != null)
@@ -265,7 +264,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _SoundEmitterWorking.StopSound(true);
                     _SoundEmitterWorking.SetPosition(null);
-                    _SoundEmitterWorkingPosition = null;
+    
                 }
             }
             else
@@ -279,7 +278,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _SoundEmitterWorking.StopSound(true);
                     _SoundEmitterWorking.SetPosition(null); //Reset
-                    _SoundEmitterWorkingPosition = null;
+    
                 }
             }
             UpdateWorkingEffectPosition(system, workingState);

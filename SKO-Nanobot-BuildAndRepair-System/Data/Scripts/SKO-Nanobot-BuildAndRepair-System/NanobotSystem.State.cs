@@ -45,6 +45,12 @@ namespace SKONanobotBuildAndRepairSystem
                 changed = true;
             }
 
+            if (!State.SafeZoneAndShieldsChecked)
+            {
+                State.SafeZoneAndShieldsChecked = true;
+                changed = true;
+            }
+
             return changed;
         }
 

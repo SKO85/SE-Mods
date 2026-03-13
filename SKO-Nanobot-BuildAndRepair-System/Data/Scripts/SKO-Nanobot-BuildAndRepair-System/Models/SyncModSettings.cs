@@ -116,7 +116,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             LogLevel = Logging.Level.Error; //Default
             MaxBackgroundTasks = Mod.MaxBackgroundTasks_Default;
             TargetsUpdateInterval = TimeSpan.FromSeconds(10);
-            SourcesUpdateInterval = TimeSpan.FromSeconds(60);
+            SourcesUpdateInterval = TimeSpan.FromSeconds(30);
             FriendlyDamageTimeout = TimeSpan.FromSeconds(60);
             FriendlyDamageCleanup = TimeSpan.FromSeconds(10);
             Range = NanobotSystem.WELDER_RANGE_DEFAULT_IN_M;

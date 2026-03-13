@@ -29,6 +29,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private bool _SafeZoneAllowsBuildingProjections;
         private bool _SafeZoneAllowsGrinding;
         private bool _IsShielded;
+        private bool _SafeZoneAndShieldsChecked;
 
         private List<SyncComponents> _MissingComponentsSync;
         private List<SyncTargetEntityData> _PossibleWeldTargetsSync;
@@ -409,6 +410,12 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
         }
 
+        public bool SafeZoneAndShieldsChecked
+        {
+            get { return _SafeZoneAndShieldsChecked; }
+            set { _SafeZoneAndShieldsChecked = value; }
+        }
+
         public SyncBlockState()
         {
             MissingComponents = new DefinitionIdHashDictionary();
@@ -547,6 +554,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _SafeZoneAllowsGrinding = newState.SafeZoneAllowsGrinding;
             _SafeZoneAllowsBuildingProjections = newState.SafeZoneAllowsBuildingProjections;
             _SafeZoneAllowsWelding = newState.SafeZoneAllowsWelding;
+            _SafeZoneAndShieldsChecked = true;
 
             Changed = true;
         }

@@ -90,14 +90,8 @@ namespace SKONanobotBuildAndRepairSystem
                         _PeriodicExtraChecksLast = MyAPIGateway.Session.ElapsedPlayTime;
                         try
                         {
-                            if (SetSafeZoneAndShieldStates())
-                            {
-                                UpdateCustomInfo(true);
-                            }
-                            else
-                            {
-                                UpdateCustomInfo(false);
-                            }
+                            SetSafeZoneAndShieldStates();
+                            UpdateCustomInfo(true);
                         }
                         catch { }
                     }

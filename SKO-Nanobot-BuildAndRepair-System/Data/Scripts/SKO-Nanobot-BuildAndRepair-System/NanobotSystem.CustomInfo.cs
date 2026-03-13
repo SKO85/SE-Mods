@@ -99,28 +99,31 @@ namespace SKONanobotBuildAndRepairSystem
 
             customInfo.Append(Environment.NewLine);
 
-            if (State.IsShielded)
+            if (State.SafeZoneAndShieldsChecked)
             {
-                customInfo.Append($"[color=#FFFFFF00]Shields Active[/color]: Grinding disabled!");
-                customInfo.Append(Environment.NewLine);
-            }
+                if (State.IsShielded)
+                {
+                    customInfo.Append($"[color=#FFFFFF00]Shields Active[/color]: Grinding disabled!");
+                    customInfo.Append(Environment.NewLine);
+                }
 
-            if (!State.SafeZoneAllowsWelding)
-            {
-                customInfo.Append($"[color=#FFFFFF00]SafeZone[/color]: Welding disabled!");
-                customInfo.Append(Environment.NewLine);
-            }
+                if (!State.SafeZoneAllowsWelding)
+                {
+                    customInfo.Append($"[color=#FFFFFF00]SafeZone[/color]: Welding disabled!");
+                    customInfo.Append(Environment.NewLine);
+                }
 
-            if (!State.SafeZoneAllowsBuildingProjections)
-            {
-                customInfo.Append($"[color=#FFFFFF00]SafeZone[/color]: Building projections disabled!");
-                customInfo.Append(Environment.NewLine);
-            }
+                if (!State.SafeZoneAllowsBuildingProjections)
+                {
+                    customInfo.Append($"[color=#FFFFFF00]SafeZone[/color]: Building projections disabled!");
+                    customInfo.Append(Environment.NewLine);
+                }
 
-            if (!State.SafeZoneAllowsGrinding)
-            {
-                customInfo.Append($"[color=#FFFFFF00]SafeZone[/color]: Grinding disabled!");
-                customInfo.Append(Environment.NewLine);
+                if (!State.SafeZoneAllowsGrinding)
+                {
+                    customInfo.Append($"[color=#FFFFFF00]SafeZone[/color]: Grinding disabled!");
+                    customInfo.Append(Environment.NewLine);
+                }
             }
 
             customInfo.Append(Environment.NewLine);
