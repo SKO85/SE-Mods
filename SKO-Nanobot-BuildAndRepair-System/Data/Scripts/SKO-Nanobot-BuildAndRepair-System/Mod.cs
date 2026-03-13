@@ -32,6 +32,58 @@ namespace SKONanobotBuildAndRepairSystem
         public static Dictionary<long, int> GridSystemCountCache = new Dictionary<long, int>();
         private static int _lastGridCountCacheTick = -1;
 
+        // --- OPT 1: Mechanical block grind throttle ---
+        // Caps mechanical connection block destructions to 1 per tick globally,
+        // preventing 100-380ms spikes when multiple BaRs destroy pistons/rotors/hinges simultaneously.
+        private static int _mechanicalGrindsThisTick;
+        private static int _lastMechanicalTick = -1;
+
+        public static bool TryClaimMechanicalGrindSlot()
+        {
+            var tick = MyAPIGateway.Session.GameplayFrameCounter;
+            if (tick != _lastMechanicalTick)
+            {
+                _lastMechanicalTick = tick;
+                _mechanicalGrindsThisTick = 0;
+            }
+            if (_mechanicalGrindsThisTick >= 1) return false;
+            _mechanicalGrindsThisTick++;
+            return true;
+        }
+
+        // --- OPT 2: BaR update staggering ---
+        // Distributes ServerTryWeldingGrindingCollecting() calls across StaggerGroupCount groups
+        // so only ~N/StaggerGroupCount BaRs fire per tick instead of all N.
+        public const int StaggerGroupCount = 5;
+        private static int _nextStaggerSlot;
+
+        public static int ClaimStaggerSlot()
+        {
+            var slot = _nextStaggerSlot % StaggerGroupCount;
+            _nextStaggerSlot++;
+            return slot;
+        }
+
+        // --- OPT 3: Global grind budget per tick ---
+        // Caps total ServerDoGrind calls per tick across all BaRs (default 10).
+        // Safety net: worst-case grind time capped at ~12.8ms/tick (10 x 1.28ms avg).
+        public const int MaxGrindsPerTick = 10;
+        private static int _grindsThisTick;
+        private static int _lastGrindBudgetTick = -1;
+
+        public static bool TryClaimGrindSlot()
+        {
+            var tick = MyAPIGateway.Session.GameplayFrameCounter;
+            if (tick != _lastGrindBudgetTick)
+            {
+                _lastGrindBudgetTick = tick;
+                _grindsThisTick = 0;
+            }
+            if (_grindsThisTick >= MaxGrindsPerTick) return false;
+            _grindsThisTick++;
+            return true;
+        }
+
         private bool _initialized = false;
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
         private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);

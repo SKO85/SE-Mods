@@ -47,8 +47,8 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 4f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
-        private const int MaxPossibleWeldTargets = 64;
-        private const int MaxPossibleGrindTargets = 64;
+        private const int MaxPossibleWeldTargets = 256;
+        private const int MaxPossibleGrindTargets = 256;
         private const int MaxPossibleFloatingTargets = 64;
 
         private const int TransmitStateMinIntervalSeconds = 1;
@@ -80,10 +80,12 @@ namespace SKONanobotBuildAndRepairSystem
         private ConcurrentDictionary<long, List<IMySlimBlock>> CachedBlocks = new ConcurrentDictionary<long, List<IMySlimBlock>>();
 
         /// <summary>
-        /// Per-BaR jitter (0-4s) added to the 8s sorted cache TTL to prevent all BaRs
+        /// Per-BaR jitter (0-4s) added to the sorted cache base TTL to prevent all BaRs
         /// from expiring their sorted caches simultaneously (thundering herd).
+        /// Base (16s) exceeds TargetsUpdateInterval (10s) for at least one cache hit between
+        /// scans, while keeping responsiveness for new blocks (e.g. projected grids).
         /// </summary>
-        internal readonly double SortedCacheTtlSeconds = 8.0 + _RandomDelay.NextDouble() * 4.0;
+        internal readonly double SortedCacheTtlSeconds = 16.0 + _RandomDelay.NextDouble() * 4.0;
 
         /// <summary>
         /// Reusable dictionary for distance pre-computation in SortWithPriorityAndDistance.
@@ -201,5 +203,12 @@ namespace SKONanobotBuildAndRepairSystem
         /// After 3 misses, falls back to independent scan.
         /// </summary>
         internal int MissedResultCycles;
+
+        /// <summary>
+        /// Stagger slot (0..StaggerGroupCount-1) assigned at init. Only BaRs whose slot
+        /// matches the current cycle run ServerTryWeldingGrindingCollecting(), spreading
+        /// the per-tick main-thread load across multiple ticks.
+        /// </summary>
+        internal int _staggerSlot = -1;
     }
 }

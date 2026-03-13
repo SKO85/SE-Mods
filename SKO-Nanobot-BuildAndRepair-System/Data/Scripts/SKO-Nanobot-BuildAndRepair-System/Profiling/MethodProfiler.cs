@@ -22,6 +22,11 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
         private static DateTime _startedUtc;
         private static DateTime? _autoStopUtc;
 
+        private static float _minSimSpeed = float.MaxValue;
+        private static float _maxSimSpeed = float.MinValue;
+        private static double _sumSimSpeed;
+        private static long _simSpeedSamples;
+
         private const int MaxAutoStopSeconds = 24 * 60 * 60;
 
         private sealed class MethodStats
@@ -115,6 +120,10 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 DeletePreviousLogs();
                 CloseInternal();
                 _methodStats.Clear();
+                _minSimSpeed = float.MaxValue;
+                _maxSimSpeed = float.MinValue;
+                _sumSimSpeed = 0;
+                _simSpeedSamples = 0;
                 _isRunning = true;
                 _startedUtc = DateTime.UtcNow;
                 _autoStopUtc = autoStopSeconds > 0 ? _startedUtc.AddSeconds(autoStopSeconds) : (DateTime?)null;
@@ -284,6 +293,11 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 writer = MyAPIGateway.Utilities.WriteFileInLocalStorage("NanobotProfiler.Summary.log", typeof(Mod));
                 writer.WriteLine("# Nanobot method profiler summary");
                 writer.WriteLine(string.Format("# sessionSeconds={0:F1};warmupCallsPerMethod={1};generatedUtc={2:u}", sessionDuration.TotalSeconds, WarmupCallsPerMethod, DateTime.UtcNow));
+                writer.WriteLine(string.Format("# simSpeed: min={0:F2};max={1:F2};avg={2:F2};samples={3}",
+                    _minSimSpeed == float.MaxValue ? 0f : _minSimSpeed,
+                    _maxSimSpeed == float.MinValue ? 0f : _maxSimSpeed,
+                    _simSpeedSamples > 0 ? _sumSimSpeed / _simSpeedSamples : 0.0,
+                    _simSpeedSamples));
                 writer.WriteLine("# domain summary: domain;calls;totalMs;avgMs;minMs;maxMs;warmupAvgMs;steadyAvgMs");
 
                 foreach (var entry in domainStats.OrderByDescending(e => e.Value.TotalMs))
@@ -398,9 +412,20 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 if (writer == null)
                     return;
 
+                var simSpeed = MyAPIGateway.Physics != null ? MyAPIGateway.Physics.ServerSimulationRatio : 1.0f;
+
+                lock (_syncRoot)
+                {
+                    if (simSpeed < _minSimSpeed) _minSimSpeed = simSpeed;
+                    if (simSpeed > _maxSimSpeed) _maxSimSpeed = simSpeed;
+                    _sumSimSpeed += simSpeed;
+                    _simSpeedSamples++;
+                }
+
                 var line = new StringBuilder(512);
                 line.Append(DateTime.UtcNow.ToString("u"));
                 line.Append(";ms=").Append(elapsedMs.ToString("F3"));
+                line.Append(";simSpeed=").Append(simSpeed.ToString("F2"));
 
                 if (!string.IsNullOrWhiteSpace(details))
                 {
@@ -435,7 +460,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
 
                 var fileName = "NanobotProfiler." + SanitizeMethodName(methodName) + ".log";
                 writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(fileName, typeof(Mod));
-                writer.WriteLine("# utc;ms;details");
+                writer.WriteLine("# utc;ms;simSpeed;details");
                 writer.Flush();
                 _writers[methodName] = writer;
                 return writer;

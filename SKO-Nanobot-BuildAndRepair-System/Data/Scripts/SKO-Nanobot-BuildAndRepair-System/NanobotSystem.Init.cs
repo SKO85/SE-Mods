@@ -102,6 +102,9 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
+            // Assign stagger slot so BaR updates are distributed across ticks.
+            _staggerSlot = Mod.ClaimStaggerSlot();
+
             // Initialize controls.
             Mod.InitControls();
 

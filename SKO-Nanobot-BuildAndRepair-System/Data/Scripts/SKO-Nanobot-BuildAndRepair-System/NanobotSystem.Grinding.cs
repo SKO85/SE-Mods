@@ -63,6 +63,12 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         needgrinding = true;
 
+                        // OPT 3: Global grind budget — cap ServerDoGrind calls per tick.
+                        if (!Mod.TryClaimGrindSlot())
+                        {
+                            break;
+                        }
+
                         grinding = ServerDoGrind(targetData, out transporting);
 
                         if (grinding)
@@ -117,7 +123,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             var targetGrid = target.CubeGrid;
 
-            if (targetGrid.Physics == null || !targetGrid.Physics.Enabled) return false;
+            if (targetGrid.Physics == null || !targetGrid.Physics.Enabled) return false;            
 
             var criticalIntegrityRatio = ((MyCubeBlockDefinition)target.BlockDefinition).CriticalIntegrityRatio;
             var ownershipIntegrityRatio = ((MyCubeBlockDefinition)target.BlockDefinition).OwnershipIntegrityRatio > 0 ? ((MyCubeBlockDefinition)target.BlockDefinition).OwnershipIntegrityRatio : criticalIntegrityRatio;
@@ -197,6 +203,14 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (target.IsFullyDismounted)
                 {
+                    // OPT 1: Mechanical blocks (pistons, rotors, hinges) cause 100-380ms spikes
+                    // when destroyed because they detach subgrids. Cap to 1 destruction per tick globally.
+                    if (target.FatBlock is Sandbox.ModAPI.IMyMechanicalConnectionBlock || target.FatBlock is Sandbox.ModAPI.IMyAttachableTopBlock)
+                    {
+                        if (!Mod.TryClaimMechanicalGrindSlot())
+                            return false;
+                    }
+
                     target.SpawnConstructionStockpile();
                     target.CubeGrid.RazeBlock(target.Position);
                 }

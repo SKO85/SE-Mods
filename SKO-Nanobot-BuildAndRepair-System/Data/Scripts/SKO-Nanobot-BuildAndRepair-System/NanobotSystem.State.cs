@@ -140,9 +140,17 @@ namespace SKONanobotBuildAndRepairSystem
             if (!State.Ready)
                 return WorkingState.NotReady;
 
-            // Welding.
+            // Welding — validate target is still in progress so effects don't linger
+            // between staggered updates (~8s gap).
             else if (State.Welding)
+            {
+                var block = State.CurrentWeldingBlock;
+                if (block == null || block.IsDestroyed
+                    || (block.CubeGrid != null && block.CubeGrid.Closed)
+                    || (!block.IsProjected() && block.IsFullIntegrity))
+                    return WorkingState.NeedWelding;
                 return WorkingState.Welding;
+            }
 
             // Need welding.
             else if (State.NeedWelding)
@@ -156,9 +164,15 @@ namespace SKONanobotBuildAndRepairSystem
                 return WorkingState.NeedWelding;
             }
 
-            // Grinding.
+            // Grinding — validate target is still in progress.
             else if (State.Grinding)
+            {
+                var block = State.CurrentGrindingBlock;
+                if (block == null || block.IsDestroyed || block.IsFullyDismounted
+                    || (block.CubeGrid != null && block.CubeGrid.Closed))
+                    return WorkingState.NeedGrinding;
                 return WorkingState.Grinding;
+            }
 
             // Need grinding.
             else if (State.NeedGrinding)

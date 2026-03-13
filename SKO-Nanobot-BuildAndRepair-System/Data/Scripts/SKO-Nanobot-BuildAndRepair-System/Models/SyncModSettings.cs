@@ -135,7 +135,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             ShieldCheckEnabled = true;
             DecreaseFactionReputationOnGrinding = true;
             DeleteBotsWhenDead = true;
-            MaxSystemsPerTargetGrid = 0;
+            MaxSystemsPerTargetGrid = 60;
             AssignToSystemEnabled = true;
             EnableMethodProfiling = true;
             MethodProfilingMinDurationMs = 1;

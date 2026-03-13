@@ -83,7 +83,29 @@ namespace SKONanobotBuildAndRepairSystem
                         CleanupFriendlyDamage();
                     }
 
-                    ServerTryWeldingGrindingCollecting();
+                    // OPT 2: Stagger heavy work across ticks. Only this BaR's assigned group
+                    // runs the weld/grind/collect logic each cycle. UI, state sync, and power
+                    // updates always run (not staggered).
+                    // Only stagger when cluster is large enough to cause load issues.
+                    // Gradual ramp: 1-4 no stagger, 5→2, 6→3, 7→4, 8+→5 groups.
+                    // When sim-speed drops, increase stagger to help the server recover.
+                    var cycle = MyAPIGateway.Session.GameplayFrameCounter / (fast ? 10 : 100);
+                    var clusterSize = AssignedCluster != null ? AssignedCluster.Members.Count : 1;
+                    var effectiveGroups = clusterSize < 5 ? 1 : Math.Min(Mod.StaggerGroupCount, clusterSize - 3);
+
+                    var simSpeed = MyAPIGateway.Physics != null ? MyAPIGateway.Physics.ServerSimulationRatio : 1.0f;
+                    if (simSpeed < 0.9f)
+                    {
+                        var simPenalty = (int)Math.Ceiling((1.0 - simSpeed) * Mod.StaggerGroupCount);
+                        effectiveGroups = Math.Min(Mod.StaggerGroupCount, effectiveGroups + simPenalty);
+                    }
+
+                    var isMyTurn = _staggerSlot < 0 || effectiveGroups <= 1 || (cycle % effectiveGroups) == (_staggerSlot % effectiveGroups);
+
+                    if (isMyTurn)
+                    {
+                        ServerTryWeldingGrindingCollecting();
+                    }
 
                     if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PeriodicExtraChecksLast).TotalSeconds >= 2)
                     {
@@ -151,8 +173,10 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 MethodProfiler.StopAndLog("UpdateBeforeSimulation10_100", profilerTs, () =>
-                    string.Format("entityId={0};fast={1};ready={2};delay={3}",
-                        _Welder != null ? _Welder.EntityId : 0, fast, _IsInit, _Delay));
+                    string.Format("entityId={0};fast={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5}",
+                        _Welder != null ? _Welder.EntityId : 0, fast, _IsInit, _Delay,
+                        AssignedCluster != null ? AssignedCluster.Members.Count : 1,
+                        AssignedCluster != null ? (AssignedCluster.Members.Count < 5 ? 1 : Math.Min(Mod.StaggerGroupCount, AssignedCluster.Members.Count - 3)) : 1));
             }
         }
     }

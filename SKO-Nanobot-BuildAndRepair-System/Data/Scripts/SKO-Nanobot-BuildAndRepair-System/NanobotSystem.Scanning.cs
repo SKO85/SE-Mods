@@ -376,7 +376,9 @@ namespace SKONanobotBuildAndRepairSystem
             grids.Add(cubeGrid);
 
             var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly;
-            var isGrinding = State.Grinding || State.NeedGrinding || (State.Transporting && isGrindingMode) || isGrindingMode;
+            // OPT 4: In GrindOnly mode, always sort for grinding. The momentary false from
+            // State.Grinding/NeedGrinding triggers the 2x-slower weld sort for no benefit.
+            var isGrinding = isGrindingMode || State.Grinding || State.NeedGrinding || (State.Transporting && isGrindingMode);
             var newBlocks = GetBlocksFromCache(cubeGrid, isGrinding);
 
             foreach (var slimBlock in newBlocks)
@@ -1019,7 +1021,11 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 _TempPossibleFloatingTargets.Clear();
 
-                if (updateSource && result.SourcesUpdated)
+                // Apply sources whenever the cluster result contains them, regardless of this
+                // BaR's own source timer. The coordinator's timer decides when to scan; members
+                // should always consume available source data. Otherwise timer drift between
+                // coordinator and members can cause members to miss source updates for minutes.
+                if (result.SourcesUpdated)
                 {
                     _TempPossibleSources.Clear();
                     _TempPossibleSources.AddRange(result.Sources);
