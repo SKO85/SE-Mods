@@ -366,8 +366,11 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             if (methodName.IndexOf("Grind", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "Grind";
 
-            if (methodName.IndexOf("Push", StringComparison.OrdinalIgnoreCase) >= 0 || methodName.IndexOf("Inventory", StringComparison.OrdinalIgnoreCase) >= 0)
-                return "Push";
+            if (methodName.IndexOf("Collect", StringComparison.OrdinalIgnoreCase) >= 0 || methodName.IndexOf("Floating", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "Collect";
+
+            if (methodName.IndexOf("Push", StringComparison.OrdinalIgnoreCase) >= 0 || methodName.IndexOf("Inventory", StringComparison.OrdinalIgnoreCase) >= 0 || methodName.IndexOf("Pull", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "Inventory";
 
             if (methodName.IndexOf("Update", StringComparison.OrdinalIgnoreCase) >= 0 || methodName.IndexOf("Simulation", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "Update";

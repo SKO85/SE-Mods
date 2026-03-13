@@ -91,6 +91,12 @@ namespace SKONanobotBuildAndRepairSystem
                 customInfo.Append(Environment.NewLine);
             }
 
+            int sourceCount = 0;
+            int pushTargetCount = 0;
+            lock (_PossibleSources) { sourceCount = _PossibleSources.Count; }
+            lock (_PossiblePushTargets) { pushTargetCount = _PossiblePushTargets.Count; }
+            customInfo.Append(string.Format("Sources: {0} | Push Targets: {1}{2}", sourceCount, pushTargetCount, Environment.NewLine));
+
             customInfo.Append(Environment.NewLine);
 
             if (State.IsShielded)

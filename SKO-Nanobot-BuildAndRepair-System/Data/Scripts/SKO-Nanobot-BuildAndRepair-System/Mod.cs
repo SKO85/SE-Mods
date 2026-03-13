@@ -245,11 +245,20 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_LastSourcesAndTargetsUpdateTimer) > SourcesAndTargetsUpdateTimerInterval)
             {
+                var profilerTs = MethodProfiler.Start();
+                try
+                {
                 foreach (var buildAndRepairSystem in NanobotSystems.Values)
                 {
                     buildAndRepairSystem.UpdateSourcesAndTargetsTimer();
                 }
                 _LastSourcesAndTargetsUpdateTimer = MyAPIGateway.Session.ElapsedPlayTime;
+                }
+                finally
+                {
+                    MethodProfiler.StopAndLog("Mod.RebuildSourcesAndTargetsTimer", profilerTs, () =>
+                        string.Format("systemCount={0}", NanobotSystems.Count));
+                }
             }
         }
 

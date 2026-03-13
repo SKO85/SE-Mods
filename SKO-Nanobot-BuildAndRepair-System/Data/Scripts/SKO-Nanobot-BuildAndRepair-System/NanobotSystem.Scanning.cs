@@ -4,6 +4,7 @@ using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
@@ -40,6 +41,10 @@ namespace SKONanobotBuildAndRepairSystem
                 lock (_PossibleSources)
                 {
                     _PossibleSources.Clear();
+                }
+                lock (_PossiblePushTargets)
+                {
+                    _PossiblePushTargets.Clear();
                 }
             }
 
@@ -82,6 +87,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         public void AsyncUpdateSourcesAndTargets(bool updateSource)
         {
+            var profilerTs = MethodProfiler.Start();
             try
             {
                 if (!State.Ready) return;
@@ -101,9 +107,7 @@ namespace SKONanobotBuildAndRepairSystem
                     _TempPossibleGrindTargets.Clear();
                     _TempPossibleFloatingTargets.Clear();
                     _TempPossibleSources.Clear();
-                    _TempIgnore4Ingot.Clear();
-                    _TempIgnore4Components.Clear();
-                    _TempIgnore4Items.Clear();
+                    _TempPossiblePushTargets.Clear();
 
                     var ignoreColor = Settings.IgnoreColorPacked;
                     var grindColor = Settings.GrindColorPacked;
@@ -169,27 +173,10 @@ namespace SKONanobotBuildAndRepairSystem
 
                         foreach (var inventory in _TempPossibleSources)
                         {
-                            var block = inventory.Owner as IMyShipWelder;
-                            if (block != null && block.BlockDefinition.SubtypeName.Contains("NanobotBuildAndRepairSystem") && block.GameLogic != null)
+                            // Only cargo containers are valid push targets — prevents BaR-to-BaR circular transfers
+                            if (inventory.Owner is IMyCargoContainer)
                             {
-                                var bar = block.GameLogic.GetAs<NanobotSystem>();
-
-                                //Don't use Bar's as destination that would push immediately
-                                if (bar != null)
-                                {
-                                    if ((bar.Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0)
-                                    {
-                                        _TempIgnore4Ingot.Add(inventory);
-                                    }
-                                    if ((bar.Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0)
-                                    {
-                                        _TempIgnore4Components.Add(inventory);
-                                    }
-                                    if ((bar.Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0)
-                                    {
-                                        _TempIgnore4Items.Add(inventory);
-                                    }
-                                }
+                                _TempPossiblePushTargets.Add(inventory);
                             }
                         }
                     }
@@ -339,17 +326,14 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             _PossibleSources.Clear();
                             _PossibleSources.AddRange(_TempPossibleSources);
-                            _Ignore4Ingot.Clear();
-                            _Ignore4Ingot.UnionWith(_TempIgnore4Ingot);
-                            _Ignore4Components.Clear();
-                            _Ignore4Components.UnionWith(_TempIgnore4Components);
-                            _Ignore4Items.Clear();
-                            _Ignore4Items.UnionWith(_TempIgnore4Items);
+                        }
+                        lock (_PossiblePushTargets)
+                        {
+                            _PossiblePushTargets.Clear();
+                            _PossiblePushTargets.AddRange(_TempPossiblePushTargets);
                         }
                         _TempPossibleSources.Clear();
-                        _TempIgnore4Ingot.Clear();
-                        _TempIgnore4Components.Clear();
-                        _TempIgnore4Items.Clear();
+                        _TempPossiblePushTargets.Clear();
                     }
 
                     _ContinuouslyError = 0;
@@ -372,6 +356,11 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _AsyncUpdateSourcesAndTargetsRunning = false;
                 }
+                MethodProfiler.StopAndLog("AsyncUpdateSourcesAndTargets", profilerTs, () =>
+                    string.Format("entityId={0};updateSource={1};searchMode={2};weldTargets={3};grindTargets={4};floatingTargets={5};sources={6};pushTargets={7}",
+                        _Welder.EntityId, updateSource, Settings.SearchMode,
+                        State.PossibleWeldTargets.CurrentCount, State.PossibleGrindTargets.CurrentCount,
+                        State.PossibleFloatingTargets.CurrentCount, _PossibleSources.Count, _PossiblePushTargets.Count));
             }
         }
 
@@ -380,6 +369,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void AsyncAddBlocksOfBox(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, List<IMyCubeGrid> grids, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets, List<TargetEntityData> possibleFloatingTargets)
         {
+            var profilerTs = MethodProfiler.Start();
             var emitterMatrix = _Welder.WorldMatrix;
             emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
             var areaBoundingBox = Settings.CorrectedAreaBoundingBox.TransformFast(emitterMatrix);
@@ -499,12 +489,26 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
+            MethodProfiler.StopAndLog("AsyncAddBlocksOfBox", profilerTs, () =>
+                string.Format("entityId={0};entities={1};cacheStale={2};weldTargets={3};grindTargets={4};floatTargets={5}",
+                    _Welder.EntityId,
+                    entityInRange != null ? entityInRange.Count : 0,
+                    cacheStale,
+                    possibleWeldTargets != null ? possibleWeldTargets.Count : -1,
+                    possibleGrindTargets != null ? possibleGrindTargets.Count : -1,
+                    possibleFloatingTargets != null ? possibleFloatingTargets.Count : -1));
         }
 
         private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, List<IMyCubeGrid> grids, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
         {
+            var profilerTs = MethodProfiler.Start();
             if (!State.Ready) return; //Block not ready
             if (grids.Contains(cubeGrid)) return; //Already parsed
+
+            // Determine if this is the welder's own grid BEFORE adding to the visited list.
+            // grids is empty only on the first call, which is always _Welder.CubeGrid.
+            // This avoids accessing CubeGrid.EntityId from background threads (unreliable).
+            var isWelderGrid = possibleSources != null && grids.Count == 0;
 
             grids.Add(cubeGrid);
 
@@ -514,14 +518,18 @@ namespace SKONanobotBuildAndRepairSystem
             // Use a cached list to avoid many GetBlocks calls from the API.
             var newBlocks = GetBlocksFromCache(cubeGrid, isGrinding);
 
+            var scanStopped = false;
             foreach (var slimBlock in newBlocks)
             {
-                if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
+                if (!scanStopped)
                 {
-                    break;
+                    scanStopped = ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null);
                 }
 
-                AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, possibleWeldTargets, possibleGrindTargets);
+                // When target lists are full, still scan for sources but skip target evaluation
+                if (scanStopped && possibleSources == null) break;
+
+                AsyncAddBlockIfTargetOrSource(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, possibleSources, scanStopped ? null : possibleWeldTargets, scanStopped ? null : possibleGrindTargets, isWelderGrid);
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -529,7 +537,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var mechanicalConnectionBlock = fatBlock as Sandbox.ModAPI.IMyMechanicalConnectionBlock;
                 if (mechanicalConnectionBlock != null)
                 {
-                    if (mechanicalConnectionBlock.TopGrid != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
+                    if (mechanicalConnectionBlock.TopGrid != null && (possibleSources != null || !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null)))
                     {
                         AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, mechanicalConnectionBlock.TopGrid, grids, possibleSources, possibleWeldTargets, possibleGrindTargets);
                     }
@@ -539,7 +547,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var attachableTopBlock = fatBlock as Sandbox.ModAPI.IMyAttachableTopBlock;
                 if (attachableTopBlock != null)
                 {
-                    if (attachableTopBlock.Base != null && attachableTopBlock.Base.CubeGrid != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
+                    if (attachableTopBlock.Base != null && attachableTopBlock.Base.CubeGrid != null && (possibleSources != null || !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null)))
                     {
                         AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, attachableTopBlock.Base.CubeGrid, grids, possibleSources, possibleWeldTargets, possibleGrindTargets);
                     }
@@ -549,7 +557,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var connector = fatBlock as Sandbox.ModAPI.IMyShipConnector;
                 if (connector != null)
                 {
-                    if (connector.Status == Sandbox.ModAPI.Ingame.MyShipConnectorStatus.Connected && connector.OtherConnector != null && !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
+                    if (connector.Status == Sandbox.ModAPI.Ingame.MyShipConnectorStatus.Connected && connector.OtherConnector != null && (possibleSources != null || !ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null)))
                     {
                         AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, connector.OtherConnector.CubeGrid, grids, possibleSources, possibleWeldTargets, possibleGrindTargets);
                     }
@@ -598,6 +606,12 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
+            MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
+                string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};sources={5}",
+                    _Welder.EntityId, cubeGrid.EntityId, newBlocks.Count,
+                    possibleWeldTargets != null ? possibleWeldTargets.Count : -1,
+                    possibleGrindTargets != null ? possibleGrindTargets.Count : -1,
+                    possibleSources != null ? possibleSources.Count : -1));
         }
 
         private bool ShouldStopScan(List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets, List<TargetEntityData> possibleFloatingTargets)
@@ -608,15 +622,10 @@ namespace SKONanobotBuildAndRepairSystem
             return weldFull && grindFull && floatingFull;
         }
 
-        private void AsyncAddBlockIfTargetOrSource(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMySlimBlock block, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets)
+        private void AsyncAddBlockIfTargetOrSource(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMySlimBlock block, List<IMyInventory> possibleSources, List<TargetBlockData> possibleWeldTargets, List<TargetBlockData> possibleGrindTargets, bool isSameGrid)
         {
             try
             {
-                if (ShouldStopScan(possibleWeldTargets, possibleGrindTargets, null))
-                {
-                    return;
-                }
-
                 if (possibleSources != null)
                 {
                     //Search for sources of components (Container, Assembler, Welder, Grinder, ?)
@@ -630,7 +639,7 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             try
                             {
-                                terminalBlock.AddIfConnectedToInventory(_Welder, possibleSources);
+                                terminalBlock.AddIfConnectedToInventory(_Welder, possibleSources, isSameGrid);
                             }
                             catch (Exception ex)
                             {

@@ -3,6 +3,7 @@ using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using VRage;
 using VRage.Game;
@@ -14,9 +15,12 @@ namespace SKONanobotBuildAndRepairSystem
     {
         private void ServerTryCollectingFloatingTargets(out bool collecting, out bool needcollecting, out bool transporting)
         {
+            var profilerTs = MethodProfiler.Start();
             collecting = false;
             needcollecting = false;
             transporting = false;
+            try
+            {
             if (!PowerHelper.HasRequiredElectricPower(this)) return; //-> Not enough power
             lock (State.PossibleFloatingTargets)
             {
@@ -38,6 +42,18 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
                 if (collecting && !transporting) ServerDoCollectFloating(null, out transporting, ref collectingFirstTarget); //Starttransport if pending
+            }
+
+            }
+            finally
+            {
+                var _collecting = collecting;
+                var _needcollecting = needcollecting;
+                var _transporting = transporting;
+                var _targetCount = State.PossibleFloatingTargets.CurrentCount;
+                MethodProfiler.StopAndLog("ServerTryCollectingFloatingTargets", profilerTs, () =>
+                    string.Format("entityId={0};collecting={1};needCollecting={2};transporting={3};targets={4}",
+                        _Welder.EntityId, _collecting, _needcollecting, _transporting, _targetCount));
             }
         }
 

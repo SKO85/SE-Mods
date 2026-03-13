@@ -1,6 +1,7 @@
 using Sandbox.Definitions;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
@@ -20,6 +21,9 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void ServerTryPushInventory()
         {
+            var profilerTs = MethodProfiler.Start();
+            try
+            {
             if ((Settings.Flags & (SyncBlockSettings.Settings.PushIngotOreImmediately | SyncBlockSettings.Settings.PushComponentImmediately | SyncBlockSettings.Settings.PushItemsImmediately)) == 0)
                 return;
 
@@ -41,7 +45,7 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if ((Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0)
                         {
-                            welderInventory.PushComponents(_PossibleSources, (IMyInventory destInventory, IMyInventory srcInventory, ref MyInventoryItem srcItemIn) => { return _Ignore4Ingot.Contains(destInventory); }, srcItemIndex, srcItem);
+                            welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem);
                             _TryAutoPushInventoryLast = lastPush;
                         }
                     }
@@ -49,7 +53,7 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if ((Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0)
                         {
-                            welderInventory.PushComponents(_PossibleSources, (IMyInventory destInventory, IMyInventory srcInventory, ref MyInventoryItem srcItemIn) => { return _Ignore4Components.Contains(destInventory); }, srcItemIndex, srcItem);
+                            welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem);
                             _TryAutoPushInventoryLast = lastPush;
                         }
                     }
@@ -58,12 +62,24 @@ namespace SKONanobotBuildAndRepairSystem
                         //Any kind of items (Tools, Weapons, Ammo, Bottles, ..)
                         if ((Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0)
                         {
-                            welderInventory.PushComponents(_PossibleSources, (IMyInventory destInventory, IMyInventory srcInventory, ref MyInventoryItem srcItemIn) => { return _Ignore4Items.Contains(destInventory); }, srcItemIndex, srcItem);
+                            welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem);
                             _TryAutoPushInventoryLast = lastPush;
                         }
                     }
                 }
                 _TempInventoryItems.Clear();
+            }
+
+            }
+            finally
+            {
+                MethodProfiler.StopAndLog("ServerTryPushInventory", profilerTs, () =>
+                    string.Format("entityId={0};pushOre={1};pushComp={2};pushItems={3};pushTargets={4}",
+                        _Welder.EntityId,
+                        (Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0,
+                        (Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0,
+                        (Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0,
+                        _PossiblePushTargets.Count));
             }
         }
 
@@ -72,6 +88,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private bool ServerEmptyTransportInventory(bool push)
         {
+            var profilerTs = MethodProfiler.Start();
             var empty = _TransportInventory.Empty();
             if (!empty)
             {
@@ -84,7 +101,7 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryPushInventoryLast).TotalSeconds > 5 && welderInventory.MaxVolume - welderInventory.CurrentVolume < _TransportInventory.CurrentVolume * 1.5f)
                             {
-                                if (!welderInventory.PushComponents(_PossibleSources, null))
+                                if (!welderInventory.PushComponents(_PossiblePushTargets, null))
                                 {
                                     // Failed retry after timeout
                                     _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
@@ -124,6 +141,11 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             State.InventoryFull = !empty;
+            MethodProfiler.StopAndLog("ServerEmptyTransportInventory", profilerTs, () =>
+                string.Format("entityId={0};push={1};empty={2};transportVol={3:F3};inventoryFull={4};sources={5};pushTargets={6}",
+                    _Welder.EntityId, push, empty,
+                    (float)_TransportInventory.CurrentVolume, State.InventoryFull,
+                    _PossibleSources.Count, _PossiblePushTargets.Count));
             return empty;
         }
 
@@ -179,6 +201,8 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private bool PullComponents(MyDefinitionId componentId, float volume, ref int neededAmount, ref float remainingVolume)
         {
+            var profilerTs = MethodProfiler.Start();
+            var startNeeded = neededAmount;
             int availAmount = 0;
             var welderInventory = _Welder.GetInventory(0);
             var maxpossibleAmount = Math.Min(neededAmount, (int)Math.Ceiling(remainingVolume / volume));
@@ -235,6 +259,9 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
+            MethodProfiler.StopAndLog("PullComponents", profilerTs, () =>
+                string.Format("entityId={0};component={1};startNeeded={2};picked={3};sources={4}",
+                    _Welder.EntityId, componentId.SubtypeName, startNeeded, picked, _PossibleSources.Count));
             return picked;
         }
 

@@ -1,6 +1,7 @@
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using VRage.Game.ModAPI;
 
@@ -13,6 +14,9 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void ServerTryWeldingGrindingCollecting()
         {
+            var profilerTs = MethodProfiler.Start();
+            try
+            {
             var inventoryFull = State.InventoryFull;
             var limitsExceeded = State.LimitsExceeded;
 
@@ -208,6 +212,15 @@ namespace SKONanobotBuildAndRepairSystem
                 inventoryFullChanged ||
                 limitsExceededChanged ||
                 transportChanged);
+            }
+            finally
+            {
+                MethodProfiler.StopAndLog("ServerTryWeldingGrindingCollecting", profilerTs, () =>
+                    string.Format("entityId={0};workMode={1};welding={2};grinding={3};transporting={4};weldTargets={5};grindTargets={6};floatingTargets={7};inventoryFull={8}",
+                        _Welder.EntityId, Settings.WorkMode, State.Welding, State.Grinding, State.Transporting,
+                        State.PossibleWeldTargets.CurrentCount, State.PossibleGrindTargets.CurrentCount,
+                        State.PossibleFloatingTargets.CurrentCount, State.InventoryFull));
+            }
         }
 
         /// <summary>
@@ -216,7 +229,10 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private int CountSystemsOnGrid(long gridEntityId)
         {
+            var profilerTs = MethodProfiler.Start();
             int count = 0;
+            try
+            {
             lock (Mod.NanobotSystems)
             {
                 foreach (var system in Mod.NanobotSystems.Values)
@@ -230,6 +246,14 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
             return count;
+            }
+            finally
+            {
+                var _count = count;
+                MethodProfiler.StopAndLog("CountSystemsOnGrid", profilerTs, () =>
+                    string.Format("entityId={0};gridEntityId={1};count={2};totalSystems={3}",
+                        _Welder.EntityId, gridEntityId, _count, Mod.NanobotSystems.Count));
+            }
         }
     }
 }

@@ -4,6 +4,7 @@ using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using VRage.Game;
@@ -15,10 +16,13 @@ namespace SKONanobotBuildAndRepairSystem
     {
         private void ServerTryGrinding(out bool grinding, out bool needgrinding, out bool transporting, out IMySlimBlock currentGrindingBlock)
         {
+            var profilerTs = MethodProfiler.Start();
             grinding = false;
             needgrinding = false;
             transporting = false;
             currentGrindingBlock = null;
+            try
+            {
 
             if (State.InventoryFull)
                 return;
@@ -83,10 +87,24 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
+
+            }
+            finally
+            {
+                var _grinding = grinding;
+                var _needgrinding = needgrinding;
+                var _transporting = transporting;
+                var _targetCount = State.PossibleGrindTargets.CurrentCount;
+                MethodProfiler.StopAndLog("ServerTryGrinding", profilerTs, () =>
+                    string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5}",
+                        _Welder.EntityId, _grinding, _needgrinding, _transporting, _targetCount,
+                        State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none"));
+            }
         }
 
         private bool ServerDoGrind(TargetBlockData targetData, out bool transporting)
         {
+            var profilerTs = MethodProfiler.Start();
             var target = targetData.Block;
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             transporting = IsTransportRunning(playTime);
@@ -191,6 +209,15 @@ namespace SKONanobotBuildAndRepairSystem
                 transporting = true;
             }
 
+            var _transporting = transporting;
+            MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
+                string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1}",
+                    _Welder.EntityId,
+                    target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                    (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                    _transporting,
+                    target != null && target.IsFullyDismounted,
+                    target != null ? target.Integrity / target.MaxIntegrity : 0f));
             return true;
         }
     }

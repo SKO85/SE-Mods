@@ -4,6 +4,7 @@ using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Linq;
@@ -19,10 +20,13 @@ namespace SKONanobotBuildAndRepairSystem
     {
         private void ServerTryWelding(out bool welding, out bool needwelding, out bool transporting, out IMySlimBlock currentWeldingBlock)
         {
+            var profilerTs = MethodProfiler.Start();
             welding = false;
             needwelding = false;
             transporting = false;
             currentWeldingBlock = null;
+            try
+            {
 
             var hasRequiredPower = PowerHelper.HasRequiredElectricPower(this);
             if (!hasRequiredPower) return; //No power -> nothing to do
@@ -114,6 +118,19 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
+
+            }
+            finally
+            {
+                var _welding = welding;
+                var _needwelding = needwelding;
+                var _transporting = transporting;
+                var _targetCount = State.PossibleWeldTargets.CurrentCount;
+                MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
+                    string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5}",
+                        _Welder.EntityId, _welding, _needwelding, _transporting, _targetCount,
+                        State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none"));
+            }
         }
 
         private bool Weldable(TargetBlockData targetData)
@@ -162,6 +179,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool ServerDoWeld(TargetBlockData targetData)
         {
+            var profilerTs = MethodProfiler.Start();
             var welderInventory = _Welder.GetInventory(0);
             var welding = false;
             var created = false;
@@ -241,7 +259,14 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            return welding || created;
+            var result = welding || created;
+            MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
+                string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5}",
+                    _Welder.EntityId,
+                    targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
+                    (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
+                    created, welding, result));
+            return result;
         }
 
         /// <summary>
@@ -249,6 +274,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private bool ServerFindMissingComponents(TargetBlockData targetData)
         {
+            var profilerTs = MethodProfiler.Start();
             try
             {
                 var playTime = MyAPIGateway.Session.ElapsedPlayTime;
@@ -318,6 +344,12 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 _TempMissingComponents.Clear();
+                MethodProfiler.StopAndLog("ServerFindMissingComponents", profilerTs, () =>
+                    string.Format("entityId={0};block={1};missingTypes={2};projected={3}",
+                        _Welder.EntityId,
+                        targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
+                        _TempMissingComponents.Count,
+                        (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0));
             }
         }
 

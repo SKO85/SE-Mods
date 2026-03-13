@@ -46,9 +46,9 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 4f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
-        private const int MaxPossibleWeldTargets = 256;
-        private const int MaxPossibleGrindTargets = 256;
-        private const int MaxPossibleFloatingTargets = 16;
+        private const int MaxPossibleWeldTargets = 512;
+        private const int MaxPossibleGrindTargets = 512;
+        private const int MaxPossibleFloatingTargets = 32;
 
         private const int TransmitStateMinIntervalSeconds = 1;
         private const int TransmitStateMaxIntervalSeconds = 2;
@@ -70,9 +70,8 @@ namespace SKONanobotBuildAndRepairSystem
         private List<TargetBlockData> _TempPossibleGrindTargets = new List<TargetBlockData>();
         private List<TargetEntityData> _TempPossibleFloatingTargets = new List<TargetEntityData>();
         private List<IMyInventory> _TempPossibleSources = new List<IMyInventory>();
-        private HashSet<IMyInventory> _TempIgnore4Ingot = new HashSet<IMyInventory>();
-        private HashSet<IMyInventory> _TempIgnore4Items = new HashSet<IMyInventory>();
-        private HashSet<IMyInventory> _TempIgnore4Components = new HashSet<IMyInventory>();
+        private List<IMyInventory> _TempPossiblePushTargets = new List<IMyInventory>();
+
 
         private ConcurrentDictionary<long, TimeSpan> CachedBlocksTime = new ConcurrentDictionary<long, TimeSpan>();
         private ConcurrentDictionary<long, List<IMySlimBlock>> CachedBlocks = new ConcurrentDictionary<long, List<IMySlimBlock>>();
@@ -89,9 +88,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool _IsInit;
         private List<IMyInventory> _PossibleSources = new List<IMyInventory>();
-        private HashSet<IMyInventory> _Ignore4Ingot = new HashSet<IMyInventory>();
-        private HashSet<IMyInventory> _Ignore4Items = new HashSet<IMyInventory>();
-        private HashSet<IMyInventory> _Ignore4Components = new HashSet<IMyInventory>();
+        private List<IMyInventory> _PossiblePushTargets = new List<IMyInventory>();
         private Dictionary<string, int> _TempMissingComponents = new Dictionary<string, int>();
         private List<MyInventoryItem> _TempInventoryItems = new List<MyInventoryItem>();
 

@@ -179,18 +179,17 @@ namespace SKONanobotBuildAndRepairSystem
                 _TempPossibleGrindTargets?.Clear();
                 _TempPossibleFloatingTargets?.Clear();
                 _TempPossibleSources?.Clear();
-                _TempIgnore4Ingot?.Clear();
-                _TempIgnore4Items?.Clear();
-                _TempIgnore4Components?.Clear();
+                _TempPossiblePushTargets?.Clear();
                 _TempMissingComponents?.Clear();
                 _TempInventoryItems?.Clear();
 
                 lock (_PossibleSources)
                 {
                     _PossibleSources?.Clear();
-                    _Ignore4Ingot?.Clear();
-                    _Ignore4Items?.Clear();
-                    _Ignore4Components?.Clear();
+                }
+                lock (_PossiblePushTargets)
+                {
+                    _PossiblePushTargets?.Clear();
                 }
 
                 CachedBlocksTime.Clear();

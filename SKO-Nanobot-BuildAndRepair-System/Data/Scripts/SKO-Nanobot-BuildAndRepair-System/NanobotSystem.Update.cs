@@ -1,6 +1,7 @@
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using VRage.Game;
@@ -57,6 +58,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private void UpdateBeforeSimulation10_100(bool fast)
         {
+            var profilerTs = MethodProfiler.Start();
             try
             {
                 if (_Welder == null) return;
@@ -151,6 +153,12 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemBlock {0}: UpdateBeforeSimulation10/100 Exception:{1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), ex);
                 }
+            }
+            finally
+            {
+                MethodProfiler.StopAndLog("UpdateBeforeSimulation10_100", profilerTs, () =>
+                    string.Format("entityId={0};fast={1};ready={2};delay={3}",
+                        _Welder != null ? _Welder.EntityId : 0, fast, _IsInit, _Delay));
             }
         }
     }
