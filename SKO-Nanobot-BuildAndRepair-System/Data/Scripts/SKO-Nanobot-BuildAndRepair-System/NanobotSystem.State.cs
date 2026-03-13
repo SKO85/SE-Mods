@@ -187,6 +187,9 @@ namespace SKONanobotBuildAndRepairSystem
             if (State.NeedGrinding && State.Transporting)
                 return "Grinding (Transporting)";
 
+            if (State.NeedCollecting && State.Transporting)
+                return "Collecting (Transporting)";
+
             if (State.Transporting)
                 return "Transporting";
 

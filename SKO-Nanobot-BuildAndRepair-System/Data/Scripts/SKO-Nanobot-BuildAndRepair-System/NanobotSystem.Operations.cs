@@ -55,7 +55,11 @@ namespace SKONanobotBuildAndRepairSystem
                     transporting = IsTransportRunning(playTime);
                 }
 
-                if (transporting && State.CurrentTransportIsPick) needgrinding = true;
+                if (transporting && State.CurrentTransportIsPick)
+                {
+                    if (State.CurrentTransportIsCollecting) needcollecting = true;
+                    else needgrinding = true;
+                }
 
                 if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
                     ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
@@ -132,6 +136,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (!isFullInventoryAndPicking && State.LastTransportTarget.HasValue)
                 {
                     State.CurrentTransportIsPick = true;
+                    State.CurrentTransportIsCollecting = false;
                     State.CurrentTransportTarget = State.LastTransportTarget;
                     State.CurrentTransportStartTime = playTime;
 
@@ -164,6 +169,7 @@ namespace SKONanobotBuildAndRepairSystem
             var needWeldingChanged = State.NeedWelding != needwelding;
             var grindingChanged = State.Grinding != grinding;
             var needGrindingChanged = State.NeedGrinding != needgrinding;
+            var needCollectingChanged = State.NeedCollecting != needcollecting;
             State.Ready = ready;
             State.Welding = welding;
             State.NeedWelding = needwelding;
@@ -171,6 +177,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             State.Grinding = grinding;
             State.NeedGrinding = needgrinding;
+            State.NeedCollecting = needcollecting;
             State.CurrentGrindingBlock = currentGrindingBlock;
 
             var transportChanged = State.Transporting != transporting;
@@ -213,6 +220,7 @@ namespace SKONanobotBuildAndRepairSystem
                 needWeldingChanged ||
                 grindingChanged ||
                 needGrindingChanged ||
+                needCollectingChanged ||
                 inventoryFullChanged ||
                 limitsExceededChanged ||
                 transportChanged);
@@ -220,8 +228,9 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 MethodProfiler.StopAndLog("ServerTryWeldingGrindingCollecting", profilerTs, () =>
-                    string.Format("entityId={0};workMode={1};welding={2};grinding={3};transporting={4};weldTargets={5};grindTargets={6};floatingTargets={7};inventoryFull={8}",
-                        _Welder.EntityId, Settings.WorkMode, State.Welding, State.Grinding, State.Transporting,
+                    string.Format("entityId={0};workMode={1};welding={2};grinding={3};needCollecting={4};transporting={5};transportIsCollecting={6};weldTargets={7};grindTargets={8};floatingTargets={9};inventoryFull={10}",
+                        _Welder.EntityId, Settings.WorkMode, State.Welding, State.Grinding,
+                        State.NeedCollecting, State.Transporting, State.CurrentTransportIsCollecting,
                         State.PossibleWeldTargets.CurrentCount, State.PossibleGrindTargets.CurrentCount,
                         State.PossibleFloatingTargets.CurrentCount, State.InventoryFull));
             }

@@ -156,6 +156,8 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             {
                 foreach (var destInventory in destinations)
                 {
+                    var destOwner = destInventory.Owner as IMyEntity;
+                    if (destOwner == null || destOwner.MarkedForClose) continue;
                     if (exclude != null && exclude(destInventory, srcInventory, ref srcItem)) continue;
                     if (destInventory.CanItemsBeAdded(srcItem.Amount, srcItem.Type) && srcInventory.CanTransferItemTo(destInventory, srcItem.Type))
                     {
@@ -168,6 +170,8 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
             foreach (var destInventory in destinations)
             {
+                var destOwner = destInventory.Owner as IMyEntity;
+                if (destOwner == null || destOwner.MarkedForClose) continue;
                 if (exclude != null && exclude(destInventory, srcInventory, ref srcItem)) continue;
                 if (srcInventory.CanTransferItemTo(destInventory, srcItem.Type))
                 {

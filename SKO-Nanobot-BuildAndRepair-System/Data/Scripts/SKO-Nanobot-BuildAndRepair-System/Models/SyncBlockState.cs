@@ -22,6 +22,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private bool _NeedWelding;
         private bool _Grinding;
         private bool _NeedGrinding;
+        private bool _NeedCollecting;
         private bool _Transporting;
         private bool _InventoryFull;
         private bool _LimitsExceeded;
@@ -41,6 +42,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private Vector3D? _CurrentTransportTarget;
         private Vector3D? _LastTransportTarget;
         private bool _CurrentTransportIsPick;
+        private bool _CurrentTransportIsCollecting;
         private TimeSpan _CurrentTransportTime = TimeSpan.Zero;
         private TimeSpan _CurrentTransportStartTime = TimeSpan.Zero;
 
@@ -118,6 +120,20 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 if (value != _NeedGrinding)
                 {
                     _NeedGrinding = value;
+                    Changed = true;
+                }
+            }
+        }
+
+        [ProtoMember(44)]
+        public bool NeedCollecting
+        {
+            get { return _NeedCollecting; }
+            set
+            {
+                if (value != _NeedCollecting)
+                {
+                    _NeedCollecting = value;
                     Changed = true;
                 }
             }
@@ -232,6 +248,15 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     Changed = true;
                 }
             }
+        }
+
+        /// <summary>
+        /// Server-only: true when the current pick-transport originated from collecting (not grinding).
+        /// </summary>
+        public bool CurrentTransportIsCollecting
+        {
+            get { return _CurrentTransportIsCollecting; }
+            set { _CurrentTransportIsCollecting = value; }
         }
 
         [ProtoMember(19)]
@@ -452,6 +477,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _NeedWelding = newState.NeedWelding;
             _Grinding = newState.Grinding;
             _NeedGrinding = newState.NeedGrinding;
+            _NeedCollecting = newState.NeedCollecting;
             _Transporting = newState.Transporting;
             _InventoryFull = newState.InventoryFull;
             _LimitsExceeded = newState.LimitsExceeded;

@@ -215,6 +215,9 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 foreach (var srcInventory in _PossibleSources)
                 {
+                    var srcOwner = srcInventory.Owner as IMyEntity;
+                    if (srcOwner == null || srcOwner.MarkedForClose) continue;
+
                     //Pre Test is 10 timers faster then get the whole list (as copy!) and iterate for nothing
                     if (srcInventory.FindItem(componentId) != null && srcInventory.CanTransferItemTo(welderInventory, componentId))
                     {
