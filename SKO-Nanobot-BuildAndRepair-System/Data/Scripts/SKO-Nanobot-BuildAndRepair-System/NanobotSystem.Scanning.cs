@@ -23,6 +23,14 @@ namespace SKONanobotBuildAndRepairSystem
     {
         public void UpdateSourcesAndTargetsTimer()
         {
+            // Block is off — skip scanning. Reset initial-scan flag so a scan
+            // triggers immediately when the block is re-enabled.
+            if (!_Welder.Enabled || !_Welder.IsFunctional)
+            {
+                _InitialScanCompleted = false;
+                return;
+            }
+
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             var updateTargets = playTime.Subtract(_LastTargetsUpdate) >= Mod.Settings.TargetsUpdateInterval;
             var updateSources = updateTargets && playTime.Subtract(_LastSourceUpdate) >= Mod.Settings.SourcesUpdateInterval;

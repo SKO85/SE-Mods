@@ -33,6 +33,13 @@ namespace SKONanobotBuildAndRepairSystem
 
             var ready = _Welder.Enabled && _Welder.IsWorking && _Welder.IsFunctional;
 
+            // Fast path: block was already off and still off, no transport in progress, nothing to drain.
+            // The transition tick (State.Ready -> false) has already run, so the panel is up to date.
+            if (!ready && !State.Ready && !State.Transporting && _TransportInventory.CurrentVolume == 0)
+            {
+                return;
+            }
+
             IMySlimBlock currentWeldingBlock = null;
             IMySlimBlock currentGrindingBlock = null;
 
