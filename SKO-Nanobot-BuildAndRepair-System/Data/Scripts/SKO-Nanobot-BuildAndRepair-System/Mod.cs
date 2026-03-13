@@ -3,6 +3,7 @@ namespace SKONanobotBuildAndRepairSystem
     using DefenseShields;
     using Sandbox.Game.EntityComponents;
     using Sandbox.ModAPI;
+    using SKONanobotBuildAndRepairSystem.Cluster;
     using SKONanobotBuildAndRepairSystem.Handlers;
     using SKONanobotBuildAndRepairSystem.Helpers;
     using SKONanobotBuildAndRepairSystem.Models;
@@ -23,6 +24,13 @@ namespace SKONanobotBuildAndRepairSystem
         public static SyncModSettings Settings = new SyncModSettings();
         public static readonly Dictionary<long, NanobotSystem> NanobotSystems = new Dictionary<long, NanobotSystem>();
         public static ShieldApi Shield; // Centralized DefenseShields API instance
+
+        /// <summary>
+        /// Centralized per-tick cache: how many BaR systems are actively targeting each grid.
+        /// Built once per tick by BuildGridSystemCountCache(), read by all NanobotSystem instances.
+        /// </summary>
+        public static Dictionary<long, int> GridSystemCountCache = new Dictionary<long, int>();
+        private static int _lastGridCountCacheTick = -1;
 
         private bool _initialized = false;
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
@@ -134,6 +142,13 @@ namespace SKONanobotBuildAndRepairSystem
             // Clear block assigned handler.
             try { BlockSystemAssigningHandler.Clear(); } catch { }
 
+            // Clear cluster coordinator.
+            try { ScanClusterCoordinator.Clear(); } catch { }
+
+            // Clear shared caches.
+            try { Utils.SharedGridBlockCache.Clear(); } catch { }
+            try { Utils.SharedEntityCache.Clear(); } catch { }
+
             // Close the profiler to release any open log files.
             try { MethodProfiler.Close(); } catch { }
 
@@ -212,6 +227,8 @@ namespace SKONanobotBuildAndRepairSystem
                                 try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
                                 try { BlockSystemAssigningHandler.Cleanup(); } catch { }
                                 try { DlcCheckHelper.CleanupOwnerCache(); } catch { }
+                                try { Utils.SharedGridBlockCache.Cleanup(); } catch { }
+                                try { Utils.SharedEntityCache.Cleanup(); } catch { }
                             });
                         }
 
@@ -248,6 +265,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var profilerTs = MethodProfiler.Start();
                 try
                 {
+                ScanClusterCoordinator.RebuildClusters();
                 foreach (var buildAndRepairSystem in NanobotSystems.Values)
                 {
                     buildAndRepairSystem.UpdateSourcesAndTargetsTimer();
@@ -284,6 +302,64 @@ namespace SKONanobotBuildAndRepairSystem
             }
             catch
             {
+            }
+        }
+
+        /// <summary>
+        /// Builds the centralized grid system count cache once per tick.
+        /// Counts how many BaR systems are actively welding/grinding on each grid.
+        /// Called by NanobotSystem.ServerTryWeldingGrindingCollecting() — runs at most once per tick.
+        /// </summary>
+        public static void BuildGridSystemCountCache()
+        {
+            var tick = MyAPIGateway.Session.GameplayFrameCounter;
+            if (tick == _lastGridCountCacheTick) return;
+            _lastGridCountCacheTick = tick;
+
+            var profilerTs = MethodProfiler.Start();
+            GridSystemCountCache.Clear();
+            try
+            {
+                lock (NanobotSystems)
+                {
+                    foreach (var system in NanobotSystems.Values)
+                    {
+                        long weldGridId = 0;
+                        long grindGridId = 0;
+
+                        var weldBlock = system.State.CurrentWeldingBlock;
+                        if (weldBlock != null && weldBlock.CubeGrid != null)
+                            weldGridId = weldBlock.CubeGrid.EntityId;
+
+                        var grindBlock = system.State.CurrentGrindingBlock;
+                        if (grindBlock != null && grindBlock.CubeGrid != null)
+                            grindGridId = grindBlock.CubeGrid.EntityId;
+
+                        if (weldGridId != 0)
+                        {
+                            int existing;
+                            if (GridSystemCountCache.TryGetValue(weldGridId, out existing))
+                                GridSystemCountCache[weldGridId] = existing + 1;
+                            else
+                                GridSystemCountCache[weldGridId] = 1;
+                        }
+
+                        if (grindGridId != 0 && grindGridId != weldGridId)
+                        {
+                            int existing;
+                            if (GridSystemCountCache.TryGetValue(grindGridId, out existing))
+                                GridSystemCountCache[grindGridId] = existing + 1;
+                            else
+                                GridSystemCountCache[grindGridId] = 1;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                var _cacheSize = GridSystemCountCache.Count;
+                MethodProfiler.StopAndLog("Mod.BuildGridSystemCountCache", profilerTs, () =>
+                    string.Format("cachedGrids={0};totalSystems={1}", _cacheSize, NanobotSystems.Count));
             }
         }
 

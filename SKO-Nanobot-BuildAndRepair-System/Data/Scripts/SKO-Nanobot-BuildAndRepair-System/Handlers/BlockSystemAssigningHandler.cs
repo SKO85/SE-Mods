@@ -1,4 +1,5 @@
 ﻿using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using VRage.Game.ModAPI;
 
@@ -52,7 +53,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static void Cleanup()
         {
+            var profilerTs = MethodProfiler.Start();
             Cache.CleanupExpired();
+            MethodProfiler.StopAndLog("BlockSystemAssigningHandler.Cleanup", profilerTs);
         }
 
         public static void Clear()

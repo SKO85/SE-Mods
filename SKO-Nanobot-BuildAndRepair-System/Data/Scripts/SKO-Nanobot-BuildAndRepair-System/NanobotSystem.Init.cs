@@ -206,7 +206,6 @@ namespace SKONanobotBuildAndRepairSystem
 
                 CachedBlocksTime.Clear();
                 CachedBlocks.Clear();
-                _CachedEntitiesInRange = null;
 
                 _DelayWatch?.Stop();
 

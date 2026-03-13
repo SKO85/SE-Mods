@@ -1,6 +1,7 @@
 ﻿using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using SpaceEngineers.Game.ModAPI;
 using System;
@@ -60,6 +61,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static void GetSafeZones()
         {
+            var profilerTs = MethodProfiler.Start();
             try
             {
                 HashSet<IMyEntity> safeZones = new HashSet<IMyEntity>();
@@ -76,6 +78,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 BlockIntersectingZones.CleanupExpired();
             }
             catch { }
+            finally
+            {
+                var _zoneCount = Zones.Count;
+                MethodProfiler.StopAndLog("SafeZoneHandler.GetSafeZones", profilerTs, () =>
+                    string.Format("zones={0}", _zoneCount));
+            }
         }
 
         public static void Unregister()
@@ -175,80 +183,93 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static MySafeZone GetIntersectingSafeZone(IMyCubeGrid targetGrid)
         {
-            if (targetGrid == null || Zones.Count == 0)
+            var profilerTs = MethodProfiler.Start();
+            var cacheHit = false;
+            try
             {
-                return null;
-            }
-
-            long zoneId = 0;
-            if (GridIntersectingZones.TryGet(targetGrid.EntityId, out zoneId))
-            {
-                // No zone intersection.
-                if (zoneId == 0)
+                if (targetGrid == null || Zones.Count == 0)
+                {
                     return null;
-
-                // Try get the zone.
-                MySafeZone zone;
-                if (Zones.TryGetValue(zoneId, out zone))
-                {
-                    return zone;
-                }
-            }
-
-            // Get safe-zones within 300m range.
-            var zones = GetSafeZonesInRange(targetGrid, 300);
-
-            foreach (var zone in zones)
-            {
-                if (zone == null || zone.Closed || zone.MarkedForClose || !zone.Enabled)
-                {
-                    continue;
                 }
 
-                var targetIntersects = GridIntersects(targetGrid, zone);
-                if (targetIntersects)
+                long zoneId = 0;
+                if (GridIntersectingZones.TryGet(targetGrid.EntityId, out zoneId))
                 {
-                    // It intersects, so cache this and also for its subgrids.
-                    GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
-                    CacheZoneForSubGrids(targetGrid, zone.EntityId);
+                    cacheHit = true;
 
-                    // Return the intersecting zone.
-                    return zone;
-                }
-                else
-                {
-                    // Get the subgrids.
-                    var groups = new List<IMyCubeGrid>();
-                    MyAPIGateway.GridGroups.GetGroup(targetGrid, GridLinkTypeEnum.Mechanical, groups);
+                    // No zone intersection.
+                    if (zoneId == 0)
+                        return null;
 
-                    var subGridIntersects = false;
-                    foreach (var subGrid in groups)
+                    // Try get the zone.
+                    MySafeZone zone;
+                    if (Zones.TryGetValue(zoneId, out zone))
                     {
-                        if (subGrid.EntityId == targetGrid.EntityId)
-                            continue;
+                        return zone;
+                    }
+                }
 
-                        // If a subgrid intersects, then mark the parent too and all other subgrids.
-                        if (GridIntersects(subGrid, zone))
+                // Get safe-zones within 300m range.
+                var zones = GetSafeZonesInRange(targetGrid, 300);
+
+                foreach (var zone in zones)
+                {
+                    if (zone == null || zone.Closed || zone.MarkedForClose || !zone.Enabled)
+                    {
+                        continue;
+                    }
+
+                    var targetIntersects = GridIntersects(targetGrid, zone);
+                    if (targetIntersects)
+                    {
+                        // It intersects, so cache this and also for its subgrids.
+                        GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
+                        CacheZoneForSubGrids(targetGrid, zone.EntityId);
+
+                        // Return the intersecting zone.
+                        return zone;
+                    }
+                    else
+                    {
+                        // Get the subgrids.
+                        var groups = new List<IMyCubeGrid>();
+                        MyAPIGateway.GridGroups.GetGroup(targetGrid, GridLinkTypeEnum.Mechanical, groups);
+
+                        var subGridIntersects = false;
+                        foreach (var subGrid in groups)
                         {
-                            subGridIntersects = true;
-                            GridIntersectingZones.Set(subGrid.EntityId, zone.EntityId);
-                            GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
+                            if (subGrid.EntityId == targetGrid.EntityId)
+                                continue;
 
-                            CacheZoneForSubGrids(subGrid, zone.EntityId);
-                            return zone;
+                            // If a subgrid intersects, then mark the parent too and all other subgrids.
+                            if (GridIntersects(subGrid, zone))
+                            {
+                                subGridIntersects = true;
+                                GridIntersectingZones.Set(subGrid.EntityId, zone.EntityId);
+                                GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
+
+                                CacheZoneForSubGrids(subGrid, zone.EntityId);
+                                return zone;
+                            }
+                        }
+
+                        // If no subgrid intersection found, then nothing intersects.
+                        if (!subGridIntersects)
+                        {
+                            GridIntersectingZones.Set(targetGrid.EntityId, 0);
+                            CacheZoneForSubGrids(targetGrid, 0);
                         }
                     }
-
-                    // If no subgrid intersection found, then nothing intersects.
-                    if (!subGridIntersects)
-                    {
-                        GridIntersectingZones.Set(targetGrid.EntityId, 0);
-                        CacheZoneForSubGrids(targetGrid, 0);
-                    }
                 }
-            }
 
-            return null;
+                return null;
+            }
+            finally
+            {
+                var _hit = cacheHit;
+                MethodProfiler.StopAndLog("SafeZoneHandler.GetIntersectingSafeZone", profilerTs, () =>
+                    string.Format("cacheHit={0}", _hit));
+            }
         }
 
         private static void CacheZoneForSubGrids(IMyCubeGrid targetGrid, long zoneId)
@@ -387,6 +408,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static bool IsProtectedFromGrinding(IMySlimBlock targetBlock, IMyCubeBlock attackerBlock)
         {
+            var profilerTs = MethodProfiler.Start();
+            var cacheHit = false;
             try
             {
                 if (targetBlock == null) return false;
@@ -399,6 +422,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     var isProtected = false;
                     if (ProtectedFromGindingCache.TryGet(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlock.EntityId), out isProtected))
                     {
+                        cacheHit = true;
                         return isProtected;
                     }
                 }
@@ -481,10 +505,17 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, true);
                 return true;
             }
-            catch { }
-
-            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
-            return false;
+            catch
+            {
+                SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
+                return false;
+            }
+            finally
+            {
+                var _hit = cacheHit;
+                MethodProfiler.StopAndLog("SafeZoneHandler.IsProtectedFromGrinding", profilerTs, () =>
+                    string.Format("cacheHit={0}", _hit));
+            }
         }
     }
 }

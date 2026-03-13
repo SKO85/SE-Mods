@@ -48,7 +48,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _LastSourceUpdate = -Mod.Settings.SourcesUpdateInterval;
                     _LastTargetsUpdate = TimeSpan.Zero;
-                    StartAsyncUpdateSourcesAndTargets(true);
+                    UpdateSourcesAndTargetsTimer();
                 }
                 else
                 {
@@ -93,7 +93,7 @@ namespace SKONanobotBuildAndRepairSystem
                         State.LimitsExceeded = false;
 
                         if (!Mod.Settings.DisableLimitSystemsPerTargetGrid)
-                            BuildGridSystemCountCache();
+                            Mod.BuildGridSystemCountCache();
 
                         switch (Settings.WorkMode)
                         {
@@ -175,7 +175,8 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (!isFullInventoryAndPicking && ready)
                 {
-                    StartAsyncUpdateSourcesAndTargets(false); //Scan immediately once for new targets
+                    _LastTargetsUpdate = TimeSpan.Zero;
+                    UpdateSourcesAndTargetsTimer(); //Scan immediately once for new targets
                 }
             }
 
@@ -262,71 +263,32 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Builds a per-tick cache of how many OTHER NanobotSystem instances are actively
-        /// welding or grinding on each grid. Called once per tick before the weld/grind loops.
-        /// </summary>
-        private void BuildGridSystemCountCache()
-        {
-            var profilerTs = MethodProfiler.Start();
-            _gridSystemCountCache.Clear();
-            try
-            {
-            lock (Mod.NanobotSystems)
-            {
-                foreach (var system in Mod.NanobotSystems.Values)
-                {
-                    if (system == this) continue;
-
-                    long weldGridId = 0;
-                    long grindGridId = 0;
-
-                    var weldBlock = system.State.CurrentWeldingBlock;
-                    if (weldBlock != null && weldBlock.CubeGrid != null)
-                        weldGridId = weldBlock.CubeGrid.EntityId;
-
-                    var grindBlock = system.State.CurrentGrindingBlock;
-                    if (grindBlock != null && grindBlock.CubeGrid != null)
-                        grindGridId = grindBlock.CubeGrid.EntityId;
-
-                    if (weldGridId != 0)
-                    {
-                        int existing;
-                        if (_gridSystemCountCache.TryGetValue(weldGridId, out existing))
-                            _gridSystemCountCache[weldGridId] = existing + 1;
-                        else
-                            _gridSystemCountCache[weldGridId] = 1;
-                    }
-
-                    if (grindGridId != 0 && grindGridId != weldGridId)
-                    {
-                        int existing;
-                        if (_gridSystemCountCache.TryGetValue(grindGridId, out existing))
-                            _gridSystemCountCache[grindGridId] = existing + 1;
-                        else
-                            _gridSystemCountCache[grindGridId] = 1;
-                    }
-                }
-            }
-            }
-            finally
-            {
-                var _cacheSize = _gridSystemCountCache.Count;
-                MethodProfiler.StopAndLog("BuildGridSystemCountCache", profilerTs, () =>
-                    string.Format("entityId={0};cachedGrids={1};totalSystems={2}",
-                        _Welder.EntityId, _cacheSize, Mod.NanobotSystems.Count));
-            }
-        }
-
-        /// <summary>
-        /// Returns the cached count of other systems targeting the given grid.
-        /// Must call BuildGridSystemCountCache() first in the same tick.
+        /// Returns the cached count of OTHER systems targeting the given grid.
+        /// Reads from the centralized Mod.GridSystemCountCache and subtracts this BaR's own
+        /// contribution to match the old per-BaR "skip self" behavior.
         /// </summary>
         private int GetCachedSystemCountOnGrid(long gridEntityId)
         {
             int count;
-            if (_gridSystemCountCache.TryGetValue(gridEntityId, out count))
-                return count;
-            return 0;
+            if (!Mod.GridSystemCountCache.TryGetValue(gridEntityId, out count))
+                return 0;
+
+            // Subtract this system's contribution (mirrors the old "if (system == this) continue" logic).
+            long myWeldGridId = 0;
+            long myGrindGridId = 0;
+            var myWeldBlock = State.CurrentWeldingBlock;
+            if (myWeldBlock != null && myWeldBlock.CubeGrid != null)
+                myWeldGridId = myWeldBlock.CubeGrid.EntityId;
+            var myGrindBlock = State.CurrentGrindingBlock;
+            if (myGrindBlock != null && myGrindBlock.CubeGrid != null)
+                myGrindGridId = myGrindBlock.CubeGrid.EntityId;
+
+            if (myWeldGridId == gridEntityId)
+                count--;
+            if (myGrindGridId == gridEntityId && myGrindGridId != myWeldGridId)
+                count--;
+
+            return count;
         }
     }
 }

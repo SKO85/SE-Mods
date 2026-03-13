@@ -97,6 +97,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
         public bool AssignToSystemEnabled { get; set; }
 
         /// <summary>
+        /// Enables debug information in the terminal custom info panel
+        /// (sources, push targets, cluster details).
+        /// </summary>
+        [ProtoMember(35), XmlElement]
+        public bool DebugMode { get; set; }
+
+        /// <summary>
         /// Enables method-level profiling logs written to local storage.
         /// Disabled by default because it can produce large files on active servers.
         /// </summary>
@@ -132,6 +139,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             AssignToSystemEnabled = true;
             EnableMethodProfiling = true;
             MethodProfilingMinDurationMs = 1;
+            DebugMode = true;
         }
 
         public static SyncModSettings Load()

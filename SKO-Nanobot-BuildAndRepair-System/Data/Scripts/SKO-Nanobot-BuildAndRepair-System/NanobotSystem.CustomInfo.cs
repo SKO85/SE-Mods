@@ -1,5 +1,6 @@
 using Sandbox.Definitions;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Cluster;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Localization;
 using SKONanobotBuildAndRepairSystem.Models;
@@ -91,11 +92,33 @@ namespace SKONanobotBuildAndRepairSystem
                 customInfo.Append(Environment.NewLine);
             }
 
-            int sourceCount = 0;
-            int pushTargetCount = 0;
-            lock (_PossibleSources) { sourceCount = _PossibleSources.Count; }
-            lock (_PossiblePushTargets) { pushTargetCount = _PossiblePushTargets.Count; }
-            customInfo.Append(string.Format("Sources: {0} | Push Targets: {1}{2}", sourceCount, pushTargetCount, Environment.NewLine));
+            if (Mod.Settings.DebugMode)
+            {
+                int sourceCount = 0;
+                int pushTargetCount = 0;
+                lock (_PossibleSources) { sourceCount = _PossibleSources.Count; }
+                lock (_PossiblePushTargets) { pushTargetCount = _PossiblePushTargets.Count; }
+                customInfo.Append(string.Format("Sources: {0} | Push Targets: {1}{2}", sourceCount, pushTargetCount, Environment.NewLine));
+
+                var cluster = AssignedCluster;
+                if (cluster != null)
+                {
+                    var isCoord = cluster.IsCoordinator(this);
+                    var coordName = "";
+                    var coord = cluster.Coordinator;
+                    if (coord != null && coord.Welder != null)
+                    {
+                        coordName = Logging.BlockName(coord.Welder, Logging.BlockNameOptions.None);
+                    }
+                    customInfo.Append(string.Format("Cluster: {0} | Members: {1}{2}", cluster.ClusterKey.GetHashCode(), cluster.Members.Count, Environment.NewLine));
+                    customInfo.Append(string.Format("Coordinator: {0}{1}{2}", coordName, isCoord ? " (self)" : "", Environment.NewLine));
+                }
+                else
+                {
+                    customInfo.Append(string.Format("Cluster: none{0}", Environment.NewLine));
+                }
+                customInfo.Append(string.Format("MaxSystems/Grid: {0}{1}", Mod.Settings.MaxSystemsPerTargetGrid, Environment.NewLine));
+            }
 
             customInfo.Append(Environment.NewLine);
 

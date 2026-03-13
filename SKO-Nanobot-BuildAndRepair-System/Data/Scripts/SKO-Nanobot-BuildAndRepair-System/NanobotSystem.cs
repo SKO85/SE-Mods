@@ -1,4 +1,5 @@
 using Sandbox.Common.ObjectBuilders;
+using SKONanobotBuildAndRepairSystem.Cluster;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
 using System;
@@ -46,9 +47,9 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 4f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
-        private const int MaxPossibleWeldTargets = 256;
-        private const int MaxPossibleGrindTargets = 256;
-        private const int MaxPossibleFloatingTargets = 16;
+        private const int MaxPossibleWeldTargets = 64;
+        private const int MaxPossibleGrindTargets = 64;
+        private const int MaxPossibleFloatingTargets = 64;
 
         private const int TransmitStateMinIntervalSeconds = 1;
         private const int TransmitStateMaxIntervalSeconds = 2;
@@ -78,11 +79,18 @@ namespace SKONanobotBuildAndRepairSystem
         private ConcurrentDictionary<long, TimeSpan> CachedBlocksTime = new ConcurrentDictionary<long, TimeSpan>();
         private ConcurrentDictionary<long, List<IMySlimBlock>> CachedBlocks = new ConcurrentDictionary<long, List<IMySlimBlock>>();
 
-        private List<IMyEntity> _CachedEntitiesInRange;
-        private TimeSpan _CachedEntitiesInRangeTime;
-        private Vector3D _CachedEntitiesInRangeBBoxCenter;
-        private const double EntityCacheTtlSeconds = 5.0;
-        private const double EntityCachePositionTolerance = 25.0; // metres
+        /// <summary>
+        /// Per-BaR jitter (0-4s) added to the 8s sorted cache TTL to prevent all BaRs
+        /// from expiring their sorted caches simultaneously (thundering herd).
+        /// </summary>
+        internal readonly double SortedCacheTtlSeconds = 8.0 + _RandomDelay.NextDouble() * 4.0;
+
+        /// <summary>
+        /// Reusable dictionary for distance pre-computation in SortWithPriorityAndDistance.
+        /// Avoids allocating a fresh dictionary (300KB+ for large grids) on every sort call.
+        /// Clear() resets count without deallocating internal arrays.
+        /// </summary>
+        internal Dictionary<IMySlimBlock, double> SortDistanceCache = new Dictionary<IMySlimBlock, double>();
 
         private IMyShipWelder _Welder;
         public IMyInventory _TransportInventory;
@@ -92,14 +100,13 @@ namespace SKONanobotBuildAndRepairSystem
         private List<IMyInventory> _PossibleSources = new List<IMyInventory>();
         private List<IMyInventory> _PossiblePushTargets = new List<IMyInventory>();
         private Dictionary<string, int> _TempMissingComponents = new Dictionary<string, int>();
-        private Dictionary<long, int> _gridSystemCountCache = new Dictionary<long, int>();
         private List<MyInventoryItem> _TempInventoryItems = new List<MyInventoryItem>();
 
         private int _UpdateEffectsInterval;
         private bool _UpdateCustomInfoNeeded;
         internal bool _firstSettingsReceived = false;
         private float _MaxTransportVolume;
-        private int _ContinuouslyError;
+
 
         private TimeSpan _LastFriendlyDamageCleanup;
         private TimeSpan _LastSourceUpdate = -Mod.Settings.SourcesUpdateInterval;
@@ -182,5 +189,17 @@ namespace SKONanobotBuildAndRepairSystem
         /// Currently friendly damaged blocks
         /// </summary>
         public readonly Dictionary<IMySlimBlock, TimeSpan> FriendlyDamage = new Dictionary<IMySlimBlock, TimeSpan>();
+
+        /// <summary>
+        /// Cluster assignment for shared scanning. Null means solo (legacy path).
+        /// Set by ScanClusterCoordinator.RebuildClusters() on main thread, read on background thread.
+        /// </summary>
+        internal ScanCluster AssignedCluster;
+
+        /// <summary>
+        /// Counts consecutive cycles where a cluster member received no shared result.
+        /// After 3 misses, falls back to independent scan.
+        /// </summary>
+        internal int MissedResultCycles;
     }
 }

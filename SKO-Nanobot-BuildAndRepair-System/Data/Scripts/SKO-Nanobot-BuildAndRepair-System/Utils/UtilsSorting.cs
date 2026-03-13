@@ -1,6 +1,7 @@
 using Sandbox.Game.Entities;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using System.Collections.Generic;
 using VRage.Game.ModAPI;
 using VRageMath;
@@ -16,12 +17,26 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
             try
             {
+                var profilerTs = MethodProfiler.Start();
+                try
+                {
                 BlockPriorityHandling priorityHandler = isGrinding ? system.BlockGrindPriority : system.BlockWeldPriority;
 
                 // Filter in-place so the caller's list is actually modified.
                 list.RemoveAll(i => !priorityHandler.GetEnabled(i));
 
                 var welderCenter = system.Welder.WorldAABB.Center;
+
+                // Reuse the system's distance dictionary to avoid allocating a fresh one each call.
+                // Clear() resets count without deallocating internal arrays — zero GC pressure.
+                var distances = system.SortDistanceCache;
+                distances.Clear();
+                foreach (var block in list)
+                {
+                    BoundingBoxD bbox;
+                    block.GetWorldBoundingBox(out bbox, false);
+                    distances[block] = (welderCenter - bbox.Center).Length();
+                }
 
                 if (isGrinding)
                 {
@@ -39,13 +54,10 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                                 return priorityA - priorityB;
                         }
 
-                        BoundingBoxD bboxA;
-                        a.GetWorldBoundingBox(out bboxA, false);
-                        var distA = (welderCenter - bboxA.Center).Length();
-
-                        BoundingBoxD bboxB;
-                        b.GetWorldBoundingBox(out bboxB, false);
-                        var distB = (welderCenter - bboxB.Center).Length();
+                        double distA;
+                        distances.TryGetValue(a, out distA);
+                        double distB;
+                        distances.TryGetValue(b, out distB);
 
                         if (grindSmallestFirst)
                         {
@@ -66,13 +78,10 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                     if (priorityA != priorityB)
                         return priorityA - priorityB;
 
-                    BoundingBoxD bboxA;
-                    a.GetWorldBoundingBox(out bboxA, false);
-                    var distA = (welderCenter - bboxA.Center).Length();
-
-                    BoundingBoxD bboxB;
-                    b.GetWorldBoundingBox(out bboxB, false);
-                    var distB = (welderCenter - bboxB.Center).Length();
+                    double distA;
+                    distances.TryGetValue(a, out distA);
+                    double distB;
+                    distances.TryGetValue(b, out distB);
 
                     var distCmp = Utils.CompareDistance(distA, distB);
                     if (distCmp != 0) return distCmp;
@@ -86,6 +95,12 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                     if (posA.Y != posB.Y) return posA.Y - posB.Y;
                     return posA.Z - posB.Z;
                 });
+                }
+                finally
+                {
+                    MethodProfiler.StopAndLog("SortWithPriorityAndDistance", profilerTs, () =>
+                        string.Format("blockCount={0};isGrinding={1}", list.Count, isGrinding));
+                }
             }
             catch { }
         }
