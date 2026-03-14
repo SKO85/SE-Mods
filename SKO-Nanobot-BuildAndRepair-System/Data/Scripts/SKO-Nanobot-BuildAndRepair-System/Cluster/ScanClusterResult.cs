@@ -54,6 +54,7 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
         public bool SourcesUpdated;
 
         public TimeSpan Timestamp;
+        public bool PreSorted;
 
         public ScanClusterResult()
         {

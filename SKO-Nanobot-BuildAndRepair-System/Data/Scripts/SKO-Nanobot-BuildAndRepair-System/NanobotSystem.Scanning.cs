@@ -721,6 +721,14 @@ namespace SKONanobotBuildAndRepairSystem
                     }
 
                     result.Timestamp = MyAPIGateway.Session.ElapsedPlayTime;
+
+                    // Pre-sort candidates for multi-member clusters.
+                    // Members reuse this order and skip their local sort.
+                    if (memberCount > 1)
+                    {
+                        PreSortClusterCandidates(areaOrientedBox.Center, clusterGrindTargets, clusterWeldTargets);
+                        result.PreSorted = true;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -748,6 +756,104 @@ namespace SKONanobotBuildAndRepairSystem
                 MethodProfiler.StopAndLog("AsyncClusterScan", profilerTs, () =>
                     string.Format("entityId={0};updateSource={1};clusterMembers={2}",
                         _Welder.EntityId, updateSource, cluster.Members.Count));
+            }
+        }
+
+        /// <summary>
+        /// Pre-sorts cluster candidates using the coordinator's settings and position.
+        /// Members reuse this sort order, avoiding redundant per-member sorts.
+        /// For co-located BaRs the coordinator's distance order is a near-perfect
+        /// approximation, so members can skip their expensive local sort.
+        /// </summary>
+        private void PreSortClusterCandidates(Vector3D coordCenter, List<ClusterTargetCandidate> grindCandidates, List<ClusterTargetCandidate> weldCandidates)
+        {
+            var profilerTs = MethodProfiler.Start();
+            try
+            {
+                if (grindCandidates != null && grindCandidates.Count > 1)
+                {
+                    var grindUsePriority = (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0;
+                    var grindSmallestGridFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
+                    var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
+
+                    var distances = new Dictionary<IMySlimBlock, double>(grindCandidates.Count);
+                    foreach (var c in grindCandidates)
+                    {
+                        var blockPos = c.Block.CubeGrid.GridIntegerToWorld(c.Block.Position);
+                        distances[c.Block] = (coordCenter - blockPos).LengthSquared();
+                    }
+
+                    grindCandidates.Sort((a, b) =>
+                    {
+                        if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
+                        {
+                            if (grindUsePriority)
+                            {
+                                var priorityA = BlockGrindPriority.GetPriority(a.Block);
+                                var priorityB = BlockGrindPriority.GetPriority(b.Block);
+                                if (priorityA != priorityB)
+                                    return priorityA - priorityB;
+                            }
+
+                            if (grindSmallestGridFirst)
+                            {
+                                var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
+                                if (res != 0) return res;
+                            }
+
+                            double distA, distB;
+                            distances.TryGetValue(a.Block, out distA);
+                            distances.TryGetValue(b.Block, out distB);
+                            return grindNearFirst ? distA.CompareTo(distB) : distB.CompareTo(distA);
+                        }
+                        else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
+                        else if ((b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return 1;
+                        return 0;
+                    });
+                }
+
+                if (weldCandidates != null && weldCandidates.Count > 1)
+                {
+                    var distances = new Dictionary<IMySlimBlock, double>(weldCandidates.Count);
+                    foreach (var c in weldCandidates)
+                    {
+                        var blockPos = c.Block.CubeGrid.GridIntegerToWorld(c.Block.Position);
+                        distances[c.Block] = (coordCenter - blockPos).LengthSquared();
+                    }
+
+                    weldCandidates.Sort((a, b) =>
+                    {
+                        var priorityA = BlockWeldPriority.GetPriority(a.Block);
+                        var priorityB = BlockWeldPriority.GetPriority(b.Block);
+                        if (priorityA != priorityB) return priorityA - priorityB;
+
+                        double distA, distB;
+                        distances.TryGetValue(a.Block, out distA);
+                        distances.TryGetValue(b.Block, out distB);
+                        var distCmp = distA.CompareTo(distB);
+                        if (distCmp != 0) return distCmp;
+
+                        var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
+                        if (gridCmp != 0) return gridCmp;
+                        var posA = a.Block.Position;
+                        var posB = b.Block.Position;
+                        if (posA.X != posB.X) return posA.X - posB.X;
+                        if (posA.Y != posB.Y) return posA.Y - posB.Y;
+                        return posA.Z - posB.Z;
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Logging.Instance.Error("PreSortClusterCandidates error: {0}", ex);
+            }
+            finally
+            {
+                var _grindCount = grindCandidates != null ? grindCandidates.Count : 0;
+                var _weldCount = weldCandidates != null ? weldCandidates.Count : 0;
+                MethodProfiler.StopAndLog("PreSortClusterCandidates", profilerTs, () =>
+                    string.Format("entityId={0};grindCandidates={1};weldCandidates={2}",
+                        _Welder.EntityId, _grindCount, _weldCount));
             }
         }
 
@@ -889,30 +995,33 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                // Sort weld targets by priority then distance
-                try
+                // Sort weld targets by priority then distance (skip if coordinator pre-sorted)
+                if (!result.PreSorted)
                 {
-                    _TempPossibleWeldTargets.Sort((a, b) =>
+                    try
                     {
-                        var priorityA = BlockWeldPriority.GetPriority(a.Block);
-                        var priorityB = BlockWeldPriority.GetPriority(b.Block);
-                        if (priorityA != priorityB) return priorityA - priorityB;
+                        _TempPossibleWeldTargets.Sort((a, b) =>
+                        {
+                            var priorityA = BlockWeldPriority.GetPriority(a.Block);
+                            var priorityB = BlockWeldPriority.GetPriority(b.Block);
+                            if (priorityA != priorityB) return priorityA - priorityB;
 
-                        var distCmp = Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                        if (distCmp != 0) return distCmp;
+                            var distCmp = Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                            if (distCmp != 0) return distCmp;
 
-                        var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
-                        if (gridCmp != 0) return gridCmp;
-                        var posA = a.Block.Position;
-                        var posB = b.Block.Position;
-                        if (posA.X != posB.X) return posA.X - posB.X;
-                        if (posA.Y != posB.Y) return posA.Y - posB.Y;
-                        return posA.Z - posB.Z;
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Logging.Instance.Error("Error on .Sort for cluster _TempPossibleWeldTargets. Exception: {0}", ex);
+                            var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
+                            if (gridCmp != 0) return gridCmp;
+                            var posA = a.Block.Position;
+                            var posB = b.Block.Position;
+                            if (posA.X != posB.X) return posA.X - posB.X;
+                            if (posA.Y != posB.Y) return posA.Y - posB.Y;
+                            return posA.Z - posB.Z;
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.Instance.Error("Error on .Sort for cluster _TempPossibleWeldTargets. Exception: {0}", ex);
+                    }
                 }
 
                 // Truncate after sorting so the correct blocks (by priority+distance) survive the cap.
@@ -920,40 +1029,43 @@ namespace SKONanobotBuildAndRepairSystem
                 if (preTruncateWeld > MaxPossibleWeldTargets)
                     _TempPossibleWeldTargets.RemoveRange(MaxPossibleWeldTargets, preTruncateWeld - MaxPossibleWeldTargets);
 
-                // Sort grind targets
-                try
+                // Sort grind targets (skip if coordinator pre-sorted)
+                if (!result.PreSorted)
                 {
-                    var grindUsePriority = (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0;
-                    var grindSmallestGridFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
-                    var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
-                    _TempPossibleGrindTargets.Sort((a, b) =>
+                    try
                     {
-                        if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
+                        var grindUsePriority = (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0;
+                        var grindSmallestGridFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
+                        var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
+                        _TempPossibleGrindTargets.Sort((a, b) =>
                         {
-                            if (grindUsePriority)
+                            if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
                             {
-                                var priorityA = BlockGrindPriority.GetPriority(a.Block);
-                                var priorityB = BlockGrindPriority.GetPriority(b.Block);
-                                if (priorityA != priorityB)
-                                    return priorityA - priorityB;
-                            }
+                                if (grindUsePriority)
+                                {
+                                    var priorityA = BlockGrindPriority.GetPriority(a.Block);
+                                    var priorityB = BlockGrindPriority.GetPriority(b.Block);
+                                    if (priorityA != priorityB)
+                                        return priorityA - priorityB;
+                                }
 
-                            if (grindSmallestGridFirst)
-                            {
-                                var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                                return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                if (grindSmallestGridFirst)
+                                {
+                                    var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
+                                    return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                }
+                                if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                return Utils.Utils.CompareDistance(b.Distance, a.Distance);
                             }
-                            if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                            return Utils.Utils.CompareDistance(b.Distance, a.Distance);
-                        }
-                        else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
-                        else if ((b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return 1;
-                        return 0;
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Logging.Instance.Error("Error on .Sort for cluster _TempPossibleGrindTargets. Exception: {0}", ex);
+                            else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
+                            else if ((b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return 1;
+                            return 0;
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.Instance.Error("Error on .Sort for cluster _TempPossibleGrindTargets. Exception: {0}", ex);
+                    }
                 }
 
                 // Truncate after sorting so the desired sort order determines which blocks survive the cap.
