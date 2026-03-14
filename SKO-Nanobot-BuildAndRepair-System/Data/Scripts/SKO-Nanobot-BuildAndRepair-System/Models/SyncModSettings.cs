@@ -103,6 +103,14 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(35), XmlElement]
         public bool DebugMode { get; set; }
 
+        /// <summary>
+        /// After scanning a grid and finding no weld or grind targets, skip it for this
+        /// many seconds before rescanning. Sub-grid connections are always traversed.
+        /// 0 = disabled. Range: 0-300.
+        /// </summary>
+        [ProtoMember(36), XmlElement]
+        public int EmptyGridRescanDelaySeconds { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -124,6 +132,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             MaxSystemsPerTargetGrid = 0;
             AssignToSystemEnabled = true;
             DebugMode = true;
+            EmptyGridRescanDelaySeconds = 30;
         }
 
         public static SyncModSettings Load()
@@ -201,6 +210,17 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     else if (settings.Welder.GrindingMultiplier >= NanobotSystem.WELDING_GRINDING_MULTIPLIER_MAX)
                     {
                         settings.Welder.GrindingMultiplier = NanobotSystem.WELDING_GRINDING_MULTIPLIER_MAX;
+                        adjusted = true;
+                    }
+
+                    if (settings.EmptyGridRescanDelaySeconds < 0)
+                    {
+                        settings.EmptyGridRescanDelaySeconds = 0;
+                        adjusted = true;
+                    }
+                    else if (settings.EmptyGridRescanDelaySeconds > 300)
+                    {
+                        settings.EmptyGridRescanDelaySeconds = 300;
                         adjusted = true;
                     }
 

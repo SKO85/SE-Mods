@@ -80,6 +80,12 @@ namespace SKONanobotBuildAndRepairSystem
         private ConcurrentDictionary<long, List<IMySlimBlock>> CachedBlocks = new ConcurrentDictionary<long, List<IMySlimBlock>>();
 
         /// <summary>
+        /// Tracks grids that were scanned and had no weld/grind targets.
+        /// Key: grid EntityId, Value: playTime when grid was found empty.
+        /// </summary>
+        private ConcurrentDictionary<long, TimeSpan> _EmptyGridCache = new ConcurrentDictionary<long, TimeSpan>();
+
+        /// <summary>
         /// Per-BaR jitter (0-4s) added to the sorted cache base TTL to prevent all BaRs
         /// from expiring their sorted caches simultaneously (thundering herd).
         /// Base (16s) exceeds TargetsUpdateInterval (10s) for at least one cache hit between

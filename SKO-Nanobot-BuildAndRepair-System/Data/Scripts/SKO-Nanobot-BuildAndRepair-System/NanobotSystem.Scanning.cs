@@ -375,6 +375,60 @@ namespace SKONanobotBuildAndRepairSystem
 
             grids.Add(cubeGrid);
 
+            var gridEntityId = cubeGrid.EntityId;
+            var playTime = MyAPIGateway.Session.ElapsedPlayTime;
+
+            // Check if this grid was recently scanned and found empty.
+            // If so, skip expensive target checks and only traverse connections
+            // so newly docked ships are still discovered.
+            var emptyDelay = Mod.Settings.EmptyGridRescanDelaySeconds;
+            if (emptyDelay > 0)
+            {
+                TimeSpan emptyTime;
+                if (_EmptyGridCache.TryGetValue(gridEntityId, out emptyTime)
+                    && playTime.Subtract(emptyTime).TotalSeconds < emptyDelay)
+                {
+                    var rawBlocks = SharedGridBlockCache.GetBlocks(cubeGrid);
+                    foreach (var slimBlock in rawBlocks)
+                    {
+                        var fatBlock = slimBlock.FatBlock;
+                        if (fatBlock == null) continue;
+                        if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
+
+                        var mechanical = fatBlock as Sandbox.ModAPI.IMyMechanicalConnectionBlock;
+                        if (mechanical != null)
+                        {
+                            if (mechanical.TopGrid != null)
+                                AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, mechanical.TopGrid, grids, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                            continue;
+                        }
+
+                        var attachable = fatBlock as Sandbox.ModAPI.IMyAttachableTopBlock;
+                        if (attachable != null)
+                        {
+                            if (attachable.Base != null && attachable.Base.CubeGrid != null)
+                                AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, attachable.Base.CubeGrid, grids, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                            continue;
+                        }
+
+                        var connector = fatBlock as Sandbox.ModAPI.IMyShipConnector;
+                        if (connector != null)
+                        {
+                            if (connector.Status == Sandbox.ModAPI.Ingame.MyShipConnectorStatus.Connected && connector.OtherConnector != null)
+                                AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, connector.OtherConnector.CubeGrid, grids, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                            continue;
+                        }
+                    }
+
+                    MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
+                        string.Format("entityId={0};gridId={1};skippedEmpty=True", _Welder.EntityId, gridEntityId));
+                    return;
+                }
+            }
+
+            var weldBefore = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
+            var grindBefore = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
+
             var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly || Settings.WorkMode == WorkModes.GrindBeforeWeld;
             // In GrindOnly/GrindBeforeWeld, always sort for grinding. The momentary false from
             // State.Grinding/NeedGrinding triggers the 2x-slower weld sort for no benefit.
@@ -463,11 +517,55 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
+
+            // Update empty grid cache: remember grids that contributed no targets
+            var weldAfter = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
+            var grindAfter = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
+            if (weldAfter == weldBefore && grindAfter == grindBefore)
+            {
+                _EmptyGridCache[gridEntityId] = playTime;
+            }
+            else
+            {
+                TimeSpan dummy;
+                _EmptyGridCache.TryRemove(gridEntityId, out dummy);
+            }
+
             MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
                 string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4}",
                     _Welder.EntityId, cubeGrid.EntityId, newBlocks.Count,
                     clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
                     clusterGrindTargets != null ? clusterGrindTargets.Count : -1));
+        }
+
+        /// <summary>
+        /// Removes expired entries from the empty grid cache.
+        /// Uses two-pass (collect keys, then remove) to avoid modifying the dictionary during enumeration.
+        /// </summary>
+        private void CleanupEmptyGridCache()
+        {
+            var emptyDelay = Mod.Settings.EmptyGridRescanDelaySeconds;
+            if (emptyDelay <= 0 || _EmptyGridCache.Count == 0) return;
+
+            var playTime = MyAPIGateway.Session.ElapsedPlayTime;
+            List<long> expiredKeys = null;
+            foreach (var kvp in _EmptyGridCache)
+            {
+                if (playTime.Subtract(kvp.Value).TotalSeconds >= emptyDelay)
+                {
+                    if (expiredKeys == null) expiredKeys = new List<long>();
+                    expiredKeys.Add(kvp.Key);
+                }
+            }
+
+            if (expiredKeys != null)
+            {
+                TimeSpan dummy;
+                foreach (var key in expiredKeys)
+                {
+                    _EmptyGridCache.TryRemove(key, out dummy);
+                }
+            }
         }
 
         /// <summary>
@@ -734,6 +832,9 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     Logging.Instance.Error("BuildAndRepairSystemBlock {0}: AsyncClusterScan exception: {1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), ex);
                 }
+
+                // Clean expired entries from empty grid cache
+                CleanupEmptyGridCache();
 
                 // Publish shared result (atomic reference swap)
                 cluster.SetResult(result);

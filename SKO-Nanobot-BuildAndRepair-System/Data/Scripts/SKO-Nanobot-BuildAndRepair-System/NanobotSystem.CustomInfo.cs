@@ -117,7 +117,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     customInfo.Append(string.Format("Cluster: none{0}", Environment.NewLine));
                 }
-                customInfo.Append(string.Format("MaxSystems/Grid: {0}{1}", Mod.Settings.MaxSystemsPerTargetGrid, Environment.NewLine));
+                customInfo.Append(string.Format("MaxSystems/Grid: {0} | EmptyGrids: {1}{2}", Mod.Settings.MaxSystemsPerTargetGrid, _EmptyGridCache.Count, Environment.NewLine));
             }
 
             customInfo.Append(Environment.NewLine);
