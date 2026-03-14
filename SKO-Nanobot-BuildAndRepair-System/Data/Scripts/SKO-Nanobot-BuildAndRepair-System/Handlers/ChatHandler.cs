@@ -16,6 +16,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private const string CmdProfileStart = "start";
         private const string CmdProfileStop = "stop";
         private const string CmdProfileStatus = "status";
+        private const string CmdProfileHelp = "help";
+        private const string CmdProfileMinDuration = "minduration";
         private const string CmdSim = "sim";
         private const string CmdSimReset = "reset";
 
@@ -136,15 +138,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 case CmdProfile:
                     if (!IsAdminOnServer(console)) break;
 
-                    if (!MethodProfiler.IsConfigured)
-                    {
-                        console.ShowMessage("Nanobars", "Profiling is not enabled in ModSettings.xml (EnableMethodProfiling=false).");
-                        break;
-                    }
-
                     if (args.Length < 2)
                     {
-                        console.ShowMessage("Nanobars", "Usage: /nanobars profile start [seconds]|stop|status");
+                        ShowProfileHelp(console);
                         break;
                     }
 
@@ -153,13 +149,30 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         var autoStopSeconds = MethodProfiler.DefaultAutoStopDurationSeconds;
                         if (args.Length >= 3 && !int.TryParse(args[2], out autoStopSeconds))
                         {
-                            console.ShowMessage("Nanobars", "Invalid seconds. Usage: /nanobars profile start [seconds]");
+                            console.ShowMessage("Nanobars", "Invalid seconds. Usage: /nanobars profile start [seconds] [minDurationMs]");
                             break;
+                        }
+
+                        if (args.Length >= 4)
+                        {
+                            int minDuration;
+                            if (!int.TryParse(args[3], out minDuration))
+                            {
+                                console.ShowMessage("Nanobars", "Invalid minDurationMs. Usage: /nanobars profile start [seconds] [minDurationMs]");
+                                break;
+                            }
+
+                            string minDurMsg;
+                            if (!MethodProfiler.SetMinDurationMs(minDuration, out minDurMsg))
+                            {
+                                console.ShowMessage("Nanobars", minDurMsg);
+                                break;
+                            }
                         }
 
                         string message;
                         MethodProfiler.StartSession(autoStopSeconds, out message);
-                        console.ShowMessage("Nanobars", message);
+                        console.ShowMessage("Nanobars", message + string.Format(" (MinDurationMs={0})", MethodProfiler.MinDurationMs));
                     }
                     else if (args[1] == CmdProfileStop)
                     {
@@ -171,9 +184,32 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     {
                         console.ShowMessage("Nanobars", MethodProfiler.GetStatusMessage());
                     }
+                    else if (args[1] == CmdProfileMinDuration)
+                    {
+                        if (args.Length < 3)
+                        {
+                            console.ShowMessage("Nanobars", string.Format("Current MinDurationMs={0}. Usage: /nanobars profile minduration <ms>", MethodProfiler.MinDurationMs));
+                            break;
+                        }
+
+                        int minDuration;
+                        if (!int.TryParse(args[2], out minDuration))
+                        {
+                            console.ShowMessage("Nanobars", "Invalid value. Usage: /nanobars profile minduration <ms>");
+                            break;
+                        }
+
+                        string minDurMsg;
+                        MethodProfiler.SetMinDurationMs(minDuration, out minDurMsg);
+                        console.ShowMessage("Nanobars", minDurMsg);
+                    }
+                    else if (args[1] == CmdProfileHelp)
+                    {
+                        ShowProfileHelp(console);
+                    }
                     else
                     {
-                        console.ShowMessage("Nanobars", "Usage: /nanobars profile start [seconds]|stop|status");
+                        ShowProfileHelp(console);
                     }
                     break;
 
@@ -213,9 +249,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             sb.AppendLine($"Version: {Constants.ModVersion}");
             sb.AppendLine();
             sb.AppendLine($"[-cwsf]: Creates a settings file inside your current world folder (local-only)");
-            sb.AppendLine($"[profile start [seconds]]: Starts profiling (defaults to auto-stop after {MethodProfiler.DefaultAutoStopDurationSeconds}s)");
-            sb.AppendLine($"[profile stop]: Stops profiling and closes profiler files");
-            sb.AppendLine($"[profile status]: Shows whether profiling is enabled/running and current settings");
+            sb.AppendLine($"[profile help]: Shows profiling command syntax");
             sb.AppendLine();
             sb.AppendLine($"Issues: Report issues or suggestions (GitHub)");
             sb.AppendLine($"https://github.com/SKO85/SE-Mods/issues");
@@ -232,6 +266,31 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             sb.AppendLine($"Have fun!\nSKO85");
 
             MyAPIGateway.Utilities.ShowMissionScreen("Nanobot Build and Repair System", "Help", "", sb.ToString());
+        }
+
+        private static void ShowProfileHelp(VRage.Game.ModAPI.IMyUtilities console)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Profiling Commands (admin-only, server-side):");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars profile start [seconds] [minDurationMs]");
+            sb.AppendLine($"  Starts a profiling session. Defaults: seconds={MethodProfiler.DefaultAutoStopDurationSeconds}, minDurationMs={MethodProfiler.MinDurationMs}");
+            sb.AppendLine("  Use 0 for seconds to disable auto-stop.");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars profile stop");
+            sb.AppendLine("  Stops the current profiling session and writes summary.");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars profile status");
+            sb.AppendLine("  Shows whether profiling is running and current settings.");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars profile minduration <ms>");
+            sb.AppendLine("  Sets the minimum method duration (0-10000ms) for logging samples.");
+            sb.AppendLine("  Only calls taking >= this threshold are written to log files.");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars profile help");
+            sb.AppendLine("  Shows this help.");
+
+            MyAPIGateway.Utilities.ShowMissionScreen("Nanobot Build and Repair System", "Profile Help", "", sb.ToString());
         }
     }
 }

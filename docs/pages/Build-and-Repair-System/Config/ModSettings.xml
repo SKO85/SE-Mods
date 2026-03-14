@@ -13,15 +13,6 @@
          Use Debug only when troubleshooting — it generates a large amount of output. -->
     <LogLevel>Error</LogLevel>
 
-    <!-- Enables method-level profiling logs in local storage. When enabled, the mod writes
-         one log file per instrumented method (NanobotProfiler.<MethodName>.log) to help
-         identify hotspots. Disabled by default because logs can grow quickly. -->
-    <EnableMethodProfiling>false</EnableMethodProfiling>
-
-    <!-- Minimum duration in milliseconds before a profiling sample is written.
-         Raise this to reduce log volume and focus on slower calls. Range: 0-10000. -->
-    <MethodProfilingMinDurationMs>1</MethodProfilingMinDurationMs>
-
     <!-- Maximum working range in metres. Blocks, projections, and floating objects outside
          this radius are ignored. -->
     <Range>100</Range>

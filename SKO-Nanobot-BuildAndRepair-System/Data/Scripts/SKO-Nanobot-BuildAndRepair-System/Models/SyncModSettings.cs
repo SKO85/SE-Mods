@@ -103,20 +103,6 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(35), XmlElement]
         public bool DebugMode { get; set; }
 
-        /// <summary>
-        /// Enables method-level profiling logs written to local storage.
-        /// Disabled by default because it can produce large files on active servers.
-        /// </summary>
-        [ProtoMember(33), XmlElement]
-        public bool EnableMethodProfiling { get; set; }
-
-        /// <summary>
-        /// Minimum method duration (in milliseconds) required before a profiling sample is written.
-        /// Clamped to 0-10000 on load.
-        /// </summary>
-        [ProtoMember(34), XmlElement]
-        public int MethodProfilingMinDurationMs { get; set; }
-
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -137,8 +123,6 @@ namespace SKONanobotBuildAndRepairSystem.Models
             DeleteBotsWhenDead = true;
             MaxSystemsPerTargetGrid = 0;
             AssignToSystemEnabled = true;
-            EnableMethodProfiling = true;
-            MethodProfilingMinDurationMs = 1;
             DebugMode = true;
         }
 
@@ -220,17 +204,6 @@ namespace SKONanobotBuildAndRepairSystem.Models
                         adjusted = true;
                     }
 
-                    if (settings.MethodProfilingMinDurationMs < 0)
-                    {
-                        settings.MethodProfilingMinDurationMs = 0;
-                        adjusted = true;
-                    }
-                    else if (settings.MethodProfilingMinDurationMs > 10000)
-                    {
-                        settings.MethodProfilingMinDurationMs = 10000;
-                        adjusted = true;
-                    }
-
                     Logging.Instance.Write(Logging.Level.Info, "NanobotBuildAndRepairSystemSettings: Settings {0}", settings);
                 }
                 else
@@ -283,8 +256,6 @@ namespace SKONanobotBuildAndRepairSystem.Models
             if (settings.Version <= 4 && settings.Welder.WeldingMultiplier == 0) settings.Welder.WeldingMultiplier = 1;
             if (settings.Version <= 4 && settings.Welder.GrindingMultiplier == 0) settings.Welder.GrindingMultiplier = 1;
             if (settings.Version <= 5 && settings.Welder.AllowedGrindJanitorRelations == 0) settings.Welder.AllowedGrindJanitorRelations = AutoGrindRelation.NoOwnership | AutoGrindRelation.Enemies | AutoGrindRelation.Neutral;
-            if (settings.Version <= 6 && settings.MethodProfilingMinDurationMs <= 0) settings.MethodProfilingMinDurationMs = 1;
-
             settings.Version = CurrentSettingsVersion;
             return true;
         }

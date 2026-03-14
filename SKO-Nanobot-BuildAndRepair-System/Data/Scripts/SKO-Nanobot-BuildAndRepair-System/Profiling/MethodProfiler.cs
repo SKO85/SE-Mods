@@ -26,8 +26,11 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
         private static float _maxSimSpeed = float.MinValue;
         private static double _sumSimSpeed;
         private static long _simSpeedSamples;
+        private static int _minDurationMs = 1;
 
         private const int MaxAutoStopSeconds = 24 * 60 * 60;
+        private const int MinDurationMsMin = 0;
+        private const int MinDurationMsMax = 10000;
 
         private sealed class MethodStats
         {
@@ -43,12 +46,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
 
         public static bool IsEnabled
         {
-            get { return Mod.Settings != null && Mod.Settings.EnableMethodProfiling && _isRunning; }
-        }
-
-        public static bool IsConfigured
-        {
-            get { return Mod.Settings != null && Mod.Settings.EnableMethodProfiling; }
+            get { return _isRunning; }
         }
 
         public static bool IsRunning
@@ -61,23 +59,33 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             get { return DefaultAutoStopSeconds; }
         }
 
-        public static string GetStatusMessage()
+        public static int MinDurationMs
         {
-            var configured = IsConfigured;
-            var minDurationMs = Mod.Settings != null ? Mod.Settings.MethodProfilingMinDurationMs : 0;
+            get { return _minDurationMs; }
+        }
 
-            if (!configured)
+        public static bool SetMinDurationMs(int value, out string message)
+        {
+            if (value < MinDurationMsMin || value > MinDurationMsMax)
             {
-                return string.Format("Profiling status: disabled in config (EnableMethodProfiling=false, MinDurationMs={0}).", minDurationMs);
+                message = string.Format("Invalid value. Range: {0}-{1}.", MinDurationMsMin, MinDurationMsMax);
+                return false;
             }
 
+            _minDurationMs = value;
+            message = string.Format("MinDurationMs set to {0}.", value);
+            return true;
+        }
+
+        public static string GetStatusMessage()
+        {
             if (!_isRunning)
             {
-                return string.Format("Profiling status: enabled in config, currently stopped (MinDurationMs={0}).", minDurationMs);
+                return string.Format("Profiling status: stopped (MinDurationMs={0}).", _minDurationMs);
             }
 
             var duration = DateTime.UtcNow - _startedUtc;
-            var status = string.Format("Profiling status: running for {0:F1}s (MinDurationMs={1}).", duration.TotalSeconds, minDurationMs);
+            var status = string.Format("Profiling status: running for {0:F1}s (MinDurationMs={1}).", duration.TotalSeconds, _minDurationMs);
             if (_autoStopUtc.HasValue)
             {
                 var remaining = _autoStopUtc.Value - DateTime.UtcNow;
@@ -99,12 +107,6 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
         {
             lock (_syncRoot)
             {
-                if (!IsConfigured)
-                {
-                    message = "Profiling is not enabled in ModSettings.xml (EnableMethodProfiling=false).";
-                    return false;
-                }
-
                 if (_isRunning)
                 {
                     message = "Profiling is already running.";
@@ -206,7 +208,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
 
             UpdateAggregate(methodName, elapsedMs);
 
-            if (elapsedMs < Mod.Settings.MethodProfilingMinDurationMs)
+            if (elapsedMs < _minDurationMs)
                 return;
 
             string details = null;
