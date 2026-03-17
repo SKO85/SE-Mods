@@ -429,6 +429,13 @@ namespace SKONanobotBuildAndRepairSystem
             var weldBefore = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
             var grindBefore = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
 
+            // Per-grid budget: cap how many targets THIS grid's blocks can contribute so one
+            // large connected grid cannot consume the entire scan budget and starve other grids.
+            // The original maxWeld/maxGrind are preserved for ShouldStopScan (global circuit breaker)
+            // and recursive calls to connected grids — each sub-grid computes its own per-grid cap.
+            var thisGridMaxGrind = clusterGrindTargets != null ? Math.Min(maxGrind, grindBefore + MaxPossibleGrindTargets) : 0;
+            var thisGridMaxWeld = clusterWeldTargets != null ? Math.Min(maxWeld, weldBefore + MaxPossibleWeldTargets) : 0;
+
             var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly || Settings.WorkMode == WorkModes.GrindBeforeWeld;
             // In GrindOnly/GrindBeforeWeld, always sort for grinding. The momentary false from
             // State.Grinding/NeedGrinding triggers the 2x-slower weld sort for no benefit.
@@ -439,7 +446,14 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
 
-                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                // Only evaluate block as target if this grid hasn't exceeded its per-grid allowance.
+                // Connection traversal below continues regardless so other grids are still discovered.
+                bool withinGridBudget = (clusterGrindTargets != null && clusterGrindTargets.Count < thisGridMaxGrind)
+                                     || (clusterWeldTargets != null && clusterWeldTargets.Count < thisGridMaxWeld);
+                if (withinGridBudget)
+                {
+                    AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, clusterGrindTargets, thisGridMaxWeld, thisGridMaxGrind, skipRangeCheck);
+                }
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -504,7 +518,7 @@ namespace SKONanobotBuildAndRepairSystem
                                         double distance;
                                         if (skipRangeCheck || block.IsInRange(ref areaBox, out distance))
                                         {
-                                            if (clusterWeldTargets.Count < maxWeld)
+                                            if (clusterWeldTargets.Count < thisGridMaxWeld)
                                             {
                                                 clusterWeldTargets.Add(new ClusterTargetCandidate(block, TargetBlockData.AttributeFlags.Projected));
                                             }
@@ -1036,6 +1050,78 @@ namespace SKONanobotBuildAndRepairSystem
         /// Applies a ScanClusterResult to this BaR by filtering candidates through own IsInRange,
         /// computing distances, sorting, and swapping into State. Used by both coordinator and members.
         /// </summary>
+        /// <summary>
+        /// Truncates a sorted target list to maxCount while preserving representation
+        /// from multiple grids. Each grid gets a guaranteed minimum number of slots
+        /// so that one dominant grid cannot crowd out all others after sorting.
+        /// </summary>
+        private static void TruncateGridAware(List<TargetBlockData> list, int maxCount)
+        {
+            if (list.Count <= maxCount) return;
+
+            // Count distinct grids
+            var gridIds = new HashSet<long>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                gridIds.Add(list[i].Block.CubeGrid.EntityId);
+            }
+
+            // Single grid — simple truncation, no fairness needed
+            if (gridIds.Count <= 1)
+            {
+                list.RemoveRange(maxCount, list.Count - maxCount);
+                return;
+            }
+
+            int numGrids = gridIds.Count;
+            int minPerGrid = Math.Max(maxCount / numGrids, 4);
+
+            // Track how many blocks we've kept per grid
+            var keptPerGrid = new Dictionary<long, int>(numGrids);
+            foreach (var id in gridIds)
+            {
+                keptPerGrid[id] = 0;
+            }
+
+            // First pass: walk sorted list, keep items until each grid hits minPerGrid
+            // or we fill up. Items beyond minPerGrid go to overflow for second pass.
+            var kept = new List<TargetBlockData>(maxCount);
+            var overflow = new List<TargetBlockData>();
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var item = list[i];
+                var gid = item.Block.CubeGrid.EntityId;
+                int count;
+                keptPerGrid.TryGetValue(gid, out count);
+
+                if (count < minPerGrid)
+                {
+                    kept.Add(item);
+                    keptPerGrid[gid] = count + 1;
+                    if (kept.Count >= maxCount) break;
+                }
+                else
+                {
+                    overflow.Add(item);
+                }
+            }
+
+            // Second pass: fill remaining slots from overflow (already in sort order)
+            if (kept.Count < maxCount)
+            {
+                int remaining = maxCount - kept.Count;
+                for (int i = 0; i < overflow.Count && remaining > 0; i++)
+                {
+                    kept.Add(overflow[i]);
+                    remaining--;
+                }
+            }
+
+            list.Clear();
+            list.AddRange(kept);
+        }
+
         private void ApplyClusterResultToSelf(ScanClusterResult result, bool updateSource)
         {
             var profilerTs = MethodProfiler.Start();
@@ -1125,10 +1211,9 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                // Truncate after sorting so the correct blocks (by priority+distance) survive the cap.
+                // Truncate after sorting, preserving blocks from multiple grids.
                 preTruncateWeld = _TempPossibleWeldTargets.Count;
-                if (preTruncateWeld > MaxPossibleWeldTargets)
-                    _TempPossibleWeldTargets.RemoveRange(MaxPossibleWeldTargets, preTruncateWeld - MaxPossibleWeldTargets);
+                TruncateGridAware(_TempPossibleWeldTargets, MaxPossibleWeldTargets);
 
                 // Sort grind targets (skip if coordinator pre-sorted)
                 if (!result.PreSorted)
@@ -1169,10 +1254,9 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                // Truncate after sorting so the desired sort order determines which blocks survive the cap.
+                // Truncate after sorting, preserving blocks from multiple grids.
                 preTruncateGrind = _TempPossibleGrindTargets.Count;
-                if (preTruncateGrind > MaxPossibleGrindTargets)
-                    _TempPossibleGrindTargets.RemoveRange(MaxPossibleGrindTargets, preTruncateGrind - MaxPossibleGrindTargets);
+                TruncateGridAware(_TempPossibleGrindTargets, MaxPossibleGrindTargets);
 
                 // Sort floating targets
                 try
@@ -1277,11 +1361,21 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
+                // Count unique grids in final target lists for profiler diagnostics
+                var weldGridCount = 0;
+                var grindGridCount = 0;
+                var countedGrids = new HashSet<long>();
+                foreach (var t in State.PossibleWeldTargets) countedGrids.Add(t.Block.CubeGrid.EntityId);
+                weldGridCount = countedGrids.Count;
+                countedGrids.Clear();
+                foreach (var t in State.PossibleGrindTargets) countedGrids.Add(t.Block.CubeGrid.EntityId);
+                grindGridCount = countedGrids.Count;
+
                 MethodProfiler.StopAndLog("ApplyClusterResultToSelf", profilerTs, () =>
-                    string.Format("entityId={0};weldTargets={1}(pre={2});grindTargets={3}(pre={4});floatingTargets={5}",
+                    string.Format("entityId={0};weldTargets={1}(pre={2},grids={3});grindTargets={4}(pre={5},grids={6});floatingTargets={7}",
                         _Welder.EntityId,
-                        State.PossibleWeldTargets.CurrentCount, preTruncateWeld,
-                        State.PossibleGrindTargets.CurrentCount, preTruncateGrind,
+                        State.PossibleWeldTargets.CurrentCount, preTruncateWeld, weldGridCount,
+                        State.PossibleGrindTargets.CurrentCount, preTruncateGrind, grindGridCount,
                         State.PossibleFloatingTargets.CurrentCount));
             }
         }

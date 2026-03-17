@@ -196,7 +196,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// Currently friendly damaged blocks
         /// </summary>
-        public readonly Dictionary<IMySlimBlock, TimeSpan> FriendlyDamage = new Dictionary<IMySlimBlock, TimeSpan>();
+        public readonly ConcurrentDictionary<IMySlimBlock, TimeSpan> FriendlyDamage = new ConcurrentDictionary<IMySlimBlock, TimeSpan>();
 
         /// <summary>
         /// Cluster assignment for shared scanning. Null means solo (legacy path).

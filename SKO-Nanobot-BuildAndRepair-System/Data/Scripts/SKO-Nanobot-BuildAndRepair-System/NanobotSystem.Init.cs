@@ -94,13 +94,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // Register this block to the nanobot systems.
-            lock (Mod.NanobotSystems)
-            {
-                if (!Mod.NanobotSystems.ContainsKey(Entity.EntityId))
-                {
-                    Mod.NanobotSystems.Add(Entity.EntityId, this);
-                }
-            }
+            Mod.NanobotSystems.TryAdd(Entity.EntityId, this);
 
             // Assign stagger slot so BaR updates are distributed across ticks.
             _staggerSlot = Mod.ClaimStaggerSlot();
@@ -188,7 +182,7 @@ namespace SKONanobotBuildAndRepairSystem
                 lock (State.PossibleGrindTargets) State.PossibleGrindTargets?.Clear();
                 lock (State.PossibleFloatingTargets) State.PossibleFloatingTargets?.Clear();
                 lock (State.MissingComponents) State.MissingComponents?.Clear();
-                lock (FriendlyDamage) FriendlyDamage?.Clear();
+                FriendlyDamage?.Clear();
 
                 _TempPossibleWeldTargets?.Clear();
                 _TempPossibleGrindTargets?.Clear();
@@ -214,10 +208,8 @@ namespace SKONanobotBuildAndRepairSystem
                 _DelayWatch?.Stop();
 
                 // Remove system from list.
-                lock (Mod.NanobotSystems)
-                {
-                    Mod.NanobotSystems.Remove(Entity.EntityId);
-                }
+                NanobotSystem removed;
+                Mod.NanobotSystems.TryRemove(Entity.EntityId, out removed);
 
                 // Save settings.
                 Settings.Save(Entity, Mod.ModGuid);

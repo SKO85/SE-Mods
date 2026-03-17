@@ -2,6 +2,7 @@ using Sandbox.Game.Entities;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
+using System;
 using System.Collections.Generic;
 using VRage.Game.ModAPI;
 using VRageMath;
@@ -105,7 +106,10 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                         string.Format("blockCount={0};isGrinding={1}", list.Count, isGrinding));
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Logging.Instance.Error("SortWithPriorityAndDistance: Exception during sorting: " + ex.Message);
+            }
         }
     }
 }

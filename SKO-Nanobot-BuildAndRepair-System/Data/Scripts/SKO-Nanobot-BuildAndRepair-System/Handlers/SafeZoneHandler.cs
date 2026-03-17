@@ -445,6 +445,13 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     {
                         var safeZoneBlock = MyEntities.GetEntityByName(safeZone.SafeZoneBlockId.ToString()) as IMySafeZoneBlock;
 
+                        if (safeZoneBlock == null)
+                        {
+                            // Entity not loaded or cast failed — default to protected to be safe.
+                            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, true);
+                            return true;
+                        }
+
                         // Relation between safeZone owner and attacker.
                         var relationSafeZoneAttacker = attackerBlock.CubeGrid.GetRelationBetweenGridAndPlayer(safeZoneBlock.OwnerId);
                         if (relationSafeZoneAttacker != VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner && relationSafeZoneAttacker != VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)

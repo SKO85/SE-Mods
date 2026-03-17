@@ -10,6 +10,7 @@ namespace SKONanobotBuildAndRepairSystem
     using SKONanobotBuildAndRepairSystem.Profiling;
     using SKONanobotBuildAndRepairSystem.Utils;
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Text;
     using VRage.Game.Components;
@@ -22,7 +23,7 @@ namespace SKONanobotBuildAndRepairSystem
         public static bool DisableLocalization = false;
         public static bool SettingsValid = false;
         public static SyncModSettings Settings = new SyncModSettings();
-        public static readonly Dictionary<long, NanobotSystem> NanobotSystems = new Dictionary<long, NanobotSystem>();
+        public static readonly ConcurrentDictionary<long, NanobotSystem> NanobotSystems = new ConcurrentDictionary<long, NanobotSystem>();
         public static ShieldApi Shield; // Centralized DefenseShields API instance
 
         /// <summary>
@@ -229,12 +230,9 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (MyAPIGateway.Session.IsServer)
             {
-                lock (NanobotSystems)
+                foreach (var entry in NanobotSystems)
                 {
-                    foreach (var entry in NanobotSystems)
-                    {
-                        try { entry.Value.Settings.Save(entry.Value.Entity, ModGuid); } catch { }
-                    }
+                    try { entry.Value.Settings.Save(entry.Value.Entity, ModGuid); } catch { }
                 }
             }
             base.SaveData();
@@ -384,38 +382,35 @@ namespace SKONanobotBuildAndRepairSystem
             GridSystemCountCache.Clear();
             try
             {
-                lock (NanobotSystems)
+                foreach (var system in NanobotSystems.Values)
                 {
-                    foreach (var system in NanobotSystems.Values)
+                    long weldGridId = 0;
+                    long grindGridId = 0;
+
+                    var weldBlock = system.State.CurrentWeldingBlock;
+                    if (weldBlock != null && weldBlock.CubeGrid != null)
+                        weldGridId = weldBlock.CubeGrid.EntityId;
+
+                    var grindBlock = system.State.CurrentGrindingBlock;
+                    if (grindBlock != null && grindBlock.CubeGrid != null)
+                        grindGridId = grindBlock.CubeGrid.EntityId;
+
+                    if (weldGridId != 0)
                     {
-                        long weldGridId = 0;
-                        long grindGridId = 0;
+                        int existing;
+                        if (GridSystemCountCache.TryGetValue(weldGridId, out existing))
+                            GridSystemCountCache[weldGridId] = existing + 1;
+                        else
+                            GridSystemCountCache[weldGridId] = 1;
+                    }
 
-                        var weldBlock = system.State.CurrentWeldingBlock;
-                        if (weldBlock != null && weldBlock.CubeGrid != null)
-                            weldGridId = weldBlock.CubeGrid.EntityId;
-
-                        var grindBlock = system.State.CurrentGrindingBlock;
-                        if (grindBlock != null && grindBlock.CubeGrid != null)
-                            grindGridId = grindBlock.CubeGrid.EntityId;
-
-                        if (weldGridId != 0)
-                        {
-                            int existing;
-                            if (GridSystemCountCache.TryGetValue(weldGridId, out existing))
-                                GridSystemCountCache[weldGridId] = existing + 1;
-                            else
-                                GridSystemCountCache[weldGridId] = 1;
-                        }
-
-                        if (grindGridId != 0 && grindGridId != weldGridId)
-                        {
-                            int existing;
-                            if (GridSystemCountCache.TryGetValue(grindGridId, out existing))
-                                GridSystemCountCache[grindGridId] = existing + 1;
-                            else
-                                GridSystemCountCache[grindGridId] = 1;
-                        }
+                    if (grindGridId != 0 && grindGridId != weldGridId)
+                    {
+                        int existing;
+                        if (GridSystemCountCache.TryGetValue(grindGridId, out existing))
+                            GridSystemCountCache[grindGridId] = existing + 1;
+                        else
+                            GridSystemCountCache[grindGridId] = 1;
                     }
                 }
             }
