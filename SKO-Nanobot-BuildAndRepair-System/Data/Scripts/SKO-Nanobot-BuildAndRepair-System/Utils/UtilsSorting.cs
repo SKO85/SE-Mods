@@ -29,7 +29,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 var grindPriority = system.BlockGrindPriority;
                 list.RemoveAll(i => !weldPriority.GetEnabled(i) && !grindPriority.GetEnabled(i));
 
-                var welderCenter = system.Welder.WorldAABB.Center;
+                var welderCenter = system.CachedWelderCenter;
 
                 // Reuse the system's distance dictionary to avoid allocating a fresh one each call.
                 // Clear() resets count without deallocating internal arrays — zero GC pressure.

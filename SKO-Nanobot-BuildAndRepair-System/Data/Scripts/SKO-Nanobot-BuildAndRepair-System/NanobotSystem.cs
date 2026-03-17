@@ -100,6 +100,12 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         internal Dictionary<IMySlimBlock, double> SortDistanceCache = new Dictionary<IMySlimBlock, double>();
 
+        /// <summary>
+        /// Welder center position captured on the main thread before enqueueing background scans.
+        /// Avoids reading WorldAABB.Center (matrix math) from the background thread.
+        /// </summary>
+        internal Vector3D CachedWelderCenter;
+
         private IMyShipWelder _Welder;
         public IMyInventory _TransportInventory;
         private Effects _Effects = new Effects();

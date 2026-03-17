@@ -717,6 +717,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (_AsyncUpdateSourcesAndTargetsRunning) return;
                 _AsyncUpdateSourcesAndTargetsRunning = true;
+                CachedWelderCenter = _Welder.WorldAABB.Center;
                 Mod.AddAsyncAction(() => AsyncClusterScan(cluster, updateSource));
             }
         }
@@ -999,6 +1000,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (_AsyncUpdateSourcesAndTargetsRunning) return;
                 _AsyncUpdateSourcesAndTargetsRunning = true;
+                CachedWelderCenter = _Welder.WorldAABB.Center;
                 Mod.AddAsyncAction(() => AsyncApplyClusterResults(cluster, updateSource));
             }
         }
