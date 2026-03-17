@@ -63,9 +63,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             if (block == null)
                 return (int)BlockClass.ArmorBlock;
 
-            // Check cache.
+            // Check cache. Negate key when real=false so both variants are cached independently.
+            var cacheKey = real ? block.EntityId : -block.EntityId;
             int result = 14;
-            if (!_HashDirty && GetItemKeyCache.TryGet(block.EntityId, out result))
+            if (!_HashDirty && GetItemKeyCache.TryGet(cacheKey, out result))
             {
                 return result;
             }
@@ -95,7 +96,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             else if (functionalBlock != null) result = (int)BlockClass.FunctionalBlock;
             else result = (int)BlockClass.ArmorBlock;
 
-            GetItemKeyCache.Set(block.EntityId, result);
+            GetItemKeyCache.Set(cacheKey, result);
             return result;
         }
 
