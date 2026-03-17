@@ -7,7 +7,7 @@ using SpaceEngineers.Game.ModAPI;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
+
 using VRage;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -17,6 +17,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 {
     public static class SafeZoneHandler
     {
+        private static readonly List<MySafeZone> EmptyZoneList = new List<MySafeZone>();
+
         public static readonly ConcurrentDictionary<long, MySafeZone> Zones = new ConcurrentDictionary<long, MySafeZone>();
 
         private static readonly TtlCache<long, long> GridIntersectingZones = new TtlCache<long, long>(
@@ -162,23 +164,33 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static List<MySafeZone> GetSafeZonesInRange(IMyCubeGrid targetGrid, int range, int take = 2)
         {
-            if (Zones.Count == 0) return new List<MySafeZone>();
+            if (Zones.Count == 0) return EmptyZoneList;
 
-            var zones = Zones.Values.Where(z =>
+            List<MySafeZone> result = null;
+            var gridCenter = targetGrid.WorldAABB.Center;
+            var count = 0;
+
+            foreach (var kvp in Zones)
             {
-                if (z != null && !z.Closed && !z.MarkedForClose && z.Enabled)
-                {
-                    double distance = Vector3D.Distance(targetGrid.WorldAABB.Center, z.PositionComp.WorldAABB.Center);
-                    if (distance <= range)
-                    {
-                        return true;
-                    }
-                }
+                var z = kvp.Value;
+                if (z == null || z.Closed || z.MarkedForClose || !z.Enabled)
+                    continue;
 
-                return false;
-            }).Take(take).ToList();
+                var distance = Vector3D.Distance(gridCenter, z.PositionComp.WorldAABB.Center);
+                if (distance > range)
+                    continue;
 
-            return zones;
+                if (result == null)
+                    result = new List<MySafeZone>(take);
+
+                result.Add(z);
+                count++;
+
+                if (count >= take)
+                    break;
+            }
+
+            return result ?? EmptyZoneList;
         }
 
         public static MySafeZone GetIntersectingSafeZone(IMyCubeGrid targetGrid)
