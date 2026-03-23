@@ -7,7 +7,7 @@ using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.Linq;
+using System.Collections.Generic;
 using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
@@ -18,11 +18,11 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public partial class NanobotSystem
     {
-        private void ServerTryWelding(out bool welding, out bool needwelding, out bool transporting, out IMySlimBlock currentWeldingBlock)
+        private void ServerTryWelding(out bool welding, out bool needWelding, out bool transporting, out IMySlimBlock currentWeldingBlock)
         {
             var profilerTs = MethodProfiler.Start();
             welding = false;
-            needwelding = false;
+            needWelding = false;
             transporting = false;
             currentWeldingBlock = null;
             var hadLockOn = State.CurrentWeldingBlock != null;
@@ -119,18 +119,17 @@ namespace SKONanobotBuildAndRepairSystem
                                 var blockPriority = BlockWeldPriority.GetPriority(targetData.Block);
                                 if (blockPriority > 0 && blockPriority < 64 && (starvedPriorityBits & (1L << blockPriority)) != 0)
                                 {
-                                    needwelding = true;
+                                    needWelding = true;
                                     starvedSkipped++;
                                     continue;
                                 }
                             }
 
-                            if (!Mod.Settings.DisableLimitSystemsPerTargetGrid && Settings.CurrentPickedWeldingBlock == null)
+                            if (Settings.CurrentPickedWeldingBlock == null)
                             {
                                 var gridId = targetData.Block.CubeGrid.EntityId;
-                                if (gridId == lastRejectedGridId || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+                                if (IsGridOverSystemLimit(gridId, ref lastRejectedGridId))
                                 {
-                                    lastRejectedGridId = gridId;
                                     skippedByGridLimit++;
                                     continue;
                                 }
@@ -148,7 +147,7 @@ namespace SKONanobotBuildAndRepairSystem
                             targetData.Block.AssignToSystem(_Welder.EntityId);
                         }
 
-                        needwelding = true;
+                        needWelding = true;
 
                         if (lookingForNext)
                         {
@@ -259,7 +258,7 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 var _welding = welding;
-                var _needwelding = needwelding;
+                var _needWelding = needWelding;
                 var _transporting = transporting;
                 var _targetCount = State.PossibleWeldTargets.CurrentCount;
                 var _hadLockOn = hadLockOn;
@@ -276,7 +275,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var _lookingForNextChecked = lookingForNextChecked;
                 MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
                     string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17}",
-                        _Welder.EntityId, _welding, _needwelding, _transporting, _targetCount,
+                        _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
                         State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
                         _hadLockOn, _lockOnFound, _lockOnLost,
                         _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _componentFailures,
@@ -457,7 +456,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 var remainingVolume = _MaxTransportVolume;
                 _TempMissingComponents.Clear();
-                var picked = false; ;
+                var picked = false;
                 var cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;
 
                 if ((targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0)
@@ -472,7 +471,8 @@ namespace SKONanobotBuildAndRepairSystem
                             if (((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) == 0) || !IsColorNearlyEquals(Settings.IgnoreColorPacked, targetData.Block.GetColorMask()))
                             {
                                 //Block could be created and should be welded -> so retrieve the remaining material also
-                                var keyValue = _TempMissingComponents.ElementAt(0);
+                                KeyValuePair<string, int> keyValue = default(KeyValuePair<string, int>);
+                                foreach (var kv in _TempMissingComponents) { keyValue = kv; break; }
                                 _TempMissingComponents.Clear();
 
                                 targetData.Block.GetMissingComponents(_TempMissingComponents, ((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) == 0) ? UtilsInventory.IntegrityLevel.Complete : UtilsInventory.IntegrityLevel.Functional);

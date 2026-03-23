@@ -17,7 +17,7 @@ namespace SKONanobotBuildAndRepairSystem.Collections
             {
                 result.Add(new SyncTargetEntityData() { Entity = SyncEntityId.GetSyncId(item.Block), Distance = item.Distance });
                 idx++;
-                if (idx > SyncBlockState.MaxSyncItems) break;
+                if (idx >= SyncBlockState.MaxSyncItems) break;
             }
             return result;
         }

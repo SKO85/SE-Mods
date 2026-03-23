@@ -22,11 +22,11 @@ namespace SKONanobotBuildAndRepairSystem
             var limitsExceeded = State.LimitsExceeded;
 
             var welding = false;
-            var needwelding = false;
+            var needWelding = false;
             var grinding = false;
-            var needgrinding = false;
+            var needGrinding = false;
             var collecting = false;
-            var needcollecting = false;
+            var needCollecting = false;
             var transporting = false;
 
             if (_Welder.Closed || _Welder.MarkedForClose)
@@ -65,14 +65,7 @@ namespace SKONanobotBuildAndRepairSystem
                     // BUG-015: Proactively detect full welder inventory after push attempt.
                     // If welder is full and we couldn't push, mark inventory full early
                     // so grinding/collecting are blocked before wasting a cycle.
-                    if (!State.InventoryFull && !CreativeModeActive)
-                    {
-                        var welderInventory = _Welder.GetInventory(0);
-                        if (welderInventory != null && (float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
-                        {
-                            State.InventoryFull = true;
-                        }
-                    }
+                    CheckAndUpdateInventoryFull();
 
                     if (isFullInventoryAndPicking)
                     {
@@ -88,12 +81,12 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (transporting && State.CurrentTransportIsPick)
                     {
-                        if (State.CurrentTransportIsCollecting) needcollecting = true;
-                        else needgrinding = true;
+                        if (State.CurrentTransportIsCollecting) needCollecting = true;
+                        else needGrinding = true;
                     }
 
                     if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
-                        ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
+                        ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);
 
                     if (!transporting)
                     {
@@ -107,44 +100,44 @@ namespace SKONanobotBuildAndRepairSystem
                         switch (Settings.WorkMode)
                         {
                             case WorkModes.WeldBeforeGrind:
-                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
                                 if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
                                 {
-                                    primaryStuck = needwelding && !welding;
-                                    ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                    primaryStuck = needWelding && !welding;
+                                    ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
                                 }
                                 break;
 
                             case WorkModes.GrindBeforeWeld:
-                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
                                 if (!(grinding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
                                 {
-                                    primaryStuck = needgrinding && !grinding;
-                                    ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                    primaryStuck = needGrinding && !grinding;
+                                    ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
                                 }
                                 break;
 
                             case WorkModes.GrindIfWeldGetStuck:
-                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
                                 if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
                                 {
-                                    ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                    ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
                                 }
                                 break;
 
                             case WorkModes.WeldOnly:
-                                ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
+                                ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
                                 break;
 
                             case WorkModes.GrindOnly:
-                                ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
+                                ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
                                 break;
                         }
                         State.MissingComponents.RebuildHash();
                     }
 
                     if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding)
-                        ServerTryCollectingFloatingTargets(out collecting, out needcollecting, out transporting);
+                        ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);
                 }
             }
             else
@@ -194,26 +187,26 @@ namespace SKONanobotBuildAndRepairSystem
             // When transporting components for welding (delivery, not a pick), preserve the
             // previous NeedWelding state so the "Blocks to Build" panel remains visible and
             // MissingComponents doesn't flicker while the transport timer is ticking.
-            if (transporting && !State.CurrentTransportIsPick && !needwelding && State.NeedWelding)
+            if (transporting && !State.CurrentTransportIsPick && !needWelding && State.NeedWelding)
             {
-                needwelding = State.NeedWelding;
+                needWelding = State.NeedWelding;
                 currentWeldingBlock = State.CurrentWeldingBlock;
             }
 
             var readyChanged = State.Ready != ready;
             var weldingChanged = State.Welding != welding;
-            var needWeldingChanged = State.NeedWelding != needwelding;
+            var needWeldingChanged = State.NeedWelding != needWelding;
             var grindingChanged = State.Grinding != grinding;
-            var needGrindingChanged = State.NeedGrinding != needgrinding;
-            var needCollectingChanged = State.NeedCollecting != needcollecting;
+            var needGrindingChanged = State.NeedGrinding != needGrinding;
+            var needCollectingChanged = State.NeedCollecting != needCollecting;
             State.Ready = ready;
             State.Welding = welding;
-            State.NeedWelding = needwelding;
+            State.NeedWelding = needWelding;
             State.CurrentWeldingBlock = currentWeldingBlock;
 
             State.Grinding = grinding;
-            State.NeedGrinding = needgrinding;
-            State.NeedCollecting = needcollecting;
+            State.NeedGrinding = needGrinding;
+            State.NeedCollecting = needCollecting;
             State.CurrentGrindingBlock = currentGrindingBlock;
 
             var transportChanged = State.Transporting != transporting;
@@ -301,6 +294,38 @@ namespace SKONanobotBuildAndRepairSystem
                 count--;
 
             return count;
+        }
+
+        /// <summary>
+        /// Checks the welder inventory and sets State.InventoryFull if at capacity.
+        /// Shared by Operations (pre-weld/grind) and Collecting (pre-collect).
+        /// </summary>
+        private void CheckAndUpdateInventoryFull()
+        {
+            if (!State.InventoryFull && !CreativeModeActive)
+            {
+                var welderInventory = _Welder.GetInventory(0);
+                if (welderInventory != null && (float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
+                {
+                    State.InventoryFull = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the grid has reached the MaxSystemsPerTargetGrid limit
+        /// and should be skipped. Updates lastRejectedGridId for fast skip on subsequent
+        /// blocks from the same grid.
+        /// </summary>
+        private bool IsGridOverSystemLimit(long gridId, ref long lastRejectedGridId)
+        {
+            if (Mod.Settings.DisableLimitSystemsPerTargetGrid) return false;
+            if (gridId == lastRejectedGridId || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+            {
+                lastRejectedGridId = gridId;
+                return true;
+            }
+            return false;
         }
     }
 }

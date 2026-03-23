@@ -15,7 +15,7 @@ namespace SKONanobotBuildAndRepairSystem.Collections
             {
                 result.Add(new SyncComponents() { Component = item.Key, Amount = item.Value });
                 idx++;
-                if (idx > SyncBlockState.MaxSyncItems) break;
+                if (idx >= SyncBlockState.MaxSyncItems) break;
             }
             return result;
         }

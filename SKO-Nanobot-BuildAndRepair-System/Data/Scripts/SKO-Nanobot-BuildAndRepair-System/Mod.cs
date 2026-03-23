@@ -201,8 +201,9 @@ namespace SKONanobotBuildAndRepairSystem
 
         protected override void UnloadData()
         {
-            // Wait until tasks finish.
-            while (true)
+            // Wait until background tasks finish (with timeout to prevent game freeze).
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (DateTime.UtcNow < deadline)
             {
                 int actualBackgroundTaskCount;
                 lock (AsynActions)

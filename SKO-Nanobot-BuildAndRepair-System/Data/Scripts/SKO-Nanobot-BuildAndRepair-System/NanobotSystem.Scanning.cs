@@ -318,16 +318,16 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 var criticalIntegrityRatio = ((MyCubeBlockDefinition)block.BlockDefinition).CriticalIntegrityRatio;
                 var ownershipIntegrityRatio = ((MyCubeBlockDefinition)block.BlockDefinition).OwnershipIntegrityRatio > 0 ? ((MyCubeBlockDefinition)block.BlockDefinition).OwnershipIntegrityRatio : criticalIntegrityRatio;
-                var integrityRation = block.Integrity / block.MaxIntegrity;
+                var integrityRatio = block.Integrity / block.MaxIntegrity;
 
                 if (autoGrind && ((autoGrindOptions & AutoGrindOptions.DisableOnly) != 0))
                 {
-                    autoGrind = block.FatBlock != null && integrityRation > criticalIntegrityRatio;
+                    autoGrind = block.FatBlock != null && integrityRatio > criticalIntegrityRatio;
                 }
 
                 if (autoGrind && ((autoGrindOptions & AutoGrindOptions.HackOnly) != 0))
                 {
-                    autoGrind = block.FatBlock != null && integrityRation > ownershipIntegrityRatio;
+                    autoGrind = block.FatBlock != null && integrityRatio > ownershipIntegrityRatio;
                 }
             }
 

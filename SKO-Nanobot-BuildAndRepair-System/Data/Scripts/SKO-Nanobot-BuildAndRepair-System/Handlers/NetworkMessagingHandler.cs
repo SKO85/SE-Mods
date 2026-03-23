@@ -84,7 +84,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModDataRequest>(data);
                 MsgModSettingsSend(msgRcv.SteamId);
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "ServerMsgDataRequestReceived: {0}", ex.Message); }
         }
 
         private static void ServerMsgBlockDataRequestReceived(ushort id, byte[] data, ulong sender, bool fromServer)
@@ -105,7 +105,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     if (Logging.Instance.ShouldLog(Logging.Level.Error)) Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockDataRequestReceived for unknown system SteamId{0} EntityId={1}", msgRcv.SteamId, msgRcv.EntityId);
                 }
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "ServerMsgBlockDataRequestReceived: {0}", ex.Message); }
         }
 
         private static void ServerMsgModCommandReceived(ushort id, byte[] data, ulong sender, bool fromServer)
@@ -289,7 +289,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncModSettingsSend failed");
                 }
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgModSettingsSend: {0}", ex.Message); }
         }
 
         public static void MsgDataRequestSend()
@@ -308,7 +308,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_MOD_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgDataRequestSend: {0}", ex.Message); }
         }
 
         public static void MsgBlockSettingsSend(ulong steamId, NanobotSystem block)
@@ -345,7 +345,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockSettingsSend failed", Logging.BlockName(block.Entity, Logging.BlockNameOptions.None));
                 }
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgBlockSettingsSend: {0}", ex.Message); }
         }
 
         public static void MsgBlockStateSend(ulong steamId, NanobotSystem system)
@@ -409,7 +409,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgBlockDataRequestSend: {0}", ex.Message); }
         }
 
         public static void MsgModCommandSend(string command)
@@ -429,7 +429,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_MOD_COMMAND_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgModCommandSend: {0}", ex.Message); }
         }
 
         internal static void SendCommandResponse(ulong steamId, string message, bool isError, bool useMissionScreen, string screenTitle, string screenSubtitle)
@@ -447,7 +447,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 MyAPIGateway.Multiplayer.SendMessageTo(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(response), steamId, true);
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SendCommandResponse: {0}", ex.Message); }
         }
 
         #endregion Send Handlers

@@ -21,7 +21,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             if (system.CreativeModeActive) return true;
 
             var required = ComputeRequiredElectricPower(system);
-            var maxAvailable = GetAvailablePower(system); ;
+            var maxAvailable = GetAvailablePower(system);
 
             if (maxAvailable >= required)
             {

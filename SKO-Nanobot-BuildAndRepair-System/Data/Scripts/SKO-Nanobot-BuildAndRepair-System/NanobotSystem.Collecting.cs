@@ -13,11 +13,11 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public partial class NanobotSystem
     {
-        private void ServerTryCollectingFloatingTargets(out bool collecting, out bool needcollecting, out bool transporting)
+        private void ServerTryCollectingFloatingTargets(out bool collecting, out bool needCollecting, out bool transporting)
         {
             var profilerTs = MethodProfiler.Start();
             collecting = false;
-            needcollecting = false;
+            needCollecting = false;
             transporting = false;
             try
             {
@@ -26,14 +26,7 @@ namespace SKONanobotBuildAndRepairSystem
             // BUG-018: Guard against collecting when welder inventory is full.
             // State.InventoryFull may not reflect the actual welder state yet (e.g. after
             // world reload or when the welder is nearly-full but not at exact MaxVolume).
-            if (!State.InventoryFull && !CreativeModeActive)
-            {
-                var welderInventory = _Welder.GetInventory(0);
-                if (welderInventory != null && (float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
-                {
-                    State.InventoryFull = true;
-                }
-            }
+            CheckAndUpdateInventoryFull();
             if (State.InventoryFull) return;
 
             lock (State.PossibleFloatingTargets)
@@ -44,7 +37,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (targetData.Entity != null && !targetData.Ignore)
                     {
-                        needcollecting = true;
+                        needCollecting = true;
                         var added = ServerDoCollectFloating(targetData, out transporting, ref collectingFirstTarget);
                         if (targetData.Ignore) State.PossibleFloatingTargets.ChangeHash();
                         collecting |= added;
@@ -62,12 +55,12 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 var _collecting = collecting;
-                var _needcollecting = needcollecting;
+                var _needCollecting = needCollecting;
                 var _transporting = transporting;
                 var _targetCount = State.PossibleFloatingTargets.CurrentCount;
                 MethodProfiler.StopAndLog("ServerTryCollectingFloatingTargets", profilerTs, () =>
                     string.Format("entityId={0};collecting={1};needCollecting={2};transporting={3};targets={4}",
-                        _Welder.EntityId, _collecting, _needcollecting, _transporting, _targetCount));
+                        _Welder.EntityId, _collecting, _needCollecting, _transporting, _targetCount));
             }
         }
 

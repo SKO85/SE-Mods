@@ -33,7 +33,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
            comparer: null,
            capacity: 100);
 
-        private static readonly TtlCache<MyTuple<long, long>, bool> ProtectedFromGindingCache = new TtlCache<MyTuple<long, long>, bool>(
+        private static readonly TtlCache<MyTuple<long, long>, bool> ProtectedFromGrindingCache = new TtlCache<MyTuple<long, long>, bool>(
            defaultTtl: TimeSpan.FromSeconds(15),
            concurrencyLevel: 4,
            comparer: new MyTupleComparer<long, long>(),
@@ -76,10 +76,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 CleanupStaleZones();
                 GridIntersectingZones.CleanupExpired();
-                ProtectedFromGindingCache.CleanupExpired();
+                ProtectedFromGrindingCache.CleanupExpired();
                 BlockIntersectingZones.CleanupExpired();
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.GetSafeZones: {0}", ex.Message); }
             finally
             {
                 var _zoneCount = Zones.Count;
@@ -101,7 +101,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             Zones?.Clear();
             GridIntersectingZones.Clear();
-            ProtectedFromGindingCache.Clear();
+            ProtectedFromGrindingCache.Clear();
             BlockIntersectingZones.Clear();
 
             _registered = false;
@@ -119,7 +119,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Zones[sz.EntityId] = sz;
                 }
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.OnEntityAdd: {0}", ex.Message); }
         }
 
         private static void OnEntityRemove(IMyEntity ent)
@@ -133,7 +133,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Zones.TryRemove(sz.EntityId, out removed);
                 }
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.OnEntityRemove: {0}", ex.Message); }
         }
 
         /// <summary>
@@ -405,7 +405,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.GetActionsAllowedForSystem: {0}", ex.Message); }
 
             return response;
         }
@@ -414,7 +414,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             if (targetBlock != null && targetBlock.FatBlock != null)
             {
-                ProtectedFromGindingCache.Set(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlockId), isProtected);
+                ProtectedFromGrindingCache.Set(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlockId), isProtected);
             }
         }
 
@@ -432,7 +432,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 if (targetBlock.FatBlock != null)
                 {
                     var isProtected = false;
-                    if (ProtectedFromGindingCache.TryGet(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlock.EntityId), out isProtected))
+                    if (ProtectedFromGrindingCache.TryGet(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlock.EntityId), out isProtected))
                     {
                         cacheHit = true;
                         return isProtected;

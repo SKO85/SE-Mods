@@ -14,11 +14,11 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public partial class NanobotSystem
     {
-        private void ServerTryGrinding(out bool grinding, out bool needgrinding, out bool transporting, out IMySlimBlock currentGrindingBlock)
+        private void ServerTryGrinding(out bool grinding, out bool needGrinding, out bool transporting, out IMySlimBlock currentGrindingBlock)
         {
             var profilerTs = MethodProfiler.Start();
             grinding = false;
-            needgrinding = false;
+            needGrinding = false;
             transporting = false;
             currentGrindingBlock = null;
             try
@@ -34,17 +34,14 @@ namespace SKONanobotBuildAndRepairSystem
                 long lastRejectedGridId = 0;
                 foreach (var targetData in State.PossibleGrindTargets)
                 {
-                    if (targetData.Block != null && targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed)
-                    {
-                        continue;
-                    }
+                    if (targetData.Block == null) continue;
+                    if (targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed) continue;
 
-                    if (!Mod.Settings.DisableLimitSystemsPerTargetGrid && Settings.CurrentPickedGrindingBlock == null)
+                    if (Settings.CurrentPickedGrindingBlock == null)
                     {
                         var gridId = targetData.Block.CubeGrid.EntityId;
-                        if (gridId == lastRejectedGridId || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+                        if (IsGridOverSystemLimit(gridId, ref lastRejectedGridId))
                         {
-                            lastRejectedGridId = gridId;
                             continue;
                         }
                     }
@@ -61,7 +58,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (!targetData.Block.IsDestroyed)
                     {
-                        needgrinding = true;
+                        needGrinding = true;
 
                         // OPT 3: Global grind budget — cap ServerDoGrind calls per tick.
                         if (!Mod.TryClaimGrindSlot())
@@ -104,12 +101,12 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 var _grinding = grinding;
-                var _needgrinding = needgrinding;
+                var _needGrinding = needGrinding;
                 var _transporting = transporting;
                 var _targetCount = State.PossibleGrindTargets.CurrentCount;
                 MethodProfiler.StopAndLog("ServerTryGrinding", profilerTs, () =>
                     string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5}",
-                        _Welder.EntityId, _grinding, _needgrinding, _transporting, _targetCount,
+                        _Welder.EntityId, _grinding, _needGrinding, _transporting, _targetCount,
                         State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none"));
             }
         }
