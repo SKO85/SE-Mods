@@ -82,6 +82,11 @@ namespace SKONanobotBuildAndRepairSystem
         private List<IMyInventory> _TempPossibleSources = new List<IMyInventory>();
         private List<IMyInventory> _TempPossiblePushTargets = new List<IMyInventory>();
 
+        // Reusable pools for TruncateGridAware — avoids 8 allocations per ApplyClusterResultToSelf call.
+        private HashSet<long> _truncateGridIds = new HashSet<long>();
+        private Dictionary<long, int> _truncateKeptPerGrid = new Dictionary<long, int>();
+        private List<TargetBlockData> _truncateKept = new List<TargetBlockData>();
+        private List<TargetBlockData> _truncateOverflow = new List<TargetBlockData>();
 
         /// <summary>
         /// Tracks grids that were scanned and had no weld/grind targets.

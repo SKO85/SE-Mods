@@ -4,6 +4,7 @@ using SKONanobotBuildAndRepairSystem.Cluster;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Localization;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Text;
@@ -21,9 +22,17 @@ namespace SKONanobotBuildAndRepairSystem
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             if (_UpdateCustomInfoNeeded && (playTime.Subtract(_UpdateCustomInfoLast).TotalSeconds >= 1))
             {
-                _Welder.RefreshCustomInfo();
-
-                TriggerTerminalRefresh();
+                var profilerTs = MethodProfiler.Start();
+                try
+                {
+                    _Welder.RefreshCustomInfo();
+                    TriggerTerminalRefresh();
+                }
+                finally
+                {
+                    MethodProfiler.StopAndLog("UpdateCustomInfo", profilerTs, () =>
+                        string.Format("entityId={0}", _Welder.EntityId));
+                }
 
                 _UpdateCustomInfoLast = playTime;
                 _UpdateCustomInfoNeeded = false;

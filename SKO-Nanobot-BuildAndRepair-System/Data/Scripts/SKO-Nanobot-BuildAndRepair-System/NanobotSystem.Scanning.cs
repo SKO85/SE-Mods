@@ -250,19 +250,11 @@ namespace SKONanobotBuildAndRepairSystem
                 return false;
             }
 
-            if ((MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode) && !MyAPIGateway.Session.SessionSettings.DestructibleBlocks)
-            {
-                return false;
-            }
+            // Scenario/destructible and grid immunity checks are pre-computed per-grid
+            // in AsyncAddBlocksOfGrid (grindTargetsForGrid=null skips grind entirely).
 
             if (block.IsProjected())
                 return false;
-
-            var cubeGrid = block.CubeGrid as MyCubeGrid;
-            if (cubeGrid != null && (!cubeGrid.DestructibleBlocks || cubeGrid.Immune))
-            {
-                return false;
-            }
 
             var autoGrind = autoGrindRelation != 0 && BlockGrindPriority.GetEnabled(block);
             if (autoGrind)
@@ -394,6 +386,26 @@ namespace SKONanobotBuildAndRepairSystem
             var weldBefore = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
             var grindBefore = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
 
+            // Pre-compute grid-level grind eligibility so per-block checks are skipped entirely
+            // when the grid can't be ground (scenario mode, indestructible, immune).
+            var grindTargetsForGrid = clusterGrindTargets;
+            if (grindTargetsForGrid != null)
+            {
+                if ((MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode)
+                    && !MyAPIGateway.Session.SessionSettings.DestructibleBlocks)
+                {
+                    grindTargetsForGrid = null;
+                }
+                else
+                {
+                    var myCubeGrid = cubeGrid as MyCubeGrid;
+                    if (myCubeGrid != null && (!myCubeGrid.DestructibleBlocks || myCubeGrid.Immune))
+                    {
+                        grindTargetsForGrid = null;
+                    }
+                }
+            }
+
             var newBlocks = GetBlocksFromCache(cubeGrid);
 
             foreach (var slimBlock in newBlocks)
@@ -403,7 +415,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // Collect all qualifying candidates from this grid (no per-grid cap during iteration).
                 // The per-grid budget is enforced after iteration via sort+truncate so that the
                 // BEST candidates (by priority+distance) are retained, not arbitrary ones.
-                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, grindTargetsForGrid, maxWeld, maxGrind, skipRangeCheck);
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -1019,71 +1031,71 @@ namespace SKONanobotBuildAndRepairSystem
         /// from multiple grids. Each grid gets a guaranteed minimum number of slots
         /// so that one dominant grid cannot crowd out all others after sorting.
         /// </summary>
-        private static void TruncateGridAware(List<TargetBlockData> list, int maxCount)
+        private void TruncateGridAware(List<TargetBlockData> list, int maxCount)
         {
             if (list.Count <= maxCount) return;
 
-            // Count distinct grids
-            var gridIds = new HashSet<long>();
+            // Count distinct grids (reuse pooled HashSet)
+            _truncateGridIds.Clear();
             for (int i = 0; i < list.Count; i++)
             {
-                gridIds.Add(list[i].Block.CubeGrid.EntityId);
+                _truncateGridIds.Add(list[i].Block.CubeGrid.EntityId);
             }
 
             // Single grid — simple truncation, no fairness needed
-            if (gridIds.Count <= 1)
+            if (_truncateGridIds.Count <= 1)
             {
                 list.RemoveRange(maxCount, list.Count - maxCount);
                 return;
             }
 
-            int numGrids = gridIds.Count;
+            int numGrids = _truncateGridIds.Count;
             int minPerGrid = Math.Max(maxCount / numGrids, 4);
 
-            // Track how many blocks we've kept per grid
-            var keptPerGrid = new Dictionary<long, int>(numGrids);
-            foreach (var id in gridIds)
+            // Track how many blocks we've kept per grid (reuse pooled Dictionary)
+            _truncateKeptPerGrid.Clear();
+            foreach (var id in _truncateGridIds)
             {
-                keptPerGrid[id] = 0;
+                _truncateKeptPerGrid[id] = 0;
             }
 
             // First pass: walk sorted list, keep items until each grid hits minPerGrid
             // or we fill up. Items beyond minPerGrid go to overflow for second pass.
-            var kept = new List<TargetBlockData>(maxCount);
-            var overflow = new List<TargetBlockData>();
+            _truncateKept.Clear();
+            _truncateOverflow.Clear();
 
             for (int i = 0; i < list.Count; i++)
             {
                 var item = list[i];
                 var gid = item.Block.CubeGrid.EntityId;
                 int count;
-                keptPerGrid.TryGetValue(gid, out count);
+                _truncateKeptPerGrid.TryGetValue(gid, out count);
 
                 if (count < minPerGrid)
                 {
-                    kept.Add(item);
-                    keptPerGrid[gid] = count + 1;
-                    if (kept.Count >= maxCount) break;
+                    _truncateKept.Add(item);
+                    _truncateKeptPerGrid[gid] = count + 1;
+                    if (_truncateKept.Count >= maxCount) break;
                 }
                 else
                 {
-                    overflow.Add(item);
+                    _truncateOverflow.Add(item);
                 }
             }
 
             // Second pass: fill remaining slots from overflow (already in sort order)
-            if (kept.Count < maxCount)
+            if (_truncateKept.Count < maxCount)
             {
-                int remaining = maxCount - kept.Count;
-                for (int i = 0; i < overflow.Count && remaining > 0; i++)
+                int remaining = maxCount - _truncateKept.Count;
+                for (int i = 0; i < _truncateOverflow.Count && remaining > 0; i++)
                 {
-                    kept.Add(overflow[i]);
+                    _truncateKept.Add(_truncateOverflow[i]);
                     remaining--;
                 }
             }
 
             list.Clear();
-            list.AddRange(kept);
+            list.AddRange(_truncateKept);
         }
 
         /// <summary>
@@ -1360,15 +1372,13 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
-                // Count unique grids in final target lists for profiler diagnostics
-                var weldGridCount = 0;
-                var grindGridCount = 0;
-                var countedGrids = new HashSet<long>();
-                foreach (var t in State.PossibleWeldTargets) countedGrids.Add(t.Block.CubeGrid.EntityId);
-                weldGridCount = countedGrids.Count;
-                countedGrids.Clear();
-                foreach (var t in State.PossibleGrindTargets) countedGrids.Add(t.Block.CubeGrid.EntityId);
-                grindGridCount = countedGrids.Count;
+                // Count unique grids using the pooled HashSet (no allocation)
+                _truncateGridIds.Clear();
+                foreach (var t in State.PossibleWeldTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
+                var weldGridCount = _truncateGridIds.Count;
+                _truncateGridIds.Clear();
+                foreach (var t in State.PossibleGrindTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
+                var grindGridCount = _truncateGridIds.Count;
 
                 MethodProfiler.StopAndLog("ApplyClusterResultToSelf", profilerTs, () =>
                     string.Format("entityId={0};weldTargets={1}(pre={2},grids={3});grindTargets={4}(pre={5},grids={6});floatingTargets={7}",
