@@ -61,14 +61,16 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         needGrinding = true;
 
-                        // OPT 3: Global grind budget — cap ServerDoGrind calls per tick.
+                        // OPT 3: Global grind budget — cap ServerDoGrind calls per tick (count + time).
                         if (!Mod.TryClaimGrindSlot())
                         {
                             if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
                             break;
                         }
 
+                        var grindTs = Stopwatch.GetTimestamp();
                         grinding = ServerDoGrind(targetData, out transporting);
+                        Mod.ReportGrindTime((Stopwatch.GetTimestamp() - grindTs) * 1000.0 / Stopwatch.Frequency);
 
                         if (grinding)
                         {

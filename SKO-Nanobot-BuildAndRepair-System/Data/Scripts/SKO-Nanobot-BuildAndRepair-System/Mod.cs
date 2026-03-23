@@ -98,9 +98,12 @@ namespace SKONanobotBuildAndRepairSystem
 
         // --- OPT 3: Global grind budget per tick ---
         // Caps total ServerDoGrind calls per tick across all BaRs.
-        // Settings.MaxGrindsPerTick: 0 = auto (based on BaR count), >0 = explicit override.
+        // Two budgets: count-based (MaxGrindsPerTick) and time-based (MaxGrindMsPerTick).
+        // The time budget prevents multiple expensive grinds from stacking in one frame.
         public const int MaxGrindsPerTickDefault = 10;
+        public const double MaxGrindMsPerTickDefault = 8.0;
         private static int _grindsThisTick;
+        private static double _grindMsThisTick;
         private static int _lastGrindBudgetTick = -1;
 
         public static int GetEffectiveMaxGrindsPerTick()
@@ -119,10 +122,20 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 _lastGrindBudgetTick = tick;
                 _grindsThisTick = 0;
+                _grindMsThisTick = 0.0;
             }
             if (_grindsThisTick >= GetEffectiveMaxGrindsPerTick()) return false;
+            if (_grindMsThisTick >= MaxGrindMsPerTickDefault) return false;
             _grindsThisTick++;
             return true;
+        }
+
+        /// <summary>
+        /// Called after each ServerDoGrind to accumulate time spent grinding this tick.
+        /// </summary>
+        public static void ReportGrindTime(double ms)
+        {
+            _grindMsThisTick += ms;
         }
 
         private bool _initialized = false;
