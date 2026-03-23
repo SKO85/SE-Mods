@@ -88,6 +88,10 @@ namespace SKONanobotBuildAndRepairSystem
         private List<TargetBlockData> _truncateKept = new List<TargetBlockData>();
         private List<TargetBlockData> _truncateOverflow = new List<TargetBlockData>();
 
+        // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
+        // Rebuilt by RebuildSaturatedGrids(), used as fast-path in IsGridOverSystemLimit().
+        private HashSet<long> _saturatedGridIds = new HashSet<long>();
+
         /// <summary>
         /// Tracks grids that were scanned and had no weld/grind targets.
         /// Key: grid EntityId, Value: playTime when grid was found empty.

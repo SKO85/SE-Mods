@@ -95,7 +95,10 @@ namespace SKONanobotBuildAndRepairSystem
 
                         if (!Mod.Settings.DisableLimitSystemsPerTargetGrid
                             && (State.PossibleWeldTargets.CurrentCount > 0 || State.PossibleGrindTargets.CurrentCount > 0))
+                        {
                             Mod.BuildGridSystemCountCache();
+                            RebuildSaturatedGrids();
+                        }
 
                         switch (Settings.WorkMode)
                         {
@@ -314,18 +317,37 @@ namespace SKONanobotBuildAndRepairSystem
 
         /// <summary>
         /// Returns true if the grid has reached the MaxSystemsPerTargetGrid limit
-        /// and should be skipped. Updates lastRejectedGridId for fast skip on subsequent
-        /// blocks from the same grid.
+        /// and should be skipped. Checks the precomputed saturated set first (O(1)),
+        /// then falls back to the per-block dictionary lookup for edge cases.
         /// </summary>
         private bool IsGridOverSystemLimit(long gridId, ref long lastRejectedGridId)
         {
             if (Mod.Settings.DisableLimitSystemsPerTargetGrid) return false;
-            if (gridId == lastRejectedGridId || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+            if (_saturatedGridIds.Contains(gridId)
+                || gridId == lastRejectedGridId
+                || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
             {
                 lastRejectedGridId = gridId;
                 return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// Precomputes the set of grids that are definitely over MaxSystemsPerTargetGrid.
+        /// Uses strictly-greater-than (>) because the cache includes this BaR's own count
+        /// and GetCachedSystemCountOnGrid subtracts at most 1 for self.
+        /// Called once per tick before weld/grind loops.
+        /// </summary>
+        private void RebuildSaturatedGrids()
+        {
+            _saturatedGridIds.Clear();
+            var limit = Mod.Settings.MaxSystemsPerTargetGrid;
+            foreach (var kvp in Mod.GridSystemCountCache)
+            {
+                if (kvp.Value > limit)
+                    _saturatedGridIds.Add(kvp.Key);
+            }
         }
     }
 }

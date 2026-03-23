@@ -294,13 +294,14 @@ namespace SKONanobotBuildAndRepairSystem
                 var _totalComponentChecks = totalComponentChecks;
                 var _lookingForNextChecked = lookingForNextChecked;
                 var _weldSkipped = weldSkipped;
+                var _saturatedGridCount = _saturatedGridIds.Count;
                 MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                    string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17};exhaustedSkip={18}",
+                    string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19}",
                         _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
                         State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
                         _hadLockOn, _lockOnFound, _lockOnLost,
                         _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _componentFailures,
-                        _starvedSkipped, _totalComponentChecks, _lookingForNextChecked, _weldSkipped));
+                        _starvedSkipped, _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount));
             }
         }
 
