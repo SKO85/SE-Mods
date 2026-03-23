@@ -131,7 +131,13 @@
     <Compile Include="Localization\TextsEnglish.cs" />
     <Compile Include="Models\TtlCache.cs" />
     <Compile Include="Constants.cs" />
-    <Compile Include="Handlers\ChatHandler.cs" />
+    <Compile Include="Chat\ChatHandler.cs" />
+    <Compile Include="Chat\ChatCommandResult.cs" />
+    <Compile Include="Chat\Commands\HelpCommand.cs" />
+    <Compile Include="Chat\Commands\SaveSettingsCommand.cs" />
+    <Compile Include="Chat\Commands\ProfileCommand.cs" />
+    <Compile Include="Chat\Commands\SimCommand.cs" />
+    <Compile Include="Chat\Commands\ConfigCommand.cs" />
     <Compile Include="Handlers\ComponentPriorityHandling.cs" />
     <Compile Include="Handlers\DamageHandler.cs" />
     <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />
@@ -150,6 +156,7 @@
     <Compile Include="Models\MsgBlockState.cs" />
     <Compile Include="Models\MsgDataRequest.cs" />
     <Compile Include="Models\MsgModCommand.cs" />
+    <Compile Include="Models\MsgModCommandResponse.cs" />
     <Compile Include="Models\MsgModSettings.cs" />
     <Compile Include="Models\SyncBlockSettings.cs" />
     <Compile Include="Models\SyncBlockState.cs" />

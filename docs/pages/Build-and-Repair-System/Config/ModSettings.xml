@@ -218,6 +218,11 @@
          blocks divide work instead of all targeting the same block. Set to false to disable. -->
     <AssignToSystemEnabled>true</AssignToSystemEnabled>
 
+    <!-- When true, the terminal custom info panel shows extra diagnostic information for all
+         Build and Repair blocks (sources, push targets, cluster details, scan timings).
+         Intended for testing and troubleshooting only — not for normal play. -->
+    <DebugMode>false</DebugMode>
+
     <!-- Number of consecutive 5-second push cycles with a full inventory and no active welding
          before the system automatically disables itself. Prevents a block with a backed-up
          conveyor network from endlessly attempting futile push operations. Range: 1–500. -->

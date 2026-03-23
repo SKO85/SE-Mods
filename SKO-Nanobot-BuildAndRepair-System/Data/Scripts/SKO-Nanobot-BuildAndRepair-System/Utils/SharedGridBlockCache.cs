@@ -14,7 +14,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
     /// </summary>
     public static class SharedGridBlockCache
     {
-        private const double CacheTtlSeconds = 4.0;
+        private const double CacheTtlSeconds = 0.5;
 
         private static readonly ConcurrentDictionary<long, TimeSpan> _timestamps =
             new ConcurrentDictionary<long, TimeSpan>();
@@ -29,40 +29,16 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         public static List<IMySlimBlock> GetBlocks(IMyCubeGrid grid)
         {
             var profilerTs = MethodProfiler.Start();
-            var gridId = grid.EntityId;
-            var now = MyAPIGateway.Session.ElapsedPlayTime;
-            var cacheHit = false;
-
             try
             {
-                // Check if we have a valid cached entry.
-                TimeSpan cachedTime;
-                List<IMySlimBlock> cachedList;
-                if (_timestamps.TryGetValue(gridId, out cachedTime)
-                    && (now - cachedTime).TotalSeconds < CacheTtlSeconds
-                    && _blocks.TryGetValue(gridId, out cachedList))
-                {
-                    cacheHit = true;
-                    // Return a copy — caller will filter/sort per-BaR.
-                    return new List<IMySlimBlock>(cachedList);
-                }
-
-                // Cache miss — call the API once.
                 var freshList = new List<IMySlimBlock>();
                 grid.GetBlocks(freshList);
-
-                _blocks[gridId] = freshList;
-                _timestamps[gridId] = now;
-
-                // Return a copy for the caller.
-                return new List<IMySlimBlock>(freshList);
+                return freshList;
             }
             finally
             {
-                var _gridId = gridId;
-                var _hit = cacheHit;
                 MethodProfiler.StopAndLog("SharedGridBlockCache.GetBlocks", profilerTs, () =>
-                    string.Format("gridId={0};cacheHit={1}", _gridId, _hit));
+                    string.Format("gridId={0}", grid.EntityId));
             }
         }
 

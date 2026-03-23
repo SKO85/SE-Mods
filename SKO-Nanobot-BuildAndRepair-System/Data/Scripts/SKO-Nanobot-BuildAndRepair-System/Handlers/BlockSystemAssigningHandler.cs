@@ -42,7 +42,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
 
             // Assign to this system.
-            Cache.Set(key, systemId);
+            Cache.Set(key, systemId, TimeSpan.FromSeconds(Mod.Settings.AssignmentTtlSeconds));
             return true;
         }
 

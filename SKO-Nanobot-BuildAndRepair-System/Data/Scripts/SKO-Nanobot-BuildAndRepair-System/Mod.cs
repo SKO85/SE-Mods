@@ -4,6 +4,7 @@ namespace SKONanobotBuildAndRepairSystem
     using Sandbox.Game.EntityComponents;
     using Sandbox.ModAPI;
     using SKONanobotBuildAndRepairSystem.Cluster;
+    using SKONanobotBuildAndRepairSystem.Chat;
     using SKONanobotBuildAndRepairSystem.Handlers;
     using SKONanobotBuildAndRepairSystem.Helpers;
     using SKONanobotBuildAndRepairSystem.Models;
@@ -55,13 +56,30 @@ namespace SKONanobotBuildAndRepairSystem
         // --- OPT 2: BaR update staggering ---
         // Distributes ServerTryWeldingGrindingCollecting() calls across StaggerGroupCount groups
         // so only ~N/StaggerGroupCount BaRs fire per tick instead of all N.
-        // Capped at 3 to keep max interval ~500ms (3 x ~167ms per 10-frame cycle).
-        public const int StaggerGroupCount = 3;
+        // Settings.StaggerGroupCount: 0 = auto (based on BaR count), >0 = explicit override.
+        public const int StaggerGroupCountDefault = 3;
         private static int _nextStaggerSlot;
+
+        public static int GetEffectiveStaggerGroupCount()
+        {
+            var configured = Settings.StaggerGroupCount;
+            if (configured > 0) return configured;
+            // Auto: scale with active (enabled + working) BaR count, not total placed blocks.
+            var active = 0;
+            foreach (var sys in NanobotSystems.Values)
+            {
+                if (sys.Welder != null && sys.Welder.IsWorking)
+                    active++;
+            }
+            if (active <= 4) return 1;
+            if (active <= 10) return 2;
+            return StaggerGroupCountDefault;
+        }
 
         public static int ClaimStaggerSlot()
         {
-            var slot = _nextStaggerSlot % StaggerGroupCount;
+            var groups = GetEffectiveStaggerGroupCount();
+            var slot = _nextStaggerSlot % groups;
             _nextStaggerSlot++;
             return slot;
         }
@@ -78,11 +96,20 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         // --- OPT 3: Global grind budget per tick ---
-        // Caps total ServerDoGrind calls per tick across all BaRs (default 10).
-        // Safety net: worst-case grind time capped at ~12.8ms/tick (10 x 1.28ms avg).
-        public const int MaxGrindsPerTick = 10;
+        // Caps total ServerDoGrind calls per tick across all BaRs.
+        // Settings.MaxGrindsPerTick: 0 = auto (based on BaR count), >0 = explicit override.
+        public const int MaxGrindsPerTickDefault = 10;
         private static int _grindsThisTick;
         private static int _lastGrindBudgetTick = -1;
+
+        public static int GetEffectiveMaxGrindsPerTick()
+        {
+            var configured = Settings.MaxGrindsPerTick;
+            if (configured > 0) return configured;
+            // Auto: scale with BaR count, minimum 5.
+            var total = NanobotSystems.Count;
+            return Math.Max(5, Math.Min(MaxGrindsPerTickDefault, total));
+        }
 
         public static bool TryClaimGrindSlot()
         {
@@ -92,7 +119,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _lastGrindBudgetTick = tick;
                 _grindsThisTick = 0;
             }
-            if (_grindsThisTick >= MaxGrindsPerTick) return false;
+            if (_grindsThisTick >= GetEffectiveMaxGrindsPerTick()) return false;
             _grindsThisTick++;
             return true;
         }
@@ -259,7 +286,15 @@ namespace SKONanobotBuildAndRepairSystem
                     // Start processing.
                     if (MyAPIGateway.Session.IsServer)
                     {
-                        MethodProfiler.TickAutoStop();
+                        string autoStopMsg;
+                        ulong autoStopSteamId;
+                        if (MethodProfiler.TickAutoStop(out autoStopMsg, out autoStopSteamId))
+                        {
+                            if (autoStopSteamId != 0 && MyAPIGateway.Multiplayer != null && MyAPIGateway.Multiplayer.MultiplayerActive)
+                                NetworkMessagingHandler.SendCommandResponse(autoStopSteamId, autoStopMsg, false, false, null, null);
+                            else if (MyAPIGateway.Utilities != null)
+                                MyAPIGateway.Utilities.ShowMessage("Nanobars", autoStopMsg);
+                        }
 
                         // Periodic ownership cache refresh
                         if (now.Subtract(_LastGeneralPeriodicCheck) >= TimeSpan.FromSeconds(10))

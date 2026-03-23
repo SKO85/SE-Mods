@@ -21,6 +21,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
         private static bool _isRunning;
         private static DateTime _startedUtc;
         private static DateTime? _autoStopUtc;
+        private static ulong _startedBySteamId;
 
         private static float _minSimSpeed = float.MaxValue;
         private static float _maxSimSpeed = float.MinValue;
@@ -105,6 +106,11 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
 
         public static bool StartSession(int autoStopSeconds, out string message)
         {
+            return StartSession(autoStopSeconds, 0, out message);
+        }
+
+        public static bool StartSession(int autoStopSeconds, ulong startedBySteamId, out string message)
+        {
             lock (_syncRoot)
             {
                 if (_isRunning)
@@ -127,6 +133,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 _sumSimSpeed = 0;
                 _simSpeedSamples = 0;
                 _isRunning = true;
+                _startedBySteamId = startedBySteamId;
                 _startedUtc = DateTime.UtcNow;
                 _autoStopUtc = autoStopSeconds > 0 ? _startedUtc.AddSeconds(autoStopSeconds) : (DateTime?)null;
                 message = autoStopSeconds > 0
@@ -157,35 +164,24 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             }
         }
 
-        public static void TickAutoStop()
+        public static bool TickAutoStop(out string message, out ulong steamId)
         {
-            string message;
-            if (TryAutoStop(out message))
-            {
-                MyLog.Default.WriteLineAndConsole("MethodProfiler: " + message);
-                var console = MyAPIGateway.Utilities;
-                if (console != null)
-                    console.ShowMessage("Nanobars", message);
-            }
-        }
-
-        private static bool TryAutoStop(out string message)
-        {
+            message = null;
+            steamId = 0;
             lock (_syncRoot)
             {
                 if (!_isRunning || !_autoStopUtc.HasValue || DateTime.UtcNow < _autoStopUtc.Value)
-                {
-                    message = null;
                     return false;
-                }
 
                 _isRunning = false;
                 var duration = DateTime.UtcNow - _startedUtc;
                 _autoStopUtc = null;
+                steamId = _startedBySteamId;
                 WriteSummary(duration);
                 WriteManifest();
                 CloseInternal();
                 message = string.Format("Profiling auto-stopped after {0:F1}s.", duration.TotalSeconds);
+                MyLog.Default.WriteLineAndConsole("MethodProfiler: " + message);
                 return true;
             }
         }

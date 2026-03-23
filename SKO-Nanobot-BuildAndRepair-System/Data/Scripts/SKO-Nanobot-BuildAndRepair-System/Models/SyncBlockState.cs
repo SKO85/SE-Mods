@@ -16,7 +16,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
     [ProtoContract(SkipConstructor = true, UseProtoMembersOnly = true)]
     public class SyncBlockState
     {
-        public const int MaxSyncItems = 16;
+        public const int MaxSyncItems = 64;
         private bool _Ready;
         private bool _Welding;
         private bool _NeedWelding;
@@ -441,6 +441,9 @@ namespace SKONanobotBuildAndRepairSystem.Models
             set { _SafeZoneAndShieldsChecked = value; }
         }
 
+        [ProtoMember(50)]
+        public byte ExcludedLists { get; set; }
+
         public SyncBlockState()
         {
             MissingComponents = new DefinitionIdHashDictionary();
@@ -461,13 +464,21 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
         internal SyncBlockState GetTransmit()
         {
+            // Always send full data — no delta optimization.
+            ExcludedLists = 0;
             _MissingComponentsSync = null;
             _PossibleWeldTargetsSync = null;
             _PossibleGrindTargetsSync = null;
             _PossibleFloatingTargetsSync = null;
+
             LastTransmitted = MyAPIGateway.Session.ElapsedPlayTime;
             Changed = false;
             return this;
+        }
+
+        internal void ForceFullTransmit()
+        {
+            Changed = true;
         }
 
         internal void AssignReceived(SyncBlockState newState)
@@ -499,80 +510,86 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 }
             }
 
-            PossibleWeldTargets.Clear();
-            var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
-
-            if (possibleWeldTargetsSync != null)
             {
-                foreach (var item in possibleWeldTargetsSync)
-                {
-                    if (item.Entity == null)
-                        continue;
+                PossibleWeldTargets.Clear();
+                var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
 
-                    if (item.Entity.EntityId == 0)
+                if (possibleWeldTargetsSync != null)
+                {
+                    foreach (var item in possibleWeldTargetsSync)
                     {
-                        IMyEntity gridEntity;
-                        if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
+                        if (item.Entity == null)
+                            continue;
+
+                        if (item.Entity.EntityId == 0)
                         {
-                            var grid = gridEntity as IMyCubeGrid;
-                            var block = grid?.GetCubeBlock(item.Entity.Position.Value);
-                            if (block != null)
+                            IMyEntity gridEntity;
+                            if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
                             {
-                                PossibleWeldTargets.Add(new TargetBlockData(block, item.Distance, 0));
+                                var grid = gridEntity as IMyCubeGrid;
+                                var block = grid?.GetCubeBlock(item.Entity.Position.Value);
+                                if (block != null)
+                                {
+                                    PossibleWeldTargets.Add(new TargetBlockData(block, item.Distance, 0));
+                                }
                             }
                         }
-                    }
-                    else
-                    {
-                        var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                        if (slimBlock != null)
-                            PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        else
+                        {
+                            var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                            if (slimBlock != null)
+                                PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        }
                     }
                 }
             }
 
-            PossibleGrindTargets.Clear();
-            var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
-
-            if (possibleGrindTargetsSync != null)
             {
-                foreach (var item in possibleGrindTargetsSync)
-                {
-                    if (item.Entity == null)
-                        continue;
+                PossibleGrindTargets.Clear();
+                var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
 
-                    if (item.Entity.EntityId == 0)
+                if (possibleGrindTargetsSync != null)
+                {
+                    foreach (var item in possibleGrindTargetsSync)
                     {
-                        IMyEntity gridEntity;
-                        if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
+                        if (item.Entity == null)
+                            continue;
+
+                        if (item.Entity.EntityId == 0)
                         {
-                            var grid = gridEntity as IMyCubeGrid;
-                            var block = grid?.GetCubeBlock(item.Entity.Position.Value);
-                            if (block != null)
+                            IMyEntity gridEntity;
+                            if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
                             {
-                                PossibleGrindTargets.Add(new TargetBlockData(block, item.Distance, 0));
+                                var grid = gridEntity as IMyCubeGrid;
+                                var block = grid?.GetCubeBlock(item.Entity.Position.Value);
+                                if (block != null)
+                                {
+                                    PossibleGrindTargets.Add(new TargetBlockData(block, item.Distance, 0));
+                                }
                             }
                         }
-                    }
-                    else
-                    {
-                        var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                        if (slimBlock != null)
-                            PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        else
+                        {
+                            var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                            if (slimBlock != null)
+                                PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        }
                     }
                 }
             }
 
-            PossibleFloatingTargets.Clear();
-            var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
-
-            if (possibleFloatingTargetsSync != null)
             {
-                foreach (var item in possibleFloatingTargetsSync)
+                PossibleFloatingTargets.Clear();
+                var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
+
+                if (possibleFloatingTargetsSync != null)
                 {
-                    var floatingObj = SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity);
-                    if (floatingObj != null)
-                        PossibleFloatingTargets.Add(new TargetEntityData(floatingObj, item.Distance));
+                    foreach (var item in possibleFloatingTargetsSync)
+                    {
+                        var floatingObj = SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity);
+                        if (floatingObj != null)
+                            PossibleFloatingTargets.Add(new TargetEntityData(floatingObj, item.Distance));
+                    }
                 }
             }
 

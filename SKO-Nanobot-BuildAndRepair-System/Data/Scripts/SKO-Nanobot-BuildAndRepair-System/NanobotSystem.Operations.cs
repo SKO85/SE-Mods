@@ -15,6 +15,7 @@ namespace SKONanobotBuildAndRepairSystem
         private void ServerTryWeldingGrindingCollecting()
         {
             var profilerTs = MethodProfiler.Start();
+            var primaryStuck = false;
             try
             {
             var inventoryFull = State.InventoryFull;
@@ -99,23 +100,26 @@ namespace SKONanobotBuildAndRepairSystem
                         State.MissingComponents.Clear();
                         State.LimitsExceeded = false;
 
-                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid)
+                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid
+                            && (State.PossibleWeldTargets.CurrentCount > 0 || State.PossibleGrindTargets.CurrentCount > 0))
                             Mod.BuildGridSystemCountCache();
 
                         switch (Settings.WorkMode)
                         {
                             case WorkModes.WeldBeforeGrind:
                                 ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
-                                if (!needwelding || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
+                                if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
                                 {
+                                    primaryStuck = needwelding && !welding;
                                     ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
                                 }
                                 break;
 
                             case WorkModes.GrindBeforeWeld:
                                 ServerTryGrinding(out grinding, out needgrinding, out transporting, out currentGrindingBlock);
-                                if (!needgrinding || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
+                                if (!(grinding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
                                 {
+                                    primaryStuck = needgrinding && !grinding;
                                     ServerTryWelding(out welding, out needwelding, out transporting, out currentWeldingBlock);
                                 }
                                 break;
@@ -230,7 +234,8 @@ namespace SKONanobotBuildAndRepairSystem
             var possibleFloatingTargetsChanged = State.PossibleFloatingTargets.LastHash != State.PossibleFloatingTargets.CurrentHash;
             State.PossibleFloatingTargets.LastHash = State.PossibleFloatingTargets.CurrentHash;
 
-            if (missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged || transportChanged) State.HasChanged();
+            if (missingComponentsChanged || possibleWeldTargetsChanged || possibleGrindTargetsChanged || possibleFloatingTargetsChanged || transportChanged)
+                State.HasChanged();
 
             if (MyAPIGateway.Session.IsServer)
             {
@@ -260,12 +265,12 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 MethodProfiler.StopAndLog("ServerTryWeldingGrindingCollecting", profilerTs, () =>
-                    string.Format("entityId={0};workMode={1};welding={2};grinding={3};needCollecting={4};transporting={5};transportIsCollecting={6};weldTargets={7};grindTargets={8};floatingTargets={9};inventoryFull={10};scanReady={11};pushFull={12}",
+                    string.Format("entityId={0};workMode={1};welding={2};grinding={3};needCollecting={4};transporting={5};transportIsCollecting={6};weldTargets={7};grindTargets={8};floatingTargets={9};inventoryFull={10};scanReady={11};pushFull={12};primaryStuck={13}",
                         _Welder.EntityId, Settings.WorkMode, State.Welding, State.Grinding,
                         State.NeedCollecting, State.Transporting, State.CurrentTransportIsCollecting,
                         State.PossibleWeldTargets.CurrentCount, State.PossibleGrindTargets.CurrentCount,
                         State.PossibleFloatingTargets.CurrentCount, State.InventoryFull,
-                        _InitialScanCompleted, _PushTargetsFull));
+                        _InitialScanCompleted, _PushTargetsFull, primaryStuck));
             }
         }
 

@@ -118,6 +118,16 @@ namespace SKONanobotBuildAndRepairSystem
                     customInfo.Append(string.Format("Cluster: none{0}", Environment.NewLine));
                 }
                 customInfo.Append(string.Format("MaxSystems/Grid: {0} | EmptyGrids: {1}{2}", Mod.Settings.MaxSystemsPerTargetGrid, _EmptyGridCache.Count, Environment.NewLine));
+                var clusterMembers = cluster != null ? cluster.Members.Count : 1;
+                var staggerCap = Mod.GetEffectiveStaggerGroupCount();
+                var effectiveStagger = clusterMembers < 5 ? 1 : Math.Min(staggerCap, clusterMembers - 3);
+                customInfo.Append(string.Format("Total BaRs: {0} | Stagger: {1}/{2}{3} | GrindBudget: {4}{5}{6}",
+                    Mod.NanobotSystems.Count,
+                    effectiveStagger, staggerCap,
+                    Mod.Settings.StaggerGroupCount > 0 ? "" : " (auto)",
+                    Mod.GetEffectiveMaxGrindsPerTick(),
+                    Mod.Settings.MaxGrindsPerTick > 0 ? "" : " (auto)",
+                    Environment.NewLine));
             }
 
             customInfo.Append(Environment.NewLine);

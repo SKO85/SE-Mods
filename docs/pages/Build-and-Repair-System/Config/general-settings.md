@@ -49,8 +49,8 @@ Power values are in **MW**. These set the upper limit; actual draw scales with a
 | `DecreaseFactionReputationOnGrinding` | `true`      | When `true`, grinding grids belonging to other factions or NPCs causes a reputation penalty, matching the behaviour of manual grinding.                                                                                                                                                                                                                                                                              |
 | `DeleteBotsWhenDead`                  | `true`      | When `true`, NPC bot bodies are deleted when they die, preventing them from cluttering the world.                                                                                                                                                                                                                                                                                                                    |
 | `AssignToSystemEnabled`               | `true`      | When `true`, target blocks for welding and grinding are assigned to individual Build and Repair systems so that multiple systems divide work efficiently instead of all targeting the same block. For welding, if a block has the **Help Others** option enabled, the assignment is ignored and multiple systems may weld the same target block simultaneously. Set to `false` to disable the mechanism server-wide. |
-| `FriendlyDamageTimeoutTicks`          | `600000000` | Number of game ticks before a friendly-damage record expires. At 60 ticks per second this is approximately 115 days.                                                                                                                                                                                                                                                                                                 |
-| `FriendlyDamageCleanupTicks`          | `100000000` | Number of game ticks between friendly-damage record cleanup passes.                                                                                                                                                                                                                                                                                                                                                  |
+| `FriendlyDamageTimeoutTicks`          | `600000000` | How long a friendly-damage record is kept, in TimeSpan ticks (1 tick = 100 nanoseconds). Default is 60 seconds.                                                                                                                                                                                                                                                                                                      |
+| `FriendlyDamageCleanupTicks`          | `100000000` | Interval between friendly-damage record cleanup passes, in TimeSpan ticks (1 tick = 100 nanoseconds). Default is 10 seconds.                                                                                                                                                                                                                                                                                        |
 
 ---
 
@@ -71,6 +71,14 @@ Power values are in **MW**. These set the upper limit; actual draw scales with a
 | ------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DisableTickingSound`    | `false` | Set to `true` to silence the ticking/unable sound for all blocks and all players on the server.                                                                  |
 | `DisableParticleEffects` | `false` | Set to `true` to disable the flying nanobot trace animations globally. Individual blocks can also toggle this in the terminal unless this setting forces it off. |
+
+---
+
+## Debugging
+
+| Setting     | Default | Description                                                                                                                                                                                                                                |
+| ----------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DebugMode` | `true`  | When `true`, the terminal custom info panel shows extra diagnostic information for all Build and Repair blocks (sources, push targets, cluster details, scan timings). Intended for testing and troubleshooting only — not for normal play. |
 
 ---
 

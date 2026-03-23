@@ -33,6 +33,7 @@ Both versions are functionally identical. They only differ in the resources requ
 - **Creative Mode** — welds and builds blocks without requiring components in inventory
 - **Priority Lists** — configure which block types to weld or grind first, with Enable All / Disable All buttons
 - **Ignore Priority Order** — optionally bypass the priority list and target the nearest block instead
+- **Inventory Sources** — pulls components from Cargo, Connectors, Sorters, Grinders, Cryo Chambers, and Refineries; pushes excess items back to the same block types
 - **Weld Mode** — choose how far blocks are welded: Weld to Full (100%), Weld to Functional Only (stops at functional threshold), or Weld to Skeleton (places projected blocks only, never repairs)
 - **Work Modes** — choose between Weld Before Grind, Grind Before Weld, Grind If Stuck, Weld Only, or Grind Only; in Weld Before Grind and Grind Before Weld modes, if no actionable targets exist for the primary mode the system now falls through to the secondary mode instead of going idle
 - **Cluster Scan Coordinator** — blocks sharing the same working area elect a single coordinator to scan for targets, eliminating redundant scans across the cluster; the role is automatically re-elected if the coordinator is disabled or removed
@@ -41,9 +42,12 @@ Both versions are functionally identical. They only differ in the resources requ
 - **Shields Support** — skips targets protected by the Shields mod
 - **DLC Aware** — skips projected blocks requiring DLC the owner does not have
 - **Plugin Aware** — skips grids protected by server plugins (e.g. `!protect` from ALE PCU Transferrer)
+- **Debug Mode** — config option that shows extra diagnostic information (scan timings, target counts, internal state) in the terminal custom info panel for testing and debugging
+- **Sim-Speed Adaptive** — automatically throttles operations when server sim speed drops, helping the server recover without manual intervention
 - **Sound & Effects** — ticking sound and flying nanobot particle effects toggleable per block and server-wide
 - **Reset All Settings** — restores all per-block settings to their defaults from the terminal
 - **Script Support** — exposes a scripting interface for Programmable Block integration
+- **Built-in Profiler** — admin-only chat commands to measure the mod's performance impact on the server
 
 ---
 
@@ -72,7 +76,7 @@ Full support for the [Defence Shields](https://steamcommunity.com/workshop/filed
 - Build resources increased to make the block appropriately expensive to obtain.
 - Grids in preview mode are skipped until fully placed.
 - Indestructible and immune grids are correctly excluded from grinding.
-- Components can be pulled from Sorters, Connectors, and Grinder blocks.
+- Components can be pulled from Cargo Containers, Connectors, Sorters, Grinders, Cryo Chambers, and Refineries.
 - Power is no longer drained when welding a projected block is not possible.
 - Block settings now persist correctly after a server restart or relog.
 - DLC ownership is checked before attempting to build a projected block.

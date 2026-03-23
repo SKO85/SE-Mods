@@ -111,6 +111,31 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(36), XmlElement]
         public int EmptyGridRescanDelaySeconds { get; set; }
 
+        /// <summary>
+        /// Maximum stagger groups for distributing BaR updates across ticks.
+        /// 0 = auto (scales with total BaR count). Range: 0-10.
+        /// Higher values spread work across more ticks (less CPU per tick, slower response).
+        /// </summary>
+        [ProtoMember(37), XmlElement]
+        public int StaggerGroupCount { get; set; }
+
+        /// <summary>
+        /// Global cap on ServerDoGrind calls per tick across all BaRs.
+        /// 0 = auto (scales with total BaR count). Range: 0-100.
+        /// Higher values allow faster grinding but cost more CPU per tick.
+        /// </summary>
+        [ProtoMember(38), XmlElement]
+        public int MaxGrindsPerTick { get; set; }
+
+        /// <summary>
+        /// How long (seconds) a block assignment reservation is held before expiring.
+        /// Prevents two BaRs from targeting the same block. Lower = faster slot recycling
+        /// when BaRs disconnect. Higher = more protection against assignment steals.
+        /// Range: 2-30. Default: 8.
+        /// </summary>
+        [ProtoMember(39), XmlElement]
+        public int AssignmentTtlSeconds { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -132,7 +157,10 @@ namespace SKONanobotBuildAndRepairSystem.Models
             MaxSystemsPerTargetGrid = 0;
             AssignToSystemEnabled = true;
             DebugMode = true;
-            EmptyGridRescanDelaySeconds = 30;
+            EmptyGridRescanDelaySeconds = 20;
+            StaggerGroupCount = 0;
+            MaxGrindsPerTick = 0;
+            AssignmentTtlSeconds = 8;
         }
 
         public static SyncModSettings Load()
@@ -221,6 +249,39 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     else if (settings.EmptyGridRescanDelaySeconds > 300)
                     {
                         settings.EmptyGridRescanDelaySeconds = 300;
+                        adjusted = true;
+                    }
+
+                    if (settings.StaggerGroupCount < 0)
+                    {
+                        settings.StaggerGroupCount = 0;
+                        adjusted = true;
+                    }
+                    else if (settings.StaggerGroupCount > 10)
+                    {
+                        settings.StaggerGroupCount = 10;
+                        adjusted = true;
+                    }
+
+                    if (settings.MaxGrindsPerTick < 0)
+                    {
+                        settings.MaxGrindsPerTick = 0;
+                        adjusted = true;
+                    }
+                    else if (settings.MaxGrindsPerTick > 100)
+                    {
+                        settings.MaxGrindsPerTick = 100;
+                        adjusted = true;
+                    }
+
+                    if (settings.AssignmentTtlSeconds < 2)
+                    {
+                        settings.AssignmentTtlSeconds = 2;
+                        adjusted = true;
+                    }
+                    else if (settings.AssignmentTtlSeconds > 30)
+                    {
+                        settings.AssignmentTtlSeconds = 30;
                         adjusted = true;
                     }
 

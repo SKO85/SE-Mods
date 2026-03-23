@@ -1,7 +1,11 @@
 ﻿using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Chat;
 using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Collections.Generic;
+using VRage.Game.ModAPI;
 
 namespace SKONanobotBuildAndRepairSystem.Handlers
 {
@@ -13,6 +17,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static ushort MSGID_BLOCK_SETTINGS_FROM_SERVER = 40102;
         private static ushort MSGID_BLOCK_SETTINGS_FROM_CLIENT = 40103;
         private static ushort MSGID_BLOCK_STATE_FROM_SERVER = 40104;
+        private static ushort MSGID_MOD_COMMAND_FROM_CLIENT = 40002;
+        private static ushort MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER = 40003;
 
         #region Registration
 
@@ -28,12 +34,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_MOD_DATAREQUEST, ServerMsgDataRequestReceived);
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_BLOCK_DATAREQUEST, ServerMsgBlockDataRequestReceived);
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_BLOCK_SETTINGS_FROM_CLIENT, MsgBlockSettingsReceived);
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_MOD_COMMAND_FROM_CLIENT, ServerMsgModCommandReceived);
             }
             else
             {
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_MOD_SETTINGS, ClientMsgModSettingsReceived);
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_BLOCK_SETTINGS_FROM_SERVER, MsgBlockSettingsReceived);
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_BLOCK_STATE_FROM_SERVER, ClientMsgBlockStateReceived);
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, ClientMsgModCommandResponseReceived);
 
                 // Send first data request message on clients.
                 MsgDataRequestSend();
@@ -52,12 +60,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_MOD_DATAREQUEST, ServerMsgDataRequestReceived);
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_BLOCK_DATAREQUEST, ServerMsgBlockDataRequestReceived);
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_BLOCK_SETTINGS_FROM_CLIENT, MsgBlockSettingsReceived);
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_MOD_COMMAND_FROM_CLIENT, ServerMsgModCommandReceived);
             }
             else
             {
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_MOD_SETTINGS, ClientMsgModSettingsReceived);
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_BLOCK_SETTINGS_FROM_SERVER, MsgBlockSettingsReceived);
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_BLOCK_STATE_FROM_SERVER, ClientMsgBlockStateReceived);
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, ClientMsgModCommandResponseReceived);
             }
 
             _registered = false;
@@ -87,6 +97,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 if (Mod.NanobotSystems.TryGetValue(msgRcv.EntityId, out system))
                 {
                     MsgBlockSettingsSend(msgRcv.SteamId, system);
+                    system.State.ForceFullTransmit();
                     MsgBlockStateSend(msgRcv.SteamId, system);
                 }
                 else
@@ -95,6 +106,49 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 }
             }
             catch { }
+        }
+
+        private static void ServerMsgModCommandReceived(ushort id, byte[] data, ulong sender, bool fromServer)
+        {
+            try
+            {
+                var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModCommand>(data);
+
+                // Validate admin using the sender parameter from SE API (tamper-proof)
+                if (!IsRemoteAdmin(sender))
+                {
+                    SendCommandResponse(sender, "Command requires admin permissions.", true, false, null, null);
+                    return;
+                }
+
+                string responseMessage;
+                bool isError;
+                bool useMissionScreen;
+                string screenTitle;
+                string screenSubtitle;
+                ChatHandler.ExecuteServerCommand(msgRcv.Command, sender, out responseMessage, out isError, out useMissionScreen, out screenTitle, out screenSubtitle);
+
+                SendCommandResponse(sender, responseMessage, isError, useMissionScreen, screenTitle, screenSubtitle);
+            }
+            catch (Exception ex)
+            {
+                Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: ServerMsgModCommandReceived Exception:{0}", ex);
+            }
+        }
+
+        private static bool IsRemoteAdmin(ulong steamId)
+        {
+            var players = new List<IMyPlayer>();
+            MyAPIGateway.Players.GetPlayers(players);
+            foreach (var player in players)
+            {
+                if (player.SteamUserId == steamId)
+                {
+                    var promoteLevel = player.PromoteLevel.ToString();
+                    return promoteLevel == "Admin" || promoteLevel == "SpaceMaster" || promoteLevel == "Owner";
+                }
+            }
+            return false;
         }
 
         #endregion Server Message Received Handlers
@@ -140,6 +194,31 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             catch (Exception ex)
             {
                 Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockStateReceived Exception:{0}", ex);
+            }
+        }
+
+        private static void ClientMsgModCommandResponseReceived(ushort id, byte[] data, ulong sender, bool fromServer)
+        {
+            try
+            {
+                var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModCommandResponse>(data);
+
+                if (msgRcv.UseMissionScreen)
+                {
+                    MyAPIGateway.Utilities.ShowMissionScreen(
+                        msgRcv.ScreenTitle ?? "Nanobot Build and Repair System",
+                        msgRcv.ScreenSubtitle ?? "",
+                        "",
+                        msgRcv.Message);
+                }
+                else
+                {
+                    MyAPIGateway.Utilities.ShowMessage("Nanobars", msgRcv.Message);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: ClientMsgModCommandResponseReceived Exception:{0}", ex);
             }
         }
 
@@ -271,6 +350,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static void MsgBlockStateSend(ulong steamId, NanobotSystem system)
         {
+            var profilerTs = MethodProfiler.Start();
             try
             {
                 if (!MyAPIGateway.Session.IsServer)
@@ -283,22 +363,32 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 msgSnd.EntityId = system.Entity.EntityId;
                 msgSnd.State = system.State.GetTransmit();
 
+                var bytes = MyAPIGateway.Utilities.SerializeToBinary(msgSnd);
+
                 var res = false;
                 if (steamId == 0)
                 {
-                    res = MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_BLOCK_STATE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                    res = MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_BLOCK_STATE_FROM_SERVER, bytes, true);
                 }
                 else
                 {
-                    res = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_STATE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true);
+                    res = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_STATE_FROM_SERVER, bytes, steamId, true);
                 }
 
                 if (!res && Logging.Instance.ShouldLog(Logging.Level.Error))
                 {
                     Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockStateSend Failed");
                 }
+
+                var payloadBytes = bytes.Length;
+                MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs, () =>
+                    string.Format("entityId={0};steamId={1};bytes={2}",
+                        system.Entity.EntityId, steamId, payloadBytes));
             }
-            catch { }
+            catch
+            {
+                MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs);
+            }
         }
 
         public static void MsgBlockDataRequestSend(NanobotSystem block)
@@ -318,6 +408,44 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 msgSnd.EntityId = block.Entity.EntityId;
 
                 MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+            }
+            catch { }
+        }
+
+        public static void MsgModCommandSend(string command)
+        {
+            try
+            {
+                if (MyAPIGateway.Session.IsServer)
+                    return;
+
+                var msgSnd = new MsgModCommand();
+                if (MyAPIGateway.Session.Player != null)
+                    msgSnd.SteamId = MyAPIGateway.Session.Player.SteamUserId;
+                else
+                    msgSnd.SteamId = 0;
+
+                msgSnd.Command = command;
+
+                MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_MOD_COMMAND_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+            }
+            catch { }
+        }
+
+        internal static void SendCommandResponse(ulong steamId, string message, bool isError, bool useMissionScreen, string screenTitle, string screenSubtitle)
+        {
+            try
+            {
+                var response = new MsgModCommandResponse
+                {
+                    Message = message,
+                    IsError = isError,
+                    UseMissionScreen = useMissionScreen,
+                    ScreenTitle = screenTitle,
+                    ScreenSubtitle = screenSubtitle
+                };
+
+                MyAPIGateway.Multiplayer.SendMessageTo(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(response), steamId, true);
             }
             catch { }
         }

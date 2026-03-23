@@ -90,13 +90,13 @@ namespace SKONanobotBuildAndRepairSystem
                     // When sim-speed drops, increase stagger to help the server recover.
                     var cycle = MyAPIGateway.Session.GameplayFrameCounter / (fast ? 10 : 100);
                     var clusterSize = AssignedCluster != null ? AssignedCluster.Members.Count : 1;
-                    var effectiveGroups = clusterSize < 5 ? 1 : Math.Min(Mod.StaggerGroupCount, clusterSize - 3);
+                    var effectiveGroups = clusterSize < 5 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), clusterSize - 3);
 
                     var simSpeed = Mod.GetEffectiveSimSpeed();
                     if (simSpeed < 0.9f)
                     {
-                        var simPenalty = (int)Math.Ceiling((1.0 - simSpeed) * Mod.StaggerGroupCount);
-                        effectiveGroups = Math.Min(Mod.StaggerGroupCount, effectiveGroups + simPenalty);
+                        var simPenalty = (int)Math.Ceiling((1.0 - simSpeed) * Mod.GetEffectiveStaggerGroupCount());
+                        effectiveGroups = Math.Min(Mod.GetEffectiveStaggerGroupCount(), effectiveGroups + simPenalty);
                     }
 
                     var isMyTurn = _staggerSlot < 0 || effectiveGroups <= 1 || (cycle % effectiveGroups) == (_staggerSlot % effectiveGroups);
@@ -186,7 +186,7 @@ namespace SKONanobotBuildAndRepairSystem
                     string.Format("entityId={0};fast={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5}",
                         _Welder != null ? _Welder.EntityId : 0, fast, _IsInit, _Delay,
                         AssignedCluster != null ? AssignedCluster.Members.Count : 1,
-                        AssignedCluster != null ? (AssignedCluster.Members.Count < 5 ? 1 : Math.Min(Mod.StaggerGroupCount, AssignedCluster.Members.Count - 3)) : 1));
+                        AssignedCluster != null ? (AssignedCluster.Members.Count < 5 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), AssignedCluster.Members.Count - 3)) : 1));
             }
         }
     }

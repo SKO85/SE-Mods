@@ -68,6 +68,13 @@ Yes, welding of projected grids using the multigrid-projection plugin is support
 </div>
 </details>
 
+<details>
+<summary>Can it pull components from Cryo Chambers and Refineries?</summary>
+<div>
+Yes. As of v2.5.0, the system includes Cryo Chambers and Refineries when scanning for source and push-target inventories. Components stored in these blocks can be pulled for welding, and excess items can be pushed into them. This works alongside Cargo Containers, Connectors, Sorters, and Grinder blocks.
+</div>
+</details>
+
 ---
 
 ## Installation & Troubleshooting
@@ -135,6 +142,32 @@ Yes, welding of projected grids using the multigrid-projection plugin is support
 
 ---
 
+## Performance
+
+<details>
+<summary>I have many Build and Repair blocks and my server sim speed is dropping. What can I do?</summary>
+<div>
+<p>Version 2.5.0 includes major performance improvements for servers running many systems. If you are on an older version, update first.</p>
+<p>If sim speed is still low after updating, try these steps:</p>
+<ul>
+  <li>Place Build and Repair blocks close together so they form a <strong>cluster</strong>. Clustered blocks share scanning work automatically, dramatically reducing CPU usage.</li>
+  <li>Lower <code>MaxBackgroundTasks</code> in <code>ModSettings.xml</code> (default: 4). This limits how many background scans run in parallel.</li>
+  <li>Increase <code>EmptyGridRescanDelaySeconds</code> (default: 30). Grids with no targets are skipped for this many seconds.</li>
+  <li>Reduce <code>MaxSystemsPerTargetGrid</code> to limit how many systems pile onto one grid.</li>
+  <li>The mod automatically throttles when sim speed drops below 1.0 — let it recover before adding more blocks.</li>
+</ul>
+</div>
+</details>
+
+<details>
+<summary>What is the Cluster Scan Coordinator?</summary>
+<div>
+When multiple Build and Repair blocks share the same working area, they automatically elect a single coordinator to scan for targets. The coordinator scans once and shares the results with all members. This eliminates redundant scanning and can reduce scan CPU usage by roughly 80% with 10 co-located blocks. If the coordinator is disabled or removed, a new one is elected automatically. You do not need to configure anything — it works out of the box.
+</div>
+</details>
+
+---
+
 ## Welding & Grinding Issues
 
 <details>
@@ -157,6 +190,33 @@ Yes, welding of projected grids using the multigrid-projection plugin is support
   <li>Check for <strong>obstructions</strong> — a wheel or misaligned component is a common culprit. Remove the obstruction, let the system weld the rest, then weld the blocked component manually or via the system afterwards.</li>
   <li>If you are using a plugin such as <strong>Multi-Grid-Projector</strong>, try disabling it and testing again. Plugins that patch game API calls can affect welding behaviour in unexpected ways.</li>
 </ul>
+</div>
+</details>
+
+---
+
+## Debug Mode & Diagnostics
+
+<details>
+<summary>What is Debug Mode and how do I use it?</summary>
+<div>
+<p>Debug Mode is a config option in <code>ModSettings.xml</code>. When enabled, all Build and Repair blocks show extra diagnostic information in the terminal custom info panel, such as scan timings, active target counts, cluster membership, and internal state flags.</p>
+<p>This is intended for testing and debugging only — it should not be left enabled during normal play. It can help diagnose why a block is not behaving as expected (e.g. waiting for initial scan, push targets full, grid limit reached).</p>
+</div>
+</details>
+
+<details>
+<summary>How do I run the built-in profiler?</summary>
+<div>
+<p>The profiler is an admin-only tool accessed through chat commands. It measures the mod's performance impact and writes detailed log files.</p>
+<ul>
+  <li><code>/nanobars profile start [seconds] [minDurationMs]</code> — start a profiling session (defaults to 120 seconds auto-stop)</li>
+  <li><code>/nanobars profile stop</code> — stop the session and write the summary</li>
+  <li><code>/nanobars profile status</code> — check if profiling is active</li>
+  <li><code>/nanobars profile minduration &lt;ms&gt;</code> — set the minimum method duration for logging</li>
+  <li><code>/nanobars profile help</code> — show profiling command help</li>
+</ul>
+<p>Log files are saved to the mod's storage folder. Share these with the developer if you are reporting a performance issue.</p>
 </div>
 </details>
 

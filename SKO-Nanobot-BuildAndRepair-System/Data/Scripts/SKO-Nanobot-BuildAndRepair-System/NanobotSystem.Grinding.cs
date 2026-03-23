@@ -66,6 +66,7 @@ namespace SKONanobotBuildAndRepairSystem
                         // OPT 3: Global grind budget — cap ServerDoGrind calls per tick.
                         if (!Mod.TryClaimGrindSlot())
                         {
+                            if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
                             break;
                         }
 
@@ -77,9 +78,9 @@ namespace SKONanobotBuildAndRepairSystem
                             break; //Only grind one block at once
                         }
 
-                        if (Mod.Settings.AssignToSystemEnabled && (targetData.Ignore || targetData.Block.IsFullyDismounted))
+                        // Grinding failed — release assignment regardless of reason so other BaRs aren't starved.
+                        if (Mod.Settings.AssignToSystemEnabled)
                         {
-                            // Release the block from this system.
                             targetData.Block.ReleaseFromSystem();
                         }
                     }

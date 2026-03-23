@@ -1,0 +1,297 @@
+using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Utils;
+using System;
+using System.Collections.Generic;
+using System.Text;
+
+namespace SKONanobotBuildAndRepairSystem.Chat.Commands
+{
+    public static class ConfigCommand
+    {
+        private sealed class SettingEntry
+        {
+            public string Name;
+            public string TypeLabel;
+            public Func<string> Get;
+            public Func<string, string> Set; // returns null on success, error message on failure
+        }
+
+        private static SettingEntry[] _entries;
+        private static Dictionary<string, SettingEntry> _lookup;
+
+        private static void EnsureInitialized()
+        {
+            if (_entries != null) return;
+
+            _entries = new SettingEntry[]
+            {
+                BoolSetting("DebugMode",
+                    () => Mod.Settings.DebugMode,
+                    v => { Mod.Settings.DebugMode = v; }),
+                EnumSetting("LogLevel",
+                    () => Mod.Settings.LogLevel.ToString(),
+                    s => {
+                        try { Mod.Settings.LogLevel = (Logging.Level)Enum.Parse(typeof(Logging.Level), s, true); return null; }
+                        catch { return string.Format("Expected one of: {0}", string.Join(", ", Enum.GetNames(typeof(Logging.Level)))); }
+                    },
+                    string.Join("|", Enum.GetNames(typeof(Logging.Level)))),
+                IntSetting("Range",
+                    () => Mod.Settings.Range,
+                    v => { Mod.Settings.Range = v; }),
+                IntSetting("MaximumOffset",
+                    () => Mod.Settings.MaximumOffset,
+                    v => { Mod.Settings.MaximumOffset = v; }),
+                IntSetting("MaxBackgroundTasks",
+                    () => Mod.Settings.MaxBackgroundTasks,
+                    v => { Mod.Settings.MaxBackgroundTasks = v; }),
+                IntSetting("MaxSystemsPerTargetGrid",
+                    () => Mod.Settings.MaxSystemsPerTargetGrid,
+                    v => { Mod.Settings.MaxSystemsPerTargetGrid = v; }),
+                BoolSetting("AssignToSystemEnabled",
+                    () => Mod.Settings.AssignToSystemEnabled,
+                    v => { Mod.Settings.AssignToSystemEnabled = v; }),
+                BoolSetting("DisableLimitSystemsPerTargetGrid",
+                    () => Mod.Settings.DisableLimitSystemsPerTargetGrid,
+                    v => { Mod.Settings.DisableLimitSystemsPerTargetGrid = v; }),
+                BoolSetting("SafeZoneCheckEnabled",
+                    () => Mod.Settings.SafeZoneCheckEnabled,
+                    v => { Mod.Settings.SafeZoneCheckEnabled = v; }),
+                BoolSetting("ShieldCheckEnabled",
+                    () => Mod.Settings.ShieldCheckEnabled,
+                    v => { Mod.Settings.ShieldCheckEnabled = v; }),
+                BoolSetting("DecreaseFactionReputationOnGrinding",
+                    () => Mod.Settings.DecreaseFactionReputationOnGrinding,
+                    v => { Mod.Settings.DecreaseFactionReputationOnGrinding = v; }),
+                BoolSetting("DeleteBotsWhenDead",
+                    () => Mod.Settings.DeleteBotsWhenDead,
+                    v => { Mod.Settings.DeleteBotsWhenDead = v; }),
+                BoolSetting("DisableTickingSound",
+                    () => Mod.Settings.DisableTickingSound,
+                    v => { Mod.Settings.DisableTickingSound = v; }),
+                BoolSetting("DisableParticleEffects",
+                    () => Mod.Settings.DisableParticleEffects,
+                    v => { Mod.Settings.DisableParticleEffects = v; }),
+                IntSetting("EmptyGridRescanDelaySeconds",
+                    () => Mod.Settings.EmptyGridRescanDelaySeconds,
+                    v => { Mod.Settings.EmptyGridRescanDelaySeconds = v; }),
+                IntSetting("StaggerGroupCount",
+                    () => Mod.Settings.StaggerGroupCount,
+                    v => { Mod.Settings.StaggerGroupCount = v; }),
+                IntSetting("MaxGrindsPerTick",
+                    () => Mod.Settings.MaxGrindsPerTick,
+                    v => { Mod.Settings.MaxGrindsPerTick = v; }),
+                IntSetting("AssignmentTtlSeconds",
+                    () => Mod.Settings.AssignmentTtlSeconds,
+                    v => { Mod.Settings.AssignmentTtlSeconds = v; }),
+                FloatSetting("WeldingMultiplier",
+                    () => Mod.Settings.Welder.WeldingMultiplier,
+                    v => { Mod.Settings.Welder.WeldingMultiplier = v; }),
+                FloatSetting("GrindingMultiplier",
+                    () => Mod.Settings.Welder.GrindingMultiplier,
+                    v => { Mod.Settings.Welder.GrindingMultiplier = v; }),
+            };
+
+            _lookup = new Dictionary<string, SettingEntry>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < _entries.Length; i++)
+                _lookup[_entries[i].Name] = _entries[i];
+        }
+
+        public static ChatCommandResult Execute(string[] args)
+        {
+            EnsureInitialized();
+            if (args.Length < 2)
+                return ShowHelp();
+
+            switch (args[1])
+            {
+                case "set":
+                    return ExecuteSet(args);
+                case "get":
+                    return ExecuteGet(args);
+                case "list":
+                    return ExecuteList();
+                case "save":
+                    return ExecuteSave();
+                case "reload":
+                    return ExecuteReload();
+                case "reset":
+                    return ExecuteReset();
+                default:
+                    return ShowHelp();
+            }
+        }
+
+        public static ChatCommandResult ShowHelp()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Config Commands (admin-only, server-side):");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars config list");
+            sb.AppendLine("  Lists all configurable settings with current values.");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars config get <setting>");
+            sb.AppendLine("  Gets the current value of a setting.");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars config set <setting> <value>");
+            sb.AppendLine("  Sets a setting to the specified value.");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars config save");
+            sb.AppendLine("  Saves current settings to the world folder (ModSettings.xml).");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars config reload");
+            sb.AppendLine("  Reloads settings from ModSettings.xml (world or local storage).");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars config reset");
+            sb.AppendLine("  Resets all settings to defaults.");
+            sb.AppendLine();
+            sb.AppendLine("Examples:");
+            sb.AppendLine("  /nanobars config set DebugMode true");
+            sb.AppendLine("  /nanobars config set MaxGrindsPerTick 20");
+            sb.AppendLine("  /nanobars config set StaggerGroupCount 2");
+            sb.AppendLine("  /nanobars config get Range");
+
+            return ChatCommandResult.MissionScreen(sb.ToString(), "Nanobot Build and Repair System", "Config Help");
+        }
+
+        private static ChatCommandResult ExecuteSet(string[] args)
+        {
+            if (args.Length < 4)
+                return ChatCommandResult.Error("Usage: /nanobars config set <setting> <value>");
+
+            SettingEntry entry;
+            if (!_lookup.TryGetValue(args[2], out entry))
+                return ChatCommandResult.Error(string.Format("Unknown setting: {0}. Use '/nanobars config list' to see available settings.", args[2]));
+
+            var error = entry.Set(args[3]);
+            if (error != null)
+                return ChatCommandResult.Error(string.Format("Invalid value for {0}: {1}", entry.Name, error));
+
+            return ChatCommandResult.Success(string.Format("{0} = {1}", entry.Name, entry.Get()));
+        }
+
+        private static ChatCommandResult ExecuteGet(string[] args)
+        {
+            if (args.Length < 3)
+                return ChatCommandResult.Error("Usage: /nanobars config get <setting>");
+
+            SettingEntry entry;
+            if (!_lookup.TryGetValue(args[2], out entry))
+                return ChatCommandResult.Error(string.Format("Unknown setting: {0}. Use '/nanobars config list' to see available settings.", args[2]));
+
+            return ChatCommandResult.Success(string.Format("{0} = {1}", entry.Name, entry.Get()));
+        }
+
+        private static ChatCommandResult ExecuteList()
+        {
+            EnsureInitialized();
+            var sb = new StringBuilder();
+            sb.AppendLine("Configurable Settings (current values):");
+            sb.AppendLine();
+
+            for (int i = 0; i < _entries.Length; i++)
+            {
+                var e = _entries[i];
+                sb.AppendLine(string.Format("  {0} = {1}  ({2})", e.Name, e.Get(), e.TypeLabel));
+            }
+
+            return ChatCommandResult.MissionScreen(sb.ToString(), "Nanobot Build and Repair System", "Config Settings");
+        }
+
+        private static ChatCommandResult ExecuteSave()
+        {
+            SyncModSettings.Save(Mod.Settings, true);
+            return ChatCommandResult.Success("Settings saved to world folder. Filename: ModSettings.xml");
+        }
+
+        private static ChatCommandResult ExecuteReload()
+        {
+            var loaded = SyncModSettings.Load();
+            if (loaded == null)
+                return ChatCommandResult.Error("Failed to load settings. Check server log for details.");
+
+            Mod.Settings = loaded;
+            Mod.SettingsChanged();
+            return ChatCommandResult.Success("Settings reloaded from ModSettings.xml.");
+        }
+
+        private static ChatCommandResult ExecuteReset()
+        {
+            var defaults = new SyncModSettings();
+            // Preserve dynamic defaults that depend on game type.
+            if (Sandbox.ModAPI.MyAPIGateway.Multiplayer != null && Sandbox.ModAPI.MyAPIGateway.Multiplayer.MultiplayerActive)
+                defaults.MaxSystemsPerTargetGrid = 10;
+            else
+                defaults.MaxSystemsPerTargetGrid = 20;
+
+            Mod.Settings = defaults;
+            Mod.SettingsChanged();
+            return ChatCommandResult.Success("Settings reset to defaults.");
+        }
+
+        #region Setting builders
+
+        private static SettingEntry BoolSetting(string name, Func<bool> getter, Action<bool> setter)
+        {
+            return new SettingEntry
+            {
+                Name = name,
+                TypeLabel = "bool",
+                Get = () => getter().ToString(),
+                Set = s =>
+                {
+                    bool v;
+                    if (!bool.TryParse(s, out v)) return "Expected 'true' or 'false'";
+                    setter(v);
+                    return null;
+                }
+            };
+        }
+
+        private static SettingEntry IntSetting(string name, Func<int> getter, Action<int> setter)
+        {
+            return new SettingEntry
+            {
+                Name = name,
+                TypeLabel = "int",
+                Get = () => getter().ToString(),
+                Set = s =>
+                {
+                    int v;
+                    if (!int.TryParse(s, out v)) return "Expected an integer";
+                    setter(v);
+                    return null;
+                }
+            };
+        }
+
+        private static SettingEntry FloatSetting(string name, Func<float> getter, Action<float> setter)
+        {
+            return new SettingEntry
+            {
+                Name = name,
+                TypeLabel = "float",
+                Get = () => getter().ToString("F2"),
+                Set = s =>
+                {
+                    float v;
+                    if (!float.TryParse(s, out v)) return "Expected a number";
+                    setter(v);
+                    return null;
+                }
+            };
+        }
+
+        private static SettingEntry EnumSetting(string name, Func<string> getter, Func<string, string> setter, string typeLabel)
+        {
+            return new SettingEntry
+            {
+                Name = name,
+                TypeLabel = typeLabel,
+                Get = getter,
+                Set = setter
+            };
+        }
+
+        #endregion
+    }
+}

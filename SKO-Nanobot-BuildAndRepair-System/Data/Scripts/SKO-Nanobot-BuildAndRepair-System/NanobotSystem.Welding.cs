@@ -31,6 +31,13 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByIgnore = 0;
             var skippedByGridLimit = 0;
             var skippedByAssign = 0;
+            var componentFailures = 0;
+            var starvedPriorityBits = 0L;
+            var lastFailPriority = -1;
+            var consecutiveAtPriority = 0;
+            var starvedSkipped = 0;
+            var totalComponentChecks = 0;
+            var lookingForNextChecked = 0;
             var lockOnFound = false;
             try
             {
@@ -46,17 +53,36 @@ namespace SKONanobotBuildAndRepairSystem
                 // currentWeldingBlock so it starts welding on the very next update cycle.
                 var lookingForNext = false;
                 long lastRejectedGridId = 0;
+                // When lock-on is lost (block vanished from list after scan rebuild),
+                // we re-iterate without lock-on so the BaR doesn't waste the tick.
+                var lockOnRetry = false;
+                LockOnRetry:
                 foreach (var targetData in State.PossibleWeldTargets)
                 {
-                    if (!lookingForNext && State.CurrentWeldingBlock != null && State.CurrentWeldingBlock != targetData.Block)
+                    var isLockOnBlock = State.CurrentWeldingBlock != null
+                        && IsSameBlock(State.CurrentWeldingBlock, targetData.Block);
+
+                    if (!lookingForNext && State.CurrentWeldingBlock != null && !isLockOnBlock)
                     {
                         skippedByLockOn++;
                         continue;
                     }
 
-                    if (!lookingForNext && State.CurrentWeldingBlock != null && State.CurrentWeldingBlock == targetData.Block)
+                    // Cap lookingForNext iteration to avoid 8ms+ spikes scanning 100+ blocks.
+                    // If no eligible block is found within the cap, the next stagger tick
+                    // will find one through normal iteration.
+                    if (lookingForNext)
+                    {
+                        lookingForNextChecked++;
+                        if (lookingForNextChecked >= 20)
+                            break;
+                    }
+
+                    if (!lookingForNext && isLockOnBlock)
                     {
                         lockOnFound = true;
+                        // Update reference so downstream code uses the current list entry.
+                        State.CurrentWeldingBlock = targetData.Block;
                     }
 
                     if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && targetData.Block != Settings.CurrentPickedWeldingBlock) continue;
@@ -81,21 +107,45 @@ namespace SKONanobotBuildAndRepairSystem
                             continue;
                         }
 
-                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid && Settings.CurrentPickedWeldingBlock == null)
+                        // Skip grid limit and assignment checks for the lock-on block —
+                        // this BaR was already working on it, don't let stale counts or
+                        // assignment races cause it to be abandoned mid-weld.
+                        if (!isLockOnBlock)
                         {
-                            var gridId = targetData.Block.CubeGrid.EntityId;
-                            if (gridId == lastRejectedGridId || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+                            // Skip blocks at starved priority levels — zero-cost after initial failures.
+                            // lookingForNext is exempt: just picking next lock-on, no component check.
+                            if (!lookingForNext && starvedPriorityBits != 0)
                             {
-                                lastRejectedGridId = gridId;
-                                skippedByGridLimit++;
+                                var blockPriority = BlockWeldPriority.GetPriority(targetData.Block);
+                                if (blockPriority > 0 && blockPriority < 64 && (starvedPriorityBits & (1L << blockPriority)) != 0)
+                                {
+                                    needwelding = true;
+                                    starvedSkipped++;
+                                    continue;
+                                }
+                            }
+
+                            if (!Mod.Settings.DisableLimitSystemsPerTargetGrid && Settings.CurrentPickedWeldingBlock == null)
+                            {
+                                var gridId = targetData.Block.CubeGrid.EntityId;
+                                if (gridId == lastRejectedGridId || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
+                                {
+                                    lastRejectedGridId = gridId;
+                                    skippedByGridLimit++;
+                                    continue;
+                                }
+                            }
+
+                            if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers && Settings.CurrentPickedWeldingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
+                            {
+                                skippedByAssign++;
                                 continue;
                             }
                         }
-
-                        if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers && Settings.CurrentPickedWeldingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
+                        else if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers)
                         {
-                            skippedByAssign++;
-                            continue;
+                            // Refresh assignment for the lock-on block.
+                            targetData.Block.AssignToSystem(_Welder.EntityId);
                         }
 
                         needwelding = true;
@@ -111,6 +161,7 @@ namespace SKONanobotBuildAndRepairSystem
                         if (!transporting) //Transport needs to be weld afterwards
                         {
                             transporting = ServerFindMissingComponents(targetData);
+                            totalComponentChecks++;
                         }
 
                         welding = ServerDoWeld(targetData);
@@ -133,6 +184,40 @@ namespace SKONanobotBuildAndRepairSystem
                             currentWeldingBlock = targetData.Block;
                             break; //Only weld one block at once (do not split over all blocks as the base shipwelder does)
                         }
+                        else
+                        {
+                            // Block can't be welded right now (no components available).
+                            if (isLockOnBlock)
+                            {
+                                State.CurrentWeldingBlock = null;
+                            }
+
+                            if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
+
+                            // Track consecutive failures at the same priority level.
+                            var failPriority = BlockWeldPriority.GetPriority(targetData.Block);
+                            if (failPriority == lastFailPriority)
+                            {
+                                consecutiveAtPriority++;
+                            }
+                            else
+                            {
+                                lastFailPriority = failPriority;
+                                consecutiveAtPriority = 1;
+                            }
+
+                            // After 3 failures at one priority, mark it starved — remaining
+                            // blocks at this level share component needs and will also fail.
+                            if (consecutiveAtPriority >= 3 && failPriority > 0 && failPriority < 64)
+                            {
+                                starvedPriorityBits |= (1L << failPriority);
+                            }
+
+                            componentFailures++;
+                            // Global safety cap: bound main-thread cost regardless of priority diversity.
+                            if (totalComponentChecks >= 10)
+                                break;
+                        }
                     }
                     else
                     {
@@ -143,13 +228,30 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                         // Current tracked block is no longer weldable; clear the lock so the
                         // loop can find the next eligible block in this same tick.
-                        if (State.CurrentWeldingBlock == targetData.Block)
+                        if (isLockOnBlock)
                         {
                             State.CurrentWeldingBlock = null;
                         }
                         // Note: Could add a cooldown timer here so non-weldable blocks are skipped
                         // for a period instead of re-evaluated every tick. (Phase 4 feature candidate)
                     }
+                }
+
+                // Lock-on block vanished from the list (e.g., projected grid EntityId changed
+                // after projector update). Clear lock-on and re-iterate so this tick isn't wasted.
+                if (!lockOnRetry && State.CurrentWeldingBlock != null && !lockOnFound)
+                {
+                    State.CurrentWeldingBlock = null;
+                    skippedByLockOn = 0;
+                    componentFailures = 0;
+                    starvedPriorityBits = 0L;
+                    lastFailPriority = -1;
+                    consecutiveAtPriority = 0;
+                    starvedSkipped = 0;
+                    totalComponentChecks = 0;
+                    lookingForNextChecked = 0;
+                    lockOnRetry = true;
+                    goto LockOnRetry;
                 }
             }
 
@@ -167,11 +269,18 @@ namespace SKONanobotBuildAndRepairSystem
                 var _skippedByIgnore = skippedByIgnore;
                 var _skippedByGridLimit = skippedByGridLimit;
                 var _skippedByAssign = skippedByAssign;
+                var _componentFailures = componentFailures;
+                var _lockOnLost = hadLockOn && !lockOnFound;
+                var _starvedSkipped = starvedSkipped;
+                var _totalComponentChecks = totalComponentChecks;
+                var _lookingForNextChecked = lookingForNextChecked;
                 MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                    string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};skipLock={8};weldChecked={9};skipIgnore={10};skipGrid={11};skipAssign={12}",
+                    string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17}",
                         _Welder.EntityId, _welding, _needwelding, _transporting, _targetCount,
                         State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
-                        _hadLockOn, _lockOnFound, _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign));
+                        _hadLockOn, _lockOnFound, _lockOnLost,
+                        _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _componentFailures,
+                        _starvedSkipped, _totalComponentChecks, _lookingForNextChecked));
             }
         }
 
@@ -273,6 +382,12 @@ namespace SKONanobotBuildAndRepairSystem
                             targetData.Block = target;
                             targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
                             created = true;
+
+                            // Close assignment gap: the projected block's key (ProjGridId:Pos) differs
+                            // from the physical block's key (RealGridId:Pos). Assign the physical block
+                            // immediately so no other BaR can steal it during our stagger wait.
+                            if (Mod.Settings.AssignToSystemEnabled && !_Welder.HelpOthers)
+                                target.AssignToSystem(_Welder.EntityId);
                         }
                         else
                         {
@@ -480,6 +595,18 @@ namespace SKONanobotBuildAndRepairSystem
             }
             _TempInventoryItems.Clear();
             return picked;
+        }
+
+        /// <summary>
+        /// Compares two slim blocks by identity rather than reference equality.
+        /// Background scans create new IMySlimBlock references for the same physical block;
+        /// ReferenceEquals short-circuits the common case, grid+position handles the rest.
+        /// </summary>
+        private static bool IsSameBlock(IMySlimBlock a, IMySlimBlock b)
+        {
+            if (ReferenceEquals(a, b)) return true;
+            if (a == null || b == null) return false;
+            return a.CubeGrid.EntityId == b.CubeGrid.EntityId && a.Position == b.Position;
         }
 
         private void AddToMissingComponents(MyDefinitionId componentId, int neededAmount)
