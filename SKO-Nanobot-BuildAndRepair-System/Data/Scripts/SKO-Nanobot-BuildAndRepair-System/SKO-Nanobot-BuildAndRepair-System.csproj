@@ -129,7 +129,7 @@
     <Compile Include="Localization\TextsRussian.cs" />
     <Compile Include="Localization\TextsGerman.cs" />
     <Compile Include="Localization\TextsEnglish.cs" />
-    <Compile Include="Models\TtlCache.cs" />
+    <Compile Include="Caches\TtlCache.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="Chat\ChatHandler.cs" />
     <Compile Include="Chat\ChatCommandResult.cs" />
@@ -202,8 +202,8 @@
     <Compile Include="Utils\UtilsProductionBlock.cs" />
 <Compile Include="Utils\UtilsSynchronization.cs" />
 <Compile Include="Utils\UtilsText.cs" />
-    <Compile Include="Utils\SharedGridBlockCache.cs" />
-    <Compile Include="Utils\SharedEntityCache.cs" />
+    <Compile Include="Caches\SharedGridBlockCache.cs" />
+    <Compile Include="Caches\SharedEntityCache.cs" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Managers\" />

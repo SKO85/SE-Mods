@@ -1,4 +1,4 @@
-﻿namespace SKONanobotBuildAndRepairSystem.Models
+﻿namespace SKONanobotBuildAndRepairSystem.Caches
 {
     using Sandbox.ModAPI;
     using System;

@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using VRage.ModAPI;
 using VRageMath;
 
-namespace SKONanobotBuildAndRepairSystem.Utils
+namespace SKONanobotBuildAndRepairSystem.Caches
 {
     /// <summary>
     /// Shared static cache for GetTopMostEntitiesInBox results. BaRs with nearby

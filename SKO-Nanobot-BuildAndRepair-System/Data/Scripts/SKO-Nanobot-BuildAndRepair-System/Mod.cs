@@ -7,6 +7,7 @@ namespace SKONanobotBuildAndRepairSystem
     using SKONanobotBuildAndRepairSystem.Chat;
     using SKONanobotBuildAndRepairSystem.Handlers;
     using SKONanobotBuildAndRepairSystem.Helpers;
+    using SKONanobotBuildAndRepairSystem.Caches;
     using SKONanobotBuildAndRepairSystem.Models;
     using SKONanobotBuildAndRepairSystem.Profiling;
     using SKONanobotBuildAndRepairSystem.Utils;
@@ -239,8 +240,8 @@ namespace SKONanobotBuildAndRepairSystem
             try { ScanClusterCoordinator.Clear(); } catch { }
 
             // Clear shared caches.
-            try { Utils.SharedGridBlockCache.Clear(); } catch { }
-            try { Utils.SharedEntityCache.Clear(); } catch { }
+            try { SharedGridBlockCache.Clear(); } catch { }
+            try { SharedEntityCache.Clear(); } catch { }
 
             // Close the profiler to release any open log files.
             try { MethodProfiler.Close(); } catch { }
@@ -325,8 +326,8 @@ namespace SKONanobotBuildAndRepairSystem
                                 try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
                                 try { BlockSystemAssigningHandler.Cleanup(); } catch { }
                                 try { DlcCheckHelper.CleanupOwnerCache(); } catch { }
-                                try { Utils.SharedGridBlockCache.Cleanup(); } catch { }
-                                try { Utils.SharedEntityCache.Cleanup(); } catch { }
+                                try { SharedGridBlockCache.Cleanup(); } catch { }
+                                try { SharedEntityCache.Cleanup(); } catch { }
                             });
                         }
 

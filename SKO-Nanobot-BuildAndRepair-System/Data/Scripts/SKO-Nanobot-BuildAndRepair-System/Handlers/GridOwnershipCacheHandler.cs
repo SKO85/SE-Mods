@@ -1,5 +1,6 @@
 ﻿using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Caches;
 using SKONanobotBuildAndRepairSystem.Models;
 using System;
 using System.Collections.Concurrent;

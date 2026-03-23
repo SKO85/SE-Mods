@@ -2,7 +2,7 @@ using SKONanobotBuildAndRepairSystem.Profiling;
 using System.Collections.Generic;
 using VRage.Game.ModAPI;
 
-namespace SKONanobotBuildAndRepairSystem.Utils
+namespace SKONanobotBuildAndRepairSystem.Caches
 {
     /// <summary>
     /// Shared static helper for raw block lists. Wraps grid.GetBlocks() with profiling.
