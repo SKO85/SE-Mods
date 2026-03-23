@@ -7,6 +7,7 @@ using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Diagnostics;
 using VRage.Game;
 using VRage.Game.ModAPI;
 
@@ -169,6 +170,15 @@ namespace SKONanobotBuildAndRepairSystem
             var emptying = false;
             bool isEmpty = false;
 
+            // Sub-timing: measure each phase to identify spike source.
+            var tsFreq = Stopwatch.Frequency;
+            var tsEmpty = 0L;
+            var tsDecrease = 0L;
+            var tsRaze = 0L;
+            var tsTransport = 0L;
+            long tsMark;
+
+            tsMark = Stopwatch.GetTimestamp();
             if (integrityRatio <= 0.2)
             {
                 //Try to emtpy inventory (if any)
@@ -177,6 +187,7 @@ namespace SKONanobotBuildAndRepairSystem
                     emptying = EmptyBlockInventories(target.FatBlock, _TransportInventory, out isEmpty);
                 }
             }
+            tsEmpty = Stopwatch.GetTimestamp() - tsMark;
 
             if (!emptying || isEmpty)
             {
@@ -196,8 +207,10 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
+                tsMark = Stopwatch.GetTimestamp();
                 target.DecreaseMountLevel(damageInfo.Amount, _TransportInventory);
                 target.MoveItemsFromConstructionStockpile(_TransportInventory);
+                tsDecrease = Stopwatch.GetTimestamp() - tsMark;
 
                 if (target.IsFullyDismounted)
                 {
@@ -209,11 +222,14 @@ namespace SKONanobotBuildAndRepairSystem
                             return false;
                     }
 
+                    tsMark = Stopwatch.GetTimestamp();
                     target.SpawnConstructionStockpile();
                     target.CubeGrid.RazeBlock(target.Position);
+                    tsRaze = Stopwatch.GetTimestamp() - tsMark;
                 }
             }
 
+            tsMark = Stopwatch.GetTimestamp();
             if ((float)_TransportInventory.CurrentVolume >= _MaxTransportVolume || target.IsFullyDismounted)
             {
                 //Transport started
@@ -226,16 +242,22 @@ namespace SKONanobotBuildAndRepairSystem
                 ServerEmptyTransportInventory(true);
                 transporting = true;
             }
+            tsTransport = Stopwatch.GetTimestamp() - tsMark;
 
             var _transporting = transporting;
+            var _emptyMs = tsEmpty * 1000.0 / tsFreq;
+            var _decreaseMs = tsDecrease * 1000.0 / tsFreq;
+            var _razeMs = tsRaze * 1000.0 / tsFreq;
+            var _transportMs = tsTransport * 1000.0 / tsFreq;
             MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
-                string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1}",
+                string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};decreaseMs={7:F3};razeMs={8:F3};transportMs={9:F3}",
                     _Welder.EntityId,
                     target != null ? target.BlockDefinition.Id.SubtypeName : "null",
                     (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
                     _transporting,
                     target != null && target.IsFullyDismounted,
-                    target != null ? target.Integrity / target.MaxIntegrity : 0f));
+                    target != null ? target.Integrity / target.MaxIntegrity : 0f,
+                    _emptyMs, _decreaseMs, _razeMs, _transportMs));
             return true;
         }
     }
