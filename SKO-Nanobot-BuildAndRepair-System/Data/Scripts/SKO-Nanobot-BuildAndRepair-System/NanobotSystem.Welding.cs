@@ -39,11 +39,22 @@ namespace SKONanobotBuildAndRepairSystem
             var totalComponentChecks = 0;
             var lookingForNextChecked = 0;
             var lockOnFound = false;
+            var weldSkipped = false;
             try
             {
 
             var hasRequiredPower = PowerHelper.HasRequiredElectricPower(this);
             if (!hasRequiredPower) return; //No power -> nothing to do
+
+            // OPT: When the previous iteration found nothing to weld (all targets grid-limited
+            // or assigned), skip the full iteration until the target list changes (new scan).
+            // CurrentHash is a uint (atomic read); stale reads are benign (skip one extra tick).
+            if (_weldLoopExhausted && State.PossibleWeldTargets.CurrentHash == _weldExhaustedAtHash)
+            {
+                weldSkipped = true;
+                return;
+            }
+            _weldLoopExhausted = false;
 
             lock (State.PossibleWeldTargets)
             {
@@ -254,6 +265,15 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
+            // OPT: Mark exhausted when the full iteration found nothing claimable.
+            // Skip condition: not welding, not needing welding, no component checks attempted,
+            // and no lock-on (lock-on BaRs must always re-check for their block).
+            if (!welding && !needWelding && totalComponentChecks == 0 && !hadLockOn)
+            {
+                _weldLoopExhausted = true;
+                _weldExhaustedAtHash = State.PossibleWeldTargets.CurrentHash;
+            }
+
             }
             finally
             {
@@ -273,13 +293,14 @@ namespace SKONanobotBuildAndRepairSystem
                 var _starvedSkipped = starvedSkipped;
                 var _totalComponentChecks = totalComponentChecks;
                 var _lookingForNextChecked = lookingForNextChecked;
+                var _weldSkipped = weldSkipped;
                 MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                    string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17}",
+                    string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17};exhaustedSkip={18}",
                         _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
                         State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
                         _hadLockOn, _lockOnFound, _lockOnLost,
                         _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _componentFailures,
-                        _starvedSkipped, _totalComponentChecks, _lookingForNextChecked));
+                        _starvedSkipped, _totalComponentChecks, _lookingForNextChecked, _weldSkipped));
             }
         }
 

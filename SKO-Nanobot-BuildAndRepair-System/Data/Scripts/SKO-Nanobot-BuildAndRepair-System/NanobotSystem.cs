@@ -69,6 +69,14 @@ namespace SKONanobotBuildAndRepairSystem
         private bool _AsyncUpdateSourcesAndTargetsRunning = false;
         private bool _InitialScanCompleted = false;
         private bool _PushTargetsFull = false;
+
+        /// <summary>
+        /// When true, the welding loop found nothing on its last full iteration
+        /// (all targets grid-limited or assigned to other systems). The loop is
+        /// skipped until the target list hash changes (i.e., a new scan completes).
+        /// </summary>
+        private bool _weldLoopExhausted = false;
+        private long _weldExhaustedAtHash;
         private List<TargetBlockData> _TempPossibleWeldTargets = new List<TargetBlockData>();
         private List<TargetBlockData> _TempPossibleGrindTargets = new List<TargetBlockData>();
         private List<TargetEntityData> _TempPossibleFloatingTargets = new List<TargetEntityData>();
