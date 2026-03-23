@@ -20,13 +20,19 @@ namespace SKONanobotBuildAndRepairSystem
         {
             _UpdateCustomInfoNeeded |= changed;
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
-            if (_UpdateCustomInfoNeeded && (playTime.Subtract(_UpdateCustomInfoLast).TotalSeconds >= 1))
+            if (_UpdateCustomInfoNeeded && (playTime.Subtract(_UpdateCustomInfoLast).TotalSeconds >= 2))
             {
                 var profilerTs = MethodProfiler.Start();
                 try
                 {
                     _Welder.RefreshCustomInfo();
-                    TriggerTerminalRefresh();
+                    // TriggerTerminalRefresh forces the terminal panel to redraw via a
+                    // workaround (Apply helpOthers action twice). On dedicated servers there's
+                    // no local terminal — skip the expensive action lookup + apply calls.
+                    if (!MyAPIGateway.Utilities.IsDedicated)
+                    {
+                        TriggerTerminalRefresh();
+                    }
                 }
                 finally
                 {
