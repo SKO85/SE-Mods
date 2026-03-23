@@ -201,8 +201,6 @@ namespace SKONanobotBuildAndRepairSystem
                     _PossiblePushTargets?.Clear();
                 }
 
-                CachedBlocksTime.Clear();
-                CachedBlocks.Clear();
                 _EmptyGridCache.Clear();
 
                 _DelayWatch?.Stop();

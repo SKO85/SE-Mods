@@ -136,47 +136,12 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        private List<IMySlimBlock> GetBlocksFromCache(IMyCubeGrid grid, bool isGrinding = false)
+        private List<IMySlimBlock> GetBlocksFromCache(IMyCubeGrid grid)
         {
-            var profilerTs = MethodProfiler.Start();
-            var gridId = grid.EntityId;
-            var cacheHit = false;
-
-            try
-            {
-                var playTime = MyAPIGateway.Session.ElapsedPlayTime;
-                TimeSpan cachedTime;
-                List<IMySlimBlock> list;
-                if (CachedBlocksTime.TryGetValue(gridId, out cachedTime))
-                {
-                    if (playTime.Subtract(cachedTime).TotalSeconds < SortedCacheTtlSeconds)
-                    {
-                        if (CachedBlocks.TryGetValue(gridId, out list))
-                        {
-                            cacheHit = true;
-                            return list;
-                        }
-                    }
-                }
-
-                // Get raw blocks from the shared cache (avoids redundant grid.GetBlocks() calls across BaRs).
-                list = SharedGridBlockCache.GetBlocks(grid);
-
-                // Sort the copy per this BaR's priority and distance settings.
-                list.SortWithPriorityAndDistance(this, isGrinding);
-
-                CachedBlocksTime[gridId] = playTime;
-                CachedBlocks[gridId] = list;
-
-                return list;
-            }
-            finally
-            {
-                var _gridId = gridId;
-                var _hit = cacheHit;
-                MethodProfiler.StopAndLog("GetBlocksFromCache", profilerTs, () =>
-                    string.Format("entityId={0};gridId={1};cacheHit={2}", _Welder.EntityId, _gridId, _hit));
-            }
+            // Returns a fresh unsorted block list. Sorting is handled later by
+            // PreSortClusterCandidates on just the target candidates, which is
+            // far cheaper than sorting the entire grid (O(candidates) vs O(all blocks)).
+            return SharedGridBlockCache.GetBlocks(grid);
         }
 
         /// <summary>
@@ -429,31 +394,16 @@ namespace SKONanobotBuildAndRepairSystem
             var weldBefore = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
             var grindBefore = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
 
-            // Per-grid budget: cap how many targets THIS grid's blocks can contribute so one
-            // large connected grid cannot consume the entire scan budget and starve other grids.
-            // The original maxWeld/maxGrind are preserved for ShouldStopScan (global circuit breaker)
-            // and recursive calls to connected grids — each sub-grid computes its own per-grid cap.
-            var thisGridMaxGrind = clusterGrindTargets != null ? Math.Min(maxGrind, grindBefore + MaxPossibleGrindTargets) : 0;
-            var thisGridMaxWeld = clusterWeldTargets != null ? Math.Min(maxWeld, weldBefore + MaxPossibleWeldTargets) : 0;
-
-            var isGrindingMode = Settings.WorkMode == WorkModes.GrindOnly || Settings.WorkMode == WorkModes.GrindBeforeWeld;
-            // In GrindOnly/GrindBeforeWeld, always sort for grinding. The momentary false from
-            // State.Grinding/NeedGrinding triggers the 2x-slower weld sort for no benefit.
-            var isGrinding = isGrindingMode || State.Grinding || State.NeedGrinding;
-            var newBlocks = GetBlocksFromCache(cubeGrid, isGrinding);
+            var newBlocks = GetBlocksFromCache(cubeGrid);
 
             foreach (var slimBlock in newBlocks)
             {
                 if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
 
-                // Only evaluate block as target if this grid hasn't exceeded its per-grid allowance.
-                // Connection traversal below continues regardless so other grids are still discovered.
-                bool withinGridBudget = (clusterGrindTargets != null && clusterGrindTargets.Count < thisGridMaxGrind)
-                                     || (clusterWeldTargets != null && clusterWeldTargets.Count < thisGridMaxWeld);
-                if (withinGridBudget)
-                {
-                    AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, clusterGrindTargets, thisGridMaxWeld, thisGridMaxGrind, skipRangeCheck);
-                }
+                // Collect all qualifying candidates from this grid (no per-grid cap during iteration).
+                // The per-grid budget is enforced after iteration via sort+truncate so that the
+                // BEST candidates (by priority+distance) are retained, not arbitrary ones.
+                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -504,7 +454,7 @@ namespace SKONanobotBuildAndRepairSystem
                             if (projectedCubeGrid != null && !grids.Contains(projectedCubeGrid))
                             {
                                 grids.Add(projectedCubeGrid);
-                                var projectedBlocks = GetBlocksFromCache(projectedCubeGrid, isGrinding);
+                                var projectedBlocks = GetBlocksFromCache(projectedCubeGrid);
 
                                 foreach (IMySlimBlock block in projectedBlocks)
                                 {
@@ -518,7 +468,7 @@ namespace SKONanobotBuildAndRepairSystem
                                         double distance;
                                         if (skipRangeCheck || block.IsInRange(ref areaBox, out distance))
                                         {
-                                            if (clusterWeldTargets.Count < thisGridMaxWeld)
+                                            if (clusterWeldTargets.Count < maxWeld)
                                             {
                                                 clusterWeldTargets.Add(new ClusterTargetCandidate(block, TargetBlockData.AttributeFlags.Projected));
                                             }
@@ -530,6 +480,20 @@ namespace SKONanobotBuildAndRepairSystem
                         continue;
                     }
                 }
+            }
+
+            // Per-grid budget: if this grid contributed more candidates than the per-grid max,
+            // sort the excess by priority+distance and keep only the best. This replaces the old
+            // pre-sort on ALL grid blocks — sorting only qualifying candidates is much cheaper.
+            var grindAdded = (clusterGrindTargets != null ? clusterGrindTargets.Count : 0) - grindBefore;
+            if (grindAdded > MaxPossibleGrindTargets)
+            {
+                SortAndCapGridCandidates(clusterGrindTargets, grindBefore, grindAdded, MaxPossibleGrindTargets, true, ref areaBox);
+            }
+            var weldAdded = (clusterWeldTargets != null ? clusterWeldTargets.Count : 0) - weldBefore;
+            if (weldAdded > MaxPossibleWeldTargets)
+            {
+                SortAndCapGridCandidates(clusterWeldTargets, weldBefore, weldAdded, MaxPossibleWeldTargets, false, ref areaBox);
             }
 
             // Update empty grid cache: remember grids that contributed no targets
@@ -717,7 +681,6 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (_AsyncUpdateSourcesAndTargetsRunning) return;
                 _AsyncUpdateSourcesAndTargetsRunning = true;
-                CachedWelderCenter = _Welder.WorldAABB.Center;
                 Mod.AddAsyncAction(() => AsyncClusterScan(cluster, updateSource));
             }
         }
@@ -1000,7 +963,6 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (_AsyncUpdateSourcesAndTargetsRunning) return;
                 _AsyncUpdateSourcesAndTargetsRunning = true;
-                CachedWelderCenter = _Welder.WorldAABB.Center;
                 Mod.AddAsyncAction(() => AsyncApplyClusterResults(cluster, updateSource));
             }
         }
@@ -1122,6 +1084,41 @@ namespace SKONanobotBuildAndRepairSystem
 
             list.Clear();
             list.AddRange(kept);
+        }
+
+        /// <summary>
+        /// Sorts a subrange of the candidate list by priority+distance and removes excess.
+        /// Called after per-grid collection to enforce the per-grid budget while keeping
+        /// the best candidates (highest priority, nearest distance).
+        /// </summary>
+        private void SortAndCapGridCandidates(List<ClusterTargetCandidate> list, int startIndex, int count, int maxKeep, bool isGrinding, ref MyOrientedBoundingBoxD areaBox)
+        {
+            var center = areaBox.Center;
+            var priorityHandler = isGrinding ? BlockGrindPriority : BlockWeldPriority;
+            var grindNearFirst = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
+            var grindSmallestFirst = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
+
+            list.Sort(startIndex, count, Comparer<ClusterTargetCandidate>.Create((a, b) =>
+            {
+                var priorityA = priorityHandler.GetPriority(a.Block);
+                var priorityB = priorityHandler.GetPriority(b.Block);
+                if (priorityA != priorityB)
+                    return priorityA - priorityB;
+
+                if (grindSmallestFirst)
+                {
+                    var gridRes = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
+                    if (gridRes != 0) return gridRes;
+                }
+
+                var posA = a.Block.CubeGrid.GridIntegerToWorld(a.Block.Position);
+                var posB = b.Block.CubeGrid.GridIntegerToWorld(b.Block.Position);
+                var distA = (center - posA).LengthSquared();
+                var distB = (center - posB).LengthSquared();
+                return (isGrinding && !grindNearFirst) ? distB.CompareTo(distA) : distA.CompareTo(distB);
+            }));
+
+            list.RemoveRange(startIndex + maxKeep, count - maxKeep);
         }
 
         private void ApplyClusterResultToSelf(ScanClusterResult result, bool updateSource)

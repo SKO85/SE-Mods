@@ -11,7 +11,6 @@ using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.Utils;
-using VRageMath;
 using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
 using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 
@@ -84,35 +83,11 @@ namespace SKONanobotBuildAndRepairSystem
         private List<IMyInventory> _TempPossiblePushTargets = new List<IMyInventory>();
 
 
-        private ConcurrentDictionary<long, TimeSpan> CachedBlocksTime = new ConcurrentDictionary<long, TimeSpan>();
-        private ConcurrentDictionary<long, List<IMySlimBlock>> CachedBlocks = new ConcurrentDictionary<long, List<IMySlimBlock>>();
-
         /// <summary>
         /// Tracks grids that were scanned and had no weld/grind targets.
         /// Key: grid EntityId, Value: playTime when grid was found empty.
         /// </summary>
         private ConcurrentDictionary<long, TimeSpan> _EmptyGridCache = new ConcurrentDictionary<long, TimeSpan>();
-
-        /// <summary>
-        /// Per-BaR jitter (0-4s) added to the sorted cache base TTL to prevent all BaRs
-        /// from expiring their sorted caches simultaneously (thundering herd).
-        /// Base (16s) exceeds TargetsUpdateInterval (10s) for at least one cache hit between
-        /// scans, while keeping responsiveness for new blocks (e.g. projected grids).
-        /// </summary>
-        internal readonly double SortedCacheTtlSeconds = 16.0 + _RandomDelay.NextDouble() * 4.0;
-
-        /// <summary>
-        /// Reusable dictionary for distance pre-computation in SortWithPriorityAndDistance.
-        /// Avoids allocating a fresh dictionary (300KB+ for large grids) on every sort call.
-        /// Clear() resets count without deallocating internal arrays.
-        /// </summary>
-        internal Dictionary<IMySlimBlock, double> SortDistanceCache = new Dictionary<IMySlimBlock, double>();
-
-        /// <summary>
-        /// Welder center position captured on the main thread before enqueueing background scans.
-        /// Avoids reading WorldAABB.Center (matrix math) from the background thread.
-        /// </summary>
-        internal Vector3D CachedWelderCenter;
 
         private IMyShipWelder _Welder;
         public IMyInventory _TransportInventory;
