@@ -407,6 +407,20 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
+            // FEAT-040: Grid-level containment pre-check.
+            // If the grid's world AABB fits entirely inside the working area OBB,
+            // all blocks are guaranteed in range — skip expensive per-block OBB checks.
+            // Connected/projected grids still use the original skipRangeCheck (they get their own check).
+            var blockSkipRange = skipRangeCheck;
+            if (!blockSkipRange)
+            {
+                var gridAABB = cubeGrid.WorldAABB;
+                if (areaBox.Contains(ref gridAABB) == ContainmentType.Contains)
+                {
+                    blockSkipRange = true;
+                }
+            }
+
             var newBlocks = GetBlocksFromCache(cubeGrid);
 
             foreach (var slimBlock in newBlocks)
@@ -416,7 +430,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // Collect all qualifying candidates from this grid (no per-grid cap during iteration).
                 // The per-grid budget is enforced after iteration via sort+truncate so that the
                 // BEST candidates (by priority+distance) are retained, not arbitrary ones.
-                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, grindTargetsForGrid, maxWeld, maxGrind, skipRangeCheck);
+                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, grindTargetsForGrid, maxWeld, maxGrind, blockSkipRange);
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -523,10 +537,11 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
-                string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4}",
+                string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};skipRange={5}",
                     _Welder.EntityId, cubeGrid.EntityId, newBlocks.Count,
                     clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
-                    clusterGrindTargets != null ? clusterGrindTargets.Count : -1));
+                    clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
+                    blockSkipRange));
         }
 
         /// <summary>
