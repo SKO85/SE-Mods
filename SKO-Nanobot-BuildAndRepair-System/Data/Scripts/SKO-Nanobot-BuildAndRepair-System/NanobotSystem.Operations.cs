@@ -367,14 +367,24 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void TryTransmitState()
         {
+            var profilerTs = MethodProfiler.Start();
             if (!State.IsTransmitNeeded() || !MyAPIGateway.Multiplayer.MultiplayerActive)
+            {
+                MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
+                    string.Format("entityId={0};action=skip;reason=notNeeded", _Welder.EntityId));
                 return;
+            }
 
             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdateStateTransmitLast).TotalSeconds < _UpdateStateTransmitInterval)
+            {
+                MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
+                    string.Format("entityId={0};action=skip;reason=interval;backoff={1}", _Welder.EntityId, _transmitBackoffMultiplier));
                 return;
+            }
 
             var fingerprint = ComputeStateFingerprint();
-            if (fingerprint != _lastTransmittedFingerprint)
+            var fingerprintChanged = fingerprint != _lastTransmittedFingerprint;
+            if (fingerprintChanged)
             {
                 _transmitBackoffMultiplier = 1;
                 _lastTransmittedFingerprint = fingerprint;
@@ -385,7 +395,12 @@ namespace SKONanobotBuildAndRepairSystem
             _UpdateStateTransmitInterval = baseInterval * _transmitBackoffMultiplier;
             _transmitBackoffMultiplier = Math.Min(_transmitBackoffMultiplier * 2, 4);
 
+            var excludedBefore = State.ExcludedLists;
             NetworkMessagingHandler.MsgBlockStateSend(0, this);
+
+            MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
+                string.Format("entityId={0};action=send;fpChanged={1};backoff={2};excluded={3}",
+                    _Welder.EntityId, fingerprintChanged, _transmitBackoffMultiplier, excludedBefore));
         }
 
         /// <summary>
