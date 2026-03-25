@@ -27,7 +27,9 @@ namespace SKONanobotBuildAndRepairSystem
             if ((Settings.Flags & (SyncBlockSettings.Settings.PushIngotOreImmediately | SyncBlockSettings.Settings.PushComponentImmediately | SyncBlockSettings.Settings.PushItemsImmediately)) == 0)
                 return;
 
-            if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryAutoPushInventoryLast).TotalSeconds <= 5)
+            // FEAT-037: Compute time since last push once for adaptive interval check.
+            var secondsSinceLastPush = MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryAutoPushInventoryLast).TotalSeconds;
+            if (secondsSinceLastPush <= 5)
                 return;
 
             // BUG-016: Skip push if all push targets are known to be full.
@@ -39,6 +41,14 @@ namespace SKONanobotBuildAndRepairSystem
             if (welderInventory != null)
             {
                 if (welderInventory.Empty()) return;
+
+                // FEAT-037: Extended push interval when welder has space.
+                // During grinding, items accumulate slowly. Batch transfers by waiting
+                // 10s instead of 5s when inventory is < 75% full. Cuts push frequency
+                // ~50% without risking overflow (CheckAndUpdateInventoryFull catches it).
+                if (secondsSinceLastPush < 10
+                    && (float)welderInventory.CurrentVolume < (float)welderInventory.MaxVolume * 0.75f)
+                    return;
                 var lastPush = MyAPIGateway.Session.ElapsedPlayTime;
                 var anyPushed = false;
                 var anyAttempted = false;
