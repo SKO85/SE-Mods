@@ -60,6 +60,19 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
+                    // FEAT-039: Skip all sub-method dispatch for idle BaRs.
+                    // When there are no targets, no transport, and inventory isn't full,
+                    // calling ServerTryWelding/Grinding/Collecting would each just exit
+                    // immediately but incur profiler + method-call overhead (~0.15ms per BaR).
+                    var isIdleNoWork = State.PossibleWeldTargets.CurrentCount == 0
+                        && State.PossibleGrindTargets.CurrentCount == 0
+                        && State.PossibleFloatingTargets.CurrentCount == 0
+                        && State.CurrentTransportStartTime <= TimeSpan.Zero
+                        && _TransportInventory.CurrentVolume == 0
+                        && !State.InventoryFull;
+
+                    if (!isIdleNoWork)
+                    {
                     ServerTryPushInventory();
 
                     // BUG-015: Proactively detect full welder inventory after push attempt.
@@ -141,6 +154,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding)
                         ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);
+                    }
                 }
             }
             else
