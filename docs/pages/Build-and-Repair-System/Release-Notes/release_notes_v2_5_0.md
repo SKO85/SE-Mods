@@ -11,6 +11,8 @@ nav_order: 1
 - Release date: March 2026
 - Notes: Major performance and stability release. Focused on server performance with many active Build and Repair systems, bug fixes, and quality-of-life improvements.
 
+> **Note:** This release also includes all changes from [v2.4.5](release_notes_v2_4_5), which was not separately published. Please review those notes as well for a complete picture of what changed since v2.4.4.
+
 ---
 
 ## Performance Improvements
@@ -29,7 +31,7 @@ Previously, a single large grid could consume the entire scan budget, causing Bu
 
 ### Empty Grid Rescan Delay
 
-When a grid is scanned and has no weld or grind targets, it is now skipped for a configurable period (default 30 seconds) before being scanned again. Sub-grid connections (connectors, pistons, rotors) are still traversed, so newly docked or spawned ships are never missed. This significantly reduces CPU usage on servers with many idle grids. Configurable via `EmptyGridRescanDelaySeconds` in `ModSettings.xml`.
+When a grid is scanned and has no weld or grind targets, it is now skipped for a configurable period (default 20 seconds) before being scanned again. Sub-grid connections (connectors, pistons, rotors) are still traversed, so newly docked or spawned ships are never missed. This significantly reduces CPU usage on servers with many idle grids. Configurable via `EmptyGridRescanDelaySeconds` in `ModSettings.xml`.
 
 ### Cluster Stagger
 
@@ -43,6 +45,30 @@ The system now monitors the server's simulation speed. When sim speed drops belo
 
 The default value for `MaxSystemsPerTargetGrid` is now **20** in local and listen-server games and **10** on dedicated servers. This provides a better out-of-the-box experience for both single-player and multiplayer. Setting the value manually in `ModSettings.xml` overrides whichever default applies.
 
+### Network Sync Optimisations
+
+State synchronisation between server and clients has been significantly reduced:
+
+- **Delta sync:** Only changed data is sent. Target lists, missing components, and floating objects are tracked by hash — if a list hasn't changed since the last send, it is omitted from the message. A full sync is sent periodically to prevent drift.
+- **Progressive backoff:** When a block's working state hasn't changed (same welding/grinding status, same target counts), the sync interval is progressively extended from 1–2 seconds up to 4–8 seconds. The interval resets immediately when state changes.
+- **Reduced payload size:** The maximum number of synced target items per list has been reduced from 64 to 24, which is more than enough for the terminal display.
+
+Together these changes reduce network bandwidth by roughly 80% during stable operation.
+
+### Scanning Interval and Projection Cold Start
+
+The target scanning interval has been tuned for server performance. The cluster coordinator scans for new targets roughly every 10 seconds. This means that when a projector is first activated, there can be a short delay (up to about 10 seconds) before the Build and Repair blocks detect the new projected blocks and begin welding. Once the first blocks are placed and subsequent scans complete, more projected blocks become visible and welding ramps up quickly. Improving the cold-start detection speed is planned for a future update.
+
+### Idle Block Optimisation
+
+Build and Repair blocks with no targets, no transport in progress, and no full inventory now skip all internal processing (welding, grinding, collecting, inventory push). Previously, each idle block still called into several methods that would immediately exit. With many idle blocks, this overhead added up.
+
+### Large-Scale Server Optimisations (100+ blocks)
+
+- **Cluster rebuild caching:** The cluster coordinator assignment now caches each block's configuration key. If no settings have changed and no blocks were added or removed, the full cluster rebuild is skipped entirely. This eliminates 20–30 ms spikes that occurred every 2 seconds on servers with 200+ blocks.
+- **Grid count cache throttle:** The per-grid system count cache now rebuilds at most every 5 frames instead of every frame, reducing steady-state CPU cost by roughly 80%.
+- **Grid containment pre-check:** Before scanning a grid's blocks for targets, the system checks whether the grid's bounding box fits entirely inside the working area. If it does, expensive per-block range checks are skipped for every block on that grid.
+
 ### Internal Optimisations
 
 - The per-grid system count, previously recalculated on every operation call, is now cached once per tick and reused.
@@ -51,14 +77,56 @@ The default value for `MaxSystemsPerTargetGrid` is now **20** in local and liste
 - LINQ allocations in the Safe Zone range check have been replaced with a simple loop, removing per-block allocations during weld and grind operations.
 - Cluster pre-sort optimisation eliminates redundant sorting across cluster members, reducing sort overhead by roughly 40%.
 - `Mod.NanobotSystems` changed to a concurrent collection, removing inconsistent manual locking.
+- Inventory push uses an adaptive interval — when the welder inventory is less than 75% full, the push interval is extended from 5 to 10 seconds, batching transfers and reducing overhead during grinding.
 
 ---
 
 ## New Features
 
-### Cryo Chambers and Refineries as Inventory Sources
+### Weld Mode: Full / Functional / Skeleton
 
-Cryo Chambers and Refineries are now included when scanning for source and push-target inventories. Components stored in these blocks can be pulled for welding, and excess items can be pushed into them.
+The old "Weld to functional only" checkbox has been replaced with a three-option dropdown:
+
+| Mode | Behaviour |
+| --- | --- |
+| **Weld to full** (default) | Welds blocks to 100% integrity. Same as the previous default. |
+| **Weld to functional** | Welds blocks until they become functional (lights turn on, doors open, thrusters fire). Stops at the functional threshold to save components and time. |
+| **Skeleton only** | Only places projected blocks (first component). Does not weld or repair existing blocks. This is the fastest way to lay out a large structure from a projection — place all blocks first, then switch to Full or Functional to weld them. |
+
+Existing saves that used "Weld to functional only" will automatically map to the new "Weld to functional" option.
+
+### Live Configuration via Chat Commands
+
+Server admins can now view and change most settings at runtime without restarting, using the `/nanobars config` command:
+
+| Command | Description |
+| --- | --- |
+| `/nanobars config list` | List all settings with their current values. |
+| `/nanobars config get <setting>` | Get a specific setting's current value. |
+| `/nanobars config set <setting> <value>` | Change a setting immediately. |
+| `/nanobars config save` | Save current settings to `ModSettings.xml`. |
+| `/nanobars config reload` | Reload settings from `ModSettings.xml`. |
+| `/nanobars config reset` | Reset all settings to defaults. |
+
+**Examples:**
+```
+/nanobars config set MaxSystemsPerTargetGrid 15
+/nanobars config set StaggerGroupCount 3
+/nanobars config set MaxGrindsPerTick 8
+/nanobars config set AssignmentTtlSeconds 5
+/nanobars config save
+```
+
+### Inventory Sources and Push Targets
+
+The system now supports a wider range of block types as inventory sources (to pull components for welding) and push targets (to offload items after grinding). Any of the following blocks connected via the conveyor network can be used:
+
+- Cargo Containers, Connectors, Conveyor Sorters
+- Assemblers, Refineries
+- Ship Grinders, Ship Welders (excluding other Build and Repair blocks)
+- Cryo Chambers
+
+**New in v2.5.0:** Cryo Chambers and Refineries have been added to this list. Blocks on connected grids (via connectors, pistons, rotors) are also included. The system rescans for sources and push targets every 30 seconds.
 
 ### Debug Mode (Config)
 
@@ -91,7 +159,7 @@ Admins can temporarily override the reported simulation speed for testing purpos
 
 ### Custom Info Panel Refresh
 
-The terminal custom info panel now refreshes every 2 seconds instead of only when state changes. This keeps the displayed status up to date even when the block is idle or waiting.
+The terminal custom info panel now updates at most every 2 seconds when something has changed, instead of immediately on every state change. This reduces unnecessary refreshes while still keeping the displayed status current. On dedicated servers, the expensive terminal redraw is skipped entirely since no local terminal is rendered — only connected clients see the panel.
 
 ---
 
@@ -161,6 +229,10 @@ When all push targets (cargo containers) were full, the system would continuousl
 
 Deselecting a sort option (Nearest, Farthest, Smallest Grid) in the terminal could unintentionally clear all sort options instead of cycling correctly. The toggle logic has been corrected.
 
+### Safe Zone Cluster Split
+
+When a grid straddles a Safe Zone boundary, some Build and Repair blocks may be inside the zone and others outside. Previously, all blocks on the same grid shared a single scan coordinator. If the coordinator happened to be inside the Safe Zone, it could prevent the other blocks from finding valid targets. The system now creates separate clusters for blocks inside and outside Safe Zones, so each group has a coordinator that matches its permissions.
+
 ---
 
 ## Stability Improvements
@@ -171,3 +243,6 @@ Deselecting a sort option (Nearest, Farthest, Smallest Grid) in the terminal cou
 - **Deleted inventory guards:** Push and pull operations now check for deleted or closed inventory owners before accessing them, preventing errors when blocks are destroyed mid-operation.
 - **Exception logging:** Silent `catch {}` blocks in sorting and other internal operations now log exceptions instead of swallowing them, making issues easier to diagnose.
 - **Logging initialisation:** Fixed a startup log message that could show a null mod name.
+- **Null guards:** Added safety checks for blocks on grids being unloaded, missing item definitions, and projector state changes during build operations. These prevent rare crashes on busy servers.
+- **Log file lock on Torch reload:** The logging system now properly releases its file handle when the mod is unloaded, preventing "file in use" errors after Torch hot-reloads.
+- **Settings backward compatibility:** Saved block settings from older versions are automatically migrated to the new format (e.g. the old "Weld to functional only" checkbox maps correctly to the new weld mode dropdown).

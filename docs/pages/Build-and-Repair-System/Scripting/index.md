@@ -127,6 +127,15 @@ When `BuildAndRepair.ScriptControlled` is `true`, the script chooses which block
 | `BuildAndRepair.PossibleTargets`        | `MemorySafeList<IMySlimBlock>`              | Blocks currently queued for welding.                      |
 | `BuildAndRepair.PossibleGrindTargets`   | `MemorySafeList<IMySlimBlock>`              | Blocks currently queued for grinding.                     |
 | `BuildAndRepair.PossibleCollectTargets` | `MemorySafeList<IMyEntity>`                 | Floating objects currently queued for collection.         |
+| `BuildAndRepair.CurrentTarget`          | `IMySlimBlock`                              | The block currently being welded (read-only).             |
+| `BuildAndRepair.CurrentGrindTarget`     | `IMySlimBlock`                              | The block currently being ground (read-only).             |
+
+### Production & Inventory Helpers
+
+| Property                                              | Type                                                                        | Description                                                                                                              |
+| ----------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `BuildAndRepair.ProductionBlock.EnsureQueued`         | `Func<IEnumerable<long>, MyDefinitionId, int, int>`                        | Ensures a component is queued in one of the specified assemblers. Returns the amount still needed after queuing.          |
+| `BuildAndRepair.Inventory.NeededComponents4Blueprint` | `Func<IMyProjector, Dictionary<MyDefinitionId, MyFixedPoint>, int>`        | Calculates the components needed to complete a projector's blueprint. Returns the number of component types.             |
 
 ---
 
@@ -135,5 +144,4 @@ When `BuildAndRepair.ScriptControlled` is `true`, the script chooses which block
 A maintained companion script is available that handles automatic assembler queuing and multi-display status output. **It only works with SKO's maintained versions of the mod — not the original mod by Dummy08.**
 
 - **Steam Workshop:** [Nanobot Build and Repair System Queuing / Display / Scripting (Maintained)](https://steamcommunity.com/sharedfiles/filedetails/?id=3472701905)
-- **Source:** `SKO-Nanobot-BuildAndRepair-System-Script/Script.cs` in this repository
 - **Documentation:** [Companion Script](../Companion-Script/)

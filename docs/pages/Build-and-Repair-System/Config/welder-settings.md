@@ -45,6 +45,20 @@ Search mode controls which targets the system scans for.
 
 ---
 
+## Weld Mode
+
+The weld mode controls how far the system welds blocks. Players can change this per block in the terminal dropdown.
+
+| Mode | Behaviour |
+| --- | --- |
+| `WeldFull` (default) | Welds blocks to 100% integrity. |
+| `WeldFunctional` | Welds blocks until they become functional. Saves components and time. |
+| `WeldSkeleton` | Only places projected blocks (first component). Does not weld or repair existing blocks. |
+
+There is no server-side setting to lock or override the weld mode — it is always controlled per block in the terminal.
+
+---
+
 ## Build (Weld Projections)
 
 | Setting             | Default | Description                                                                                     |

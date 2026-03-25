@@ -19,14 +19,13 @@ The companion script runs in a Programmable Block and provides two features on t
 The script handles one or more independent **groups**, each pairing a set of Build and Repair blocks with a set of assemblers and optional display panels. A typical ship needs only one group; large builds with separate hangar bays can define one group per bay.
 
 - **Steam Workshop:** [Nanobot Build and Repair System Queuing / Display / Scripting (Maintained)](https://steamcommunity.com/sharedfiles/filedetails/?id=3472701905)
-- **Source:** `SKO-Nanobot-BuildAndRepair-System-Script/Script.cs` in this repository
 
 ---
 
 ## Quick Start
 
 1. Place a **Programmable Block** on your grid.
-2. Subscribe to the script on the Workshop and load it into the block, or paste the source directly from `Script.cs`.
+2. Subscribe to the script on the [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3472701905) and load it into the block.
 3. Compile and run. The script auto-detects all Build and Repair blocks on the grid — no further configuration is needed for a basic setup.
 
 For assembler queuing and named displays, continue to the configuration section below.

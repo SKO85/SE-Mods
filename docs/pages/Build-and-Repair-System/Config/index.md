@@ -10,7 +10,24 @@ has_children: true
 
 The mod can be configured through a `ModSettings.xml` file. All settings are optional — any value omitted from the file will use its default. The file is shared across all Build and Repair blocks on the server.
 
-> **Note:** The server (or session) must be restarted after any change to `ModSettings.xml` for the new values to take effect.
+> **Note:** You can also change most settings at runtime using chat commands (admin only) — see [Live Configuration](#live-configuration) below. Some settings (such as range, power, and welder-specific options) still require a session restart to take effect.
+
+---
+
+## Live Configuration
+
+Server admins can view and change settings at runtime without restarting, using chat commands:
+
+| Command | Description |
+| --- | --- |
+| `/nanobars config list` | List all settings with their current values. |
+| `/nanobars config get <setting>` | Get a specific setting's current value. |
+| `/nanobars config set <setting> <value>` | Change a setting immediately. |
+| `/nanobars config save` | Save current settings to `ModSettings.xml`. |
+| `/nanobars config reload` | Reload settings from `ModSettings.xml`. |
+| `/nanobars config reset` | Reset all settings to defaults. |
+
+Most settings take effect immediately. Some changes (such as range, power, and welder-specific settings) require a session restart.
 
 ---
 

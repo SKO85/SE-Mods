@@ -140,7 +140,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool _initialized = false;
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
-        private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);
+        private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(1);
         private static TimeSpan _LastSyncModDataRequestSend;
         private static TimeSpan _LastGeneralPeriodicCheck;
         private static TimeSpan _LastTtlCacheCleanerCheck;

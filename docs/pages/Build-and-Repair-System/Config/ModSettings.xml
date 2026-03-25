@@ -177,7 +177,7 @@
 
     <!-- Maximum number of background scan tasks that may run in parallel across all blocks
          on the server. Reduce to lower CPU impact on large servers. -->
-    <MaxBackgroundTasks>2</MaxBackgroundTasks>
+    <MaxBackgroundTasks>4</MaxBackgroundTasks>
 
     <!-- Maximum distance in metres the work area can be offset from the block's position
          via the terminal. Min: 0. -->
@@ -223,13 +223,24 @@
          Intended for testing and troubleshooting only — not for normal play. -->
     <DebugMode>false</DebugMode>
 
-    <!-- Number of consecutive 5-second push cycles with a full inventory and no active welding
-         before the system automatically disables itself. Prevents a block with a backed-up
-         conveyor network from endlessly attempting futile push operations. Range: 1–500. -->
-    <MaxInventoryFullPushAttempts>100</MaxInventoryFullPushAttempts>
-
     <!-- After a grid is found to have no weld or grind targets, skip scanning it for this many
          seconds. Set to 0 to disable. Sub-grid connections (connectors, pistons, rotors) are
          always traversed so newly docked ships are never missed. Range: 0–300. -->
-    <EmptyGridRescanDelaySeconds>30</EmptyGridRescanDelaySeconds>
+    <EmptyGridRescanDelaySeconds>20</EmptyGridRescanDelaySeconds>
+
+    <!-- Controls how many stagger groups are used to distribute Build and Repair updates
+         across ticks. 0 = automatic (scales with block count). Higher values spread the
+         load more but increase delay between each block's updates. Range: 0–10. -->
+    <StaggerGroupCount>0</StaggerGroupCount>
+
+    <!-- Maximum number of grind operations across all blocks per tick. 0 = automatic
+         (scales with block count, min 5, max 10). Higher values allow faster grinding
+         but use more CPU per tick. Range: 0–100. -->
+    <MaxGrindsPerTick>0</MaxGrindsPerTick>
+
+    <!-- How long (seconds) a block assignment reservation is held before expiring.
+         Prevents two systems from targeting the same block. Lower = faster recycling
+         when systems disconnect. Higher = more protection against assignment steals.
+         Range: 2–30. -->
+    <AssignmentTtlSeconds>8</AssignmentTtlSeconds>
 </SyncModSettings>

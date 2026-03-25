@@ -64,14 +64,27 @@ Yes. The system checks whether the owner of the Build and Repair block has the r
 <details>
 <summary>Does it work with the multigrid projection plugin?</summary>
 <div>
-Yes, welding of projected grids using the multigrid-projection plugin is supported.
+<p>Yes, welding of projected grids using the multigrid-projection plugin is supported.</p>
+<p><strong>Known limitation:</strong> In some cases the multigrid-projection plugin can break welding. The plugin patches native game API calls, which may not always work as expected. If you encounter a block that cannot be welded, try welding it manually with your hand welder or a standard ship welder first. If manual welding also fails, the issue is caused by the plugin — not by the Build and Repair system. Please report such cases to the multigrid-projection plugin team.</p>
 </div>
 </details>
 
 <details>
-<summary>Can it pull components from Cryo Chambers and Refineries?</summary>
+<summary>What blocks can the system pull components from and push items to?</summary>
 <div>
-Yes. As of v2.5.0, the system includes Cryo Chambers and Refineries when scanning for source and push-target inventories. Components stored in these blocks can be pulled for welding, and excess items can be pushed into them. This works alongside Cargo Containers, Connectors, Sorters, and Grinder blocks.
+<p>The system scans for <strong>source inventories</strong> (to pull components for welding) and <strong>push targets</strong> (to offload items after grinding or when the inventory is full). Both use the same set of supported block types. The block must be connected to the Build and Repair block via the <strong>conveyor network</strong>.</p>
+<p><strong>Supported block types:</strong></p>
+<ul>
+  <li>Cargo Containers</li>
+  <li>Connectors</li>
+  <li>Conveyor Sorters</li>
+  <li>Assemblers</li>
+  <li>Refineries</li>
+  <li>Ship Grinders</li>
+  <li>Ship Welders (excluding other Build and Repair blocks, to prevent circular transfers)</li>
+  <li>Cryo Chambers</li>
+</ul>
+<p>Blocks on connected grids (via connectors, pistons, rotors) are also included as long as they are reachable through the conveyor system. The system rescans for sources and push targets every 30 seconds.</p>
 </div>
 </details>
 
@@ -118,6 +131,20 @@ Yes. As of v2.5.0, the system includes Cryo Chambers and Refineries when scannin
 </div>
 </details>
 
+<details>
+<summary>The mod is not working correctly after an update.</summary>
+<div>
+<p>In some cases issues can be caused by an outdated configuration file (<code>ModSettings.xml</code>) that contains settings from an older version. To rule this out:</p>
+<ol>
+  <li>Make a backup of your current <code>ModSettings.xml</code>.</li>
+  <li>Delete the original file and restart the server or session.</li>
+  <li>Generate a fresh configuration file using <code>/nanobars -cwsf</code> or <code>/nanobars config save</code>.</li>
+  <li>Compare the new file with your backup and merge any custom settings you need back into the new file.</li>
+</ol>
+<p>This ensures you are using a configuration file that matches the current version of the mod.</p>
+</div>
+</details>
+
 ---
 
 ## Block Seems Stuck
@@ -135,6 +162,7 @@ Yes. As of v2.5.0, the system includes Cryo Chambers and Refineries when scannin
   <li>Are you inside a <strong>Safe Zone</strong> that does not have Weld, Grind, or Build enabled?</li>
   <li>Do you have <strong>Shields</strong> active on the target? Shields prevent grinding.</li>
   <li>Are you using a server plugin that <strong>protects grids</strong>, such as the <code>!protect</code> command from ALE PCU Transferrer? Protected grids cannot be welded or ground.</li>
+  <li>Check whether the block's search mode is set to <strong>Fly</strong> or <strong>Walk</strong> mode. Try switching between them — the wrong mode for your situation can prevent the system from finding targets.</li>
   <li>Check the <strong>info panel</strong> in the terminal — it often shows a specific reason why the system is idle.</li>
 </ul>
 </div>
@@ -163,6 +191,56 @@ Yes. As of v2.5.0, the system includes Cryo Chambers and Refineries when scannin
 <summary>What is the Cluster Scan Coordinator?</summary>
 <div>
 When multiple Build and Repair blocks share the same working area, they automatically elect a single coordinator to scan for targets. The coordinator scans once and shares the results with all members. This eliminates redundant scanning and can reduce scan CPU usage by roughly 80% with 10 co-located blocks. If the coordinator is disabled or removed, a new one is elected automatically. You do not need to configure anything — it works out of the box.
+</div>
+</details>
+
+---
+
+## Weld Modes
+
+<details>
+<summary>What are the different weld modes?</summary>
+<div>
+<p>The terminal dropdown offers three weld modes:</p>
+<ul>
+  <li><strong>Weld to full</strong> (default) — Welds every block to 100% integrity.</li>
+  <li><strong>Weld to functional</strong> — Welds blocks just enough to become functional (lights on, doors work, thrusters fire). Saves components and time when you don't need full armour integrity.</li>
+  <li><strong>Skeleton only</strong> — Only places projected blocks (the first component). Does not weld or repair existing blocks. Great for quickly laying out an entire blueprint from a projector, then switching to Full or Functional to finish the job.</li>
+</ul>
+</div>
+</details>
+
+<details>
+<summary>How do I quickly build a large ship from a projection?</summary>
+<div>
+<ol>
+  <li>Set up your projector with the blueprint.</li>
+  <li>Set all your Build and Repair blocks to <strong>Skeleton only</strong> mode.</li>
+  <li>Make sure <strong>Build new</strong> is enabled in the terminal.</li>
+  <li>The blocks will rapidly place all projected blocks (one component each).</li>
+  <li>Once all blocks are placed, switch to <strong>Weld to full</strong> or <strong>Weld to functional</strong> to weld them up.</li>
+</ol>
+<p>This two-step approach is much faster than welding each block to completion before placing the next one.</p>
+</div>
+</details>
+
+<details>
+<summary>I switched from the old "Weld to functional only" checkbox. Where did it go?</summary>
+<div>
+It has been replaced with the <strong>Weld mode</strong> dropdown in the terminal. If your block previously had "Weld to functional only" checked, it will automatically appear as <strong>Weld to functional</strong> in the new dropdown. No action is needed — your saved settings are preserved.
+</div>
+</details>
+
+---
+
+## Scanning & Detection
+
+<details>
+<summary>Why does it take a few seconds before my Build and Repair blocks start welding a new projection?</summary>
+<div>
+<p>When you first activate a projector, the Build and Repair blocks do not immediately know about the projected blocks. The cluster coordinator needs to scan and discover them first. This scan runs on a timer (roughly every 10 seconds), so there can be a short delay before the first projected block is detected and welding begins.</p>
+<p>This "cold start" is a trade-off for performance — scanning less frequently reduces CPU load, especially on servers with many blocks. Once the first few blocks have been welded and new scans complete, more projected blocks become visible and welding speeds up quickly.</p>
+<p>Improving the cold-start detection speed is planned for a future update. For now, patience for the first few seconds is expected.</p>
 </div>
 </details>
 
@@ -234,7 +312,27 @@ Yes. Many options can be configured through the <code>ModSettings.xml</code> fil
 <details>
 <summary>How do I create the server configuration file?</summary>
 <div>
-Run <code>/nanobars -cwsf</code> in-game to generate a <code>ModSettings.xml</code> file in your local Space Engineers folder. Copy the file to your dedicated server, edit the values as needed, and restart the server for the changes to take effect.
+<p>There are two ways:</p>
+<ul>
+  <li><strong>From chat:</strong> Run <code>/nanobars config save</code> in-game (admin only). This saves the current settings to <code>ModSettings.xml</code> in the mod's storage folder.</li>
+  <li><strong>Legacy command:</strong> Run <code>/nanobars -cwsf</code> in-game. This generates a <code>ModSettings.xml</code> file in your local Space Engineers folder that you can then copy to your dedicated server.</li>
+</ul>
+<p>On a dedicated server, you can also change settings at runtime using <code>/nanobars config set &lt;setting&gt; &lt;value&gt;</code> and then save them with <code>/nanobars config save</code>. Most settings take effect immediately, but some changes (such as range, power, and welder-specific settings) require a session restart to apply.</p>
+</div>
+</details>
+
+<details>
+<summary>Can I change settings without restarting the server?</summary>
+<div>
+<p>Yes. As of v2.5.0, most settings can be changed at runtime using chat commands (admin only):</p>
+<ul>
+  <li><code>/nanobars config list</code> — see all settings and their current values</li>
+  <li><code>/nanobars config set MaxGrindsPerTick 8</code> — change a setting immediately</li>
+  <li><code>/nanobars config save</code> — save changes to <code>ModSettings.xml</code> so they persist after restart</li>
+  <li><code>/nanobars config reload</code> — reload settings from <code>ModSettings.xml</code></li>
+  <li><code>/nanobars config reset</code> — reset all settings to defaults</li>
+</ul>
+<p>Most settings take effect immediately. However, some changes (such as range, power, and welder-specific settings) require a session restart to apply.</p>
 </div>
 </details>
 
@@ -265,15 +363,6 @@ Set <code>DisableParticleEffects</code> to <code>true</code> in <code>ModSetting
 </details>
 
 <details>
-<summary>My Build and Repair block turned itself off. Why?</summary>
-<div>
-<p>The block will automatically disable itself if its inventory stays full for too many consecutive push cycles with no active welding. This is a safety mechanism to prevent a block with a backed-up conveyor network from endlessly attempting futile push operations.</p>
-<p>To recover: clear space in a connected cargo container, or manually pull items out of the block's inventory, then re-enable the block from the terminal.</p>
-<p>The threshold is controlled by the <code>MaxInventoryFullPushAttempts</code> setting in <code>ModSettings.xml</code> (default: <code>100</code> cycles of 5 seconds each, roughly 8 minutes). Set it to <code>0</code> to disable this behaviour entirely.</p>
-</div>
-</details>
-
-<details>
 <summary>How do I disable reputation loss when grinding enemy or neutral grids?</summary>
 <div>
 Set <code>DecreaseFactionReputationOnGrinding</code> to <code>false</code> in <code>ModSettings.xml</code>. By default, grinding grids belonging to other factions or NPCs causes a reputation penalty, matching manual grinding behaviour.
@@ -293,6 +382,14 @@ Set <code>DecreaseFactionReputationOnGrinding</code> to <code>false</code> in <c
   <li>Grinding inside your own Safe Zone is allowed when the relevant Safe Zone option is enabled in the Safe Zone settings panel.</li>
 </ul>
 <p>These checks can be disabled in <code>ModSettings.xml</code> if needed.</p>
+</div>
+</details>
+
+<details>
+<summary>My grid is partially inside a Safe Zone and some blocks are not working. Why?</summary>
+<div>
+<p>When a grid straddles a Safe Zone boundary, Build and Repair blocks inside the zone have different permissions than those outside. The system automatically creates separate work groups for blocks inside and outside the Safe Zone, so each group has a coordinator that matches its permissions.</p>
+<p>If all your blocks are inside a Safe Zone that blocks welding or grinding, they will be idle — this is correct behaviour. Move blocks outside the zone or adjust the Safe Zone settings to allow the operations you need.</p>
 </div>
 </details>
 
@@ -351,7 +448,7 @@ Open the block's terminal and click <strong>Reset All Settings</strong>. This re
 <p><strong>Setup:</strong></p>
 <ol>
   <li>Place a Programmable Block on your grid.</li>
-  <li>Open the script from the Steam Workshop link above (or from <code>SKO-Nanobot-BuildAndRepair-System-Script/Script.cs</code>) and paste it into the Programmable Block editor.</li>
+  <li>Open the script from the Steam Workshop link above and paste it into the Programmable Block editor.</li>
   <li>Edit the <code>BuildAndRepairSystemQueuingGroups</code> array at the top of the script to match your block and assembler names or group names.</li>
   <li>Compile and run the script. It updates automatically on every 100-tick cycle.</li>
 </ol>

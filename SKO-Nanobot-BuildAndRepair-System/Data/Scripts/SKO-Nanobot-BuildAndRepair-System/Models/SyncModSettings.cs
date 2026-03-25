@@ -156,7 +156,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             DeleteBotsWhenDead = true;
             MaxSystemsPerTargetGrid = 0;
             AssignToSystemEnabled = true;
-            DebugMode = true;
+            DebugMode = false;
             EmptyGridRescanDelaySeconds = 20;
             StaggerGroupCount = 0;
             MaxGrindsPerTick = 0;
