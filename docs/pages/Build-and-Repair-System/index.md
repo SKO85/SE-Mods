@@ -47,6 +47,7 @@ Both versions are functionally identical. They only differ in the resources requ
 - **Sound & Effects** — ticking sound and flying nanobot particle effects toggleable per block and server-wide
 - **Reset All Settings** — restores all per-block settings to their defaults from the terminal
 - **Script Support** — exposes a scripting interface for Programmable Block integration
+- **Live Configuration** — server admins can view and change most settings at runtime via `/nanobars config` chat commands without restarting
 - **Built-in Profiler** — admin-only chat commands to measure the mod's performance impact on the server
 
 ---
@@ -132,6 +133,7 @@ _Applies to the (Maintained) - Nerfed Version only. See the [Original Resources 
 ## Documentation
 
 - [Configuration File](Config/) — all `ModSettings.xml` settings with defaults and descriptions
+- [Companion Script](Companion-Script/) — automatic assembler queuing and multi-display status output
 - [Scripting API](Scripting/) — terminal properties available to Programmable Block scripts
 - [FAQ](FAQ/) — common questions and troubleshooting steps
 - [Release Notes](Release-Notes/) — full version history
