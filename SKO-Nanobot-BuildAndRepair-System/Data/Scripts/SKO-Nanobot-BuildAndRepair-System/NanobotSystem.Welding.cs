@@ -440,7 +440,20 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (welding)
                     {
-                        target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
+                        var weldAmount = MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_AMOUNT_PER_SECOND;
+
+                        // Cap weld amount for non-Full modes so we don't overshoot the target integrity.
+                        if (Settings.WeldOptions != AutoWeldOptions.WeldFull)
+                        {
+                            var remaining = target.GetRequiredIntegrity(Settings.WeldOptions) - target.Integrity;
+                            if (remaining <= 0f)
+                                welding = false;
+                            else
+                                weldAmount = Math.Min(weldAmount, remaining);
+                        }
+
+                        if (welding)
+                            target.IncreaseMountLevel(weldAmount, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
                     }
 
                     if (IsWeldIntegrityReached(target))
@@ -486,35 +499,23 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if ((targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0)
                 {
-                    targetData.Block.GetMissingComponents(_TempMissingComponents, UtilsInventory.IntegrityLevel.Create);
+                    // Single GetMissingComponents call for projected blocks.
+                    // Skeleton: only the creation component. Otherwise: all components
+                    // at the target integrity level (includes creation component).
+                    // Avoids the previous double API call + subtraction logic.
+                    var useIgnoreColor = ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0) && IsColorNearlyEquals(Settings.IgnoreColorPacked, targetData.Block.GetColorMask());
+                    if (Settings.WeldOptions == AutoWeldOptions.WeldSkeleton || useIgnoreColor)
+                    {
+                        targetData.Block.GetMissingComponents(_TempMissingComponents, UtilsInventory.IntegrityLevel.Create);
+                    }
+                    else
+                    {
+                        targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? UtilsInventory.IntegrityLevel.Functional : UtilsInventory.IntegrityLevel.Complete);
+                    }
+
                     if (_TempMissingComponents.Count > 0)
                     {
                         picked = ServerFindMissingComponents(targetData, ref remainingVolume);
-
-                        if (picked)
-                        {
-                            if (((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) == 0) || !IsColorNearlyEquals(Settings.IgnoreColorPacked, targetData.Block.GetColorMask()))
-                            {
-                                //Block could be created and should be welded -> so retrieve the remaining material also
-                                KeyValuePair<string, int> keyValue = default(KeyValuePair<string, int>);
-                                foreach (var kv in _TempMissingComponents) { keyValue = kv; break; }
-                                _TempMissingComponents.Clear();
-
-                                targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? UtilsInventory.IntegrityLevel.Functional : UtilsInventory.IntegrityLevel.Complete);
-
-                                if (_TempMissingComponents.ContainsKey(keyValue.Key))
-                                {
-                                    if (_TempMissingComponents[keyValue.Key] <= keyValue.Value)
-                                    {
-                                        _TempMissingComponents.Remove(keyValue.Key);
-                                    }
-                                    else
-                                    {
-                                        _TempMissingComponents[keyValue.Key] -= keyValue.Value;
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
                 else
