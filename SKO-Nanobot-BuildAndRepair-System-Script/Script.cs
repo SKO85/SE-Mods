@@ -503,7 +503,7 @@ public class BuildAndRepairSystemQueuingGroupData
             if (display != null && settings != null)
             {
                 display.Clear();
-                if (settings.DisplayKinds != null && RepairSystems != null)
+                if (settings.DisplayKinds != null && settings.DisplayKinds.Length > 0 && RepairSystems != null)
                 {
                     if (elapsedTime > NextSwitchTime[idx])
                     {
@@ -1122,7 +1122,8 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 BlockClass blockClass;
                 bool enabled;
-                if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
+                if (values.Length >= 2 &&
+                   Enum.TryParse<BlockClass>(values[0], out blockClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
@@ -1202,7 +1203,8 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 BlockClass blockClass;
                 bool enabled;
-                if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
+                if (values.Length >= 2 &&
+                   Enum.TryParse<BlockClass>(values[0], out blockClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
@@ -1213,7 +1215,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return null;
     }
 
-    /// <summary> 
+    /// <summary>
     /// Get the grind priority of the given block class 
     /// </summary> 
     public int GetGrindPriority(BlockClass blockClass)
@@ -1282,7 +1284,8 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 ComponentClass compClass;
                 bool enabled;
-                if (Enum.TryParse<ComponentClass>(values[0], out compClass) &&
+                if (values.Length >= 2 &&
+                   Enum.TryParse<ComponentClass>(values[0], out compClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     compList.Add(new ClassState<ComponentClass>(compClass, enabled));
@@ -2035,14 +2038,14 @@ public class StatusAndLogDisplay
             return cubeBlock.BlockDefinition.SubtypeName;
         }
 
+        var cubeGrid = block as IMyCubeGrid;
+        if (cubeGrid != null) return cubeGrid.DisplayName;
+
         var entity = block as IMyEntity;
         if (entity != null)
         {
             return string.Format("{0} ({1})", entity.DisplayName, entity.EntityId);
         }
-
-        var cubeGrid = block as IMyCubeGrid;
-        if (cubeGrid != null) return cubeGrid.DisplayName;
 
         return block != null ? block.ToString() : "NULL";
     }

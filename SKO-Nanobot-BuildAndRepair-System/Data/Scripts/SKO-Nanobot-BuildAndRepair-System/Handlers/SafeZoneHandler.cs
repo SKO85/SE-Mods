@@ -215,7 +215,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                     // Try get the zone.
                     MySafeZone zone;
-                    if (Zones.TryGetValue(zoneId, out zone))
+                    if (Zones.TryGetValue(zoneId, out zone) && !zone.Closed && !zone.MarkedForClose && zone.Enabled)
                     {
                         return zone;
                     }

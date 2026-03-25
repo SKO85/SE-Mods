@@ -38,7 +38,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
     public class BlockPriorityHandling : PriorityHandling<PrioItem, IMySlimBlock>
     {
         public static readonly TtlCache<long, int> GetItemKeyCache = new TtlCache<long, int>(
-          defaultTtl: TimeSpan.FromMinutes(5),
+          defaultTtl: TimeSpan.FromSeconds(30),
           concurrencyLevel: 4,
           comparer: null,
           capacity: 1024);

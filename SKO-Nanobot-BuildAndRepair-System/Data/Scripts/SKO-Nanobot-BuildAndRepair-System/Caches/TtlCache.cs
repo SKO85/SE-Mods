@@ -56,7 +56,9 @@
             if (ttl <= TimeSpan.Zero)
                 throw new Exception("TTL must be positive.");
 
-            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            var session = MyAPIGateway.Session;
+            if (session == null) return;
+            var now = session.ElapsedPlayTime;
             var expiration = now.Add(ttl);
             var item = new CacheItem(value, expiration);
             Entries[key] = item;
@@ -71,7 +73,9 @@
             CacheItem item;
             if (Entries.TryGetValue(key, out item))
             {
-                var now = MyAPIGateway.Session.ElapsedPlayTime;
+                var session = MyAPIGateway.Session;
+                if (session == null) { value = default(TValue); return false; }
+                var now = session.ElapsedPlayTime;
                 if (!item.IsExpired(now))
                 {
                     value = item.Value;
@@ -100,7 +104,9 @@
         /// <summary>Optional: remove all expired entries (call periodically if you skip purge-on-read).</summary>
         public void CleanupExpired()
         {
-            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            var session = MyAPIGateway.Session;
+            if (session == null) return;
+            var now = session.ElapsedPlayTime;
             var expiredKeys = new List<TKey>();
             foreach (var pair in Entries)
             {

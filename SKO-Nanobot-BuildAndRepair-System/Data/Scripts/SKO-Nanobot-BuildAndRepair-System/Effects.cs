@@ -4,7 +4,7 @@ using Sandbox.Game.Lights;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
 using System.Collections.Generic;
-using System.Threading;
+
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.Utils;
@@ -118,7 +118,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (_ParticleEffectWorking1 != null)
             {
-                Interlocked.Decrement(ref _ActiveWorkingEffects);
+                _ActiveWorkingEffects--;
                 _ParticleEffectWorking1.Stop();
                 _ParticleEffectWorking1 = null;
             }
@@ -137,7 +137,7 @@ namespace SKONanobotBuildAndRepairSystem
                         ((workingState == WorkingState.Welding && ((Mod.Settings.Welder.AllowedEffects & VisualAndSoundEffects.WeldingVisualEffect) != 0)) ||
                          (workingState == WorkingState.Grinding && ((Mod.Settings.Welder.AllowedEffects & VisualAndSoundEffects.GrindingVisualEffect) != 0))))
                     {
-                        Interlocked.Increment(ref _ActiveWorkingEffects);
+                        _ActiveWorkingEffects++;
 
                         MyParticlesManager.TryCreateParticleEffect(workingState == WorkingState.Welding ? PARTICLE_EFFECT_WELDING1 : PARTICLE_EFFECT_GRINDING1, ref MatrixD.Identity, ref Vector3D.Zero, uint.MaxValue, out _ParticleEffectWorking1);
                         if (_ParticleEffectWorking1 != null) _ParticleEffectWorking1.UserRadiusMultiplier = workingState == WorkingState.Welding ? 4f : 2f;// 0.5f;
@@ -337,7 +337,7 @@ namespace SKONanobotBuildAndRepairSystem
             // Always stop any running effect first so toggling the flag cleans up immediately.
             if (_ParticleEffectTransport1 != null)
             {
-                Interlocked.Decrement(ref _ActiveTransportEffects);
+                _ActiveTransportEffects--;
                 _ParticleEffectTransport1.Stop();
                 _ParticleEffectTransport1 = null;
             }
@@ -350,7 +350,7 @@ namespace SKONanobotBuildAndRepairSystem
                     MyParticlesManager.TryCreateParticleEffect(system.State.CurrentTransportIsPick ? PARTICLE_EFFECT_TRANSPORT1_PICK : PARTICLE_EFFECT_TRANSPORT1_DELIVER, ref MatrixD.Identity, ref Vector3D.Zero, uint.MaxValue, out _ParticleEffectTransport1);
                     if (_ParticleEffectTransport1 != null)
                     {
-                        Interlocked.Increment(ref _ActiveTransportEffects);
+                        _ActiveTransportEffects++;
                         _ParticleEffectTransport1.UserScale = 0.1f;
                         UpdateTransportEffectPosition(system);
                     }
@@ -398,7 +398,7 @@ namespace SKONanobotBuildAndRepairSystem
             // so other BaRs are not blocked from creating new effects.
             if (_ParticleEffectWorking1 != null)
             {
-                Interlocked.Decrement(ref _ActiveWorkingEffects);
+                _ActiveWorkingEffects--;
                 _ParticleEffectWorking1.Stop();
                 _ParticleEffectWorking1.Clear();
                 _ParticleEffectWorking1 = null;
@@ -406,7 +406,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (_ParticleEffectTransport1 != null)
             {
-                Interlocked.Decrement(ref _ActiveTransportEffects);
+                _ActiveTransportEffects--;
                 _ParticleEffectTransport1.Stop();
                 _ParticleEffectTransport1.Clear();
                 _ParticleEffectTransport1 = null;

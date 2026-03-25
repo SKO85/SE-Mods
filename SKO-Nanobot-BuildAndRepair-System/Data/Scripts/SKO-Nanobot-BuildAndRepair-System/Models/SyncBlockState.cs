@@ -601,6 +601,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
                         if (item.Entity.EntityId == 0)
                         {
+                            if (!item.Entity.Position.HasValue) continue;
                             IMyEntity gridEntity;
                             if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
                             {
@@ -636,6 +637,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
                         if (item.Entity.EntityId == 0)
                         {
+                            if (!item.Entity.Position.HasValue) continue;
                             IMyEntity gridEntity;
                             if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
                             {

@@ -231,9 +231,9 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                     else
                     {
+                        if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
                         if (targetData.Ignore)
                         {
-                            if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
                             State.PossibleWeldTargets.ChangeHash();
                         }
                         // Current tracked block is no longer weldable; clear the lock so the
@@ -242,8 +242,6 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             State.CurrentWeldingBlock = null;
                         }
-                        // Note: Could add a cooldown timer here so non-weldable blocks are skipped
-                        // for a period instead of re-evaluated every tick. (Phase 4 feature candidate)
                     }
                 }
 

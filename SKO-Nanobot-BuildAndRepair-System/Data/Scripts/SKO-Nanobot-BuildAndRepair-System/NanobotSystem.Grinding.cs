@@ -36,6 +36,7 @@ namespace SKONanobotBuildAndRepairSystem
                 foreach (var targetData in State.PossibleGrindTargets)
                 {
                     if (targetData.Block == null) continue;
+                    if (targetData.Block.CubeGrid == null) continue;
                     if (targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed) continue;
 
                     if (Settings.CurrentPickedGrindingBlock == null)
@@ -123,6 +124,7 @@ namespace SKONanobotBuildAndRepairSystem
             if (transporting) return false;
 
             var targetGrid = target.CubeGrid;
+            if (targetGrid == null) return false;
 
             if (targetGrid.Physics == null || !targetGrid.Physics.Enabled) return false;            
 
