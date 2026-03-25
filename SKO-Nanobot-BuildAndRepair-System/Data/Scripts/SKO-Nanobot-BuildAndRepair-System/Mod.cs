@@ -282,6 +282,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         public override void UpdateBeforeSimulation()
         {
+            var profilerTs = MethodProfiler.Start();
             try
             {
                 // If not initialized, to that first.
@@ -364,6 +365,11 @@ namespace SKONanobotBuildAndRepairSystem
             catch (Exception e)
             {
                 Logging.Instance.Error(e);
+            }
+            finally
+            {
+                MethodProfiler.StopAndLog("Mod.UpdateBeforeSimulation", profilerTs, () =>
+                    string.Format("bars={0}", NanobotSystems.Count));
             }
         }
 

@@ -8,6 +8,7 @@ using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
@@ -368,6 +369,7 @@ namespace SKONanobotBuildAndRepairSystem
         private bool ServerDoWeld(TargetBlockData targetData)
         {
             var profilerTs = MethodProfiler.Start();
+            long tsBuild = 0, tsStockpile = 0, tsMount = 0;
             var welderInventory = _Welder.GetInventory(0);
             var welding = false;
             var created = false;
@@ -387,8 +389,10 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed))
                         {
+                            tsBuild = Stopwatch.GetTimestamp();
                             var proj = cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector;
                             proj.Build(target, _Welder.OwnerId, _Welder.EntityId, Settings.WeldOptions == AutoWeldOptions.WeldFull, _Welder.SlimBlock.BuiltBy);
+                            tsBuild = Stopwatch.GetTimestamp() - tsBuild;
                         }
 
                         // proj.Build() handles component consumption internally; manual RemoveItems is not needed.
@@ -433,7 +437,9 @@ namespace SKONanobotBuildAndRepairSystem
                 if (!IsWeldIntegrityReached(target) || created)
                 {
                     //Move collected/needed items to stockpile.
+                    tsStockpile = Stopwatch.GetTimestamp();
                     target.MoveItemsToConstructionStockpile(_TransportInventory);
+                    tsStockpile = Stopwatch.GetTimestamp() - tsStockpile;
 
                     //Incomplete
                     welding = target.CanContinueBuild(_TransportInventory) || CreativeModeActive;
@@ -453,7 +459,11 @@ namespace SKONanobotBuildAndRepairSystem
                         }
 
                         if (welding)
+                        {
+                            tsMount = Stopwatch.GetTimestamp();
                             target.IncreaseMountLevel(weldAmount, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
+                            tsMount = Stopwatch.GetTimestamp() - tsMount;
+                        }
                     }
 
                     if (IsWeldIntegrityReached(target))
@@ -470,12 +480,18 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             var result = welding || created;
+            var _tsBuild = tsBuild;
+            var _tsStockpile = tsStockpile;
+            var _tsMount = tsMount;
             MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
-                string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5}",
+                string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};stockpileMs={7:F3};mountMs={8:F3}",
                     _Welder.EntityId,
                     targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
                     (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
-                    created, welding, result));
+                    created, welding, result,
+                    _tsBuild * 1000.0 / Stopwatch.Frequency,
+                    _tsStockpile * 1000.0 / Stopwatch.Frequency,
+                    _tsMount * 1000.0 / Stopwatch.Frequency));
             return result;
         }
 
@@ -588,11 +604,16 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private bool ServerPickFromWelder(MyDefinitionId componentId, float volume, ref int neededAmount, ref float remainingVolume)
         {
+            var profilerTs = MethodProfiler.Start();
             var picked = false;
+            var startNeeded = neededAmount;
 
             var welderInventory = _Welder.GetInventory(0);
             if (welderInventory == null || welderInventory.Empty())
             {
+                MethodProfiler.StopAndLog("ServerPickFromWelder", profilerTs, () =>
+                    string.Format("entityId={0};component={1};startNeeded={2};picked={3};empty=True",
+                        _Welder.EntityId, componentId.SubtypeName, startNeeded, false));
                 return picked;
             }
 
@@ -620,6 +641,10 @@ namespace SKONanobotBuildAndRepairSystem
                 if (neededAmount <= 0 || remainingVolume <= 0) break;
             }
             _TempInventoryItems.Clear();
+
+            MethodProfiler.StopAndLog("ServerPickFromWelder", profilerTs, () =>
+                string.Format("entityId={0};component={1};startNeeded={2};picked={3};empty=False",
+                    _Welder.EntityId, componentId.SubtypeName, startNeeded, picked));
             return picked;
         }
 
