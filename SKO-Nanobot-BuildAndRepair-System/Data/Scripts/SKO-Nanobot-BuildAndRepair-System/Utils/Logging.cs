@@ -287,6 +287,10 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 _Indent = 0;
                 _Cache.Clear();
             }
+
+            // Clear the static singleton so a fresh instance is created on next access.
+            // Prevents stale file handles after Torch hot-reloads.
+            _instance = null;
         }
     }
 }
