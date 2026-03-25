@@ -327,8 +327,7 @@ namespace SKONanobotBuildAndRepairSystem
                     return false;
                 }
 
-                var isFunctionalOnly = (Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0;
-                var weld = (!IsWeldIntegrityReached(target) || target.NeedRepair(isFunctionalOnly)) && !IsFriendlyDamage(target);
+                var weld = (!IsWeldIntegrityReached(target) || target.NeedRepair(Settings.WeldOptions)) && !IsFriendlyDamage(target);
 
                 targetData.Ignore = !weld;
                 result = weld;
@@ -349,13 +348,14 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                var isFunctionalOnly = (Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0;
-                if (!isFunctionalOnly)
-                {
-                    return target.IsFullIntegrity;
-                }
+                // FEAT-034: Skeleton mode — always consider integrity reached (only place, don't weld)
+                if (Settings.WeldOptions == AutoWeldOptions.WeldSkeleton)
+                    return true;
 
-                var requiredIntegrity = target.GetRequiredIntegrity(isFunctionalOnly);
+                if (Settings.WeldOptions == AutoWeldOptions.WeldFull)
+                    return target.IsFullIntegrity;
+
+                var requiredIntegrity = target.GetRequiredIntegrity(Settings.WeldOptions);
                 return target.Integrity >= requiredIntegrity;
             }
             catch
@@ -388,7 +388,7 @@ namespace SKONanobotBuildAndRepairSystem
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed))
                         {
                             var proj = cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector;
-                            proj.Build(target, _Welder.OwnerId, _Welder.EntityId, true, _Welder.SlimBlock.BuiltBy);
+                            proj.Build(target, _Welder.OwnerId, _Welder.EntityId, Settings.WeldOptions == AutoWeldOptions.WeldFull, _Welder.SlimBlock.BuiltBy);
                         }
 
                         // proj.Build() handles component consumption internally; manual RemoveItems is not needed.
@@ -424,10 +424,13 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            if (!hasIgnoreColor && target != null && (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) == 0)
+            // FEAT-034: Skeleton mode — block was placed, skip further welding
+            var skipWelding = created && Settings.WeldOptions == AutoWeldOptions.WeldSkeleton;
+
+            if (!skipWelding && !hasIgnoreColor && target != null && (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) == 0)
             {
                 //No ignore color and allready created
-                if (!target.IsFullIntegrity || created)
+                if (!IsWeldIntegrityReached(target) || created)
                 {
                     //Move collected/needed items to stockpile.
                     target.MoveItemsToConstructionStockpile(_TransportInventory);
@@ -497,7 +500,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 foreach (var kv in _TempMissingComponents) { keyValue = kv; break; }
                                 _TempMissingComponents.Clear();
 
-                                targetData.Block.GetMissingComponents(_TempMissingComponents, ((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) == 0) ? UtilsInventory.IntegrityLevel.Complete : UtilsInventory.IntegrityLevel.Functional);
+                                targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? UtilsInventory.IntegrityLevel.Functional : UtilsInventory.IntegrityLevel.Complete);
 
                                 if (_TempMissingComponents.ContainsKey(keyValue.Key))
                                 {
@@ -516,7 +519,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
-                    targetData.Block.GetMissingComponents(_TempMissingComponents, ((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) == 0) ? UtilsInventory.IntegrityLevel.Complete : UtilsInventory.IntegrityLevel.Functional);
+                    targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? UtilsInventory.IntegrityLevel.Functional : UtilsInventory.IntegrityLevel.Complete);
                 }
 
                 if (_TempMissingComponents.Count > 0)

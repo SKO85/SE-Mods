@@ -71,10 +71,11 @@ namespace SKONanobotBuildAndRepairSystem
         HackOnly = 0x0002
     }
 
-    [Flags]
     public enum AutoWeldOptions
     {
-        FunctionalOnly = 0x0001
+        WeldFull = 0,
+        WeldFunctional = 1,
+        WeldSkeleton = 2
     }
 
     [Flags]
@@ -267,9 +268,9 @@ namespace SKONanobotBuildAndRepairSystem
                             onoffSwitch = OnOffSwitches.CreateAllowBuild(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
                             CreateProperty(onoffSwitch, Mod.Settings.Welder.AllowBuildFixed || !weldingAllowed);
 
-                            // --Weld to functional only ---
-                            onoffSwitch = OnOffSwitches.CreateWeldOptionFunctionalOnly(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
-                            CreateProperty(onoffSwitch, !weldingAllowed);
+                            // --- Weld mode dropdown ---
+                            var weldModeCombo = ComboBoxes.CreateWeldMode(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
+                            CreateProperty(weldModeCombo, !weldingAllowed);
                         }
 
                         // --- Priority Welding ---

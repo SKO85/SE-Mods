@@ -188,5 +188,72 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
 
             return control;
         }
+
+        public static IMyTerminalControlCombobox CreateWeldMode(bool weldingAllowed, Func<IMyTerminalBlock, bool> isWeldingAllowed, Func<IMyTerminalBlock, bool> isReadonly, Func<IMyTerminalBlock, bool> isBaRSystem)
+        {
+            var isEnabled = !weldingAllowed ? isReadonly : isBaRSystem;
+
+            var control = Create(
+                // Id:
+                "WeldMode",
+
+                // Texts
+                Texts.WeldMode,
+                Texts.WeldMode_Tooltip,
+
+                // Enabled:
+                isEnabled,
+
+                // ComboboxContent:
+                (list) =>
+                {
+                    list.Add(new MyTerminalControlComboBoxItem() { Key = (long)AutoWeldOptions.WeldFull, Value = Texts.WeldMode_Full });
+                    list.Add(new MyTerminalControlComboBoxItem() { Key = (long)AutoWeldOptions.WeldFunctional, Value = Texts.WeldMode_Functional });
+                    list.Add(new MyTerminalControlComboBoxItem() { Key = (long)AutoWeldOptions.WeldSkeleton, Value = Texts.WeldMode_Skeleton });
+                },
+
+                // Getter:
+                (block) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system == null) return 0;
+                    return (long)system.Settings.WeldOptions;
+                },
+
+                // Setter:
+                (block, value) =>
+                {
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null)
+                    {
+                        system.Settings.WeldOptions = (AutoWeldOptions)value;
+                    }
+                },
+
+                // Multiple blocks support.
+                true
+            );
+
+            // Allow switch weld mode by Buttonpanel
+            var list1 = new List<MyTerminalControlComboBoxItem>();
+            control.ComboBoxContent(list1);
+            foreach (var entry in list1)
+            {
+                var mode = entry.Key;
+                var comboBox1 = control;
+                var action = MyAPIGateway.TerminalControls.CreateAction<IMyShipWelder>(string.Format("WeldMode_{0}_On", ((AutoWeldOptions)mode).ToString()));
+                action.Name = new StringBuilder(string.Format("{0} On", entry.Value));
+                action.Icon = @"Textures\GUI\Icons\Actions\SwitchOn.dds";
+                action.Enabled = isBaRSystem;
+                action.Action = (block) =>
+                {
+                    comboBox1.Setter(block, mode);
+                };
+                action.ValidForGroups = true;
+                MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
+            }
+
+            return control;
+        }
     }
 }

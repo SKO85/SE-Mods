@@ -224,7 +224,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if ((!useIgnoreColor || !IsColorNearlyEquals(ignoreColor, colorMask)) && (!useGrindColor || !IsColorNearlyEquals(grindColor, colorMask)) &&
                    BlockWeldPriority.GetEnabled(block) &&
                    IsRelationAllowed4Welding(block) &&
-                   block.NeedRepair((Settings.WeldOptions & AutoWeldOptions.FunctionalOnly) != 0))
+                   block.NeedRepair(Settings.WeldOptions))
                 {
                     double distance;
                     if (skipRangeCheck || block.IsInRange(ref areaBox, out distance))

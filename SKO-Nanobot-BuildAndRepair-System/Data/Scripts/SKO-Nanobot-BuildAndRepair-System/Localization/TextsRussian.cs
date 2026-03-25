@@ -23,8 +23,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"WeldUseIgnoreColor_Tooltip",      "Когда установлен этот флажок, система будет\nигнорировать блоки с цветом, определенным ниже."},
             {"WeldBuildNew",                    "Построить новый"},
             {"WeldBuildNew_Tooltip",            "Если этот флажок установлен, система также будет\nсоздавать проецируемые блоки."},
-            {"WeldToFuncOnly",                  "Перестал быть активным"},
-            {"WeldToFuncOnly_Tooltip",          "Сваривать только когда блок перестал функционировать\nиз за повреждений/распиливания."},
+            {"WeldMode",                        "Режим сварки"},
+            {"WeldMode_Tooltip",                "Выберите, насколько далеко наноботы сваривают блоки."},
+            {"WeldMode_Full",                   "Сварка до полной"},
+            {"WeldMode_Functional",             "Сварка до функциональной"},
+            {"WeldMode_Skeleton",               "Только каркас"},
             {"WeldPriority",                    "Приоритет сварки"},
             {"WeldPriority_Tooltip",            "Включить/выключить сборку-ремонт выбранных видов предметов."},
 

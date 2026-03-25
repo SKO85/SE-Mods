@@ -23,8 +23,11 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"WeldUseIgnoreColor_Tooltip",      "Wenn diese Option markiert ist, wird das System alle Blöcke, die die weiter unten definierte Farbe besitzen, ignorieren (nicht fertig schweißen)."},
             {"WeldBuildNew",                    "Neue Blöcke erzeugen"},
             {"WeldBuildNew_Tooltip",            "Wenn diese Option markiert ist, wird das System auch projizierte Blöcke erzeugen und schweißen."},
-            {"WeldToFuncOnly",                  "Nur bis Funktionsstufe schweißen"},
-            {"WeldToFuncOnly_Tooltip",          "Wenn diese Option markiert ist, werden Blöcke nur bis zur der Stufe geschweißt in der sie bereits arbeiten können."},
+            {"WeldMode",                        "Schweißmodus"},
+            {"WeldMode_Tooltip",                "Wähle, wie weit die Nanobots Blöcke schweißen."},
+            {"WeldMode_Full",                   "Voll schweißen"},
+            {"WeldMode_Functional",             "Bis Funktionsstufe"},
+            {"WeldMode_Skeleton",               "Nur Skelett"},
             {"WeldPriority",                    "Schweiß Priorität"},
             {"WeldPriority_Tooltip",            "Schaltet das Erzeugen/Reparieren der selektierten Typen von Blöcken ein/aus"},
 
