@@ -142,12 +142,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                         Settings.TrySave(Entity, Mod.ModGuid);
 
-                        if (State.IsTransmitNeeded() && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdateStateTransmitLast).TotalSeconds >= _UpdateStateTransmitInterval)
-                        {
-                            _UpdateStateTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
-                            _UpdateStateTransmitInterval = _RandomDelay.Next(TransmitStateMinIntervalSeconds, TransmitStateMaxIntervalSeconds + 1);
-                            NetworkMessagingHandler.MsgBlockStateSend(0, this);
-                        }
+                        TryTransmitState();
                     }
                 }
                 else

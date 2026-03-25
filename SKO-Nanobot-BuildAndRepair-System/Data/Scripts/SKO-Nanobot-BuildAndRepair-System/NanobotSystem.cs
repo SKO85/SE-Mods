@@ -123,6 +123,10 @@ namespace SKONanobotBuildAndRepairSystem
         private TimeSpan _UpdateStateTransmitLast;
         private int _UpdateStateTransmitInterval;
 
+        // FEAT-038: Progressive backoff for unchanged state transmits.
+        private int _lastTransmittedFingerprint;
+        private int _transmitBackoffMultiplier = 1;
+
         private TimeSpan _PeriodicExtraChecksLast;
 
         public TimeSpan _TryAutoPushInventoryLast;

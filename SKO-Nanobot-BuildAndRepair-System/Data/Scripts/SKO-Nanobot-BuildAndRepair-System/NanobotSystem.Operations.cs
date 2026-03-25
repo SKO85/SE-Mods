@@ -249,12 +249,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (MyAPIGateway.Session.IsServer)
             {
-                if (State.IsTransmitNeeded() && MyAPIGateway.Multiplayer.MultiplayerActive && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdateStateTransmitLast).TotalSeconds >= _UpdateStateTransmitInterval)
-                {
-                    _UpdateStateTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
-                    _UpdateStateTransmitInterval = _RandomDelay.Next(TransmitStateMinIntervalSeconds, TransmitStateMaxIntervalSeconds + 1);
-                    NetworkMessagingHandler.MsgBlockStateSend(0, this);
-                }
+                TryTransmitState();
             }
 
             UpdateCustomInfo(
@@ -362,6 +357,58 @@ namespace SKONanobotBuildAndRepairSystem
                 if (kvp.Value > limit)
                     _saturatedGridIds.Add(kvp.Key);
             }
+        }
+
+        /// <summary>
+        /// FEAT-038: Transmit state with progressive backoff for unchanged state.
+        /// Compares a lightweight fingerprint of key state fields against last transmit.
+        /// When unchanged, progressively extends the interval (1-2s → 2-4s → 4-8s).
+        /// Resets to base interval on any visible state change.
+        /// </summary>
+        private void TryTransmitState()
+        {
+            if (!State.IsTransmitNeeded() || !MyAPIGateway.Multiplayer.MultiplayerActive)
+                return;
+
+            if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdateStateTransmitLast).TotalSeconds < _UpdateStateTransmitInterval)
+                return;
+
+            var fingerprint = ComputeStateFingerprint();
+            if (fingerprint != _lastTransmittedFingerprint)
+            {
+                _transmitBackoffMultiplier = 1;
+                _lastTransmittedFingerprint = fingerprint;
+            }
+
+            _UpdateStateTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
+            var baseInterval = _RandomDelay.Next(TransmitStateMinIntervalSeconds, TransmitStateMaxIntervalSeconds + 1);
+            _UpdateStateTransmitInterval = baseInterval * _transmitBackoffMultiplier;
+            _transmitBackoffMultiplier = Math.Min(_transmitBackoffMultiplier * 2, 4);
+
+            NetworkMessagingHandler.MsgBlockStateSend(0, this);
+        }
+
+        /// <summary>
+        /// Lightweight hash of key visible state fields for transmit backoff comparison.
+        /// Captures working state + target counts — enough to detect meaningful changes
+        /// without comparing full serialized payloads.
+        /// </summary>
+        private int ComputeStateFingerprint()
+        {
+            var hash = 17;
+            hash = hash * 31 + (State.Ready ? 1 : 0);
+            hash = hash * 31 + (State.Welding ? 1 : 0);
+            hash = hash * 31 + (State.NeedWelding ? 1 : 0);
+            hash = hash * 31 + (State.Grinding ? 1 : 0);
+            hash = hash * 31 + (State.NeedGrinding ? 1 : 0);
+            hash = hash * 31 + (State.NeedCollecting ? 1 : 0);
+            hash = hash * 31 + (State.Transporting ? 1 : 0);
+            hash = hash * 31 + (State.InventoryFull ? 1 : 0);
+            hash = hash * 31 + (State.LimitsExceeded ? 1 : 0);
+            hash = hash * 31 + State.PossibleWeldTargets.CurrentCount;
+            hash = hash * 31 + State.PossibleGrindTargets.CurrentCount;
+            hash = hash * 31 + State.PossibleFloatingTargets.CurrentCount;
+            return hash;
         }
     }
 }
