@@ -207,6 +207,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (srcItem == null) continue;
 
                     var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(srcItem.Content.GetId());
+                    if (definition == null) continue;
 
                     var maxpossibleAmountFP = Math.Min((float)srcItem.Amount, (remainingVolume / definition.Volume));
                     //Real Transport Volume is always bigger than logical _MaxTransportVolume so ceiling is no problem

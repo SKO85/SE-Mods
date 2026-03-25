@@ -7,7 +7,6 @@ using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using VRage;
 using VRage.Game;
@@ -398,25 +397,32 @@ namespace SKONanobotBuildAndRepairSystem
                         // proj.Build() handles component consumption internally; manual RemoveItems is not needed.
 
                         //After creation we can't welding this projected block, we have to find the 'physical' block instead.
-                        var cubeGrid = cubeGridProjected.Projector.CubeGrid;
-                        var blockPos = cubeGrid.WorldToGridInteger(cubeGridProjected.GridIntegerToWorld(target.Position));
-                        target = cubeGrid.GetCubeBlock(blockPos);
-
-                        if (target != null)
+                        var projectorGrid = cubeGridProjected.Projector != null ? cubeGridProjected.Projector.CubeGrid : null;
+                        if (projectorGrid == null || projectorGrid.Closed)
                         {
-                            targetData.Block = target;
-                            targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
-                            created = true;
-
-                            // Close assignment gap: the projected block's key (ProjGridId:Pos) differs
-                            // from the physical block's key (RealGridId:Pos). Assign the physical block
-                            // immediately so no other BaR can steal it during our stagger wait.
-                            if (Mod.Settings.AssignToSystemEnabled && !_Welder.HelpOthers)
-                                target.AssignToSystem(_Welder.EntityId);
+                            targetData.Ignore = true;
                         }
                         else
                         {
-                            targetData.Ignore = true;
+                            var blockPos = projectorGrid.WorldToGridInteger(cubeGridProjected.GridIntegerToWorld(target.Position));
+                            target = projectorGrid.GetCubeBlock(blockPos);
+
+                            if (target != null)
+                            {
+                                targetData.Block = target;
+                                targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
+                                created = true;
+
+                                // Close assignment gap: the projected block's key (ProjGridId:Pos) differs
+                                // from the physical block's key (RealGridId:Pos). Assign the physical block
+                                // immediately so no other BaR can steal it during our stagger wait.
+                                if (Mod.Settings.AssignToSystemEnabled && !_Welder.HelpOthers)
+                                    target.AssignToSystem(_Welder.EntityId);
+                            }
+                            else
+                            {
+                                targetData.Ignore = true;
+                            }
                         }
 
                     }
@@ -657,7 +663,8 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (ReferenceEquals(a, b)) return true;
             if (a == null || b == null) return false;
-            return a.CubeGrid.EntityId == b.CubeGrid.EntityId && a.Position == b.Position;
+            return a.CubeGrid != null && b.CubeGrid != null
+                && a.CubeGrid.EntityId == b.CubeGrid.EntityId && a.Position == b.Position;
         }
 
         private void AddToMissingComponents(MyDefinitionId componentId, int neededAmount)
