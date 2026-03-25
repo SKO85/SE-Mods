@@ -217,5 +217,11 @@ namespace SKONanobotBuildAndRepairSystem
         /// the per-tick main-thread load across multiple ticks.
         /// </summary>
         internal int _staggerSlot = -1;
+
+        /// <summary>
+        /// Last computed cluster key. Used by RebuildClusters to detect
+        /// settings changes and skip the full rebuild when nothing changed.
+        /// </summary>
+        internal string _lastClusterKey;
     }
 }

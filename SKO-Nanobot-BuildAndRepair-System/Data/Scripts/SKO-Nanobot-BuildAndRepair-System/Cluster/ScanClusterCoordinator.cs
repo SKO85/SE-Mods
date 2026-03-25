@@ -13,6 +13,7 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
     static class ScanClusterCoordinator
     {
         private static Dictionary<string, ScanCluster> _clusters = new Dictionary<string, ScanCluster>();
+        private static int _lastSystemCount;
 
         /// <summary>
         /// Mask of SyncBlockSettings.Settings flags that affect scan results.
@@ -34,8 +35,34 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             var profilerTs = MethodProfiler.Start();
             int clusterCount = 0;
             int clusteredSystems = 0;
+            var skipped = false;
             try
             {
+                // Quick check: if BaR count unchanged, compare keys to detect settings changes.
+                // Skip the full rebuild if nothing changed — saves O(N) dictionary/list operations.
+                var systemCount = Mod.NanobotSystems.Count;
+                if (systemCount == _lastSystemCount && _clusters.Count > 0)
+                {
+                    var anyChanged = false;
+                    foreach (var system in Mod.NanobotSystems.Values)
+                    {
+                        var isReady = system.Welder != null && system.Welder.IsFunctional && system.Welder.Enabled && system.State.Ready;
+                        if (!isReady)
+                        {
+                            if (system.AssignedCluster != null) { anyChanged = true; break; }
+                            continue;
+                        }
+                        var key = ComputeClusterKey(system);
+                        if (key != system._lastClusterKey) { anyChanged = true; break; }
+                    }
+                    if (!anyChanged)
+                    {
+                        skipped = true;
+                        return;
+                    }
+                }
+                _lastSystemCount = systemCount;
+
                 // Clear previous clusters
                 foreach (var cluster in _clusters.Values)
                 {
@@ -49,10 +76,12 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                     if (system.Welder == null || !system.Welder.IsFunctional || !system.Welder.Enabled || !system.State.Ready)
                     {
                         system.AssignedCluster = null;
+                        system._lastClusterKey = null;
                         continue;
                     }
 
                     var key = ComputeClusterKey(system);
+                    system._lastClusterKey = key;
 
                     ScanCluster cluster;
                     if (!_clusters.TryGetValue(key, out cluster))
@@ -94,9 +123,10 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                 var _clusterCount = clusterCount;
                 var _clusteredSystems = clusteredSystems;
                 var _totalSystems = Mod.NanobotSystems.Count;
+                var _skipped = skipped;
                 MethodProfiler.StopAndLog("ScanClusterCoordinator.RebuildClusters", profilerTs, () =>
-                    string.Format("clusters={0};clusteredSystems={1};totalSystems={2}",
-                        _clusterCount, _clusteredSystems, _totalSystems));
+                    string.Format("clusters={0};clusteredSystems={1};totalSystems={2};skipped={3}",
+                        _clusterCount, _clusteredSystems, _totalSystems, _skipped));
             }
         }
 
@@ -142,6 +172,11 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             key += "|" + system.Welder.OwnerId;
             key += "|" + (system.Welder.HelpOthers ? "1" : "0");
             key += "|" + (system.Welder.UseConveyorSystem ? "1" : "0");
+
+            // Safe zone state — BaRs inside vs outside safe zones need separate clusters
+            // so the coordinator can actually weld/grind for its members.
+            key += "|SZ" + (system.State.SafeZoneAllowsWelding ? "1" : "0")
+                 + (system.State.SafeZoneAllowsGrinding ? "1" : "0");
 
             return key;
         }

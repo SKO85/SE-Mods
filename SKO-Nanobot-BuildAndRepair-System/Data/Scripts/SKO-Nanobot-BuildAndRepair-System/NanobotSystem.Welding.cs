@@ -522,22 +522,48 @@ namespace SKONanobotBuildAndRepairSystem
                 if ((targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0)
                 {
                     // Single GetMissingComponents call for projected blocks.
-                    // Skeleton: only the creation component. Otherwise: all components
-                    // at the target integrity level (includes creation component).
-                    // Avoids the previous double API call + subtraction logic.
+                    // Skeleton/ignoreColor: only the creation component.
+                    // Otherwise: all components at the target integrity level.
                     var useIgnoreColor = ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0) && IsColorNearlyEquals(Settings.IgnoreColorPacked, targetData.Block.GetColorMask());
                     if (Settings.WeldOptions == AutoWeldOptions.WeldSkeleton || useIgnoreColor)
                     {
                         targetData.Block.GetMissingComponents(_TempMissingComponents, UtilsInventory.IntegrityLevel.Create);
+
+                        if (_TempMissingComponents.Count > 0)
+                        {
+                            picked = ServerFindMissingComponents(targetData, ref remainingVolume);
+                        }
                     }
                     else
                     {
-                        targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? UtilsInventory.IntegrityLevel.Functional : UtilsInventory.IntegrityLevel.Complete);
-                    }
+                        // Pick creation component first to guarantee it's in transport
+                        // before other components fill the volume.
+                        targetData.Block.GetMissingComponents(_TempMissingComponents, UtilsInventory.IntegrityLevel.Create);
+                        if (_TempMissingComponents.Count > 0)
+                        {
+                            picked = ServerFindMissingComponents(targetData, ref remainingVolume);
+                        }
 
-                    if (_TempMissingComponents.Count > 0)
-                    {
-                        picked = ServerFindMissingComponents(targetData, ref remainingVolume);
+                        // Then fetch remaining components (full/functional level minus creation)
+                        if (picked)
+                        {
+                            var blockDef = targetData.Block.BlockDefinition as MyCubeBlockDefinition;
+                            var createCompName = blockDef.Components[0].Definition.Id.SubtypeName;
+                            int createCount;
+                            _TempMissingComponents.TryGetValue(createCompName, out createCount);
+                            _TempMissingComponents.Clear();
+
+                            targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? UtilsInventory.IntegrityLevel.Functional : UtilsInventory.IntegrityLevel.Complete);
+
+                            // Subtract the creation component (already picked)
+                            if (createCount > 0 && _TempMissingComponents.ContainsKey(createCompName))
+                            {
+                                if (_TempMissingComponents[createCompName] <= createCount)
+                                    _TempMissingComponents.Remove(createCompName);
+                                else
+                                    _TempMissingComponents[createCompName] -= createCount;
+                            }
+                        }
                     }
                 }
                 else

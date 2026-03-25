@@ -431,7 +431,7 @@ namespace SKONanobotBuildAndRepairSystem
         public static void BuildGridSystemCountCache()
         {
             var tick = MyAPIGateway.Session.GameplayFrameCounter;
-            if (tick == _lastGridCountCacheTick) return;
+            if (tick - _lastGridCountCacheTick < 5) return;
             _lastGridCountCacheTick = tick;
 
             var profilerTs = MethodProfiler.Start();
