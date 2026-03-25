@@ -2,7 +2,6 @@
 using Sandbox.ModAPI.Weapons;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.Collections.Generic;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;

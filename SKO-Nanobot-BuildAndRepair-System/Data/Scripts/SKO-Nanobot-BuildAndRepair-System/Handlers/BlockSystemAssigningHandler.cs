@@ -1,5 +1,4 @@
 ﻿using SKONanobotBuildAndRepairSystem.Caches;
-using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using VRage.Game.ModAPI;

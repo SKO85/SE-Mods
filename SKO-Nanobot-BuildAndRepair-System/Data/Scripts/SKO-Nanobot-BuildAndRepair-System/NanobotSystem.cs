@@ -9,7 +9,6 @@ using System.Diagnostics;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
-using VRage.ModAPI;
 using VRage.Utils;
 using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
 using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
@@ -46,7 +45,7 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 4f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
-        private const int MaxPossibleWeldTargets = 512;
+        private const int MaxPossibleWeldTargets = 256;
         private const int MaxPossibleGrindTargets = 256;
         private const int MaxPossibleFloatingTargets = 16;
 
