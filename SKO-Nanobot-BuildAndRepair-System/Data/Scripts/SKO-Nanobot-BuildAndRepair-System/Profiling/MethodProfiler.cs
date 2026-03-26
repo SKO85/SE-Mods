@@ -396,6 +396,9 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 _sessionName = SanitizeName(sessionName, 60);
                 _sessionPrefix = _sessionName + ".";
 
+                // If a session with this name already exists, delete its files first.
+                DeleteSessionFiles(_sessionPrefix);
+
                 CloseInternal();
                 _methodStats.Clear();
                 _gridCosts.Clear();
@@ -868,6 +871,38 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 sb.AppendLine(string.Format("  {0}", s));
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Delete all files belonging to a session by reading its manifest.
+        /// </summary>
+        private static void DeleteSessionFiles(string prefix)
+        {
+            try
+            {
+                if (MyAPIGateway.Utilities == null) return;
+                var manifestName = prefix + "NanobotProfiler.manifest";
+                if (!MyAPIGateway.Utilities.FileExistsInLocalStorage(manifestName, typeof(Mod))) return;
+
+                var files = new List<string>();
+                var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage(manifestName, typeof(Mod));
+                try
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        line = line.Trim();
+                        if (!string.IsNullOrEmpty(line))
+                            files.Add(line);
+                    }
+                }
+                finally { reader.Close(); }
+
+                foreach (var file in files)
+                    DeleteFile(file);
+                DeleteFile(manifestName);
+            }
+            catch { }
         }
 
         private static void DeleteFile(string fileName)

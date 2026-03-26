@@ -545,8 +545,13 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 }
                 s.EmptyGridSkip += sys.EmptyGridCacheCount;
 
-                var scanAge = (float)now.Subtract(sys.LastTargetsUpdate).TotalSeconds;
-                if (scanAge > s.OldestScanAgeSec) s.OldestScanAgeSec = scanAge;
+                // Skip BaRs that have never scanned (TimeSpan.Zero = "no scan yet" sentinel).
+                // Without this guard, disabled/off BaRs inflate the metric to session uptime.
+                if (sys.LastTargetsUpdate > TimeSpan.Zero)
+                {
+                    var scanAge = (float)now.Subtract(sys.LastTargetsUpdate).TotalSeconds;
+                    if (scanAge > s.OldestScanAgeSec) s.OldestScanAgeSec = scanAge;
+                }
             }
 
             s.Clusters = ScanClusterCoordinator.ClusterCount;
