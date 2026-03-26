@@ -346,9 +346,6 @@ healthchecksdb
 .vscode/
 .claude/
 
-# Planning / tracking docs (local only)
-docs/plan/
-
 # Temporary files from testing / debugging
 _temp/
 
