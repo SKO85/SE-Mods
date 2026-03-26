@@ -34,13 +34,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             // If deformation detected via MaxDeformation, just fix the bones and do not tell the BnR system to weld anything.
             if (target.MaxDeformation > MinDeformation)
             {
-                // Keep trackign the minimal deformation.
-                if (target.MaxDeformation < MinDeformation)
-                {
-                    MinDeformation = target.MaxDeformation;
-                }
-
-                // Just try fix the bones structure for defromations.
+                // Just try fix the bones structure for deformations.
                 target.ResetSkeleton();
 
                 // Report it as target not to weld in this case as MaxDeformation is bugged in game and not resetting.

@@ -70,6 +70,8 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 var nameParts = new string[args.Length - 3];
                 Array.Copy(args, 3, nameParts, 0, nameParts.Length);
                 ownerFilter = string.Join(" ", nameParts);
+                if (string.IsNullOrEmpty(ownerFilter))
+                    return ChatCommandResult.Error("Usage: /nanobars systems list --owner <player-name>");
             }
 
             var sb = new StringBuilder();
@@ -214,6 +216,8 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 var gridNameParts = new string[args.Length - 3];
                 Array.Copy(args, 3, gridNameParts, 0, gridNameParts.Length);
                 var gridName = string.Join(" ", gridNameParts);
+                if (string.IsNullOrEmpty(gridName))
+                    return ChatCommandResult.Error("Usage: /nanobars systems " + (enable ? "enable" : "disable") + " --grid <grid-name>");
 
                 var count = 0;
                 var matched = false;
@@ -249,6 +253,8 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 var playerNameParts = new string[args.Length - 3];
                 Array.Copy(args, 3, playerNameParts, 0, playerNameParts.Length);
                 var playerName = string.Join(" ", playerNameParts);
+                if (string.IsNullOrEmpty(playerName))
+                    return ChatCommandResult.Error("Usage: /nanobars systems " + (enable ? "enable" : "disable") + " --owner <player-name>");
 
                 var count = 0;
                 var matched = false;

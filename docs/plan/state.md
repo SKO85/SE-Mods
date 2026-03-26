@@ -14,6 +14,7 @@ Items in `TODO/` are pending. Items in `DONE/` are completed.
 | REVIEW-full-code-review-v250-r3 | Full code review round 3 — correctness, thread safety, edge cases | 2026-03-25 | v2.5.0 | Done |
 | REVIEW-full-code-review-v250-r4 | Full code review round 4 — pre-merge review of fix/new_v2.5.0 | 2026-03-26 | v2.5.0 | Done |
 | REVIEW-full-code-review-v250-r5 | Full code review round 5 — threading, null safety, performance (BUG-065..071) | 2026-03-26 | v2.5.0 | Done |
+| REVIEW-full-code-review-v250-r6 | Full code review round 6 — dead code, exception handling, input validation, atomicity (BUG-072..083) | 2026-03-26 | v2.5.0 | Done |
 
 ## Bugs
 
@@ -160,6 +161,19 @@ Items in `TODO/` are pending. Items in `DONE/` are completed.
 | BUG-069 | Medium | v2.5.0 | Done | Close() clears state while async scan may still be running — use-after-close race |
 | BUG-070 | Medium | v2.5.0 | Done | Profiler lambda closures allocated every tick even when profiling is off — GC pressure |
 | BUG-071 | Low | v2.5.0 | Done | PullComponents allocates new List per call + LINQ .Count() on dictionary |
+
+| BUG-072 | Critical | v2.5.0 | `Utils/Utils.cs:35-41` | Done | Dead code: inner `MaxDeformation < MinDeformation` check unreachable inside `> MinDeformation` block — deformation tracking never updates |
+| BUG-073 | Critical | v2.5.0 | `NanobotSystem.Init.cs:170-171` | Done | Close() spin-wait on `_AsyncUpdateSourcesAndTargetsRunning` without lock — may not observe background thread's write, risking use-after-free |
+| BUG-074 | High | v2.5.0 | `NanobotSystem.State.cs:65-97` | Done | Silent `catch {}` in IsShieldProtected/IsWelderShielded — shield check failures invisible |
+| BUG-075 | High | v2.5.0 | `NanobotSystem.Welding.cs:383-387` | Done | Silent `catch {}` in IsWeldIntegrityReached returns true — silently skips incomplete blocks |
+| BUG-076 | High | v2.5.0 | `Chat/Commands/ConfigCommand.cs:313-327` | Done | IntSetting/FloatSetting accept any parsed value — no bounds validation on chat config commands |
+| BUG-077 | Medium | v2.5.0 | `Mod.cs:43-59` | Done | DecrementGridCount TryGetValue→TryUpdate non-atomic — second decrement silently fails, count drifts |
+| BUG-078 | Medium | v2.5.0 | `Caches/SharedEntityCache.cs:33,100` | Done | GetEntitiesInBox/Cleanup access Session.ElapsedPlayTime without null check — crash during load/unload |
+| BUG-079 | Medium | v2.5.0 | `Chat/Commands/SystemsCommand.cs:68-73` | Done | Empty `--owner`/`--grid` filter produces empty string — IndexOf matches all players/grids |
+| BUG-080 | Medium | v2.5.0 | `Handlers/GridOwnershipCacheHandler.cs` | Done | Multiple bare `catch {}` blocks — ownership errors invisible, wrong relations used silently |
+| BUG-081 | High | v2.5.0 | `NanobotSystem.Scanning.cs` | TODO | Lock ordering inconsistency: `_Welder` vs `PossibleWeldTargets` acquired in different orders across code paths — potential deadlock |
+| BUG-082 | Medium | v2.5.0 | `NanobotSystem.Scanning.cs:1392-1436` | TODO | Cross-collection consistency gap: weld/grind/float targets swapped under separate locks — one-tick mixed state possible |
+| BUG-083 | Low | v2.5.0 | `NanobotSystem.Scanning.cs:36-37` | TODO | `_LastTargetsUpdate`/`_LastSourceUpdate` (TimeSpan, 8 bytes) read without memory barrier from game loop, written from background |
 
 ## Previously Fixed (not in this review)
 

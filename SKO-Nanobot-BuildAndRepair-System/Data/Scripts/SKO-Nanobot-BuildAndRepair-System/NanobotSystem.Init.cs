@@ -166,9 +166,17 @@ namespace SKONanobotBuildAndRepairSystem
             if (_IsInit)
             {
                 // Wait for any in-flight async scan to finish before clearing shared state.
-                // The background task sets _AsyncUpdateSourcesAndTargetsRunning = false in its finally block.
-                var maxWait = 1000;
-                while (_AsyncUpdateSourcesAndTargetsRunning && --maxWait > 0) { }
+                // The background task sets _AsyncUpdateSourcesAndTargetsRunning = false
+                // inside lock(_Welder) in its finally block. Check under the same lock
+                // to ensure we observe the write, not a stale cached value.
+                var deadline = DateTime.UtcNow.AddSeconds(5);
+                while (DateTime.UtcNow < deadline)
+                {
+                    lock (_Welder)
+                    {
+                        if (!_AsyncUpdateSourcesAndTargetsRunning) break;
+                    }
+                }
 
                 if (_Welder != null)
                 {
