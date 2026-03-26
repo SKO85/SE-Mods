@@ -149,10 +149,13 @@ namespace SKONanobotBuildAndRepairSystem
         internal void ResetSettings()
         {
             _Settings = new SyncBlockSettings(this);
+            BlockWeldPriority.ResetToDefaultOrder();
             BlockWeldPriority.SetAllEnabled(true);
             _Settings.WeldPriority = BlockWeldPriority.GetEntries();
+            BlockGrindPriority.ResetToDefaultOrder();
             BlockGrindPriority.SetAllEnabled(true);
             _Settings.GrindPriority = BlockGrindPriority.GetEntries();
+            ComponentCollectPriority.ResetToDefaultOrder();
             ComponentCollectPriority.SetAllEnabled(true);
             _Settings.ComponentCollectPriority = ComponentCollectPriority.GetEntries();
             UpdateCustomInfo(true);

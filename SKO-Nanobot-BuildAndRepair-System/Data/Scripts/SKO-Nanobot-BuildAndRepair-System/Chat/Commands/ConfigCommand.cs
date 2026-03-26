@@ -111,11 +111,14 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 case "list":
                     return ExecuteList();
                 case "save":
+                case "create":
                     return ExecuteSave();
                 case "reload":
                     return ExecuteReload();
                 case "reset":
                     return ExecuteReset();
+                case "delete":
+                    return ExecuteDelete();
                 default:
                     return ShowHelp();
             }
@@ -135,14 +138,18 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             sb.AppendLine("/nanobars config set <setting> <value>");
             sb.AppendLine("  Sets a setting to the specified value.");
             sb.AppendLine();
-            sb.AppendLine("/nanobars config save");
+            sb.AppendLine("/nanobars config save  (or: config create)");
             sb.AppendLine("  Saves current settings to the world folder (ModSettings.xml).");
+            sb.AppendLine("  Creates the file if it doesn't exist yet.");
             sb.AppendLine();
             sb.AppendLine("/nanobars config reload");
             sb.AppendLine("  Reloads settings from ModSettings.xml (world or local storage).");
             sb.AppendLine();
             sb.AppendLine("/nanobars config reset");
-            sb.AppendLine("  Resets all settings to defaults.");
+            sb.AppendLine("  Resets all settings to defaults (keeps ModSettings.xml).");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars config delete");
+            sb.AppendLine("  Resets all settings to defaults and deletes ModSettings.xml.");
             sb.AppendLine();
             sb.AppendLine("Examples:");
             sb.AppendLine("  /nanobars config set DebugMode true");
@@ -199,10 +206,23 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             return ChatCommandResult.MissionScreen(sb.ToString(), "Nanobot Build and Repair System", "Config Settings");
         }
 
+        private static string GetSettingsFilePath()
+        {
+            try
+            {
+                var worldPath = Sandbox.ModAPI.MyAPIGateway.Session.CurrentPath;
+                if (!string.IsNullOrEmpty(worldPath))
+                    return worldPath + "\\Storage\\" + typeof(SyncModSettings).Name + "\\ModSettings.xml";
+            }
+            catch { }
+            return "ModSettings.xml (world storage)";
+        }
+
         private static ChatCommandResult ExecuteSave()
         {
             SyncModSettings.Save(Mod.Settings, true);
-            return ChatCommandResult.Success("Settings saved to world folder. Filename: ModSettings.xml");
+            Mod.CustomSettingsLoaded = true;
+            return ChatCommandResult.Success(string.Format("Settings saved to: {0}", GetSettingsFilePath()));
         }
 
         private static ChatCommandResult ExecuteReload()
@@ -214,22 +234,61 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             Mod.Settings = loaded;
             Mod.SettingsChanged();
             Handlers.NetworkMessagingHandler.BroadcastModSettings();
-            return ChatCommandResult.Success("Settings reloaded from ModSettings.xml.");
+            return ChatCommandResult.Success(string.Format("Settings reloaded from: {0}", GetSettingsFilePath()));
         }
 
-        private static ChatCommandResult ExecuteReset()
+        private static SyncModSettings CreateDefaults()
         {
             var defaults = new SyncModSettings();
-            // Preserve dynamic defaults that depend on game type.
             if (Sandbox.ModAPI.MyAPIGateway.Multiplayer != null && Sandbox.ModAPI.MyAPIGateway.Multiplayer.MultiplayerActive)
                 defaults.MaxSystemsPerTargetGrid = 10;
             else
                 defaults.MaxSystemsPerTargetGrid = 20;
+            return defaults;
+        }
 
-            Mod.Settings = defaults;
+        private static ChatCommandResult ExecuteReset()
+        {
+            Mod.Settings = CreateDefaults();
             Mod.SettingsChanged();
             Handlers.NetworkMessagingHandler.BroadcastModSettings();
-            return ChatCommandResult.Success("Settings reset to defaults.");
+            return ChatCommandResult.Success("Settings reset to defaults. A session/server restart is recommended for all changes to take full effect.");
+        }
+
+        private static ChatCommandResult ExecuteDelete()
+        {
+            // Reset settings to defaults.
+            Mod.Settings = CreateDefaults();
+            Mod.CustomSettingsLoaded = false;
+            Mod.SettingsChanged();
+            Handlers.NetworkMessagingHandler.BroadcastModSettings();
+
+            // Delete ModSettings.xml from world and local storage.
+            var deleted = false;
+            try
+            {
+                if (Sandbox.ModAPI.MyAPIGateway.Utilities.FileExistsInWorldStorage("ModSettings.xml", typeof(SyncModSettings)))
+                {
+                    Sandbox.ModAPI.MyAPIGateway.Utilities.DeleteFileInWorldStorage("ModSettings.xml", typeof(SyncModSettings));
+                    deleted = true;
+                }
+            }
+            catch { }
+            try
+            {
+                if (Sandbox.ModAPI.MyAPIGateway.Utilities.FileExistsInLocalStorage("ModSettings.xml", typeof(SyncModSettings)))
+                {
+                    Sandbox.ModAPI.MyAPIGateway.Utilities.DeleteFileInLocalStorage("ModSettings.xml", typeof(SyncModSettings));
+                    deleted = true;
+                }
+            }
+            catch { }
+
+            var restart = " A session/server restart is recommended for all changes to take full effect.";
+            if (deleted)
+                return ChatCommandResult.Success(string.Format("Settings reset to defaults. Deleted: {0}.{1}", GetSettingsFilePath(), restart));
+
+            return ChatCommandResult.Success("Settings reset to defaults. No ModSettings.xml file found to delete." + restart);
         }
 
         #region Setting builders

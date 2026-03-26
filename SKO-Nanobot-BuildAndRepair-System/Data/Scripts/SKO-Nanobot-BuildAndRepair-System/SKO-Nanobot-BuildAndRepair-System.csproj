@@ -153,6 +153,7 @@
     <Compile Include="Collections\HashDictionary.cs" />
     <Compile Include="Collections\HashList.cs" />
     <Compile Include="Models\MsgDebugStats.cs" />
+    <Compile Include="Models\MsgProfileSummary.cs" />
     <Compile Include="Models\MsgBlockDataRequest.cs" />
     <Compile Include="Models\MsgBlockSettings.cs" />
     <Compile Include="Models\MsgBlockState.cs" />

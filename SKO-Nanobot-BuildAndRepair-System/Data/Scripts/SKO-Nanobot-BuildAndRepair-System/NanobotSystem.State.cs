@@ -1,5 +1,6 @@
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
@@ -11,8 +12,9 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public partial class NanobotSystem
     {
-        private bool SetSafeZoneAndShieldStates()
+        internal bool SetSafeZoneAndShieldStates()
         {
+            var profilerTs = MethodProfiler.Start();
             var safeZoneActionsState = SafeZoneHandler.GetActionsAllowedForSystem(this);
 
             var safezoneAllowsWelding = safeZoneActionsState.IsWeldingAllowed;
@@ -52,6 +54,9 @@ namespace SKONanobotBuildAndRepairSystem
                 changed = true;
             }
 
+            MethodProfiler.StopAndLog("SetSafeZoneAndShieldStates", profilerTs, () =>
+                string.Format("entityId={0};changed={1};zones={2}",
+                    _Welder != null ? _Welder.EntityId : 0, changed, SafeZoneHandler.Zones.Count));
             return changed;
         }
 
@@ -96,7 +101,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var relation = _Welder.OwnerId == 0 ? MyRelationsBetweenPlayerAndBlock.NoOwnership : block.GetUserRelationToOwner(_Welder.OwnerId);
             if (relation == MyRelationsBetweenPlayerAndBlock.Enemies) return false;
-            if (!_Welder.HelpOthers && (relation == MyRelationsBetweenPlayerAndBlock.Neutral || relation == MyRelationsBetweenPlayerAndBlock.NoOwnership)) return false;
+            if (relation == MyRelationsBetweenPlayerAndBlock.Neutral || relation == MyRelationsBetweenPlayerAndBlock.NoOwnership) return false;
             return true;
         }
 

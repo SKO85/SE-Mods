@@ -20,6 +20,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static ushort MSGID_MOD_COMMAND_FROM_CLIENT = 40002;
         private static ushort MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER = 40003;
         private static ushort MSGID_DEBUG_STATS_FROM_SERVER = 40004;
+        private static ushort MSGID_PROFILE_SUMMARY_FROM_SERVER = 40005;
 
         #region Registration
 
@@ -44,6 +45,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_BLOCK_STATE_FROM_SERVER, ClientMsgBlockStateReceived);
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, ClientMsgModCommandResponseReceived);
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_DEBUG_STATS_FROM_SERVER, ClientMsgDebugStatsReceived);
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_PROFILE_SUMMARY_FROM_SERVER, ClientMsgProfileSummaryReceived);
 
                 // Send first data request message on clients.
                 MsgDataRequestSend();
@@ -71,6 +73,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_BLOCK_STATE_FROM_SERVER, ClientMsgBlockStateReceived);
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, ClientMsgModCommandResponseReceived);
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_DEBUG_STATS_FROM_SERVER, ClientMsgDebugStatsReceived);
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_PROFILE_SUMMARY_FROM_SERVER, ClientMsgProfileSummaryReceived);
             }
 
             _registered = false;
@@ -317,16 +320,36 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         }
 
         /// <summary>
-        /// Broadcast debug stats to all connected clients. Server-only, called periodically when DebugMode or profiling is active.
+        /// Send a message to all admin-level players (Admin, SpaceMaster, Owner).
+        /// Server-only. Reuses a single player list to avoid per-call allocation.
         /// </summary>
-        public static void BroadcastDebugStats(MsgDebugStats stats)
+        private static readonly List<IMyPlayer> _adminBroadcastPlayers = new List<IMyPlayer>();
+        private static void SendToAdmins(ushort msgId, byte[] bytes)
+        {
+            if (!MyAPIGateway.Session.IsServer || MyAPIGateway.Multiplayer == null || !MyAPIGateway.Multiplayer.MultiplayerActive)
+                return;
+
+            _adminBroadcastPlayers.Clear();
+            MyAPIGateway.Players.GetPlayers(_adminBroadcastPlayers);
+            foreach (var player in _adminBroadcastPlayers)
+            {
+                if (player.SteamUserId == 0) continue;
+                var level = player.PromoteLevel.ToString();
+                if (level == "Admin" || level == "SpaceMaster" || level == "Owner")
+                {
+                    MyAPIGateway.Multiplayer.SendMessageTo(msgId, bytes, player.SteamUserId, true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Broadcast debug stats to admin clients only. Server-only, called periodically when DebugMode or profiling is active.
+        /// </summary>
+        public static void BroadcastDebugStatsToAdmins(MsgDebugStats stats)
         {
             try
             {
-                if (!MyAPIGateway.Session.IsServer || MyAPIGateway.Multiplayer == null || !MyAPIGateway.Multiplayer.MultiplayerActive)
-                    return;
-
-                MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_DEBUG_STATS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(stats), true);
+                SendToAdmins(MSGID_DEBUG_STATS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(stats));
             }
             catch { }
         }
@@ -338,6 +361,29 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 if (!isSenderServer) return;
                 var stats = MyAPIGateway.Utilities.SerializeFromBinary<MsgDebugStats>(bytes);
                 if (stats != null) HudHandler.ReceivedStats = stats;
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Broadcast profile summary to admin clients. Server-only.
+        /// </summary>
+        public static void BroadcastProfileSummaryToAdmins(MsgProfileSummary summary)
+        {
+            try
+            {
+                SendToAdmins(MSGID_PROFILE_SUMMARY_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(summary));
+            }
+            catch { }
+        }
+
+        private static void ClientMsgProfileSummaryReceived(ushort channelId, byte[] bytes, ulong senderSteamId, bool isSenderServer)
+        {
+            try
+            {
+                if (!isSenderServer) return;
+                var summary = MyAPIGateway.Utilities.SerializeFromBinary<MsgProfileSummary>(bytes);
+                if (summary != null) HudHandler.ReceivedProfileSummary = summary;
             }
             catch { }
         }

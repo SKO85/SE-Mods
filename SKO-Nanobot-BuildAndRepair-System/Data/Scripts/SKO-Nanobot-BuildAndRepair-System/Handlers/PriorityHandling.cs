@@ -218,6 +218,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             _HashDirty = true;
         }
 
+        internal void ResetToDefaultOrder()
+        {
+            Sort((a, b) => a.PrioItem.Key.CompareTo(b.PrioItem.Key));
+            _HashDirty = true;
+        }
+
         public bool AnyEnabled
         {
             get

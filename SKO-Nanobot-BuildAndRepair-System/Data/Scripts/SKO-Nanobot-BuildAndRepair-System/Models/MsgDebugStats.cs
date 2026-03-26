@@ -101,6 +101,10 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(64)]
         public int SyncSkipped { get; set; }
 
+        // Settings
+        [ProtoMember(65)]
+        public bool CustomSettingsLoaded { get; set; }
+
         // Profiling
         [ProtoMember(70)]
         public bool ProfilingActive { get; set; }

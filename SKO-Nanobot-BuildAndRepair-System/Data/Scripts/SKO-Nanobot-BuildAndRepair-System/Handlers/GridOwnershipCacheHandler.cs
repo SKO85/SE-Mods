@@ -1,6 +1,7 @@
 ﻿using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Caches;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -163,8 +164,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             LastCheckTime = now;
 
+            var profilerTs = MethodProfiler.Start();
             RefreshExpiredEntries();
             Cache.CleanupExpired();
+            MethodProfiler.StopAndLog("GridOwnershipCacheHandler.Update", profilerTs, () =>
+                string.Format("cacheCount={0}", Cache.Count));
         }
 
         private static void RefreshExpiredEntries()

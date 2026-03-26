@@ -106,8 +106,9 @@ namespace SKONanobotBuildAndRepairSystem
                 customInfo.Append(Environment.NewLine);
             }
 
-            if (Mod.Settings.DebugMode)
+            if (Mod.Settings.DebugMode && !MyAPIGateway.Utilities.IsDedicated)
             {
+                customInfo.Append(string.Format("Version: {0}{1}", Constants.ModVersion, Environment.NewLine));
                 int sourceCount = 0;
                 int pushTargetCount = 0;
                 lock (_PossibleSources) { sourceCount = _PossibleSources.Count; }
@@ -141,6 +142,9 @@ namespace SKONanobotBuildAndRepairSystem
                     Mod.Settings.StaggerGroupCount > 0 ? "" : " (auto)",
                     Mod.GetEffectiveMaxGrindsPerTick(),
                     Mod.Settings.MaxGrindsPerTick > 0 ? "" : " (auto)",
+                    Environment.NewLine));
+                customInfo.Append(string.Format("ModSettings.xml: {0}{1}",
+                    Mod.CustomSettingsLoaded ? "Loaded (custom)" : "Not found (defaults)",
                     Environment.NewLine));
             }
 

@@ -183,6 +183,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     }
                 }
 
+                Mod.CustomSettingsLoaded = settings != null;
+
                 if (settings != null)
                 {
                     var adjusted = AdjustSettings(settings);

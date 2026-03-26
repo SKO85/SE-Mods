@@ -96,6 +96,9 @@ namespace SKONanobotBuildAndRepairSystem
             // Register this block to the nanobot systems.
             Mod.NanobotSystems.TryAdd(Entity.EntityId, this);
 
+            // Force HelpOthers off — the mod does not use this option.
+            _Welder.HelpOthers = false;
+
             // Assign stagger slot so BaR updates are distributed across ticks.
             _staggerSlot = Mod.ClaimStaggerSlot();
 

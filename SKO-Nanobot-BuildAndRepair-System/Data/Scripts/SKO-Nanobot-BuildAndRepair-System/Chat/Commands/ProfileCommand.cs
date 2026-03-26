@@ -43,6 +43,8 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             if (args[1] == "status")
                 return ChatCommandResult.Success(MethodProfiler.GetStatusMessage());
 
+            // "summary" is handled locally in ChatHandler (HUD toggle, not forwarded to server)
+
             if (args[1] == "minduration")
             {
                 if (args.Length < 3)
@@ -75,6 +77,10 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             sb.AppendLine();
             sb.AppendLine("/nanobars profile status");
             sb.AppendLine("  Shows whether profiling is running and current settings.");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars profile summary");
+            sb.AppendLine("  Toggle the profile summary HUD panel (top-right).");
+            sb.AppendLine("  Shows domains, top methods, and heaviest grids. Stays visible after profiling stops.");
             sb.AppendLine();
             sb.AppendLine("/nanobars profile minduration <ms>");
             sb.AppendLine("  Sets the minimum method duration (0-10000ms) for logging samples.");

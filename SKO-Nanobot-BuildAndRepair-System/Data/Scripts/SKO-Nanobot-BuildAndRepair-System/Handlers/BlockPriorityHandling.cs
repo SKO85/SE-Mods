@@ -23,7 +23,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         DisplayPanel,
         Lighting,
         SensorDevice,
-        CommunicationBlock
+        CommunicationBlock,
+        Connector,
+        MergeBlock
     }
 
     public enum ComponentClass
@@ -93,6 +95,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             else if (block is Sandbox.ModAPI.IMyLightingBlock) result = (int)BlockClass.Lighting;
             else if (block is Sandbox.ModAPI.IMySensorBlock || block is Sandbox.ModAPI.IMyCameraBlock) result = (int)BlockClass.SensorDevice;
             else if (block is Sandbox.ModAPI.IMyRadioAntenna || block is Sandbox.ModAPI.IMyLaserAntenna) result = (int)BlockClass.CommunicationBlock;
+            else if (block is Sandbox.ModAPI.IMyShipConnector) result = (int)BlockClass.Connector;
+            else if (block is SpaceEngineers.Game.ModAPI.IMyShipMergeBlock) result = (int)BlockClass.MergeBlock;
             else if (functionalBlock != null) result = (int)BlockClass.FunctionalBlock;
             else result = (int)BlockClass.ArmorBlock;
 

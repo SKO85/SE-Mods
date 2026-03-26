@@ -249,6 +249,9 @@ namespace SKONanobotBuildAndRepairSystem
 
             var picked = false;
 
+            // BUG-057: Reuse list across source iterations to avoid per-source allocation.
+            var tempInventoryItems = new List<MyInventoryItem>();
+
             lock (_PossibleSources)
             {
                 foreach (var srcInventory in _PossibleSources)
@@ -259,7 +262,7 @@ namespace SKONanobotBuildAndRepairSystem
                     //Pre Test is 10 timers faster then get the whole list (as copy!) and iterate for nothing
                     if (srcInventory.FindItem(componentId) != null && srcInventory.CanTransferItemTo(welderInventory, componentId))
                     {
-                        var tempInventoryItems = new List<MyInventoryItem>();
+                        tempInventoryItems.Clear();
                         srcInventory.GetItems(tempInventoryItems);
                         for (int srcItemIndex = tempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                         {
@@ -294,7 +297,6 @@ namespace SKONanobotBuildAndRepairSystem
                             }
                             if (maxpossibleAmount <= 0) return picked;
                         }
-                        tempInventoryItems.Clear();
                     }
                     if (maxpossibleAmount <= 0) return picked;
                 }

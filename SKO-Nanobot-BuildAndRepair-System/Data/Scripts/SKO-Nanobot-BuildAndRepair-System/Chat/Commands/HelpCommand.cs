@@ -4,17 +4,36 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
 {
     public static class HelpCommand
     {
-        public static ChatCommandResult Execute()
+        public static ChatCommandResult Execute(bool isAdmin)
         {
             var sb = new StringBuilder();
 
             sb.AppendLine(string.Format("Version: {0}", Constants.ModVersion));
             sb.AppendLine();
-            sb.AppendLine("[-cwsf]: Creates a settings file inside your current world folder (local-only)");
-            sb.AppendLine("[config help]: Shows config command syntax");
-            sb.AppendLine("[profile help]: Shows profiling command syntax");
-            sb.AppendLine("[sim <value|reset>]: Override sim-speed for BaR calculations");
-            sb.AppendLine("[mods]: Shows status of mod integrations (TextHudAPI, DefenseShields)");
+
+            if (isAdmin)
+            {
+                sb.AppendLine("--- Admin Commands ---");
+                sb.AppendLine();
+                sb.AppendLine("[config help]: Shows config command syntax");
+                sb.AppendLine("[config create]: Creates/saves settings file (ModSettings.xml) in world folder");
+                sb.AppendLine("[config delete]: Resets settings to defaults and deletes ModSettings.xml");
+                sb.AppendLine("[profile help]: Shows profiling command syntax");
+                sb.AppendLine("[profile summary]: Toggle profile summary HUD (top-right)");
+                sb.AppendLine("[sim <value|reset>]: Override sim-speed for BaR calculations");
+                sb.AppendLine("[debug on|off]: Enable/disable debug mode (server-wide)");
+                sb.AppendLine("[debug show|hide]: Show/hide the debug HUD locally");
+                sb.AppendLine("[debug left|right]: Set HUD position and show");
+                sb.AppendLine("[mods]: Shows status of mod integrations (TextHudAPI, DefenseShields)");
+                sb.AppendLine();
+            }
+            else
+            {
+                sb.AppendLine("Admin commands are available for players with Admin, SpaceMaster, or Owner permissions.");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("--- Links ---");
             sb.AppendLine();
             sb.AppendLine("Issues: Report issues or suggestions (GitHub)");
             sb.AppendLine("https://github.com/SKO85/SE-Mods/issues");

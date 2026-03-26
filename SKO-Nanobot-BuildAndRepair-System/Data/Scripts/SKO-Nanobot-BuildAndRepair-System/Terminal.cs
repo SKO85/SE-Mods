@@ -97,7 +97,6 @@ namespace SKONanobotBuildAndRepairSystem
         public static bool CustomControlsInit = false;
         internal static List<IMyTerminalControl> CustomControls = new List<IMyTerminalControl>();
 
-        internal static IMyTerminalControl _HelpOthers;
         internal static IMyTerminalControlSeparator _SeparateWeldOptions;
 
         internal static IMyTerminalControlSlider _IgnoreColorHueSlider;
@@ -202,11 +201,14 @@ namespace SKONanobotBuildAndRepairSystem
                     List<IMyTerminalControl> controls;
                     MyAPIGateway.TerminalControls.GetControls<IMyShipWelder>(out controls);
 
-                    _HelpOthers = controls.Find((ctrl) =>
+                    // Hide the native "Help Others" checkbox — the mod does not use this option.
+                    var helpOthers = controls.Find((ctrl) =>
                     {
                         var cb = ctrl as IMyTerminalControlCheckbox;
                         return (cb != null && ctrl.Id == "helpOthers");
                     });
+                    if (helpOthers != null)
+                        helpOthers.Visible = (block) => false;
 
                     // --- General ---
                     label = Labels.Create("ModeSettings", Texts.ModeSettings_Headline);
@@ -225,6 +227,14 @@ namespace SKONanobotBuildAndRepairSystem
                     // --- Welding ---
                     label = Labels.Create("WeldingSettings", Texts.WeldSettings_Headline);
                     {
+                        // --- AllowBuild (Build Projections) ---
+                        onoffSwitch = OnOffSwitches.CreateAllowBuild(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
+                        CreateProperty(onoffSwitch, Mod.Settings.Welder.AllowBuildFixed || !weldingAllowed);
+
+                        // --- Weld mode dropdown ---
+                        var weldModeCombo = ComboBoxes.CreateWeldMode(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
+                        CreateProperty(weldModeCombo, !weldingAllowed);
+
                         // --- Set Color that marks blocks as 'ignore' ---
                         {
                             onoffSwitch = OnOffSwitches.CreateUseIgnoreColor(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
@@ -260,18 +270,6 @@ namespace SKONanobotBuildAndRepairSystem
 
                         // Weld Options
                         _SeparateWeldOptions = Separators.Create("SeparateWeldOptions", isWeldingAllowed);
-                        {
-                            // ---helpOthers
-                            // Moved here
-
-                            // --- AllowBuild CheckBox ---
-                            onoffSwitch = OnOffSwitches.CreateAllowBuild(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
-                            CreateProperty(onoffSwitch, Mod.Settings.Welder.AllowBuildFixed || !weldingAllowed);
-
-                            // --- Weld mode dropdown ---
-                            var weldModeCombo = ComboBoxes.CreateWeldMode(weldingAllowed, isWeldingAllowed, isReadonly, isBaRSystem);
-                            CreateProperty(weldModeCombo, !weldingAllowed);
-                        }
 
                         // --- Priority Welding ---
                         separateArea = Separators.Create("SeparateWeldPrio", isWeldingAllowed);
@@ -645,12 +643,6 @@ namespace SKONanobotBuildAndRepairSystem
                 foreach (var item in CustomControls)
                 {
                     controls.Add(item);
-                    if (item == _SeparateWeldOptions)
-                    {
-                        var fromIdx = controls.IndexOf(_HelpOthers);
-                        var toIdx = controls.IndexOf(_SeparateWeldOptions);
-                        if (fromIdx >= 0 && toIdx >= 0) controls.Move(fromIdx, toIdx);
-                    }
                 }
             }
         }

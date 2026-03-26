@@ -182,8 +182,31 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Check if the given slim block is a weld target. When skipRangeCheck is true, skips IsInRange and sets distance to 0.
+        /// BUG-053: SE applies safe zone building restrictions at the grid level.
+        /// If the projector's physical grid intersects a safe zone that blocks building,
+        /// proj.Build() will fail for ALL projected blocks on that grid.
         /// </summary>
+        private bool IsProjectorGridBuildBlocked(IMyProjector projector)
+        {
+            if (!Mod.Settings.SafeZoneCheckEnabled || SafeZoneHandler.Zones.Count == 0)
+                return false;
+
+            var projectorGrid = projector.CubeGrid;
+            if (projectorGrid == null)
+                return false;
+
+            var zone = SafeZoneHandler.GetIntersectingSafeZone(projectorGrid);
+            if (zone != null && zone.Enabled)
+            {
+                var buildAllowed = zone.IsActionAllowed(
+                    SafeZoneHandler.CastProhibit(MySessionComponentSafeZones.AllowedActions, SafeZoneHandler.SafeZoneAction.BuildingProjections), 0L);
+                if (!buildAllowed)
+                    return true;
+            }
+
+            return false;
+        }
+
         private bool AsyncAddBlockIfWeldTarget(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, IMySlimBlock block, List<ClusterTargetCandidate> clusterWeldTargets, int maxTargets, bool skipRangeCheck)
         {
             if (clusterWeldTargets != null && clusterWeldTargets.Count >= maxTargets)
@@ -196,6 +219,12 @@ namespace SKONanobotBuildAndRepairSystem
             if (block.IsProjected(out projector))
             {
                 if (!State.SafeZoneAllowsBuildingProjections)
+                    return false;
+
+                // BUG-053: SE applies safe zone building restrictions at the grid level.
+                // If the projector's physical grid intersects a safe zone that blocks
+                // building, proj.Build() fails for ALL projected blocks on that grid.
+                if (IsProjectorGridBuildBlocked(projector))
                     return false;
 
                 if (((Settings.Flags & SyncBlockSettings.Settings.AllowBuild) != 0) &&
@@ -477,6 +506,14 @@ namespace SKONanobotBuildAndRepairSystem
                                 continue;
                             }
 
+                            // BUG-053: SE applies safe zone building restrictions at the grid level.
+                            // If the projector's physical grid intersects a build-blocked safe zone,
+                            // proj.Build() fails for ALL projected blocks — skip this projector entirely.
+                            if (IsProjectorGridBuildBlocked(projector))
+                            {
+                                continue;
+                            }
+
                             var projectedCubeGrid = projector.ProjectedGrid;
                             if (projectedCubeGrid != null && !grids.Contains(projectedCubeGrid))
                             {
@@ -536,12 +573,25 @@ namespace SKONanobotBuildAndRepairSystem
                 _EmptyGridCache.TryRemove(gridEntityId, out dummy);
             }
 
+            var _gridName = cubeGrid.DisplayName;
+            var _gridEid = cubeGrid.EntityId;
+
+            // Capture end timestamp before StopAndLog so grid cost doesn't include logging overhead.
+            var endTs = profilerTs != 0L ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+
             MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
                 string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};skipRange={5}",
-                    _Welder.EntityId, cubeGrid.EntityId, newBlocks.Count,
+                    _Welder.EntityId, _gridEid, newBlocks.Count,
                     clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
                     clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
                     blockSkipRange));
+
+            // Report per-grid scan cost for profile summary.
+            if (endTs != 0L)
+            {
+                var gridMs = (double)(endTs - profilerTs) / System.Diagnostics.Stopwatch.Frequency * 1000.0;
+                MethodProfiler.ReportGridCost(_gridEid, _gridName, gridMs);
+            }
         }
 
         /// <summary>
@@ -877,13 +927,20 @@ namespace SKONanobotBuildAndRepairSystem
             var profilerTs = MethodProfiler.Start();
             try
             {
+                // BUG-058: Reuse one distance dictionary for both grind and weld sorts
+                // to avoid two allocations per scan cycle.
+                var maxCap = Math.Max(
+                    grindCandidates != null ? grindCandidates.Count : 0,
+                    weldCandidates != null ? weldCandidates.Count : 0);
+                var distances = maxCap > 0 ? new Dictionary<IMySlimBlock, double>(maxCap) : null;
+
                 if (grindCandidates != null && grindCandidates.Count > 1)
                 {
                     var grindUsePriority = (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0;
                     var grindSmallestGridFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
                     var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
 
-                    var distances = new Dictionary<IMySlimBlock, double>(grindCandidates.Count);
+                    distances.Clear();
                     foreach (var c in grindCandidates)
                     {
                         var blockPos = c.Block.CubeGrid.GridIntegerToWorld(c.Block.Position);
@@ -921,7 +978,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (weldCandidates != null && weldCandidates.Count > 1)
                 {
-                    var distances = new Dictionary<IMySlimBlock, double>(weldCandidates.Count);
+                    distances.Clear();
                     foreach (var c in weldCandidates)
                     {
                         var blockPos = c.Block.CubeGrid.GridIntegerToWorld(c.Block.Position);

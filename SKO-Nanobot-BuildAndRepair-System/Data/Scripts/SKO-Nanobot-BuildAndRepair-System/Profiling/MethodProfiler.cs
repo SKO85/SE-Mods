@@ -1,4 +1,5 @@
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Models;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -43,6 +44,158 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             public double WarmupTotalMs;
             public long SteadyCalls;
             public double SteadyTotalMs;
+        }
+
+        // --- Per-grid cost tracking ---
+        private sealed class GridCostEntry
+        {
+            public long EntityId;
+            public string Name;
+            public double TotalMs;
+            public long Calls;
+        }
+
+        private static readonly Dictionary<string, GridCostEntry> _gridCosts = new Dictionary<string, GridCostEntry>();
+
+        /// <summary>
+        /// Report time spent on a specific grid. Called from scan/weld/grind methods.
+        /// </summary>
+        public static void ReportGridCost(long gridEntityId, string gridName, double elapsedMs)
+        {
+            if (!_isRunning) return;
+            lock (_syncRoot)
+            {
+                var key = gridEntityId.ToString();
+                GridCostEntry entry;
+                if (!_gridCosts.TryGetValue(key, out entry))
+                {
+                    entry = new GridCostEntry { EntityId = gridEntityId, Name = gridName ?? key };
+                    _gridCosts[key] = entry;
+                }
+                entry.TotalMs += elapsedMs;
+                entry.Calls++;
+            }
+        }
+
+        public static bool HasSummaryData
+        {
+            get { lock (_syncRoot) { return _methodStats.Count > 0; } }
+        }
+
+        /// <summary>
+        /// Build a profile summary message for network broadcast and local rendering.
+        /// Returns null if no data is available.
+        /// </summary>
+        public static MsgProfileSummary BuildSummaryMessage(int maxMethods, int maxGrids)
+        {
+            List<KeyValuePair<string, MethodStats>> methods;
+            List<KeyValuePair<string, GridCostEntry>> grids;
+
+            lock (_syncRoot)
+            {
+                if (_methodStats.Count == 0) return null;
+                methods = _methodStats.ToList();
+                grids = _gridCosts.Count > 0 ? _gridCosts.ToList() : null;
+            }
+
+            var msg = new MsgProfileSummary();
+            msg.IsRunning = _isRunning;
+            msg.ElapsedSeconds = _isRunning ? (float)(DateTime.UtcNow - _startedUtc).TotalSeconds : 0;
+            msg.MethodCount = methods.Count;
+            msg.SimSpeedMin = _minSimSpeed == float.MaxValue ? 0f : _minSimSpeed;
+            msg.SimSpeedAvg = _simSpeedSamples > 0 ? (float)(_sumSimSpeed / _simSpeedSamples) : 0f;
+
+            // Domain summary
+            var domainAgg = new Dictionary<string, MethodStats>();
+            foreach (var m in methods)
+            {
+                var domain = ClassifyDomain(m.Key);
+                MethodStats agg;
+                if (!domainAgg.TryGetValue(domain, out agg))
+                {
+                    agg = new MethodStats();
+                    domainAgg[domain] = agg;
+                }
+                MergeStats(agg, m.Value);
+            }
+
+            msg.Domains = new List<ProfileDomainEntry>();
+            var domainList = domainAgg.ToList();
+            domainList.Sort((a, b) => b.Value.TotalMs.CompareTo(a.Value.TotalMs));
+            foreach (var d in domainList)
+            {
+                var s = d.Value;
+                msg.Domains.Add(new ProfileDomainEntry
+                {
+                    Name = d.Key,
+                    Calls = s.Calls,
+                    TotalMs = (float)s.TotalMs,
+                    AvgMs = s.Calls > 0 ? (float)(s.TotalMs / s.Calls) : 0,
+                    MaxMs = s.MaxMs == double.MinValue ? 0f : (float)s.MaxMs
+                });
+            }
+
+            // Top methods
+            methods.Sort((a, b) => b.Value.TotalMs.CompareTo(a.Value.TotalMs));
+            var topCount = Math.Min(maxMethods, methods.Count);
+
+            msg.TopMethods = new List<ProfileMethodEntry>(topCount);
+            for (int i = 0; i < topCount; i++)
+            {
+                var name = methods[i].Key;
+                var s = methods[i].Value;
+                var calls = s.SteadyCalls > 0 ? s.SteadyCalls : s.Calls;
+                var total = s.SteadyCalls > 0 ? s.SteadyTotalMs : s.TotalMs;
+                msg.TopMethods.Add(new ProfileMethodEntry
+                {
+                    Name = name,
+                    Calls = calls,
+                    TotalMs = (float)total,
+                    AvgMs = calls > 0 ? (float)(total / calls) : 0,
+                    MinMs = s.MinMs == double.MaxValue ? 0f : (float)s.MinMs,
+                    MaxMs = s.MaxMs == double.MinValue ? 0f : (float)s.MaxMs
+                });
+            }
+
+            // Top grids with owner name lookup
+            if (grids != null && grids.Count > 0)
+            {
+                grids.Sort((a, b) => b.Value.TotalMs.CompareTo(a.Value.TotalMs));
+                var gridCount = Math.Min(maxGrids, grids.Count);
+                msg.TopGrids = new List<ProfileGridEntry>(gridCount);
+                for (int i = 0; i < gridCount; i++)
+                {
+                    var g = grids[i].Value;
+                    string ownerName = null;
+                    try
+                    {
+                        VRage.ModAPI.IMyEntity ent;
+                        if (MyAPIGateway.Entities.TryGetEntityById(g.EntityId, out ent) && ent != null)
+                        {
+                            var grid = ent as VRage.Game.ModAPI.IMyCubeGrid;
+                            if (grid != null && grid.BigOwners != null && grid.BigOwners.Count > 0)
+                            {
+                                var ownerId = grid.BigOwners[0];
+                                var players = new List<VRage.Game.ModAPI.IMyPlayer>();
+                                MyAPIGateway.Players.GetPlayers(players, p => p.IdentityId == ownerId);
+                                if (players.Count > 0)
+                                    ownerName = players[0].DisplayName;
+                            }
+                        }
+                    }
+                    catch { }
+
+                    msg.TopGrids.Add(new ProfileGridEntry
+                    {
+                        Name = g.Name,
+                        Calls = g.Calls,
+                        TotalMs = (float)g.TotalMs,
+                        OwnerName = ownerName
+                    });
+                }
+            }
+
+            return msg;
         }
 
         public static bool IsEnabled
@@ -109,6 +262,96 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             return status;
         }
 
+        /// <summary>
+        /// Returns a formatted summary of current profiling stats for in-game display.
+        /// Works whether profiling is running or has been stopped (shows last collected data).
+        /// </summary>
+        public static string GetSummaryText()
+        {
+            List<KeyValuePair<string, MethodStats>> methods;
+            bool running;
+            double elapsedSec;
+
+            lock (_syncRoot)
+            {
+                if (_methodStats.Count == 0)
+                    return "No profiling data collected. Start a profiling session first with /nanobars profile start.";
+
+                methods = _methodStats.ToList();
+                running = _isRunning;
+                elapsedSec = running ? (DateTime.UtcNow - _startedUtc).TotalSeconds : 0;
+            }
+
+            var sb = new StringBuilder(2048);
+
+            // Header
+            if (running)
+                sb.AppendLine(string.Format("Profiling: RUNNING ({0:F1}s elapsed, MinDurationMs={1})", elapsedSec, _minDurationMs));
+            else
+                sb.AppendLine(string.Format("Profiling: STOPPED (MinDurationMs={0})", _minDurationMs));
+
+            sb.AppendLine(string.Format("Methods tracked: {0}", methods.Count));
+            sb.AppendLine();
+
+            // Domain summary
+            var domainStats = new Dictionary<string, MethodStats>();
+            foreach (var method in methods)
+            {
+                var domain = ClassifyDomain(method.Key);
+                MethodStats aggregate;
+                if (!domainStats.TryGetValue(domain, out aggregate))
+                {
+                    aggregate = new MethodStats();
+                    domainStats[domain] = aggregate;
+                }
+                MergeStats(aggregate, method.Value);
+            }
+
+            sb.AppendLine("--- DOMAIN SUMMARY ---");
+            sb.AppendLine(string.Format("{0,-12} {1,8} {2,10} {3,8} {4,8}",
+                "Domain", "Calls", "TotalMs", "AvgMs", "MaxMs"));
+
+            var domainList = domainStats.ToList();
+            domainList.Sort((a, b) => b.Value.TotalMs.CompareTo(a.Value.TotalMs));
+            foreach (var entry in domainList)
+            {
+                var s = entry.Value;
+                sb.AppendLine(string.Format("{0,-12} {1,8} {2,10:F1} {3,8:F3} {4,8:F3}",
+                    entry.Key,
+                    s.Calls,
+                    s.TotalMs,
+                    SafeAverage(s.TotalMs, s.Calls),
+                    s.MaxMs == double.MinValue ? 0.0 : s.MaxMs));
+            }
+
+            sb.AppendLine();
+
+            // Top methods by total time (top 20)
+            methods.Sort((a, b) => b.Value.TotalMs.CompareTo(a.Value.TotalMs));
+            var topCount = Math.Min(20, methods.Count);
+
+            sb.AppendLine(string.Format("--- TOP {0} METHODS (by total time) ---", topCount));
+            sb.AppendLine(string.Format("{0,-38} {1,8} {2,10} {3,8} {4,8} {5,8}",
+                "Method", "Calls", "TotalMs", "AvgMs", "MinMs", "MaxMs"));
+
+            for (int i = 0; i < topCount; i++)
+            {
+                var name = methods[i].Key;
+                var s = methods[i].Value;
+                // Truncate long method names for display
+                if (name.Length > 38) name = name.Substring(0, 35) + "...";
+                sb.AppendLine(string.Format("{0,-38} {1,8} {2,10:F1} {3,8:F3} {4,8:F3} {5,8:F3}",
+                    name,
+                    s.SteadyCalls > 0 ? s.SteadyCalls : s.Calls,
+                    s.SteadyCalls > 0 ? s.SteadyTotalMs : s.TotalMs,
+                    s.SteadyCalls > 0 ? SafeAverage(s.SteadyTotalMs, s.SteadyCalls) : SafeAverage(s.TotalMs, s.Calls),
+                    s.MinMs == double.MaxValue ? 0.0 : s.MinMs,
+                    s.MaxMs == double.MinValue ? 0.0 : s.MaxMs));
+            }
+
+            return sb.ToString();
+        }
+
         public static bool StartSession(out string message)
         {
             return StartSession(DefaultAutoStopSeconds, out message);
@@ -138,6 +381,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 DeletePreviousLogs();
                 CloseInternal();
                 _methodStats.Clear();
+                _gridCosts.Clear();
                 _minSimSpeed = float.MaxValue;
                 _maxSimSpeed = float.MinValue;
                 _sumSimSpeed = 0;
@@ -501,6 +745,8 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 _autoStopUtc = null;
                 WriteManifest();
                 CloseInternal();
+                _methodStats.Clear();
+                _gridCosts.Clear();
             }
         }
 
@@ -593,7 +839,10 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             }
 
             _writers.Clear();
-            _methodStats.Clear();
+            // Note: _methodStats is intentionally NOT cleared here.
+            // Data is preserved so /nanobars profile summary can display
+            // results after the session stops. Stats are cleared when a
+            // new session starts (StartSession).
         }
     }
 }

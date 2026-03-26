@@ -98,7 +98,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && targetData.Block != Settings.CurrentPickedWeldingBlock) continue;
 
-                    if (Mod.Settings.AssignToSystemEnabled && !_Welder.HelpOthers
+                    if (Mod.Settings.AssignToSystemEnabled
                         && Settings.CurrentPickedWeldingBlock == null
                         && targetData.Block.IsAssignedToOtherSystem(_Welder.EntityId))
                     {
@@ -143,7 +143,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 }
                             }
 
-                            if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers && Settings.CurrentPickedWeldingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
+                            if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && Settings.CurrentPickedWeldingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
                             {
                                 skippedByAssign++;
                                 continue;
@@ -166,7 +166,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 }
                             }
                             // Refresh assignment for the lock-on block.
-                            if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers)
+                            if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled)
                             {
                                 targetData.Block.AssignToSystem(_Welder.EntityId);
                             }
@@ -194,7 +194,12 @@ namespace SKONanobotBuildAndRepairSystem
 
                         if (targetData.Ignore)
                         {
-                            if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
+                            // BUG-053: Only release assignment when the block was successfully
+                            // processed (welding=true). Failed projected builds (safe zone blocked)
+                            // keep the assignment so other BaRs in the same tick don't cascade
+                            // through the same block. The TTL will release it naturally.
+                            if (Mod.Settings.AssignToSystemEnabled && welding)
+                                targetData.Block.ReleaseFromSystem();
                             State.PossibleWeldTargets.ChangeHash();
                             // Block completed this tick. Clear lock-on and search for the
                             // next target in the same iteration. welding stays true so
@@ -431,7 +436,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 // Close assignment gap: the projected block's key (ProjGridId:Pos) differs
                                 // from the physical block's key (RealGridId:Pos). Assign the physical block
                                 // immediately so no other BaR can steal it during our stagger wait.
-                                if (Mod.Settings.AssignToSystemEnabled && !_Welder.HelpOthers)
+                                if (Mod.Settings.AssignToSystemEnabled)
                                     target.AssignToSystem(_Welder.EntityId);
                             }
                             else
@@ -482,7 +487,7 @@ namespace SKONanobotBuildAndRepairSystem
                         if (welding)
                         {
                             tsMount = Stopwatch.GetTimestamp();
-                            target.IncreaseMountLevel(weldAmount, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
+                            target.IncreaseMountLevel(weldAmount, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, false);
                             tsMount = Stopwatch.GetTimestamp() - tsMount;
                         }
                     }
@@ -496,7 +501,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     //Deformation
                     welding = true;
-                    target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, _Welder.HelpOthers);
+                    target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, false);
                 }
             }
 

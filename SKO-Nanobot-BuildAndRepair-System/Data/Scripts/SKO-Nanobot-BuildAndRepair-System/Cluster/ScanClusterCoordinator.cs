@@ -170,13 +170,14 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             // Weld options (FunctionalOnly affects NeedRepair check)
             key += "|" + (int)s.WeldOptions;
 
-            // Ownership and cooperation settings
+            // Ownership settings
             key += "|" + system.Welder.OwnerId;
-            key += "|" + (system.Welder.HelpOthers ? "1" : "0");
             key += "|" + (system.Welder.UseConveyorSystem ? "1" : "0");
 
             // Safe zone state — BaRs inside vs outside safe zones need separate clusters
-            // so the coordinator can actually weld/grind for its members.
+            // so the coordinator's scan gates match all members' capabilities.
+            // BUG-053: Timing fix ensures safe zone state is refreshed for all BaRs
+            // immediately before RebuildClusters() (see Mod.RebuildSourcesAndTargetsTimer).
             key += "|SZ" + (system.State.SafeZoneAllowsWelding ? "1" : "0")
                  + (system.State.SafeZoneAllowsGrinding ? "1" : "0");
 

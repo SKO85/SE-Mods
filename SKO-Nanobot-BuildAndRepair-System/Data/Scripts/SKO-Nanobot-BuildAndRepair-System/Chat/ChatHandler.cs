@@ -65,13 +65,25 @@ namespace SKONanobotBuildAndRepairSystem.Chat
             // Client-side display commands (no server roundtrip needed)
             if (args.Length == 0 || args[0] == "-help")
             {
-                ShowResult(HelpCommand.Execute());
+                var isAdmin = IsAdmin();
+                ShowResult(HelpCommand.Execute(isAdmin));
                 return;
             }
 
             if (args[0] == "profile" && (args.Length < 2 || args[1] == "help"))
             {
                 ShowResult(ProfileCommand.ShowHelp());
+                return;
+            }
+
+            // "profile summary" is a local HUD toggle — don't forward to server
+            if (args[0] == "profile" && args.Length >= 2 && args[1] == "summary")
+            {
+                if (!IsLocalAdmin(console)) return;
+                var enabled = HudHandler.ToggleProfileSummary();
+                console.ShowMessage("Nanobars", enabled
+                    ? "Profile summary HUD enabled (top-right). Use the same command to toggle off."
+                    : "Profile summary HUD disabled.");
                 return;
             }
 
@@ -86,6 +98,67 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                 if (!IsLocalAdmin(console)) return;
                 ShowResult(GetModsStatus());
                 return;
+            }
+
+            // "debug" command: local subcommands (show/hide/left/right) stay client-side,
+            // server subcommands (on/off/true/false) are forwarded to the server.
+            if (args[0] == "debug")
+            {
+                if (!IsLocalAdmin(console)) return;
+
+                if (args.Length < 2)
+                {
+                    // No args: show current status
+                    var status = string.Format("DebugMode: {0} (server) | Local HUD: {1}",
+                        Mod.Settings.DebugMode ? "ON" : "OFF",
+                        HudHandler.LocalDebugVisible ? "shown" : "hidden");
+                    console.ShowMessage("Nanobars", status);
+                    if (!HudHandler.LocalDebugVisible)
+                        console.ShowMessage("Nanobars", "Use /nanobars debug show to enable the HUD overlay.");
+                    return;
+                }
+
+                var sub = args[1];
+
+                // Local-only: show/hide the HUD panel on this client
+                if (sub == "show")
+                {
+                    HudHandler.SetLocalDebugVisible(true);
+                    console.ShowMessage("Nanobars", "Debug HUD shown locally.");
+                    return;
+                }
+                if (sub == "hide")
+                {
+                    HudHandler.SetLocalDebugVisible(false);
+                    console.ShowMessage("Nanobars", "Debug HUD hidden locally.");
+                    return;
+                }
+
+                // Local-only: position + auto-show
+                if (sub == "left" || sub == "right")
+                {
+                    HudHandler.SetPosition(sub == "right");
+                    HudHandler.SetLocalDebugVisible(true);
+                    console.ShowMessage("Nanobars", string.Format("Debug HUD positioned {0} and shown.", sub));
+                    return;
+                }
+
+                // Server-side: on/off/true/false → forwarded as config set DebugMode
+                if (sub == "on" || sub == "true")
+                {
+                    console.ShowMessage("Nanobars", "Use /nanobars debug show to view the HUD, /nanobars debug hide to hide it.");
+                    args = new[] { "config", "set", "DebugMode", "true" };
+                }
+                else if (sub == "off" || sub == "false")
+                {
+                    HudHandler.SetLocalDebugVisible(false);
+                    args = new[] { "config", "set", "DebugMode", "false" };
+                }
+                else
+                {
+                    console.ShowMessage("Nanobars", "Usage: /nanobars debug [on|off|show|hide|left|right]");
+                    return;
+                }
             }
 
             // All remaining commands require server execution
@@ -136,11 +209,11 @@ namespace SKONanobotBuildAndRepairSystem.Chat
 
             ChatCommandResult result;
 
+            // "debug on/off" forwarded from client as "config set DebugMode true/false"
+            // (already rewritten by OnMessageEntered before reaching here)
+
             switch (args[0])
             {
-                case "-cwsf":
-                    result = SaveSettingsCommand.Execute();
-                    break;
                 case "sim":
                     result = SimCommand.Execute(args);
                     break;
@@ -162,20 +235,21 @@ namespace SKONanobotBuildAndRepairSystem.Chat
             screenSubtitle = result.ScreenSubtitle;
         }
 
-        private static bool IsLocalAdmin(VRage.Game.ModAPI.IMyUtilities console)
+        private static bool IsAdmin()
         {
             var player = MyAPIGateway.Session.Player;
-            if (player != null)
-            {
-                var promoteLevel = player.PromoteLevel.ToString();
-                var isAdmin = promoteLevel == "Admin" || promoteLevel == "SpaceMaster" || promoteLevel == "Owner";
-                if (!isAdmin)
-                {
-                    console.ShowMessage("Nanobars", "Command requires admin permissions");
-                    return false;
-                }
-            }
+            if (player == null) return true;
+            var promoteLevel = player.PromoteLevel.ToString();
+            return promoteLevel == "Admin" || promoteLevel == "SpaceMaster" || promoteLevel == "Owner";
+        }
 
+        private static bool IsLocalAdmin(VRage.Game.ModAPI.IMyUtilities console)
+        {
+            if (!IsAdmin())
+            {
+                console.ShowMessage("Nanobars", "Command requires admin permissions");
+                return false;
+            }
             return true;
         }
 

@@ -24,6 +24,7 @@ namespace SKONanobotBuildAndRepairSystem
         public static Guid ModGuid = new Guid("8B57046C-DA20-4DE1-8E35-513FD21E3B9F");
         public static bool DisableLocalization = false;
         public static bool SettingsValid = false;
+        public static bool CustomSettingsLoaded = false;
         public static SyncModSettings Settings = new SyncModSettings();
         public static readonly ConcurrentDictionary<long, NanobotSystem> NanobotSystems = new ConcurrentDictionary<long, NanobotSystem>();
         public static ShieldApi Shield; // Centralized DefenseShields API instance
@@ -203,6 +204,7 @@ namespace SKONanobotBuildAndRepairSystem
         public static void ResetSyncStats() { _syncSent = 0; _syncSkipped = 0; }
 
         private bool _initialized = false;
+        private bool _welcomeShown = false;
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
         private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(1);
         private static TimeSpan _LastSyncModDataRequestSend;
@@ -446,8 +448,21 @@ namespace SKONanobotBuildAndRepairSystem
                     // Update HUD overlay (client-side only, self-throttled).
                     HudHandler.Update(now);
 
-                    // Show some debug info on blocks we point to:
-                    // BlockDebugInfo();
+                    // FEAT-054: One-time admin welcome message on session join.
+                    if (!_welcomeShown && !MyAPIGateway.Utilities.IsDedicated)
+                    {
+                        var player = MyAPIGateway.Session.Player;
+                        if (player != null)
+                        {
+                            _welcomeShown = true;
+                            var level = player.PromoteLevel.ToString();
+                            if (level == "Admin" || level == "SpaceMaster" || level == "Owner")
+                            {
+                                MyAPIGateway.Utilities.ShowMessage("Nanobars",
+                                    string.Format("Hi admin! Build and Repair System v{0} loaded. Type /nanobars help for available commands.", Constants.ModVersion));
+                            }
+                        }
+                    }
                 }
             }
             catch (Exception e)
@@ -472,12 +487,27 @@ namespace SKONanobotBuildAndRepairSystem
                 var profilerTs = MethodProfiler.Start();
                 try
                 {
-                ScanClusterCoordinator.RebuildClusters();
-                foreach (var buildAndRepairSystem in NanobotSystems.Values)
-                {
-                    buildAndRepairSystem.UpdateSourcesAndTargetsTimer();
-                }
-                _LastSourcesAndTargetsUpdateTimer = MyAPIGateway.Session.ElapsedPlayTime;
+                    // BUG-053: Refresh safe zone state for all BaRs before cluster rebuild
+                    // so cluster keys always reflect current safe zone permissions.
+                    // This eliminates the timing gap where per-BaR timers (2s, unsynchronized)
+                    // could leave stale state when RebuildClusters computes keys.
+                    if (SafeZoneHandler.Zones.Count > 0)
+                    {
+                        foreach (var system in NanobotSystems.Values)
+                        {
+                            if (system.Welder != null && system.State.Ready)
+                            {
+                                try { system.SetSafeZoneAndShieldStates(); } catch { }
+                            }
+                        }
+                    }
+
+                    ScanClusterCoordinator.RebuildClusters();
+                    foreach (var buildAndRepairSystem in NanobotSystems.Values)
+                    {
+                        buildAndRepairSystem.UpdateSourcesAndTargetsTimer();
+                    }
+                    _LastSourcesAndTargetsUpdateTimer = MyAPIGateway.Session.ElapsedPlayTime;
                 }
                 finally
                 {

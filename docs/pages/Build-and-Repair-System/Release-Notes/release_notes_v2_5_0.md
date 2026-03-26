@@ -131,7 +131,7 @@ The system now supports a wider range of block types as inventory sources (to pu
 
 ### Debug Mode (Config)
 
-A new `DebugMode` option can be set in `ModSettings.xml` to show additional diagnostic information in the terminal custom info panel, such as scan timings, target counts, and internal state. This is intended for testing and debugging purposes only — it is not a per-block setting and should not be left enabled in normal play.
+A new `DebugMode` option can be set in `ModSettings.xml` to show additional diagnostic information in the terminal custom info panel, such as scan timings, target counts, and internal state. This is intended for testing and debugging purposes only — it is not a per-block setting and should not be left enabled in normal play. The terminal debug panel is only shown on local and listen-server games, not on dedicated servers.
 
 ### Debug HUD Overlay (Requires BuildInfo Mod)
 
@@ -146,6 +146,29 @@ The HUD shows:
 
 The overlay is admin-only (Admin, SpaceMaster, or Owner promote level) and updates every 2 seconds. When a profiling session is running, the overlay additionally shows recording status and elapsed time.
 
+Debug mode is a server-wide setting that enables diagnostic data collection. The debug HUD overlay is a separate local toggle — each admin controls their own HUD visibility independently to avoid disturbing other admins. Debug and profiling data is only broadcast to admin players, not to all connected clients.
+
+| Command | Description |
+| --- | --- |
+| `/nanobars debug on` (or `true`) | Enable debug mode (server-wide setting). |
+| `/nanobars debug off` (or `false`) | Disable debug mode (server-wide setting). |
+| `/nanobars debug show` | Show the debug HUD overlay on your screen. |
+| `/nanobars debug hide` | Hide the debug HUD overlay on your screen. |
+| `/nanobars debug left` | Set HUD position to left side and show. |
+| `/nanobars debug right` | Set HUD position to right side and show. |
+| `/nanobars debug` | Show current debug status (server mode + local HUD). Hints about `/nanobars debug show` when the HUD is hidden. |
+
+### Context-Sensitive Help
+
+The `/nanobars` help dialog now shows different information depending on the player's role:
+
+- **Normal players** see the mod version and useful links (GitHub, Wiki, FAQ, Discord).
+- **Admins** additionally see the full command reference (config, profile, sim, debug, mods).
+
+### "Help Others" Option Removed
+
+The native **Help Others** checkbox has been removed from the Build and Repair terminal. This SE welder property had no meaningful function for the mod. The option previously bypassed the block assignment system when enabled, which is undesirable since the assignment system exists to distribute work efficiently across multiple systems. The value is now forced to `false` internally.
+
 ### Work Mode Fallthrough
 
 In **Weld Before Grind** and **Grind Before Weld** modes, if no actionable targets exist for the primary mode the system now falls through to the secondary mode instead of going idle. This means the block will always find work if any valid target exists, regardless of which mode has priority.
@@ -159,6 +182,7 @@ Server admins can run a built-in profiler to measure the mod's performance impac
 | `/nanobars profile start [seconds] [minDurationMs]` | Start a profiling session. Defaults to 120 seconds auto-stop. |
 | `/nanobars profile stop` | Stop the current session and write the summary. |
 | `/nanobars profile status` | Show whether profiling is active and current settings. |
+| `/nanobars profile summary` | Toggle the profile summary HUD panel (top-right). Shows domains, top methods, heaviest grids, and sim-speed (min/avg). |
 | `/nanobars profile minduration <ms>` | Set the minimum method duration threshold for logging. |
 | `/nanobars profile help` | Show profiling command help. |
 
@@ -269,6 +293,10 @@ Block assignments (the TTL-based reservations that prevent two systems from targ
 2. **Lock-on loss retry:** When a locked-on block vanished from the target list (e.g., after a projector update changed the grid's EntityId), the lock-on was cleared but the assignment was not released, holding the slot for up to 8 seconds.
 
 Both leaks have been fixed with explicit release calls before the transition/retry.
+
+### Debug HUD Not Counting Projection-Blocked Safe Zones
+
+The debug HUD's "SafeZone Blocked" counter only counted systems where welding or grinding was blocked by a Safe Zone. Systems where building projections was blocked (but welding/grinding was still allowed) were not counted. The counter now includes all three Safe Zone restriction types.
 
 ---
 
