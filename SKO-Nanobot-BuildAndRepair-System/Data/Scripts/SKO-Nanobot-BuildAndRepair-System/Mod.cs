@@ -453,8 +453,9 @@ namespace SKONanobotBuildAndRepairSystem
                     // Update HUD overlay (client-side only, self-throttled).
                     HudHandler.Update(now);
 
-                    // FEAT-054: One-time admin welcome message on session join.
-                    if (!_welcomeShown && !MyAPIGateway.Utilities.IsDedicated)
+                    // FEAT-054: One-time admin welcome message on session join (multiplayer only).
+                    if (!_welcomeShown && !MyAPIGateway.Utilities.IsDedicated
+                        && MyAPIGateway.Multiplayer != null && MyAPIGateway.Multiplayer.MultiplayerActive)
                     {
                         var player = MyAPIGateway.Session.Player;
                         if (player != null)
@@ -464,7 +465,7 @@ namespace SKONanobotBuildAndRepairSystem
                             if (level == "Admin" || level == "SpaceMaster" || level == "Owner")
                             {
                                 MyAPIGateway.Utilities.ShowMessage("Nanobars",
-                                    string.Format("Hi admin! Build and Repair System v{0} loaded. Type /nanobars help for available commands.", Constants.ModVersion));
+                                    string.Format("Hi admin! Build and Repair System v{0} loaded. Type /nanobars -help for available commands.", Constants.ModVersion));
                             }
                         }
                     }
