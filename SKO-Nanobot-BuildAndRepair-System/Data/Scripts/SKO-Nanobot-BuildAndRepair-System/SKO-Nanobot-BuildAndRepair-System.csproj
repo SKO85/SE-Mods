@@ -140,6 +140,7 @@
     <Compile Include="Chat\Commands\ProfileCommand.cs" />
     <Compile Include="Chat\Commands\SimCommand.cs" />
     <Compile Include="Chat\Commands\ConfigCommand.cs" />
+    <Compile Include="Chat\Commands\SystemsCommand.cs" />
     <Compile Include="Handlers\ComponentPriorityHandling.cs" />
     <Compile Include="Handlers\DamageHandler.cs" />
     <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />

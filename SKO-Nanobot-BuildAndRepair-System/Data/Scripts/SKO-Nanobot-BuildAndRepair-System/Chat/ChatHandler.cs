@@ -93,6 +93,12 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                 return;
             }
 
+            if (args[0] == "systems" && (args.Length < 2 || args[1] == "help"))
+            {
+                ShowResult(SystemsCommand.ShowHelp());
+                return;
+            }
+
             if (args[0] == "mods")
             {
                 if (!IsLocalAdmin(console)) return;
@@ -222,6 +228,9 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                     break;
                 case "config":
                     result = ConfigCommand.Execute(args);
+                    break;
+                case "systems":
+                    result = SystemsCommand.Execute(args);
                     break;
                 default:
                     result = ChatCommandResult.Error("Unknown command: " + args[0]);

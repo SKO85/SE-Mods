@@ -25,6 +25,10 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 sb.AppendLine("[debug show|hide]: Show/hide the debug HUD locally");
                 sb.AppendLine("[debug left|right]: Set HUD position and show");
                 sb.AppendLine("[mods]: Shows status of mod integrations (TextHudAPI, DefenseShields)");
+                sb.AppendLine("[systems help]: Shows systems management command syntax");
+                sb.AppendLine("[systems list]: List all BaR blocks on the server");
+                sb.AppendLine("[systems count]: Show BaR count per player and faction");
+                sb.AppendLine("[systems enable|disable all|--grid|--owner]: Enable/disable BaR blocks");
                 sb.AppendLine();
             }
             else
