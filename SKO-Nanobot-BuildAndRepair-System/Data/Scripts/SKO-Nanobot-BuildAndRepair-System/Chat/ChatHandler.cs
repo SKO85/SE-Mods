@@ -72,6 +72,7 @@ namespace SKONanobotBuildAndRepairSystem.Chat
 
             if (args[0] == "profile" && (args.Length < 2 || args[1] == "help"))
             {
+                if (!IsLocalAdmin(console)) return;
                 ShowResult(ProfileCommand.ShowHelp());
                 return;
             }
@@ -89,12 +90,14 @@ namespace SKONanobotBuildAndRepairSystem.Chat
 
             if (args[0] == "config" && (args.Length < 2 || args[1] == "help"))
             {
+                if (!IsLocalAdmin(console)) return;
                 ShowResult(ConfigCommand.ShowHelp());
                 return;
             }
 
             if (args[0] == "systems" && (args.Length < 2 || args[1] == "help"))
             {
+                if (!IsLocalAdmin(console)) return;
                 ShowResult(SystemsCommand.ShowHelp());
                 return;
             }
