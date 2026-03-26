@@ -166,6 +166,8 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             if (error != null)
                 return ChatCommandResult.Error(string.Format("Invalid value for {0}: {1}", entry.Name, error));
 
+            Mod.SettingsChanged();
+            Handlers.NetworkMessagingHandler.BroadcastModSettings();
             return ChatCommandResult.Success(string.Format("{0} = {1}", entry.Name, entry.Get()));
         }
 
@@ -211,6 +213,7 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
 
             Mod.Settings = loaded;
             Mod.SettingsChanged();
+            Handlers.NetworkMessagingHandler.BroadcastModSettings();
             return ChatCommandResult.Success("Settings reloaded from ModSettings.xml.");
         }
 
@@ -225,6 +228,7 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
 
             Mod.Settings = defaults;
             Mod.SettingsChanged();
+            Handlers.NetworkMessagingHandler.BroadcastModSettings();
             return ChatCommandResult.Success("Settings reset to defaults.");
         }
 

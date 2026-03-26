@@ -19,6 +19,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static ushort MSGID_BLOCK_STATE_FROM_SERVER = 40104;
         private static ushort MSGID_MOD_COMMAND_FROM_CLIENT = 40002;
         private static ushort MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER = 40003;
+        private static ushort MSGID_DEBUG_STATS_FROM_SERVER = 40004;
 
         #region Registration
 
@@ -42,6 +43,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_BLOCK_SETTINGS_FROM_SERVER, MsgBlockSettingsReceived);
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_BLOCK_STATE_FROM_SERVER, ClientMsgBlockStateReceived);
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, ClientMsgModCommandResponseReceived);
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_DEBUG_STATS_FROM_SERVER, ClientMsgDebugStatsReceived);
 
                 // Send first data request message on clients.
                 MsgDataRequestSend();
@@ -68,6 +70,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_BLOCK_SETTINGS_FROM_SERVER, MsgBlockSettingsReceived);
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_BLOCK_STATE_FROM_SERVER, ClientMsgBlockStateReceived);
                 MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, ClientMsgModCommandResponseReceived);
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(MSGID_DEBUG_STATS_FROM_SERVER, ClientMsgDebugStatsReceived);
             }
 
             _registered = false;
@@ -290,6 +293,53 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 }
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgModSettingsSend: {0}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Broadcast current mod settings to all connected clients.
+        /// Called after config set/reload/reset to push changes immediately.
+        /// </summary>
+        public static void BroadcastModSettings()
+        {
+            try
+            {
+                if (!MyAPIGateway.Session.IsServer || MyAPIGateway.Multiplayer == null || !MyAPIGateway.Multiplayer.MultiplayerActive)
+                    return;
+
+                var msgSnd = new MsgModSettings()
+                {
+                    Settings = Mod.Settings
+                };
+
+                MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+            }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "BroadcastModSettings: {0}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Broadcast debug stats to all connected clients. Server-only, called periodically when DebugMode or profiling is active.
+        /// </summary>
+        public static void BroadcastDebugStats(MsgDebugStats stats)
+        {
+            try
+            {
+                if (!MyAPIGateway.Session.IsServer || MyAPIGateway.Multiplayer == null || !MyAPIGateway.Multiplayer.MultiplayerActive)
+                    return;
+
+                MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_DEBUG_STATS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(stats), true);
+            }
+            catch { }
+        }
+
+        private static void ClientMsgDebugStatsReceived(ushort channelId, byte[] bytes, ulong senderSteamId, bool isSenderServer)
+        {
+            try
+            {
+                if (!isSenderServer) return;
+                var stats = MyAPIGateway.Utilities.SerializeFromBinary<MsgDebugStats>(bytes);
+                if (stats != null) HudHandler.ReceivedStats = stats;
+            }
+            catch { }
         }
 
         public static void MsgDataRequestSend()
