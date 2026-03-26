@@ -18,6 +18,7 @@ Automatically welds, repairs, grinds, and collects floating objects within range
 **Documentation:** [sko85.github.io/SE-Mods/Build-and-Repair-System/](https://sko85.github.io/SE-Mods/Build-and-Repair-System/)
 
 - [Configuration File](https://sko85.github.io/SE-Mods/Build-and-Repair-System/Config/) — all `ModSettings.xml` settings
+- [Chat Commands](https://sko85.github.io/SE-Mods/Build-and-Repair-System/Chat-Commands/) — admin chat commands reference
 - [FAQ](https://sko85.github.io/SE-Mods/Build-and-Repair-System/FAQ/) — common questions and troubleshooting
 - [Release Notes](https://sko85.github.io/SE-Mods/Build-and-Repair-System/Release-Notes/) — full version history
 
