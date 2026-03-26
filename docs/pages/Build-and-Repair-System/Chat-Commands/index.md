@@ -1,0 +1,145 @@
+---
+layout: default
+title: Chat Commands
+parent: Build and Repair System
+nav_order: 3
+---
+
+# Chat Commands
+
+All chat commands start with `/nanobars` (or the alias `/nanoboars`). Commands are **admin-only** — you need Admin, SpaceMaster, or Owner permissions to use them.
+
+On dedicated servers, commands are automatically forwarded to the server and responses are sent back to the client.
+
+Type `/nanobars` or `/nanobars -help` in the chat to see the help overview in-game.
+
+---
+
+## Help
+
+| Command | Description |
+|---|---|
+| `/nanobars` | Show the help overview |
+| `/nanobars -help` | Same as above |
+
+---
+
+## Configuration
+
+Manage the `ModSettings.xml` server settings at runtime. Changes take effect immediately (no restart needed for most settings).
+
+| Command | Description |
+|---|---|
+| `/nanobars config help` | Show config command syntax |
+| `/nanobars config list` | List all settings with current values |
+| `/nanobars config get <setting>` | Get a specific setting value |
+| `/nanobars config set <setting> <value>` | Set a setting (takes effect immediately) |
+| `/nanobars config save` | Save current settings to `ModSettings.xml` in the world folder |
+| `/nanobars config create` | Alias for `config save` (creates the file if it doesn't exist) |
+| `/nanobars config reload` | Reload settings from `ModSettings.xml` |
+| `/nanobars config reset` | Reset all settings to defaults |
+| `/nanobars config delete` | Reset to defaults and delete `ModSettings.xml` |
+
+### Examples
+
+```
+/nanobars config set MaxSystemsPerTargetGrid 15
+/nanobars config set DebugMode true
+/nanobars config get AssignmentTtlSeconds
+/nanobars config list
+```
+
+---
+
+## Debug
+
+Toggle debug diagnostics and the debug HUD overlay.
+
+| Command | Description |
+|---|---|
+| `/nanobars debug` | Show current debug status |
+| `/nanobars debug on` | Enable debug mode (server-wide) |
+| `/nanobars debug off` | Disable debug mode (server-wide) |
+| `/nanobars debug show` | Show the debug HUD overlay locally |
+| `/nanobars debug hide` | Hide the debug HUD overlay locally |
+| `/nanobars debug left` | Position the debug HUD on the left side and show it |
+| `/nanobars debug right` | Position the debug HUD on the right side and show it |
+
+> **Note:** The debug HUD overlay requires the [TextHudAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=758597413) (BuildInfo) mod to be installed. The `on/off` commands control the server-wide debug mode, while `show/hide/left/right` control the local client display.
+
+---
+
+## Profiling
+
+Built-in performance profiler for diagnosing sim-speed issues. Produces per-method log files for analysis.
+
+| Command | Description |
+|---|---|
+| `/nanobars profile help` | Show profiling command syntax |
+| `/nanobars profile start [seconds] [minDurationMs] [sessionName]` | Start a profiling session |
+| `/nanobars profile stop` | Stop the current profiling session and write logs |
+| `/nanobars profile status` | Show whether profiling is running |
+| `/nanobars profile summary` | Toggle the live profile summary HUD (top-right) |
+| `/nanobars profile list` | List all stored profiling sessions |
+| `/nanobars profile clear <sessionName\|all>` | Delete log files for a session or all sessions |
+| `/nanobars profile minduration <ms>` | Set minimum duration threshold for log entries |
+
+### Examples
+
+```
+/nanobars profile start 120
+/nanobars profile start 60 2 my-test
+/nanobars profile summary
+/nanobars profile clear all
+```
+
+---
+
+## Sim-Speed Override
+
+Override the simulation speed value used by BaR for internal calculations. Useful for testing throttle behavior.
+
+| Command | Description |
+|---|---|
+| `/nanobars sim <0.1-1.0>` | Override sim-speed to a fixed value |
+| `/nanobars sim reset` | Remove the override and use actual sim-speed |
+
+---
+
+## Systems Management
+
+Remotely list, count, enable, or disable BaR blocks on the server.
+
+| Command | Description |
+|---|---|
+| `/nanobars systems help` | Show systems command syntax |
+| `/nanobars systems list` | List all BaR blocks on the server |
+| `/nanobars systems list --owner <player-name>` | List BaR blocks owned by a specific player |
+| `/nanobars systems count` | Show BaR count per player and per faction |
+| `/nanobars systems enable all` | Enable all BaR blocks on the server |
+| `/nanobars systems disable all` | Disable all BaR blocks on the server |
+| `/nanobars systems enable --grid <grid-name>` | Enable BaR blocks on a matching grid |
+| `/nanobars systems disable --grid <grid-name>` | Disable BaR blocks on a matching grid |
+| `/nanobars systems enable --owner <player-name>` | Enable BaR blocks owned by a matching player |
+| `/nanobars systems disable --owner <player-name>` | Disable BaR blocks owned by a matching player |
+
+Grid and player name matching is **case-insensitive** and supports **partial matches**.
+
+### Examples
+
+```
+/nanobars systems list
+/nanobars systems list --owner John
+/nanobars systems count
+/nanobars systems disable --grid "Pirate Base"
+/nanobars systems enable --owner Steve
+/nanobars systems disable all
+```
+
+---
+
+## Mod Integrations
+
+| Command | Description |
+|---|---|
+| `/nanobars mods` | Show status of mod integrations (TextHudAPI, DefenseShields) |
