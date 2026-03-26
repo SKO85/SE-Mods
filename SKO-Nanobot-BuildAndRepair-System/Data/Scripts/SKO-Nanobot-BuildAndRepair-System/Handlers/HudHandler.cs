@@ -28,6 +28,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static TimeSpan _lastUpdate;
         private static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(2);
 
+        public static bool IsApiReady { get { return _registered && _hudApi != null && _hudApi.Heartbeat; } }
+
         private static readonly Vector2D Origin = new Vector2D(0.55, 0.98);
         private const double ValueColumnOffset = 0.14;
         private const double Scale = 0.7;
@@ -222,6 +224,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             MyAPIGateway.Players.GetPlayers(playerList);
             s.PlayerCount = playerList.Count;
 
+            s.TickCostAvgMs = (float)Mod.TickCostAvgMs;
+            s.TickCostPeakMs = (float)Mod.TickCostPeakMs;
+            Mod.ResetTickCostStats();
+
+            s.SyncSent = Mod.SyncSent;
+            s.SyncSkipped = Mod.SyncSkipped;
+            Mod.ResetSyncStats();
+
             s.ProfilingActive = MethodProfiler.IsRunning;
             if (s.ProfilingActive)
             {
@@ -335,6 +345,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             // --- Performance ---
             AddSpacer();
             AddRow("<color=130,180,230>--- Performance ---", "<color=130,180,230>---");
+            var tickColor = s.TickCostAvgMs > 4.0 ? "<color=255,180,100>" : "<color=200,255,200>";
+            var peakColor = s.TickCostPeakMs > 8.0 ? "<color=255,180,100>" : "<color=200,255,200>";
+            AddRow("<color=white>Mod Tick Cost",
+                string.Format("{0}{1:0.00}ms<color=white> avg  {2}{3:0.00}ms<color=white> peak",
+                    tickColor, s.TickCostAvgMs, peakColor, s.TickCostPeakMs));
+            var syncTotal = s.SyncSent + s.SyncSkipped;
+            var syncPct = syncTotal > 0 ? s.SyncSkipped * 100 / syncTotal : 0;
+            AddRow("<color=white>Net Sync",
+                string.Format("<color=200,255,200>{0}<color=white> sent  <color=200,255,200>{1}<color=white> skip ({2}%)",
+                    s.SyncSent, s.SyncSkipped, syncPct));
             AddRow("<color=white>Clusters", string.Format("<color=200,255,200>{0}", s.Clusters));
             AddRow("<color=white>Stagger", string.Format("<color=200,255,200>{0}<color=white> groups", s.Stagger));
             var grindSaturated = s.GrindBudgetPeak >= s.GrindBudgetMax;

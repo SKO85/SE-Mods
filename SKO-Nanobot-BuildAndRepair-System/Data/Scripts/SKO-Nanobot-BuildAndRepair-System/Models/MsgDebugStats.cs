@@ -92,6 +92,14 @@ namespace SKONanobotBuildAndRepairSystem.Models
         // Server info
         [ProtoMember(60)]
         public int PlayerCount { get; set; }
+        [ProtoMember(61)]
+        public float TickCostAvgMs { get; set; }
+        [ProtoMember(62)]
+        public float TickCostPeakMs { get; set; }
+        [ProtoMember(63)]
+        public int SyncSent { get; set; }
+        [ProtoMember(64)]
+        public int SyncSkipped { get; set; }
 
         // Profiling
         [ProtoMember(70)]

@@ -81,6 +81,13 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                 return;
             }
 
+            if (args[0] == "mods")
+            {
+                if (!IsLocalAdmin(console)) return;
+                ShowResult(GetModsStatus());
+                return;
+            }
+
             // All remaining commands require server execution
             var commandText = string.Join(" ", args);
 
@@ -170,6 +177,31 @@ namespace SKONanobotBuildAndRepairSystem.Chat
             }
 
             return true;
+        }
+
+        private static ChatCommandResult GetModsStatus()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("Mod Integrations:\n");
+
+            // TextHudAPI (BuildInfo)
+            var hudActive = HudHandler.IsApiReady;
+            sb.AppendFormat("  TextHudAPI (BuildInfo):  {0}\n", hudActive ? "Active" : "Not detected");
+
+            // DefenseShields
+            var shieldLoaded = Mod.Shield != null;
+            var shieldReady = shieldLoaded && Mod.Shield.IsReady;
+            var shieldEnabled = Mod.Settings.ShieldCheckEnabled;
+            if (!shieldEnabled)
+                sb.Append("  DefenseShields:         Disabled (ShieldCheckEnabled=false)\n");
+            else if (shieldReady)
+                sb.Append("  DefenseShields:         Active\n");
+            else if (shieldLoaded)
+                sb.Append("  DefenseShields:         Loaded (not ready)\n");
+            else
+                sb.Append("  DefenseShields:         Not detected\n");
+
+            return ChatCommandResult.Success(sb.ToString());
         }
 
         private static void ShowResult(ChatCommandResult result)

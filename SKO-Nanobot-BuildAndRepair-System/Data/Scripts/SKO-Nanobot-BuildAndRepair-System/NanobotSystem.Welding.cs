@@ -263,6 +263,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // after projector update). Clear lock-on and re-iterate so this tick isn't wasted.
                 if (!lockOnRetry && State.CurrentWeldingBlock != null && !lockOnFound)
                 {
+                    if (Mod.Settings.AssignToSystemEnabled) State.CurrentWeldingBlock.ReleaseFromSystem();
                     State.CurrentWeldingBlock = null;
                     skippedByLockOn = 0;
                     componentFailures = 0;
@@ -421,6 +422,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                             if (target != null)
                             {
+                                // Release the projected block's assignment before switching to the physical block.
+                                if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
                                 targetData.Block = target;
                                 targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
                                 created = true;

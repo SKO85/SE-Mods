@@ -369,6 +369,7 @@ namespace SKONanobotBuildAndRepairSystem
             var profilerTs = MethodProfiler.Start();
             if (!State.IsTransmitNeeded() || !MyAPIGateway.Multiplayer.MultiplayerActive)
             {
+                Mod.ReportSyncSkipped();
                 MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
                     string.Format("entityId={0};action=skip;reason=notNeeded", _Welder.EntityId));
                 return;
@@ -376,6 +377,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdateStateTransmitLast).TotalSeconds < _UpdateStateTransmitInterval)
             {
+                Mod.ReportSyncSkipped();
                 MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
                     string.Format("entityId={0};action=skip;reason=interval;backoff={1}", _Welder.EntityId, _transmitBackoffMultiplier));
                 return;
@@ -396,6 +398,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             var excludedBefore = State.ExcludedLists;
             NetworkMessagingHandler.MsgBlockStateSend(0, this);
+            Mod.ReportSyncSent();
 
             MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
                 string.Format("entityId={0};action=send;fpChanged={1};backoff={2};excluded={3}",

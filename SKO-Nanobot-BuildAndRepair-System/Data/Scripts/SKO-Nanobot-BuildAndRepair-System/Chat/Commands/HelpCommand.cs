@@ -14,6 +14,7 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             sb.AppendLine("[config help]: Shows config command syntax");
             sb.AppendLine("[profile help]: Shows profiling command syntax");
             sb.AppendLine("[sim <value|reset>]: Override sim-speed for BaR calculations");
+            sb.AppendLine("[mods]: Shows status of mod integrations (TextHudAPI, DefenseShields)");
             sb.AppendLine();
             sb.AppendLine("Issues: Report issues or suggestions (GitHub)");
             sb.AppendLine("https://github.com/SKO85/SE-Mods/issues");

@@ -166,6 +166,42 @@ namespace SKONanobotBuildAndRepairSystem
             _grindMsThisTick += ms;
         }
 
+        // --- Lightweight tick cost tracking (always-on, for debug HUD) ---
+        private static double _tickCostAccumMs;
+        private static int _tickCostCount;
+        private static double _tickCostAvgMs;
+        private static double _tickCostPeakMs;
+
+        public static double TickCostAvgMs { get { return _tickCostAvgMs; } }
+        public static double TickCostPeakMs { get { return _tickCostPeakMs; } }
+
+        public static void ResetTickCostStats()
+        {
+            _tickCostAvgMs = _tickCostCount > 0 ? _tickCostAccumMs / _tickCostCount : 0;
+            _tickCostAccumMs = 0;
+            _tickCostCount = 0;
+            _tickCostPeakMs = 0;
+        }
+
+        private void RecordTickCost(long startTimestamp)
+        {
+            var elapsed = (double)(System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) / System.Diagnostics.Stopwatch.Frequency * 1000.0;
+            _tickCostAccumMs += elapsed;
+            _tickCostCount++;
+            if (elapsed > _tickCostPeakMs) _tickCostPeakMs = elapsed;
+        }
+
+        // --- Network sync counters (for debug HUD) ---
+        private static int _syncSent;
+        private static int _syncSkipped;
+
+        public static int SyncSent { get { return _syncSent; } }
+        public static int SyncSkipped { get { return _syncSkipped; } }
+
+        public static void ReportSyncSent() { _syncSent++; }
+        public static void ReportSyncSkipped() { _syncSkipped++; }
+        public static void ResetSyncStats() { _syncSent = 0; _syncSkipped = 0; }
+
         private bool _initialized = false;
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
         private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(1);
@@ -330,6 +366,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         public override void UpdateBeforeSimulation()
         {
+            var tickStart = System.Diagnostics.Stopwatch.GetTimestamp();
             var profilerTs = MethodProfiler.Start();
             try
             {
@@ -419,6 +456,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
+                RecordTickCost(tickStart);
                 MethodProfiler.StopAndLog("Mod.UpdateBeforeSimulation", profilerTs, () =>
                     string.Format("bars={0}", NanobotSystems.Count));
             }
