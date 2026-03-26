@@ -17,7 +17,7 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             switch (args[1])
             {
                 case "list":
-                    return ExecuteList();
+                    return ExecuteList(args);
                 case "count":
                     return ExecuteCount();
                 case "enable":
@@ -39,6 +39,9 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             sb.AppendLine("  /nanobars systems list");
             sb.AppendLine("    List all BaR blocks on the server.");
             sb.AppendLine();
+            sb.AppendLine("  /nanobars systems list --owner <player-name>");
+            sb.AppendLine("    List BaR blocks owned by a specific player.");
+            sb.AppendLine();
             sb.AppendLine("  /nanobars systems count");
             sb.AppendLine("    Show BaR count per player and per faction.");
             sb.AppendLine();
@@ -58,8 +61,17 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             return ChatCommandResult.MissionScreen(sb.ToString(), "Nanobot Build and Repair System", "Systems Help");
         }
 
-        private static ChatCommandResult ExecuteList()
+        private static ChatCommandResult ExecuteList(string[] args)
         {
+            // Parse optional --owner filter: "systems list --owner <name>"
+            string ownerFilter = null;
+            if (args.Length >= 4 && args[2] == "--owner")
+            {
+                var nameParts = new string[args.Length - 3];
+                Array.Copy(args, 3, nameParts, 0, nameParts.Length);
+                ownerFilter = string.Join(" ", nameParts);
+            }
+
             var sb = new StringBuilder();
             var count = 0;
             var maxItems = 50;
@@ -70,10 +82,14 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 if (system == null || system.Welder == null) continue;
 
                 var welder = system.Welder;
+                var ownerName = GetOwnerName(welder.OwnerId);
+
+                if (ownerFilter != null && ownerName.IndexOf(ownerFilter, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
                 var grid = welder.CubeGrid;
                 var gridName = grid != null ? grid.DisplayName : "Unknown";
                 var enabled = welder.Enabled;
-                var ownerName = GetOwnerName(welder.OwnerId);
                 var factionTag = GetFactionTag(welder.OwnerId);
 
                 sb.AppendFormat("  {0}{1} | Grid: {2} | Owner: {3} [{4}]{5}",
@@ -87,17 +103,22 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 count++;
                 if (count >= maxItems)
                 {
-                    sb.AppendFormat("  ... and {0} more (showing first {1}){2}", Mod.NanobotSystems.Count - maxItems, maxItems, Environment.NewLine);
+                    sb.AppendFormat("  ... showing first {0}, more may exist{1}", maxItems, Environment.NewLine);
                     break;
                 }
             }
 
             if (count == 0)
             {
-                sb.AppendLine("  No BaR blocks found on the server.");
+                if (ownerFilter != null)
+                    sb.AppendFormat("  No BaR blocks found for owner matching '{0}'.{1}", ownerFilter, Environment.NewLine);
+                else
+                    sb.AppendLine("  No BaR blocks found on the server.");
             }
 
-            var header = string.Format("BaR Systems: {0} total", Mod.NanobotSystems.Count);
+            var header = ownerFilter != null
+                ? string.Format("BaR Systems owned by '{0}': {1} found", ownerFilter, count)
+                : string.Format("BaR Systems: {0} total", Mod.NanobotSystems.Count);
             return ChatCommandResult.MissionScreen(sb.ToString(), "Nanobot Build and Repair System", header);
         }
 
