@@ -37,16 +37,16 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                     string.Join("|", Enum.GetNames(typeof(Logging.Level)))),
                 IntSetting("Range",
                     () => Mod.Settings.Range,
-                    v => { Mod.Settings.Range = v; }),
+                    v => { Mod.Settings.Range = v; }, 1, 1000),
                 IntSetting("MaximumOffset",
                     () => Mod.Settings.MaximumOffset,
-                    v => { Mod.Settings.MaximumOffset = v; }),
+                    v => { Mod.Settings.MaximumOffset = v; }, 0, 1000),
                 IntSetting("MaxBackgroundTasks",
                     () => Mod.Settings.MaxBackgroundTasks,
-                    v => { Mod.Settings.MaxBackgroundTasks = v; }),
+                    v => { Mod.Settings.MaxBackgroundTasks = v; }, 1, 10),
                 IntSetting("MaxSystemsPerTargetGrid",
                     () => Mod.Settings.MaxSystemsPerTargetGrid,
-                    v => { Mod.Settings.MaxSystemsPerTargetGrid = v; }),
+                    v => { Mod.Settings.MaxSystemsPerTargetGrid = v; }, 1, 100),
                 BoolSetting("AssignToSystemEnabled",
                     () => Mod.Settings.AssignToSystemEnabled,
                     v => { Mod.Settings.AssignToSystemEnabled = v; }),
@@ -73,22 +73,22 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                     v => { Mod.Settings.DisableParticleEffects = v; }),
                 IntSetting("EmptyGridRescanDelaySeconds",
                     () => Mod.Settings.EmptyGridRescanDelaySeconds,
-                    v => { Mod.Settings.EmptyGridRescanDelaySeconds = v; }),
+                    v => { Mod.Settings.EmptyGridRescanDelaySeconds = v; }, 0, 300),
                 IntSetting("StaggerGroupCount",
                     () => Mod.Settings.StaggerGroupCount,
-                    v => { Mod.Settings.StaggerGroupCount = v; }),
+                    v => { Mod.Settings.StaggerGroupCount = v; }, 0, 10),
                 IntSetting("MaxGrindsPerTick",
                     () => Mod.Settings.MaxGrindsPerTick,
-                    v => { Mod.Settings.MaxGrindsPerTick = v; }),
+                    v => { Mod.Settings.MaxGrindsPerTick = v; }, 0, 100),
                 IntSetting("AssignmentTtlSeconds",
                     () => Mod.Settings.AssignmentTtlSeconds,
-                    v => { Mod.Settings.AssignmentTtlSeconds = v; }),
+                    v => { Mod.Settings.AssignmentTtlSeconds = v; }, 2, 30),
                 FloatSetting("WeldingMultiplier",
                     () => Mod.Settings.Welder.WeldingMultiplier,
-                    v => { Mod.Settings.Welder.WeldingMultiplier = v; }),
+                    v => { Mod.Settings.Welder.WeldingMultiplier = v; }, 0.1f, 1000f),
                 FloatSetting("GrindingMultiplier",
                     () => Mod.Settings.Welder.GrindingMultiplier,
-                    v => { Mod.Settings.Welder.GrindingMultiplier = v; }),
+                    v => { Mod.Settings.Welder.GrindingMultiplier = v; }, 0.1f, 1000f),
             };
 
             _lookup = new Dictionary<string, SettingEntry>(StringComparer.OrdinalIgnoreCase);
@@ -310,34 +310,42 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             };
         }
 
-        private static SettingEntry IntSetting(string name, Func<int> getter, Action<int> setter)
+        private static SettingEntry IntSetting(string name, Func<int> getter, Action<int> setter, int min = int.MinValue, int max = int.MaxValue)
         {
+            var label = (min != int.MinValue || max != int.MaxValue)
+                ? string.Format("int, {0}..{1}", min, max)
+                : "int";
             return new SettingEntry
             {
                 Name = name,
-                TypeLabel = "int",
+                TypeLabel = label,
                 Get = () => getter().ToString(),
                 Set = s =>
                 {
                     int v;
                     if (!int.TryParse(s, out v)) return "Expected an integer";
+                    if (v < min || v > max) return string.Format("Value must be between {0} and {1}", min, max);
                     setter(v);
                     return null;
                 }
             };
         }
 
-        private static SettingEntry FloatSetting(string name, Func<float> getter, Action<float> setter)
+        private static SettingEntry FloatSetting(string name, Func<float> getter, Action<float> setter, float min = float.MinValue, float max = float.MaxValue)
         {
+            var label = (min != float.MinValue || max != float.MaxValue)
+                ? string.Format("float, {0}..{1}", min, max)
+                : "float";
             return new SettingEntry
             {
                 Name = name,
-                TypeLabel = "float",
+                TypeLabel = label,
                 Get = () => getter().ToString("F2"),
                 Set = s =>
                 {
                     float v;
                     if (!float.TryParse(s, out v)) return "Expected a number";
+                    if (v < min || v > max) return string.Format("Value must be between {0} and {1}", min, max);
                     setter(v);
                     return null;
                 }

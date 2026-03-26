@@ -380,9 +380,10 @@ namespace SKONanobotBuildAndRepairSystem
                 var requiredIntegrity = target.GetRequiredIntegrity(Settings.WeldOptions);
                 return target.Integrity >= requiredIntegrity;
             }
-            catch
+            catch (Exception ex)
             {
-                // If something goes wrong, lets say its all built to avoid issues!
+                // If something goes wrong, treat as fully built to avoid infinite retries.
+                Logging.Instance.Error("IsWeldIntegrityReached exception: {0}", ex.Message);
                 return true;
             }
         }

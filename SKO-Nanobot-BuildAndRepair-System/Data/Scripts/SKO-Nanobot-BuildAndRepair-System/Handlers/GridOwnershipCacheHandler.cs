@@ -2,6 +2,7 @@
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Caches;
 using SKONanobotBuildAndRepairSystem.Profiling;
+using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -84,8 +85,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 SetCache(cubeGrid, playerId, relation);
                 return relation;
             }
-            catch
+            catch (Exception ex)
             {
+                Logging.Instance.Error("GridOwnershipCacheHandler.GetRelation exception: {0}", ex.Message);
             }
 
             return MyRelationsBetweenPlayerAndBlock.NoOwnership;
@@ -114,8 +116,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Logging.Instance.Error("GridOwnershipCacheHandler.GetRelationInternal exception: {0}", ex.Message);
             }
 
             // Everything else:
@@ -151,7 +154,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Logging.Instance.Error("GridOwnershipCacheHandler.CheckOwners exception: {0}", ex.Message);
+            }
             return null;
         }
 
@@ -223,9 +229,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     refreshed++;
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // swallow errors in background refresh
+                Logging.Instance.Error("GridOwnershipCacheHandler.RefreshExpiredEntries exception: {0}", ex.Message);
             }
         }
 

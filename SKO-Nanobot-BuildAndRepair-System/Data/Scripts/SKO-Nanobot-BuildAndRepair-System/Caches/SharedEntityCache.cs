@@ -28,9 +28,11 @@ namespace SKONanobotBuildAndRepairSystem.Caches
         public static List<IMyEntity> GetEntitiesInBox(ref BoundingBoxD areaBoundingBox)
         {
             var profilerTs = MethodProfiler.Start();
+            var session = MyAPIGateway.Session;
+            if (session == null) return new List<IMyEntity>();
             var center = areaBoundingBox.Center;
             var key = QuantizePosition(center);
-            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            var now = session.ElapsedPlayTime;
             var cacheHit = false;
 
             try
@@ -97,7 +99,9 @@ namespace SKONanobotBuildAndRepairSystem.Caches
         /// </summary>
         public static void Cleanup()
         {
-            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            var session = MyAPIGateway.Session;
+            if (session == null) return;
+            var now = session.ElapsedPlayTime;
             var evictThreshold = CacheTtlSeconds * 2.0;
 
             var staleKeys = new List<long>();

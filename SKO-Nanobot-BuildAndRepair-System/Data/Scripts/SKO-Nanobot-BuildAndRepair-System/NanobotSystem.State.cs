@@ -72,7 +72,10 @@ namespace SKONanobotBuildAndRepairSystem
                     return Mod.Shield.IsBlockProtected(slimBlock);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Logging.Instance.Error("IsShieldProtected exception: {0}", ex.Message);
+            }
 
             return false;
         }
@@ -89,8 +92,9 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Logging.Instance.Error("IsWelderShielded exception: {0}", ex.Message);
             }
 
             return false;

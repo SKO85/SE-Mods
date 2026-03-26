@@ -42,19 +42,24 @@ namespace SKONanobotBuildAndRepairSystem
 
         public static void DecrementGridCount(long gridId)
         {
+            // CAS loop: retry if the value changed between read and update.
             int current;
-            if (GridSystemCount.TryGetValue(gridId, out current))
+            while (GridSystemCount.TryGetValue(gridId, out current))
             {
                 var newVal = current - 1;
                 if (newVal <= 0)
                 {
+                    // Try to remove; if it fails (value changed), loop retries.
                     int removed;
-                    GridSystemCount.TryRemove(gridId, out removed);
+                    if (GridSystemCount.TryRemove(gridId, out removed))
+                        break;
                 }
                 else
                 {
-                    GridSystemCount.TryUpdate(gridId, newVal, current);
+                    if (GridSystemCount.TryUpdate(gridId, newVal, current))
+                        break;
                 }
+                // TryUpdate/TryRemove failed — value was modified concurrently; retry.
             }
         }
 
