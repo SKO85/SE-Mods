@@ -54,13 +54,16 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
-                var _collecting = collecting;
-                var _needCollecting = needCollecting;
-                var _transporting = transporting;
-                var _targetCount = State.PossibleFloatingTargets.CurrentCount;
-                MethodProfiler.StopAndLog("ServerTryCollectingFloatingTargets", profilerTs, () =>
-                    string.Format("entityId={0};collecting={1};needCollecting={2};transporting={3};targets={4}",
-                        _Welder.EntityId, _collecting, _needCollecting, _transporting, _targetCount));
+                if (profilerTs != 0L)
+                {
+                    var _collecting = collecting;
+                    var _needCollecting = needCollecting;
+                    var _transporting = transporting;
+                    var _targetCount = State.PossibleFloatingTargets.CurrentCount;
+                    MethodProfiler.StopAndLog("ServerTryCollectingFloatingTargets", profilerTs, () =>
+                        string.Format("entityId={0};collecting={1};needCollecting={2};transporting={3};targets={4}",
+                            _Welder.EntityId, _collecting, _needCollecting, _transporting, _targetCount));
+                }
             }
         }
 
@@ -111,7 +114,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            if (collectingFirstTarget != null && ((float)_TransportInventory.CurrentVolume >= _MaxTransportVolume || (!canAdd && _TransportInventory.CurrentVolume > 0)))
+            if (collectingFirstTarget != null && collectingFirstTarget.Entity != null && ((float)_TransportInventory.CurrentVolume >= _MaxTransportVolume || (!canAdd && _TransportInventory.CurrentVolume > 0)))
             {
                 //Transport started
                 State.CurrentTransportIsPick = true;

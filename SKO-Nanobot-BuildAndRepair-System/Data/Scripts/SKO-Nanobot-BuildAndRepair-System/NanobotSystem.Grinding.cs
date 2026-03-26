@@ -104,14 +104,17 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
-                var _grinding = grinding;
-                var _needGrinding = needGrinding;
-                var _transporting = transporting;
-                var _targetCount = State.PossibleGrindTargets.CurrentCount;
-                MethodProfiler.StopAndLog("ServerTryGrinding", profilerTs, () =>
-                    string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5}",
-                        _Welder.EntityId, _grinding, _needGrinding, _transporting, _targetCount,
-                        State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none"));
+                if (profilerTs != 0L)
+                {
+                    var _grinding = grinding;
+                    var _needGrinding = needGrinding;
+                    var _transporting = transporting;
+                    var _targetCount = State.PossibleGrindTargets.CurrentCount;
+                    MethodProfiler.StopAndLog("ServerTryGrinding", profilerTs, () =>
+                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5}",
+                            _Welder.EntityId, _grinding, _needGrinding, _transporting, _targetCount,
+                            State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none"));
+                }
             }
         }
 
@@ -147,7 +150,9 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             var disassembleRatio = target.FatBlock != null ? target.FatBlock.DisassembleRatio : ((MyCubeBlockDefinition)target.BlockDefinition).DisassembleRatio;
+            if (disassembleRatio <= 0f) return false;
             var integrityPointsPerSec = ((MyCubeBlockDefinition)target.BlockDefinition).IntegrityPointsPerSec;
+            if (target.MaxIntegrity <= 0f) return false;
 
             float damage = MyAPIGateway.Session.GrinderSpeedMultiplier * Mod.Settings.Welder.GrindingMultiplier * GRINDER_AMOUNT_PER_SECOND;
             var grinderAmount = damage * integrityPointsPerSec / disassembleRatio;
@@ -248,20 +253,23 @@ namespace SKONanobotBuildAndRepairSystem
             }
             tsTransport = Stopwatch.GetTimestamp() - tsMark;
 
-            var _transporting = transporting;
-            var _emptyMs = tsEmpty * 1000.0 / tsFreq;
-            var _decreaseMs = tsDecrease * 1000.0 / tsFreq;
-            var _razeMs = tsRaze * 1000.0 / tsFreq;
-            var _transportMs = tsTransport * 1000.0 / tsFreq;
-            MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
-                string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};decreaseMs={7:F3};razeMs={8:F3};transportMs={9:F3}",
-                    _Welder.EntityId,
-                    target != null ? target.BlockDefinition.Id.SubtypeName : "null",
-                    (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
-                    _transporting,
-                    target != null && target.IsFullyDismounted,
-                    target != null ? target.Integrity / target.MaxIntegrity : 0f,
-                    _emptyMs, _decreaseMs, _razeMs, _transportMs));
+            if (profilerTs != 0L)
+            {
+                var _transporting = transporting;
+                var _emptyMs = tsEmpty * 1000.0 / tsFreq;
+                var _decreaseMs = tsDecrease * 1000.0 / tsFreq;
+                var _razeMs = tsRaze * 1000.0 / tsFreq;
+                var _transportMs = tsTransport * 1000.0 / tsFreq;
+                MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
+                    string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};decreaseMs={7:F3};razeMs={8:F3};transportMs={9:F3}",
+                        _Welder.EntityId,
+                        target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                        (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                        _transporting,
+                        target != null && target.IsFullyDismounted,
+                        target != null ? target.Integrity / target.MaxIntegrity : 0f,
+                        _emptyMs, _decreaseMs, _razeMs, _transportMs));
+            }
             return true;
         }
     }

@@ -268,13 +268,16 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
-                MethodProfiler.StopAndLog("ServerTryWeldingGrindingCollecting", profilerTs, () =>
-                    string.Format("entityId={0};workMode={1};welding={2};grinding={3};needCollecting={4};transporting={5};transportIsCollecting={6};weldTargets={7};grindTargets={8};floatingTargets={9};inventoryFull={10};scanReady={11};pushFull={12};primaryStuck={13}",
-                        _Welder.EntityId, Settings.WorkMode, State.Welding, State.Grinding,
-                        State.NeedCollecting, State.Transporting, State.CurrentTransportIsCollecting,
-                        State.PossibleWeldTargets.CurrentCount, State.PossibleGrindTargets.CurrentCount,
-                        State.PossibleFloatingTargets.CurrentCount, State.InventoryFull,
-                        _InitialScanCompleted, _PushTargetsFull, primaryStuck));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("ServerTryWeldingGrindingCollecting", profilerTs, () =>
+                        string.Format("entityId={0};workMode={1};welding={2};grinding={3};needCollecting={4};transporting={5};transportIsCollecting={6};weldTargets={7};grindTargets={8};floatingTargets={9};inventoryFull={10};scanReady={11};pushFull={12};primaryStuck={13}",
+                            _Welder.EntityId, Settings.WorkMode, State.Welding, State.Grinding,
+                            State.NeedCollecting, State.Transporting, State.CurrentTransportIsCollecting,
+                            State.PossibleWeldTargets.CurrentCount, State.PossibleGrindTargets.CurrentCount,
+                            State.PossibleFloatingTargets.CurrentCount, State.InventoryFull,
+                            _InitialScanCompleted, _PushTargetsFull, primaryStuck));
+                }
             }
         }
 

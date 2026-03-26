@@ -177,11 +177,14 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
-                MethodProfiler.StopAndLog("UpdateBeforeSimulation10_100", profilerTs, () =>
-                    string.Format("entityId={0};fast={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5}",
-                        _Welder != null ? _Welder.EntityId : 0, fast, _IsInit, _Delay,
-                        AssignedCluster != null ? AssignedCluster.Members.Count : 1,
-                        AssignedCluster != null ? (AssignedCluster.Members.Count < 5 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), AssignedCluster.Members.Count - 3)) : 1));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("UpdateBeforeSimulation10_100", profilerTs, () =>
+                        string.Format("entityId={0};fast={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5}",
+                            _Welder != null ? _Welder.EntityId : 0, fast, _IsInit, _Delay,
+                            AssignedCluster != null ? AssignedCluster.Members.Count : 1,
+                            AssignedCluster != null ? (AssignedCluster.Members.Count < 5 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), AssignedCluster.Members.Count - 3)) : 1));
+                }
             }
         }
     }

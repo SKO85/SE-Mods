@@ -16,8 +16,9 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
 
         /// <summary>
         /// Shared result published by the coordinator. Read by members via atomic reference read.
+        /// Volatile ensures cross-thread visibility between coordinator write and member read.
         /// </summary>
-        private ScanClusterResult _sharedResult;
+        private volatile ScanClusterResult _sharedResult;
 
         public ScanCluster(string clusterKey)
         {

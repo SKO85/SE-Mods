@@ -105,13 +105,16 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
-                MethodProfiler.StopAndLog("ServerTryPushInventory", profilerTs, () =>
-                    string.Format("entityId={0};pushOre={1};pushComp={2};pushItems={3};pushTargets={4}",
-                        _Welder.EntityId,
-                        (Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0,
-                        (Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0,
-                        (Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0,
-                        _PossiblePushTargets.Count));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("ServerTryPushInventory", profilerTs, () =>
+                        string.Format("entityId={0};pushOre={1};pushComp={2};pushItems={3};pushTargets={4}",
+                            _Welder.EntityId,
+                            (Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0,
+                            (Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0,
+                            (Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0,
+                            _PossiblePushTargets.Count));
+                }
             }
         }
 
@@ -178,11 +181,14 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             State.InventoryFull = !empty;
-            MethodProfiler.StopAndLog("ServerEmptyTransportInventory", profilerTs, () =>
-                string.Format("entityId={0};push={1};empty={2};transportVol={3:F3};inventoryFull={4};sources={5};pushTargets={6}",
-                    _Welder.EntityId, push, empty,
-                    (float)_TransportInventory.CurrentVolume, State.InventoryFull,
-                    _PossibleSources.Count, _PossiblePushTargets.Count));
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("ServerEmptyTransportInventory", profilerTs, () =>
+                    string.Format("entityId={0};push={1};empty={2};transportVol={3:F3};inventoryFull={4};sources={5};pushTargets={6}",
+                        _Welder.EntityId, push, empty,
+                        (float)_TransportInventory.CurrentVolume, State.InventoryFull,
+                        _PossibleSources.Count, _PossiblePushTargets.Count));
+            }
             return empty;
         }
 
@@ -249,8 +255,8 @@ namespace SKONanobotBuildAndRepairSystem
 
             var picked = false;
 
-            // BUG-057: Reuse list across source iterations to avoid per-source allocation.
-            var tempInventoryItems = new List<MyInventoryItem>();
+            // BUG-057: Reuse pooled list across source iterations to avoid per-call allocation.
+            _TempPullInventoryItems.Clear();
 
             lock (_PossibleSources)
             {
@@ -262,11 +268,11 @@ namespace SKONanobotBuildAndRepairSystem
                     //Pre Test is 10 timers faster then get the whole list (as copy!) and iterate for nothing
                     if (srcInventory.FindItem(componentId) != null && srcInventory.CanTransferItemTo(welderInventory, componentId))
                     {
-                        tempInventoryItems.Clear();
-                        srcInventory.GetItems(tempInventoryItems);
-                        for (int srcItemIndex = tempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                        _TempPullInventoryItems.Clear();
+                        srcInventory.GetItems(_TempPullInventoryItems);
+                        for (int srcItemIndex = _TempPullInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                         {
-                            var srcItem = tempInventoryItems[srcItemIndex];
+                            var srcItem = _TempPullInventoryItems[srcItemIndex];
                             if (srcItem != null && (MyDefinitionId)srcItem.Type == componentId && srcItem.Amount > 0)
                             {
                                 var moved = false;
@@ -302,9 +308,12 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            MethodProfiler.StopAndLog("PullComponents", profilerTs, () =>
-                string.Format("entityId={0};component={1};startNeeded={2};picked={3};sources={4}",
-                    _Welder.EntityId, componentId.SubtypeName, startNeeded, picked, _PossibleSources.Count));
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("PullComponents", profilerTs, () =>
+                    string.Format("entityId={0};component={1};startNeeded={2};picked={3};sources={4}",
+                        _Welder.EntityId, componentId.SubtypeName, startNeeded, picked, _PossibleSources.Count));
+            }
             return picked;
         }
 

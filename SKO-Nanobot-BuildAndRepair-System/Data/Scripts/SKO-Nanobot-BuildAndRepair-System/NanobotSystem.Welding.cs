@@ -46,18 +46,17 @@ namespace SKONanobotBuildAndRepairSystem
             var hasRequiredPower = PowerHelper.HasRequiredElectricPower(this);
             if (!hasRequiredPower) return; //No power -> nothing to do
 
-            // OPT: When the previous iteration found nothing to weld (all targets grid-limited
-            // or assigned), skip the full iteration until the target list changes (new scan).
-            // CurrentHash is a uint (atomic read); stale reads are benign (skip one extra tick).
-            if (_weldLoopExhausted && State.PossibleWeldTargets.CurrentHash == _weldExhaustedAtHash)
-            {
-                weldSkipped = true;
-                return;
-            }
-            _weldLoopExhausted = false;
-
             lock (State.PossibleWeldTargets)
             {
+                // OPT: When the previous iteration found nothing to weld (all targets grid-limited
+                // or assigned), skip the full iteration until the target list changes (new scan).
+                // Hash read is under lock so it can't race with background scan updates.
+                if (_weldLoopExhausted && State.PossibleWeldTargets.CurrentHash == _weldExhaustedAtHash)
+                {
+                    weldSkipped = true;
+                    return;
+                }
+                _weldLoopExhausted = false;
                 // Set to true once the locked-on block completes this tick so the loop
                 // can find the next target immediately, without actually welding it
                 // (only one block is welded per tick). The next target is returned as
@@ -281,45 +280,47 @@ namespace SKONanobotBuildAndRepairSystem
                     lockOnRetry = true;
                     goto LockOnRetry;
                 }
-            }
 
-            // OPT: Mark exhausted when the full iteration found nothing claimable.
-            // Skip condition: not welding, not needing welding, no component checks attempted,
-            // and no lock-on (lock-on BaRs must always re-check for their block).
-            if (!welding && !needWelding && totalComponentChecks == 0 && !hadLockOn)
-            {
-                _weldLoopExhausted = true;
-                _weldExhaustedAtHash = State.PossibleWeldTargets.CurrentHash;
+                // OPT: Mark exhausted when the full iteration found nothing claimable.
+                // Hash write under lock so it stays consistent with background scan updates.
+                if (!welding && !needWelding && totalComponentChecks == 0 && !hadLockOn)
+                {
+                    _weldLoopExhausted = true;
+                    _weldExhaustedAtHash = State.PossibleWeldTargets.CurrentHash;
+                }
             }
 
             }
             finally
             {
-                var _welding = welding;
-                var _needWelding = needWelding;
-                var _transporting = transporting;
-                var _targetCount = State.PossibleWeldTargets.CurrentCount;
-                var _hadLockOn = hadLockOn;
-                var _lockOnFound = lockOnFound;
-                var _skippedByLockOn = skippedByLockOn;
-                var _checkedByWeldable = checkedByWeldable;
-                var _skippedByIgnore = skippedByIgnore;
-                var _skippedByGridLimit = skippedByGridLimit;
-                var _skippedByAssign = skippedByAssign;
-                var _componentFailures = componentFailures;
-                var _lockOnLost = hadLockOn && !lockOnFound;
-                var _starvedSkipped = starvedSkipped;
-                var _totalComponentChecks = totalComponentChecks;
-                var _lookingForNextChecked = lookingForNextChecked;
-                var _weldSkipped = weldSkipped;
-                var _saturatedGridCount = _saturatedGridIds.Count;
-                MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                    string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19}",
-                        _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
-                        State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
-                        _hadLockOn, _lockOnFound, _lockOnLost,
-                        _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _componentFailures,
-                        _starvedSkipped, _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount));
+                if (profilerTs != 0L)
+                {
+                    var _welding = welding;
+                    var _needWelding = needWelding;
+                    var _transporting = transporting;
+                    var _targetCount = State.PossibleWeldTargets.CurrentCount;
+                    var _hadLockOn = hadLockOn;
+                    var _lockOnFound = lockOnFound;
+                    var _skippedByLockOn = skippedByLockOn;
+                    var _checkedByWeldable = checkedByWeldable;
+                    var _skippedByIgnore = skippedByIgnore;
+                    var _skippedByGridLimit = skippedByGridLimit;
+                    var _skippedByAssign = skippedByAssign;
+                    var _componentFailures = componentFailures;
+                    var _lockOnLost = hadLockOn && !lockOnFound;
+                    var _starvedSkipped = starvedSkipped;
+                    var _totalComponentChecks = totalComponentChecks;
+                    var _lookingForNextChecked = lookingForNextChecked;
+                    var _weldSkipped = weldSkipped;
+                    var _saturatedGridCount = _saturatedGridIds.Count;
+                    MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
+                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19}",
+                            _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
+                            State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
+                            _hadLockOn, _lockOnFound, _lockOnLost,
+                            _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _componentFailures,
+                            _starvedSkipped, _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount));
+                }
             }
         }
 
@@ -353,12 +354,15 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
-                var _result = result;
-                MethodProfiler.StopAndLog("Weldable", profilerTs, () =>
-                    string.Format("entityId={0};block={1};projected={2};result={3}",
-                        _Welder.EntityId,
-                        target != null ? target.BlockDefinition.Id.SubtypeName : "null",
-                        isProjected, _result));
+                if (profilerTs != 0L)
+                {
+                    var _result = result;
+                    MethodProfiler.StopAndLog("Weldable", profilerTs, () =>
+                        string.Format("entityId={0};block={1};projected={2};result={3}",
+                            _Welder.EntityId,
+                            target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                            isProjected, _result));
+                }
             }
         }
 
@@ -506,18 +510,21 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             var result = welding || created;
-            var _tsBuild = tsBuild;
-            var _tsStockpile = tsStockpile;
-            var _tsMount = tsMount;
-            MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
-                string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};stockpileMs={7:F3};mountMs={8:F3}",
-                    _Welder.EntityId,
-                    targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
-                    (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
-                    created, welding, result,
-                    _tsBuild * 1000.0 / Stopwatch.Frequency,
-                    _tsStockpile * 1000.0 / Stopwatch.Frequency,
-                    _tsMount * 1000.0 / Stopwatch.Frequency));
+            if (profilerTs != 0L)
+            {
+                var _tsBuild = tsBuild;
+                var _tsStockpile = tsStockpile;
+                var _tsMount = tsMount;
+                MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
+                    string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};stockpileMs={7:F3};mountMs={8:F3}",
+                        _Welder.EntityId,
+                        targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
+                        (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
+                        created, welding, result,
+                        _tsBuild * 1000.0 / Stopwatch.Frequency,
+                        _tsStockpile * 1000.0 / Stopwatch.Frequency,
+                        _tsMount * 1000.0 / Stopwatch.Frequency));
+            }
             return result;
         }
 
@@ -538,6 +545,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _TempMissingComponents.Clear();
                 var picked = false;
                 var cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;
+                if (cubeGrid == null) return false;
 
                 if ((targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0)
                 {
@@ -612,12 +620,14 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 _TempMissingComponents.Clear();
-                MethodProfiler.StopAndLog("ServerFindMissingComponents", profilerTs, () =>
-                    string.Format("entityId={0};block={1};missingTypes={2};projected={3}",
-                        _Welder.EntityId,
-                        targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
-                        _TempMissingComponents.Count,
-                        (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("ServerFindMissingComponents", profilerTs, () =>
+                        string.Format("entityId={0};block={1};projected={2}",
+                            _Welder.EntityId,
+                            targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
+                            (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0));
+                }
             }
         }
 
@@ -663,9 +673,12 @@ namespace SKONanobotBuildAndRepairSystem
             var welderInventory = _Welder.GetInventory(0);
             if (welderInventory == null || welderInventory.Empty())
             {
-                MethodProfiler.StopAndLog("ServerPickFromWelder", profilerTs, () =>
-                    string.Format("entityId={0};component={1};startNeeded={2};picked={3};empty=True",
-                        _Welder.EntityId, componentId.SubtypeName, startNeeded, false));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("ServerPickFromWelder", profilerTs, () =>
+                        string.Format("entityId={0};component={1};startNeeded={2};picked={3};empty=True",
+                            _Welder.EntityId, componentId.SubtypeName, startNeeded, false));
+                }
                 return picked;
             }
 
@@ -694,9 +707,12 @@ namespace SKONanobotBuildAndRepairSystem
             }
             _TempInventoryItems.Clear();
 
-            MethodProfiler.StopAndLog("ServerPickFromWelder", profilerTs, () =>
-                string.Format("entityId={0};component={1};startNeeded={2};picked={3};empty=False",
-                    _Welder.EntityId, componentId.SubtypeName, startNeeded, picked));
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("ServerPickFromWelder", profilerTs, () =>
+                    string.Format("entityId={0};component={1};startNeeded={2};picked={3};empty=False",
+                        _Welder.EntityId, componentId.SubtypeName, startNeeded, picked));
+            }
             return picked;
         }
 

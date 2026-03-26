@@ -64,9 +64,9 @@ namespace SKONanobotBuildAndRepairSystem
         private Stopwatch _DelayWatch = new Stopwatch();
         private int _Delay = 0;
 
-        private bool _AsyncUpdateSourcesAndTargetsRunning = false;
-        private bool _InitialScanCompleted = false;
-        private bool _PushTargetsFull = false;
+        private volatile bool _AsyncUpdateSourcesAndTargetsRunning = false;
+        private volatile bool _InitialScanCompleted = false;
+        private volatile bool _PushTargetsFull = false;
 
         /// <summary>
         /// When true, the welding loop found nothing on its last full iteration
@@ -107,6 +107,7 @@ namespace SKONanobotBuildAndRepairSystem
         private List<IMyInventory> _PossiblePushTargets = new List<IMyInventory>();
         private Dictionary<string, int> _TempMissingComponents = new Dictionary<string, int>();
         private List<MyInventoryItem> _TempInventoryItems = new List<MyInventoryItem>();
+        private List<MyInventoryItem> _TempPullInventoryItems = new List<MyInventoryItem>();
 
         private int _UpdateEffectsInterval;
         private bool _UpdateCustomInfoNeeded;
@@ -208,7 +209,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// Cluster assignment for shared scanning. Null means solo (legacy path).
         /// Set by ScanClusterCoordinator.RebuildClusters() on main thread, read on background thread.
         /// </summary>
-        internal ScanCluster AssignedCluster;
+        internal volatile ScanCluster AssignedCluster;
 
         /// <summary>
         /// Counts consecutive cycles where a cluster member received no shared result.

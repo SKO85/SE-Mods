@@ -283,7 +283,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                     }
                 }
             }
-            return componentList.Count();
+            return componentList.Count;
         }
 
         public enum IntegrityLevel

@@ -129,11 +129,14 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
-                var _visitedCount = visited.Count;
-                var _sourceCount = possibleSources.Count;
-                MethodProfiler.StopAndLog("AsyncScanForSources", profilerTs, () =>
-                    string.Format("entityId={0};gridsVisited={1};sourcesFound={2}",
-                        _Welder.EntityId, _visitedCount, _sourceCount));
+                if (profilerTs != 0L)
+                {
+                    var _visitedCount = visited.Count;
+                    var _sourceCount = possibleSources.Count;
+                    MethodProfiler.StopAndLog("AsyncScanForSources", profilerTs, () =>
+                        string.Format("entityId={0};gridsVisited={1};sourcesFound={2}",
+                            _Welder.EntityId, _visitedCount, _sourceCount));
+                }
             }
         }
 
@@ -407,8 +410,11 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
 
-                    MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
-                        string.Format("entityId={0};gridId={1};skippedEmpty=True", _Welder.EntityId, gridEntityId));
+                    if (profilerTs != 0L)
+                    {
+                        MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
+                            string.Format("entityId={0};gridId={1};skippedEmpty=True", _Welder.EntityId, gridEntityId));
+                    }
                     return;
                 }
             }
@@ -573,22 +579,22 @@ namespace SKONanobotBuildAndRepairSystem
                 _EmptyGridCache.TryRemove(gridEntityId, out dummy);
             }
 
-            var _gridName = cubeGrid.DisplayName;
-            var _gridEid = cubeGrid.EntityId;
-
-            // Capture end timestamp before StopAndLog so grid cost doesn't include logging overhead.
-            var endTs = profilerTs != 0L ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
-
-            MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
-                string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};skipRange={5}",
-                    _Welder.EntityId, _gridEid, newBlocks.Count,
-                    clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
-                    clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
-                    blockSkipRange));
-
-            // Report per-grid scan cost for profile summary.
-            if (endTs != 0L)
+            if (profilerTs != 0L)
             {
+                var _gridName = cubeGrid.DisplayName;
+                var _gridEid = cubeGrid.EntityId;
+
+                // Capture end timestamp before StopAndLog so grid cost doesn't include logging overhead.
+                var endTs = System.Diagnostics.Stopwatch.GetTimestamp();
+
+                MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
+                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};skipRange={5}",
+                        _Welder.EntityId, _gridEid, newBlocks.Count,
+                        clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
+                        clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
+                        blockSkipRange));
+
+                // Report per-grid scan cost for profile summary.
                 var gridMs = (double)(endTs - profilerTs) / System.Diagnostics.Stopwatch.Frequency * 1000.0;
                 MethodProfiler.ReportGridCost(_gridEid, _gridName, gridMs);
             }
@@ -722,13 +728,16 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
-            MethodProfiler.StopAndLog("AsyncAddBlocksOfBox", profilerTs, () =>
-                string.Format("entityId={0};entities={1};weldTargets={2};grindTargets={3};floatTargets={4}",
-                    _Welder.EntityId,
-                    entityInRange != null ? entityInRange.Count : 0,
-                    clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
-                    clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
-                    clusterFloatingTargets != null ? clusterFloatingTargets.Count : -1));
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("AsyncAddBlocksOfBox", profilerTs, () =>
+                    string.Format("entityId={0};entities={1};weldTargets={2};grindTargets={3};floatTargets={4}",
+                        _Welder.EntityId,
+                        entityInRange != null ? entityInRange.Count : 0,
+                        clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
+                        clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
+                        clusterFloatingTargets != null ? clusterFloatingTargets.Count : -1));
+            }
         }
 
         /// <summary>
@@ -910,9 +919,12 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _AsyncUpdateSourcesAndTargetsRunning = false;
                 }
-                MethodProfiler.StopAndLog("AsyncClusterScan", profilerTs, () =>
-                    string.Format("entityId={0};updateSource={1};clusterMembers={2}",
-                        _Welder.EntityId, updateSource, cluster.Members.Count));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("AsyncClusterScan", profilerTs, () =>
+                        string.Format("entityId={0};updateSource={1};clusterMembers={2}",
+                            _Welder.EntityId, updateSource, cluster.Members.Count));
+                }
             }
         }
 
@@ -1015,9 +1027,12 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 var _grindCount = grindCandidates != null ? grindCandidates.Count : 0;
                 var _weldCount = weldCandidates != null ? weldCandidates.Count : 0;
-                MethodProfiler.StopAndLog("PreSortClusterCandidates", profilerTs, () =>
-                    string.Format("entityId={0};grindCandidates={1};weldCandidates={2}",
-                        _Welder.EntityId, _grindCount, _weldCount));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("PreSortClusterCandidates", profilerTs, () =>
+                        string.Format("entityId={0};grindCandidates={1};weldCandidates={2}",
+                            _Welder.EntityId, _grindCount, _weldCount));
+                }
             }
         }
 
@@ -1089,9 +1104,12 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _AsyncUpdateSourcesAndTargetsRunning = false;
                 }
-                MethodProfiler.StopAndLog("AsyncApplyClusterResults", profilerTs, () =>
-                    string.Format("entityId={0};updateSource={1};missed={2}",
-                        _Welder.EntityId, updateSource, MissedResultCycles));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("AsyncApplyClusterResults", profilerTs, () =>
+                        string.Format("entityId={0};updateSource={1};missed={2}",
+                            _Welder.EntityId, updateSource, MissedResultCycles));
+                }
             }
         }
 
@@ -1453,12 +1471,15 @@ namespace SKONanobotBuildAndRepairSystem
                 foreach (var t in State.PossibleGrindTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
                 var grindGridCount = _truncateGridIds.Count;
 
-                MethodProfiler.StopAndLog("ApplyClusterResultToSelf", profilerTs, () =>
-                    string.Format("entityId={0};weldTargets={1}(pre={2},grids={3});grindTargets={4}(pre={5},grids={6});floatingTargets={7}",
-                        _Welder.EntityId,
-                        State.PossibleWeldTargets.CurrentCount, preTruncateWeld, weldGridCount,
-                        State.PossibleGrindTargets.CurrentCount, preTruncateGrind, grindGridCount,
-                        State.PossibleFloatingTargets.CurrentCount));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("ApplyClusterResultToSelf", profilerTs, () =>
+                        string.Format("entityId={0};weldTargets={1}(pre={2},grids={3});grindTargets={4}(pre={5},grids={6});floatingTargets={7}",
+                            _Welder.EntityId,
+                            State.PossibleWeldTargets.CurrentCount, preTruncateWeld, weldGridCount,
+                            State.PossibleGrindTargets.CurrentCount, preTruncateGrind, grindGridCount,
+                            State.PossibleFloatingTargets.CurrentCount));
+                }
             }
         }
     }

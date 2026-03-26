@@ -106,9 +106,11 @@ namespace SKONanobotBuildAndRepairSystem
                 customInfo.Append(Environment.NewLine);
             }
 
-            if (Mod.Settings.DebugMode && !MyAPIGateway.Utilities.IsDedicated)
+            // Debug diagnostics — local game only (not on DS or DS clients).
+            // Version, MaxSystems/Grid, Total BaRs, Stagger, GrindBudget, ModSettings.xml
+            // are shown in the debug HUD overlay instead — no duplication needed here.
+            if (Mod.Settings.DebugMode && MyAPIGateway.Session.IsServer && !MyAPIGateway.Utilities.IsDedicated)
             {
-                customInfo.Append(string.Format("Version: {0}{1}", Constants.ModVersion, Environment.NewLine));
                 int sourceCount = 0;
                 int pushTargetCount = 0;
                 lock (_PossibleSources) { sourceCount = _PossibleSources.Count; }
@@ -132,20 +134,6 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     customInfo.Append(string.Format("Cluster: none{0}", Environment.NewLine));
                 }
-                customInfo.Append(string.Format("MaxSystems/Grid: {0} | EmptyGrids: {1}{2}", Mod.Settings.MaxSystemsPerTargetGrid, _EmptyGridCache.Count, Environment.NewLine));
-                var clusterMembers = cluster != null ? cluster.Members.Count : 1;
-                var staggerCap = Mod.GetEffectiveStaggerGroupCount();
-                var effectiveStagger = clusterMembers < 5 ? 1 : Math.Min(staggerCap, clusterMembers - 3);
-                customInfo.Append(string.Format("Total BaRs: {0} | Stagger: {1}/{2}{3} | GrindBudget: {4}{5}{6}",
-                    Mod.NanobotSystems.Count,
-                    effectiveStagger, staggerCap,
-                    Mod.Settings.StaggerGroupCount > 0 ? "" : " (auto)",
-                    Mod.GetEffectiveMaxGrindsPerTick(),
-                    Mod.Settings.MaxGrindsPerTick > 0 ? "" : " (auto)",
-                    Environment.NewLine));
-                customInfo.Append(string.Format("ModSettings.xml: {0}{1}",
-                    Mod.CustomSettingsLoaded ? "Loaded (custom)" : "Not found (defaults)",
-                    Environment.NewLine));
             }
 
             customInfo.Append(Environment.NewLine);
