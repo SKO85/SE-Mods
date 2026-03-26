@@ -96,6 +96,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// Key: grid EntityId, Value: playTime when grid was found empty.
         /// </summary>
         private ConcurrentDictionary<long, TimeSpan> _EmptyGridCache = new ConcurrentDictionary<long, TimeSpan>();
+        public int EmptyGridCacheCount { get { return _EmptyGridCache.Count; } }
 
         private IMyShipWelder _Welder;
         public IMyInventory _TransportInventory;
@@ -116,6 +117,7 @@ namespace SKONanobotBuildAndRepairSystem
         private TimeSpan _LastFriendlyDamageCleanup;
         private TimeSpan _LastSourceUpdate = -Mod.Settings.SourcesUpdateInterval;
         private TimeSpan _LastTargetsUpdate;
+        public TimeSpan LastTargetsUpdate { get { return _LastTargetsUpdate; } }
         private TimeSpan _UpdateCustomInfoLast;
         private TimeSpan _UpdatePowerSinkLast;
         private TimeSpan _UpdateSettingsTransmitLast;

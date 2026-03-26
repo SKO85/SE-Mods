@@ -65,6 +65,16 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             get { return _minDurationMs; }
         }
 
+        public static double ElapsedSeconds
+        {
+            get { return _isRunning ? (DateTime.UtcNow - _startedUtc).TotalSeconds : 0; }
+        }
+
+        public static double TotalSessionSeconds
+        {
+            get { return _isRunning && _autoStopUtc.HasValue ? (_autoStopUtc.Value - _startedUtc).TotalSeconds : 0; }
+        }
+
         public static bool SetMinDurationMs(int value, out string message)
         {
             if (value < MinDurationMsMin || value > MinDurationMsMax)

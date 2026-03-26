@@ -86,11 +86,11 @@ namespace SKONanobotBuildAndRepairSystem
                     // runs the weld/grind/collect logic each cycle. UI, state sync, and power
                     // updates always run (not staggered).
                     // Only stagger when cluster is large enough to cause load issues.
-                    // Gradual ramp: 1-4 no stagger, 5→2, 6+→3 groups (max ~500ms interval).
+                    // Gradual ramp: 1-5 no stagger, 6-10→2, 11+→3 groups (max ~500ms interval).
                     // When sim-speed drops, increase stagger to help the server recover.
                     var cycle = MyAPIGateway.Session.GameplayFrameCounter / (fast ? 10 : 100);
                     var clusterSize = AssignedCluster != null ? AssignedCluster.Members.Count : 1;
-                    var effectiveGroups = clusterSize < 5 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), clusterSize - 3);
+                    var effectiveGroups = clusterSize < 6 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), clusterSize - 3);
 
                     var simSpeed = Mod.GetEffectiveSimSpeed();
                     if (simSpeed < 0.9f)

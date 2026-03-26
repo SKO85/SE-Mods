@@ -118,9 +118,6 @@ namespace SKONanobotBuildAndRepairSystem
                             continue;
                         }
 
-                        // Skip grid limit and assignment checks for the lock-on block —
-                        // this BaR was already working on it, don't let stale counts or
-                        // assignment races cause it to be abandoned mid-weld.
                         if (!isLockOnBlock)
                         {
                             // Skip blocks at starved priority levels — zero-cost after initial failures.
@@ -152,10 +149,27 @@ namespace SKONanobotBuildAndRepairSystem
                                 continue;
                             }
                         }
-                        else if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers)
+                        else
                         {
+                            // Lock-on block: enforce grid limit (live counter is accurate).
+                            // If over limit, release and find a target on another grid.
+                            if (Settings.CurrentPickedWeldingBlock == null && targetData.Block.CubeGrid != null)
+                            {
+                                var gridId = targetData.Block.CubeGrid.EntityId;
+                                if (IsGridOverSystemLimit(gridId, ref lastRejectedGridId))
+                                {
+                                    if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
+                                    State.CurrentWeldingBlock = null;
+                                    lookingForNext = true;
+                                    skippedByGridLimit++;
+                                    continue;
+                                }
+                            }
                             // Refresh assignment for the lock-on block.
-                            targetData.Block.AssignToSystem(_Welder.EntityId);
+                            if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && !_Welder.HelpOthers)
+                            {
+                                targetData.Block.AssignToSystem(_Welder.EntityId);
+                            }
                         }
 
                         needWelding = true;

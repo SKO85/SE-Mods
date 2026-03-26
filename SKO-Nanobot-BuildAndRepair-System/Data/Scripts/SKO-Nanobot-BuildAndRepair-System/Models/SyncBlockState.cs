@@ -171,6 +171,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 if (value != _CurrentWeldingBlock)
                 {
+                    if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
+                    {
+                        if (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
+                            Mod.DecrementGridCount(_CurrentWeldingBlock.CubeGrid.EntityId);
+                        if (value != null && value.CubeGrid != null)
+                            Mod.IncrementGridCount(value.CubeGrid.EntityId);
+                    }
                     _CurrentWeldingBlock = value;
                     Changed = true;
                 }
@@ -197,6 +204,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 if (value != _CurrentGrindingBlock)
                 {
+                    if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
+                    {
+                        if (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
+                            Mod.DecrementGridCount(_CurrentGrindingBlock.CubeGrid.EntityId);
+                        if (value != null && value.CubeGrid != null)
+                            Mod.IncrementGridCount(value.CubeGrid.EntityId);
+                    }
                     _CurrentGrindingBlock = value;
                     Changed = true;
                 }

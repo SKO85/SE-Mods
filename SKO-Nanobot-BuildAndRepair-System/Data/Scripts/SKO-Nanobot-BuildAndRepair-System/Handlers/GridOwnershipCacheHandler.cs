@@ -20,6 +20,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
            concurrencyLevel: 4,
            capacity: 1024);
 
+        public static int CacheCount { get { return Cache.Count; } }
+
         private static readonly ConcurrentDictionary<long, long> GridLastAccess = new ConcurrentDictionary<long, long>();
 
         private const int MaxRefreshItems = 100;

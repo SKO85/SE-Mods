@@ -9,6 +9,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
     {
         private static TtlCache<string, long> Cache = new TtlCache<string, long>(TimeSpan.FromSeconds(8));
 
+        public static int AssignmentCount { get { return Cache.Count; } }
+
         private static string GetBlockKey(IMySlimBlock block)
         {
             return string.Format("{0}:{1}", block.CubeGrid.EntityId, block.Position);

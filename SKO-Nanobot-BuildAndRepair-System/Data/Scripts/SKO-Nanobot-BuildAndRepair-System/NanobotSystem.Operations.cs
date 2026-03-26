@@ -109,7 +109,6 @@ namespace SKONanobotBuildAndRepairSystem
                         if (!Mod.Settings.DisableLimitSystemsPerTargetGrid
                             && (State.PossibleWeldTargets.CurrentCount > 0 || State.PossibleGrindTargets.CurrentCount > 0))
                         {
-                            Mod.BuildGridSystemCountCache();
                             RebuildSaturatedGrids();
                         }
 
@@ -281,13 +280,13 @@ namespace SKONanobotBuildAndRepairSystem
 
         /// <summary>
         /// Returns the cached count of OTHER systems targeting the given grid.
-        /// Reads from the centralized Mod.GridSystemCountCache and subtracts this BaR's own
+        /// Reads from the live Mod.GridSystemCount counter and subtracts this BaR's own
         /// contribution to match the old per-BaR "skip self" behavior.
         /// </summary>
         private int GetCachedSystemCountOnGrid(long gridEntityId)
         {
             int count;
-            if (!Mod.GridSystemCountCache.TryGetValue(gridEntityId, out count))
+            if (!Mod.GridSystemCount.TryGetValue(gridEntityId, out count))
                 return 0;
 
             // Subtract this system's contribution (mirrors the old "if (system == this) continue" logic).
@@ -352,7 +351,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             _saturatedGridIds.Clear();
             var limit = Mod.Settings.MaxSystemsPerTargetGrid;
-            foreach (var kvp in Mod.GridSystemCountCache)
+            foreach (var kvp in Mod.GridSystemCount)
             {
                 if (kvp.Value > limit)
                     _saturatedGridIds.Add(kvp.Key);

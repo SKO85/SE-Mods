@@ -39,6 +39,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
            comparer: new MyTupleComparer<long, long>(),
            capacity: 100);
 
+        public static int GridCacheCount { get { return GridIntersectingZones.Count; } }
+        public static int BlockCacheCount { get { return BlockIntersectingZones.Count; } }
+        public static int GrindCacheCount { get { return ProtectedFromGrindingCache.Count; } }
+
         #region Registration
 
         private static bool _registered = false;

@@ -122,7 +122,9 @@
     <Compile Include="Cluster\ScanClusterCoordinator.cs" />
     <Compile Include="Cluster\ScanClusterResult.cs" />
     <Compile Include="Handlers\BlockSystemAssigningHandler.cs" />
+    <Compile Include="Handlers\HudHandler.cs" />
     <Compile Include="Handlers\SafeZoneHandler.cs" />
+    <Compile Include="Mods\HudAPIv2.cs" />
     <Compile Include="Helpers\DlcCheckHelper.cs" />
     <Compile Include="Helpers\InventoryHelper.cs" />
     <Compile Include="Localization\TextsPolish.cs" />

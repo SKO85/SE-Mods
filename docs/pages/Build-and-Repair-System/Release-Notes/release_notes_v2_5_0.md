@@ -1,14 +1,15 @@
 ---
 layout: default
-title: 'Release Notes – v2.5.0'
+title: 'Pre-Release Notes – v2.5.0'
 parent: Release Notes
 grand_parent: Build and Repair System
 nav_order: 1
 ---
 
-# Release Notes – v2.5.0
+# Pre-Release Notes – v2.5.0 (UNRELEASED)
 
-- Release date: March 2026
+- Status: **Pre-release** — this version is under active development and has not been published yet. Features and details are subject to change.
+- Expected release: End of March 2026
 - Notes: Major performance and stability release. Focused on server performance with many active Build and Repair systems, bug fixes, and quality-of-life improvements.
 
 > **Note:** This release also includes all changes from [v2.4.5](release_notes_v2_4_5), which was not separately published. Please review those notes as well for a complete picture of what changed since v2.4.4.
@@ -132,6 +133,19 @@ The system now supports a wider range of block types as inventory sources (to pu
 
 A new `DebugMode` option can be set in `ModSettings.xml` to show additional diagnostic information in the terminal custom info panel, such as scan timings, target counts, and internal state. This is intended for testing and debugging purposes only — it is not a per-block setting and should not be left enabled in normal play.
 
+### Debug HUD Overlay (Requires BuildInfo Mod)
+
+When `DebugMode` is enabled or a profiling session is active, admins see a real-time HUD overlay with comprehensive system statistics. The overlay requires the [BuildInfo](https://steamcommunity.com/sharedfiles/filedetails/?id=514062285) mod to be installed (soft dependency — the mod works fine without it, the overlay simply won't appear).
+
+The HUD shows:
+- **System status:** Active/total BaR count, percentage working, activity breakdown (welding, grinding, collecting, idle, off), transporting, inventory full, component starved, safe zone blocked
+- **Work & search modes:** Per-mode counts with percentages
+- **Targets:** Unique weld/grind/float targets across all clusters
+- **Performance:** Cluster count, stagger groups, grind budget utilisation (with CAPPED indicator), sim speed, background task activity, scan age, empty grid cache
+- **Assignments & caches:** Block reservation count, cache sizes for safe zones, ownership, and block priority
+
+The overlay is admin-only (Admin, SpaceMaster, or Owner promote level) and updates every 2 seconds. When a profiling session is running, the overlay additionally shows recording status and elapsed time.
+
 ### Work Mode Fallthrough
 
 In **Weld Before Grind** and **Grind Before Weld** modes, if no actionable targets exist for the primary mode the system now falls through to the secondary mode instead of going idle. This means the block will always find work if any valid target exists, regardless of which mode has priority.
@@ -232,6 +246,10 @@ Deselecting a sort option (Nearest, Farthest, Smallest Grid) in the terminal cou
 ### Safe Zone Cluster Split
 
 When a grid straddles a Safe Zone boundary, some Build and Repair blocks may be inside the zone and others outside. Previously, all blocks on the same grid shared a single scan coordinator. If the coordinator happened to be inside the Safe Zone, it could prevent the other blocks from finding valid targets. The system now creates separate clusters for blocks inside and outside Safe Zones, so each group has a coordinator that matches its permissions.
+
+### Per-Grid System Limit Not Enforced Correctly
+
+The `MaxSystemsPerTargetGrid` limit could be exceeded — for example, 30+ blocks welding on the same grid with a limit of 20. This was caused by the grid system count cache being stale (rebuilt every 5 frames), allowing a burst of blocks to pass the limit check simultaneously. Additionally, blocks with an active lock-on bypassed the grid limit entirely. The system now uses a live counter that updates instantly when blocks start or stop targeting a grid, and lock-on blocks are also subject to the grid limit. Blocks that exceed the limit release their lock-on and move to another grid.
 
 ---
 

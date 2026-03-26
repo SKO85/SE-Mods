@@ -29,11 +29,33 @@ namespace SKONanobotBuildAndRepairSystem
         public static ShieldApi Shield; // Centralized DefenseShields API instance
 
         /// <summary>
-        /// Centralized per-tick cache: how many BaR systems are actively targeting each grid.
-        /// Built once per tick by BuildGridSystemCountCache(), read by all NanobotSystem instances.
+        /// Live counter: how many BaR systems are actively targeting each grid.
+        /// Incremented/decremented in SyncBlockState.CurrentWeldingBlock/CurrentGrindingBlock setters.
         /// </summary>
-        public static Dictionary<long, int> GridSystemCountCache = new Dictionary<long, int>();
-        private static int _lastGridCountCacheTick = -1;
+        public static ConcurrentDictionary<long, int> GridSystemCount = new ConcurrentDictionary<long, int>();
+
+        public static void IncrementGridCount(long gridId)
+        {
+            GridSystemCount.AddOrUpdate(gridId, 1, (k, v) => v + 1);
+        }
+
+        public static void DecrementGridCount(long gridId)
+        {
+            int current;
+            if (GridSystemCount.TryGetValue(gridId, out current))
+            {
+                var newVal = current - 1;
+                if (newVal <= 0)
+                {
+                    int removed;
+                    GridSystemCount.TryRemove(gridId, out removed);
+                }
+                else
+                {
+                    GridSystemCount.TryUpdate(gridId, newVal, current);
+                }
+            }
+        }
 
         // --- OPT 1: Mechanical block grind throttle ---
         // Caps mechanical connection block destructions to 1 per tick globally,
@@ -72,7 +94,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (sys.Welder != null && sys.Welder.IsWorking)
                     active++;
             }
-            if (active <= 4) return 1;
+            if (active <= 5) return 1;
             if (active <= 10) return 2;
             return StaggerGroupCountDefault;
         }
@@ -106,6 +128,11 @@ namespace SKONanobotBuildAndRepairSystem
         private static double _grindMsThisTick;
         private static int _lastGrindBudgetTick = -1;
 
+        // Peak grind usage tracking for HUD debug
+        private static int _grindPeakUsed;
+        public static int GrindBudgetPeakUsed { get { return _grindPeakUsed; } }
+        public static void ResetGrindBudgetStats() { _grindPeakUsed = 0; }
+
         public static int GetEffectiveMaxGrindsPerTick()
         {
             var configured = Settings.MaxGrindsPerTick;
@@ -127,6 +154,7 @@ namespace SKONanobotBuildAndRepairSystem
             if (_grindsThisTick >= GetEffectiveMaxGrindsPerTick()) return false;
             if (_grindMsThisTick >= MaxGrindMsPerTickDefault) return false;
             _grindsThisTick++;
+            if (_grindsThisTick > _grindPeakUsed) _grindPeakUsed = _grindsThisTick;
             return true;
         }
 
@@ -151,6 +179,20 @@ namespace SKONanobotBuildAndRepairSystem
         public const int MaxBackgroundTasks_Min = 1;
         public static Queue<Action> AsynActions = new Queue<Action>();
         private static int ActualBackgroundTaskCount = 0;
+
+        // Cumulative stats for HUD — reset by ResetBackgroundTaskStats()
+        private static int _bgTasksEnqueued;
+        private static int _bgTasksCompleted;
+        private static int _bgPeakRunning;
+
+        public static int BackgroundTasksEnqueued { get { lock (AsynActions) { return _bgTasksEnqueued; } } }
+        public static int BackgroundTasksCompleted { get { lock (AsynActions) { return _bgTasksCompleted; } } }
+        public static int BackgroundPeakRunning { get { lock (AsynActions) { return _bgPeakRunning; } } }
+
+        public static void ResetBackgroundTaskStats()
+        {
+            lock (AsynActions) { _bgTasksEnqueued = 0; _bgTasksCompleted = 0; _bgPeakRunning = ActualBackgroundTaskCount; }
+        }
 
         public void Init()
         {
@@ -185,6 +227,9 @@ namespace SKONanobotBuildAndRepairSystem
 
             // Register Chat Message Handler.
             ChatHandler.Register();
+
+            // Register HUD overlay (client-side only, soft dependency on TextHudAPI).
+            HudHandler.Register();
 
             Logging.Instance.Write("BuildAndRepairSystemMod: Initialized.");
         }
@@ -233,6 +278,9 @@ namespace SKONanobotBuildAndRepairSystem
             // Unregister Shield API message handler
             try { Shield?.Unload(); } catch { }
             Shield = null;
+
+            // Unregister HUD overlay.
+            try { HudHandler.Unregister(); } catch { }
 
             // Unregister Chat Handler.
             try { ChatHandler.Unregister(); } catch { }
@@ -358,6 +406,9 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
 
+                    // Update HUD overlay (client-side only, self-throttled).
+                    HudHandler.Update(now);
+
                     // Show some debug info on blocks we point to:
                     // BlockDebugInfo();
                 }
@@ -423,69 +474,16 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        /// <summary>
-        /// Builds the centralized grid system count cache once per tick.
-        /// Counts how many BaR systems are actively welding/grinding on each grid.
-        /// Called by NanobotSystem.ServerTryWeldingGrindingCollecting() — runs at most once per tick.
-        /// </summary>
-        public static void BuildGridSystemCountCache()
-        {
-            var tick = MyAPIGateway.Session.GameplayFrameCounter;
-            if (tick - _lastGridCountCacheTick < 5) return;
-            _lastGridCountCacheTick = tick;
-
-            var profilerTs = MethodProfiler.Start();
-            GridSystemCountCache.Clear();
-            try
-            {
-                foreach (var system in NanobotSystems.Values)
-                {
-                    long weldGridId = 0;
-                    long grindGridId = 0;
-
-                    var weldBlock = system.State.CurrentWeldingBlock;
-                    if (weldBlock != null && weldBlock.CubeGrid != null)
-                        weldGridId = weldBlock.CubeGrid.EntityId;
-
-                    var grindBlock = system.State.CurrentGrindingBlock;
-                    if (grindBlock != null && grindBlock.CubeGrid != null)
-                        grindGridId = grindBlock.CubeGrid.EntityId;
-
-                    if (weldGridId != 0)
-                    {
-                        int existing;
-                        if (GridSystemCountCache.TryGetValue(weldGridId, out existing))
-                            GridSystemCountCache[weldGridId] = existing + 1;
-                        else
-                            GridSystemCountCache[weldGridId] = 1;
-                    }
-
-                    if (grindGridId != 0 && grindGridId != weldGridId)
-                    {
-                        int existing;
-                        if (GridSystemCountCache.TryGetValue(grindGridId, out existing))
-                            GridSystemCountCache[grindGridId] = existing + 1;
-                        else
-                            GridSystemCountCache[grindGridId] = 1;
-                    }
-                }
-            }
-            finally
-            {
-                var _cacheSize = GridSystemCountCache.Count;
-                MethodProfiler.StopAndLog("Mod.BuildGridSystemCountCache", profilerTs, () =>
-                    string.Format("cachedGrids={0};totalSystems={1}", _cacheSize, NanobotSystems.Count));
-            }
-        }
-
         public static void AddAsyncAction(Action newAction)
         {
             lock (AsynActions)
             {
                 AsynActions.Enqueue(newAction);
+                _bgTasksEnqueued++;
                 if (ActualBackgroundTaskCount < Settings.MaxBackgroundTasks)
                 {
                     ActualBackgroundTaskCount++;
+                    if (ActualBackgroundTaskCount > _bgPeakRunning) _bgPeakRunning = ActualBackgroundTaskCount;
                     MyAPIGateway.Parallel.StartBackground(() =>
                     {
                         try
@@ -512,7 +510,7 @@ namespace SKONanobotBuildAndRepairSystem
                                         pendingAction();
                                     }
                                     catch { }
-                                    ;
+                                    lock (AsynActions) { _bgTasksCompleted++; }
                                 }
                             }
                         }

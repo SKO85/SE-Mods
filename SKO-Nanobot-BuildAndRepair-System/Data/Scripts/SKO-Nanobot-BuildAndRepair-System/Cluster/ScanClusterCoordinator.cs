@@ -15,6 +15,8 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
         private static Dictionary<string, ScanCluster> _clusters = new Dictionary<string, ScanCluster>();
         private static int _lastSystemCount;
 
+        public static int ClusterCount { get { return _clusters.Count; } }
+
         /// <summary>
         /// Mask of SyncBlockSettings.Settings flags that affect scan results.
         /// </summary>
