@@ -37,18 +37,18 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 sb.AppendLine();
             }
 
-            sb.AppendLine("--- Links ---");
+            sb.AppendLine("--- Documentation ---");
             sb.AppendLine();
-            sb.AppendLine("Issues: Report issues or suggestions (GitHub)");
+            sb.AppendLine("Visit the mod website for FAQ, troubleshooting, documentation,");
+            sb.AppendLine("configuration settings, release notes, and more:");
+            sb.AppendLine("https://sko85.github.io/SE-Mods");
+            sb.AppendLine();
+            sb.AppendLine("--- Support ---");
+            sb.AppendLine();
+            sb.AppendLine("Report issues, ask questions, or suggest features on GitHub:");
             sb.AppendLine("https://github.com/SKO85/SE-Mods/issues");
             sb.AppendLine();
-            sb.AppendLine("WIKI / Documentation (GitHub)");
-            sb.AppendLine("https://github.com/SKO85/SE-Mods/wiki");
-            sb.AppendLine();
-            sb.AppendLine("FAQ / Troubleshooting (GitHub)");
-            sb.AppendLine("https://github.com/SKO85/SE-Mods/wiki/FAQ---Frequently-Asked-Questions");
-            sb.AppendLine();
-            sb.AppendLine("Discord: Contact Developer via Discord");
+            sb.AppendLine("Join the Discord for help and discussion:");
             sb.AppendLine("https://discord.gg/5XkQW5tdQM");
             sb.AppendLine();
             sb.AppendLine("Have fun!\nSKO85");
