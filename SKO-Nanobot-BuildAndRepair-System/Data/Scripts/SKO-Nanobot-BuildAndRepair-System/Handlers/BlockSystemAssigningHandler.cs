@@ -1,4 +1,5 @@
-﻿using SKONanobotBuildAndRepairSystem.Models;
+﻿using SKONanobotBuildAndRepairSystem.Caches;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using VRage.Game.ModAPI;
 
@@ -6,12 +7,31 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 {
     public static class BlockSystemAssigningHandler
     {
-        private static TtlCache<IMySlimBlock, long> Cache = new TtlCache<IMySlimBlock, long>(TimeSpan.FromSeconds(8));
+        private static TtlCache<string, long> Cache = new TtlCache<string, long>(TimeSpan.FromSeconds(8));
+
+        public static int AssignmentCount { get { return Cache.Count; } }
+
+        private static string GetBlockKey(IMySlimBlock block)
+        {
+            return string.Format("{0}:{1}", block.CubeGrid.EntityId, block.Position);
+        }
+
+        public static bool IsAssignedToOtherSystem(this IMySlimBlock block, long systemId)
+        {
+            var key = GetBlockKey(block);
+            long assignedSystemId;
+            if (Cache.TryGet(key, out assignedSystemId))
+            {
+                return assignedSystemId != systemId;
+            }
+            return false;
+        }
 
         public static bool AssignToSystem(this IMySlimBlock block, long systemId)
         {
+            var key = GetBlockKey(block);
             long assignedSystemId;
-            if (Cache.TryGet(block, out assignedSystemId))
+            if (Cache.TryGet(key, out assignedSystemId))
             {
                 // Already assigned to this system.
                 if (assignedSystemId == systemId)
@@ -24,18 +44,20 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
 
             // Assign to this system.
-            Cache.Set(block, systemId);
+            Cache.Set(key, systemId, TimeSpan.FromSeconds(Mod.Settings.AssignmentTtlSeconds));
             return true;
         }
 
         public static void ReleaseFromSystem(this IMySlimBlock block)
         {
-            Cache.Remove(block);
+            Cache.Remove(GetBlockKey(block));
         }
 
         public static void Cleanup()
         {
+            var profilerTs = MethodProfiler.Start();
             Cache.CleanupExpired();
+            MethodProfiler.StopAndLog("BlockSystemAssigningHandler.Cleanup", profilerTs);
         }
 
         public static void Clear()

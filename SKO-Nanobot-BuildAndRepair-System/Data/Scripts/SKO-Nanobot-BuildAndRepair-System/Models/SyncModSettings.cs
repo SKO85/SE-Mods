@@ -12,7 +12,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
     [ProtoContract(SkipConstructor = true, UseProtoMembersOnly = true)]
     public class SyncModSettings
     {
-        private const int CurrentSettingsVersion = 6;
+        private const int CurrentSettingsVersion = 7;
 
         [ProtoMember(2000), XmlElement]
         public int Version { get; set; }
@@ -96,13 +96,53 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(30), XmlElement]
         public bool AssignToSystemEnabled { get; set; }
 
+        /// <summary>
+        /// Enables debug information in the terminal custom info panel
+        /// (sources, push targets, cluster details).
+        /// </summary>
+        [ProtoMember(35), XmlElement]
+        public bool DebugMode { get; set; }
+
+        /// <summary>
+        /// After scanning a grid and finding no weld or grind targets, skip it for this
+        /// many seconds before rescanning. Sub-grid connections are always traversed.
+        /// 0 = disabled. Range: 0-300.
+        /// </summary>
+        [ProtoMember(36), XmlElement]
+        public int EmptyGridRescanDelaySeconds { get; set; }
+
+        /// <summary>
+        /// Maximum stagger groups for distributing BaR updates across ticks.
+        /// 0 = auto (scales with total BaR count). Range: 0-10.
+        /// Higher values spread work across more ticks (less CPU per tick, slower response).
+        /// </summary>
+        [ProtoMember(37), XmlElement]
+        public int StaggerGroupCount { get; set; }
+
+        /// <summary>
+        /// Global cap on ServerDoGrind calls per tick across all BaRs.
+        /// 0 = auto (scales with total BaR count). Range: 0-100.
+        /// Higher values allow faster grinding but cost more CPU per tick.
+        /// </summary>
+        [ProtoMember(38), XmlElement]
+        public int MaxGrindsPerTick { get; set; }
+
+        /// <summary>
+        /// How long (seconds) a block assignment reservation is held before expiring.
+        /// Prevents two BaRs from targeting the same block. Lower = faster slot recycling
+        /// when BaRs disconnect. Higher = more protection against assignment steals.
+        /// Range: 2-30. Default: 8.
+        /// </summary>
+        [ProtoMember(39), XmlElement]
+        public int AssignmentTtlSeconds { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
             LogLevel = Logging.Level.Error; //Default
             MaxBackgroundTasks = Mod.MaxBackgroundTasks_Default;
             TargetsUpdateInterval = TimeSpan.FromSeconds(10);
-            SourcesUpdateInterval = TimeSpan.FromSeconds(60);
+            SourcesUpdateInterval = TimeSpan.FromSeconds(30);
             FriendlyDamageTimeout = TimeSpan.FromSeconds(60);
             FriendlyDamageCleanup = TimeSpan.FromSeconds(10);
             Range = NanobotSystem.WELDER_RANGE_DEFAULT_IN_M;
@@ -114,8 +154,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
             ShieldCheckEnabled = true;
             DecreaseFactionReputationOnGrinding = true;
             DeleteBotsWhenDead = true;
-            MaxSystemsPerTargetGrid = 10;
+            MaxSystemsPerTargetGrid = 0;
             AssignToSystemEnabled = true;
+            DebugMode = false;
+            EmptyGridRescanDelaySeconds = 20;
+            StaggerGroupCount = 0;
+            MaxGrindsPerTick = 0;
+            AssignmentTtlSeconds = 8;
         }
 
         public static SyncModSettings Load()
@@ -137,6 +182,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
                         settings = MyAPIGateway.Utilities.SerializeFromXML<SyncModSettings>(reader.ReadToEnd());
                     }
                 }
+
+                Mod.CustomSettingsLoaded = settings != null;
 
                 if (settings != null)
                 {
@@ -196,13 +243,62 @@ namespace SKONanobotBuildAndRepairSystem.Models
                         adjusted = true;
                     }
 
+                    if (settings.EmptyGridRescanDelaySeconds < 0)
+                    {
+                        settings.EmptyGridRescanDelaySeconds = 0;
+                        adjusted = true;
+                    }
+                    else if (settings.EmptyGridRescanDelaySeconds > 300)
+                    {
+                        settings.EmptyGridRescanDelaySeconds = 300;
+                        adjusted = true;
+                    }
+
+                    if (settings.StaggerGroupCount < 0)
+                    {
+                        settings.StaggerGroupCount = 0;
+                        adjusted = true;
+                    }
+                    else if (settings.StaggerGroupCount > 10)
+                    {
+                        settings.StaggerGroupCount = 10;
+                        adjusted = true;
+                    }
+
+                    if (settings.MaxGrindsPerTick < 0)
+                    {
+                        settings.MaxGrindsPerTick = 0;
+                        adjusted = true;
+                    }
+                    else if (settings.MaxGrindsPerTick > 100)
+                    {
+                        settings.MaxGrindsPerTick = 100;
+                        adjusted = true;
+                    }
+
+                    if (settings.AssignmentTtlSeconds < 2)
+                    {
+                        settings.AssignmentTtlSeconds = 2;
+                        adjusted = true;
+                    }
+                    else if (settings.AssignmentTtlSeconds > 30)
+                    {
+                        settings.AssignmentTtlSeconds = 30;
+                        adjusted = true;
+                    }
+
                     Logging.Instance.Write(Logging.Level.Info, "NanobotBuildAndRepairSystemSettings: Settings {0}", settings);
-                    //if (adjusted) Save(settings, world); don't save file
                 }
                 else
                 {
                     settings = new SyncModSettings() { Version = CurrentSettingsVersion };
-                    //Save(settings, world); don't save file with default values
+                }
+
+                // Apply dynamic default for MaxSystemsPerTargetGrid based on game type.
+                // 0 = no explicit value set → use 30 for local, 15 for multiplayer.
+                if (settings.MaxSystemsPerTargetGrid <= 0)
+                {
+                    settings.MaxSystemsPerTargetGrid = MyAPIGateway.Multiplayer.MultiplayerActive ? 10 : 20;
                 }
             }
             catch (Exception ex)
@@ -243,7 +339,6 @@ namespace SKONanobotBuildAndRepairSystem.Models
             if (settings.Version <= 4 && settings.Welder.WeldingMultiplier == 0) settings.Welder.WeldingMultiplier = 1;
             if (settings.Version <= 4 && settings.Welder.GrindingMultiplier == 0) settings.Welder.GrindingMultiplier = 1;
             if (settings.Version <= 5 && settings.Welder.AllowedGrindJanitorRelations == 0) settings.Welder.AllowedGrindJanitorRelations = AutoGrindRelation.NoOwnership | AutoGrindRelation.Enemies | AutoGrindRelation.Neutral;
-
             settings.Version = CurrentSettingsVersion;
             return true;
         }

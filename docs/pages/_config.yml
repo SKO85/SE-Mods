@@ -1,0 +1,10 @@
+title: SKO Space Engineers Mods
+description: Documentation for SKO Space Engineers mods
+theme: just-the-docs
+
+exclude:
+  - run.bat
+
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap

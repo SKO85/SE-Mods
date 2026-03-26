@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="utf-16"?>
+<SyncModSettings xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+    <!-- Internal schema version. Do not change. -->
+    <Version>7</Version>
+
+    <!-- Set to true to disable localisation and force English for all players. -->
+    <DisableLocalization>false</DisableLocalization>
+
+    <!-- How much detail is written to the game log.
+         Values: Error, Warning, Info, Debug.
+         Use Debug only when troubleshooting — it generates a large amount of output. -->
+    <LogLevel>Error</LogLevel>
+
+    <!-- Maximum working range in metres. Blocks, projections, and floating objects outside
+         this radius are ignored. -->
+    <Range>100</Range>
+
+    <!-- How long a friendly-damage record is kept before it expires, in TimeSpan ticks
+         (1 tick = 100 nanoseconds). Default 600000000 = 60 seconds. -->
+    <FriendlyDamageTimeoutTicks>600000000</FriendlyDamageTimeoutTicks>
+
+    <!-- Interval between friendly-damage record cleanup passes, in TimeSpan ticks
+         (1 tick = 100 nanoseconds). Default 100000000 = 10 seconds. -->
+    <FriendlyDamageCleanupTicks>100000000</FriendlyDamageCleanupTicks>
+
+    <!-- Maximum power draw during item transport in MW (default 0.1 = 100 kW).
+         Actual draw scales with activity. -->
+    <MaximumRequiredElectricPowerTransport>0.1</MaximumRequiredElectricPowerTransport>
+
+    <!-- Maximum power draw while idle/standby in MW (default 0.05 = 50 kW).
+         Actual draw scales with activity. -->
+    <MaximumRequiredElectricPowerStandby>0.05</MaximumRequiredElectricPowerStandby>
+
+    <Welder>
+        <!-- Maximum power draw while welding in MW (default 0.2 = 200 kW). -->
+        <MaximumRequiredElectricPowerWelding>0.2</MaximumRequiredElectricPowerWelding>
+
+        <!-- Maximum power draw while grinding in MW (default 0.2 = 200 kW). -->
+        <MaximumRequiredElectricPowerGrinding>0.2</MaximumRequiredElectricPowerGrinding>
+
+        <!-- Welding speed multiplier. 1 = default speed, 2 = double, 0.5 = half. -->
+        <WeldingMultiplier>1</WeldingMultiplier>
+
+        <!-- Grinding speed multiplier. 1 = default speed, 2 = double, 0.5 = half. -->
+        <GrindingMultiplier>1</GrindingMultiplier>
+
+        <!-- Space-separated list of search modes available to players in the terminal.
+             Remove a value to hide that mode entirely.
+             Values: Grids, BoundingBox. -->
+        <AllowedSearchModes>Grids BoundingBox</AllowedSearchModes>
+
+        <!-- Default search mode applied when a block is first placed or reset.
+             Values: Grids, BoundingBox. -->
+        <SearchModeDefault>Grids</SearchModeDefault>
+
+        <!-- When true, the AllowBuild (weld projected blocks) option is locked server-wide
+             and players cannot change it from the terminal. -->
+        <AllowBuildFixed>false</AllowBuildFixed>
+
+        <!-- Default state of the AllowBuild (weld projected blocks) option. -->
+        <AllowBuildDefault>true</AllowBuildDefault>
+
+        <!-- Space-separated list of work modes available to players in the terminal.
+             Remove a value to hide that mode.
+             Values: WeldBeforeGrind, GrindBeforeWeld, GrindIfWeldGetStuck, WeldOnly, GrindOnly. -->
+        <AllowedWorkModes>WeldBeforeGrind GrindBeforeWeld GrindIfWeldGetStuck WeldOnly GrindOnly</AllowedWorkModes>
+
+        <!-- Default work mode applied when a block is first placed or reset.
+             Values: WeldBeforeGrind, GrindBeforeWeld, GrindIfWeldGetStuck, WeldOnly, GrindOnly. -->
+        <WorkModeDefault>WeldBeforeGrind</WorkModeDefault>
+
+        <!-- When true, the Use Ignore Color option is locked server-wide. -->
+        <UseIgnoreColorFixed>false</UseIgnoreColorFixed>
+
+        <!-- Default state of the Use Ignore Color option. When true, blocks painted with
+             IgnoreColorDefault are skipped during welding. -->
+        <UseIgnoreColorDefault>true</UseIgnoreColorDefault>
+
+        <!-- Default ignore color as HSV: Hue (0–360), Saturation (0–100), Value (0–100). -->
+        <IgnoreColorDefault>
+            <float>321</float>
+            <float>100</float>
+            <float>51</float>
+        </IgnoreColorDefault>
+
+        <!-- When true, the Use Grind Color option is locked server-wide. -->
+        <UseGrindColorFixed>false</UseGrindColorFixed>
+
+        <!-- Default state of the Use Grind Color option. When true, blocks painted with
+             GrindColorDefault are treated as grind targets. -->
+        <UseGrindColorDefault>true</UseGrindColorDefault>
+
+        <!-- Default grind color as HSV: Hue (0–360), Saturation (0–100), Value (0–100). -->
+        <GrindColorDefault>
+            <float>321</float>
+            <float>100</float>
+            <float>50</float>
+        </GrindColorDefault>
+
+        <!-- When true, all Grind Janitor settings are locked server-wide. -->
+        <UseGrindJanitorFixed>false</UseGrindJanitorFixed>
+
+        <!-- Default ownership categories the Grind Janitor targets automatically.
+             Space-separated. Values: NoOwnership, Neutral, Enemies. -->
+        <UseGrindJanitorDefault>NoOwnership Enemies</UseGrindJanitorDefault>
+
+        <!-- Additional Grind Janitor option flags applied by default. Leave empty for full grind.
+             Values: DisableOnly (grind only to non-functional), HackOnly (grind only to hackable). -->
+        <GrindJanitorOptionsDefault />
+
+        <!-- Ownership categories players may enable for the Grind Janitor.
+             Remove a value to hide that option from the terminal.
+             Values: NoOwnership, Neutral, Enemies. -->
+        <AllowedGrindJanitorRelations>NoOwnership Neutral Enemies</AllowedGrindJanitorRelations>
+
+        <!-- When true, the Show Work Area toggle is locked server-wide. -->
+        <ShowAreaFixed>false</ShowAreaFixed>
+
+        <!-- When true, work area size sliders are locked server-wide. -->
+        <AreaSizeFixed>false</AreaSizeFixed>
+
+        <!-- When true, work area offset controls are locked server-wide. -->
+        <AreaOffsetFixed>false</AreaOffsetFixed>
+
+        <!-- When true, the weld and grind priority lists are locked server-wide. -->
+        <PriorityFixed>false</PriorityFixed>
+
+        <!-- When true, the collect priority list is locked server-wide. -->
+        <CollectPriorityFixed>false</CollectPriorityFixed>
+
+        <!-- When true, the Push Ingots/Ore Immediately option is locked server-wide. -->
+        <PushIngotOreImmediatelyFixed>false</PushIngotOreImmediatelyFixed>
+
+        <!-- Default state of the Push Ingots/Ore Immediately option. When true, ingots and ore
+             are immediately pushed to connected inventories after collection. -->
+        <PushIngotOreImmediatelyDefault>true</PushIngotOreImmediatelyDefault>
+
+        <!-- When true, the Push Components Immediately option is locked server-wide. -->
+        <PushComponentImmediatelyFixed>false</PushComponentImmediatelyFixed>
+
+        <!-- Default state of the Push Components Immediately option. When true, components
+             are immediately pushed to connected inventories. -->
+        <PushComponentImmediatelyDefault>true</PushComponentImmediatelyDefault>
+
+        <!-- When true, the Push Items Immediately option is locked server-wide. -->
+        <PushItemsImmediatelyFixed>false</PushItemsImmediatelyFixed>
+
+        <!-- Default state of the Push Items Immediately option. -->
+        <PushItemsImmediatelyDefault>true</PushItemsImmediatelyDefault>
+
+        <!-- When true, the Collect If Idle option is locked server-wide. -->
+        <CollectIfIdleFixed>false</CollectIfIdleFixed>
+
+        <!-- Default state of the Collect If Idle option. When true, the block collects floating
+             objects even when there is no welding or grinding work to do. -->
+        <CollectIfIdleDefault>false</CollectIfIdleDefault>
+
+        <!-- When true, the sound volume setting is locked server-wide. -->
+        <SoundVolumeFixed>false</SoundVolumeFixed>
+
+        <!-- Default sound volume for the block. Range: 0.0 (silent) – 1.0 (full volume). -->
+        <SoundVolumeDefault>1</SoundVolumeDefault>
+
+        <!-- When true, the Script Control option is locked server-wide and players cannot
+             enable script-controlled mode from the terminal. -->
+        <ScriptControlFixed>false</ScriptControlFixed>
+
+        <!-- Space-separated list of effect types the system may produce. Remove an entry to
+             disable that effect globally — players will not be able to enable it from the terminal.
+             Values: WeldingVisualEffect, WeldingSoundEffect, GrindingVisualEffect,
+             GrindingSoundEffect, TransportVisualEffect. -->
+        <AllowedEffects>WeldingVisualEffect WeldingSoundEffect GrindingVisualEffect
+            GrindingSoundEffect TransportVisualEffect</AllowedEffects>
+    </Welder>
+
+    <!-- Maximum number of background scan tasks that may run in parallel across all blocks
+         on the server. Reduce to lower CPU impact on large servers. -->
+    <MaxBackgroundTasks>4</MaxBackgroundTasks>
+
+    <!-- Maximum distance in metres the work area can be offset from the block's position
+         via the terminal. Min: 0. -->
+    <MaximumOffset>200</MaximumOffset>
+
+    <!-- When true, the system respects Safe Zone rules before welding, grinding, or building
+         projections. Set to false to disable the check entirely. -->
+    <SafeZoneCheckEnabled>true</SafeZoneCheckEnabled>
+
+    <!-- When true, grids protected by an active Defence Shield are skipped.
+         Set to false to disable the check. -->
+    <ShieldCheckEnabled>true</ShieldCheckEnabled>
+
+    <!-- When true, grinding grids belonging to other factions or NPCs causes a reputation
+         penalty, matching the behaviour of manual grinding. -->
+    <DecreaseFactionReputationOnGrinding>true</DecreaseFactionReputationOnGrinding>
+
+    <!-- When true, NPC bot bodies are deleted when they die, preventing world clutter. -->
+    <DeleteBotsWhenDead>true</DeleteBotsWhenDead>
+
+    <!-- Set to true to silence the ticking/unable sound for all blocks and all players. -->
+    <DisableTickingSound>false</DisableTickingSound>
+
+    <!-- Set to true to disable flying nanobot particle effects globally. Individual blocks
+         can also toggle this in the terminal unless this setting forces it off. -->
+    <DisableParticleEffects>false</DisableParticleEffects>
+
+    <!-- Set to true to remove the per-grid system limit entirely (ignores MaxSystemsPerTargetGrid). -->
+    <DisableLimitSystemsPerTargetGrid>false</DisableLimitSystemsPerTargetGrid>
+
+    <!-- Maximum number of Build and Repair blocks that may work on the same target grid
+         simultaneously. Prevents many systems piling onto one grid while nearby grids are
+         ignored. Defaults to 10 on dedicated servers and 20 in local/listen-server games
+         when omitted; setting it here overrides whichever default applies. Range: 1–100. -->
+    <MaxSystemsPerTargetGrid>20</MaxSystemsPerTargetGrid>
+
+    <!-- When true, weld and grind targets are assigned to individual systems so multiple
+         blocks divide work instead of all targeting the same block. Set to false to disable. -->
+    <AssignToSystemEnabled>true</AssignToSystemEnabled>
+
+    <!-- When true, the terminal custom info panel shows extra diagnostic information for all
+         Build and Repair blocks (sources, push targets, cluster details, scan timings).
+         Intended for testing and troubleshooting only — not for normal play. -->
+    <DebugMode>false</DebugMode>
+
+    <!-- After a grid is found to have no weld or grind targets, skip scanning it for this many
+         seconds. Set to 0 to disable. Sub-grid connections (connectors, pistons, rotors) are
+         always traversed so newly docked ships are never missed. Range: 0–300. -->
+    <EmptyGridRescanDelaySeconds>20</EmptyGridRescanDelaySeconds>
+
+    <!-- Controls how many stagger groups are used to distribute Build and Repair updates
+         across ticks. 0 = automatic (scales with block count). Higher values spread the
+         load more but increase delay between each block's updates. Range: 0–10. -->
+    <StaggerGroupCount>0</StaggerGroupCount>
+
+    <!-- Maximum number of grind operations across all blocks per tick. 0 = automatic
+         (scales with block count, min 5, max 10). Higher values allow faster grinding
+         but use more CPU per tick. Range: 0–100. -->
+    <MaxGrindsPerTick>0</MaxGrindsPerTick>
+
+    <!-- How long (seconds) a block assignment reservation is held before expiring.
+         Prevents two systems from targeting the same block. Lower = faster recycling
+         when systems disconnect. Higher = more protection against assignment steals.
+         Range: 2–30. -->
+    <AssignmentTtlSeconds>8</AssignmentTtlSeconds>
+</SyncModSettings>

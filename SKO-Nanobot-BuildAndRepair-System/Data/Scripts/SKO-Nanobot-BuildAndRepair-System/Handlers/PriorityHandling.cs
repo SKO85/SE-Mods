@@ -70,7 +70,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             var itemKey = GetItemKey(a, false);
             if (_HashDirty) UpdateHash();
-            return _PrioHash[itemKey];
+            int prio;
+            if (_PrioHash.TryGetValue(itemKey, out prio))
+                return prio;
+            return int.MaxValue;
         }
 
         /// <summary>
@@ -80,7 +83,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             var itemKey = GetItemKey(a, true);
             if (_HashDirty) UpdateHash();
-            return _PrioHash[itemKey] < int.MaxValue;
+            int prio;
+            if (_PrioHash.TryGetValue(itemKey, out prio))
+                return prio < int.MaxValue;
+            return false;
         }
 
         /// <summary>
@@ -209,6 +215,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             {
                 entry.Enabled = enabled;
             }
+            _HashDirty = true;
+        }
+
+        internal void ResetToDefaultOrder()
+        {
+            Sort((a, b) => a.PrioItem.Key.CompareTo(b.PrioItem.Key));
             _HashDirty = true;
         }
 

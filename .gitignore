@@ -346,10 +346,11 @@ healthchecksdb
 .vscode/
 .claude/
 
-# Jekyll (docs/)
-docs/_site/
-docs/.jekyll-cache/
-docs/.jekyll-metadata
-docs/Gemfile.lock
-docs/.bundle/
-docs/vendor/
+# Planning / tracking docs (local only)
+docs/plan/
+
+# Temporary files from testing / debugging
+_temp/
+
+# Ignore Claude MD file for now.
+CLAUDE.md

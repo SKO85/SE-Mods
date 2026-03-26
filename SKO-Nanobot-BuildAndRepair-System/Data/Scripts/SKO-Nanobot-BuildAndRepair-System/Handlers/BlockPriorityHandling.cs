@@ -1,4 +1,4 @@
-using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Caches;
 using System;
 using VRage.Game.ModAPI;
 
@@ -23,7 +23,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         DisplayPanel,
         Lighting,
         SensorDevice,
-        CommunicationBlock
+        CommunicationBlock,
+        Connector,
+        MergeBlock
     }
 
     public enum ComponentClass
@@ -38,7 +40,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
     public class BlockPriorityHandling : PriorityHandling<PrioItem, IMySlimBlock>
     {
         public static readonly TtlCache<long, int> GetItemKeyCache = new TtlCache<long, int>(
-          defaultTtl: TimeSpan.FromMinutes(5),
+          defaultTtl: TimeSpan.FromSeconds(30),
           concurrencyLevel: 4,
           comparer: null,
           capacity: 1024);
@@ -63,9 +65,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             if (block == null)
                 return (int)BlockClass.ArmorBlock;
 
-            // Check cache.
+            // Check cache. Negate key when real=false so both variants are cached independently.
+            var cacheKey = real ? block.EntityId : -block.EntityId;
             int result = 14;
-            if (!_HashDirty && GetItemKeyCache.TryGet(block.EntityId, out result))
+            if (!_HashDirty && GetItemKeyCache.TryGet(cacheKey, out result))
             {
                 return result;
             }
@@ -92,10 +95,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             else if (block is Sandbox.ModAPI.IMyLightingBlock) result = (int)BlockClass.Lighting;
             else if (block is Sandbox.ModAPI.IMySensorBlock || block is Sandbox.ModAPI.IMyCameraBlock) result = (int)BlockClass.SensorDevice;
             else if (block is Sandbox.ModAPI.IMyRadioAntenna || block is Sandbox.ModAPI.IMyLaserAntenna) result = (int)BlockClass.CommunicationBlock;
+            else if (block is Sandbox.ModAPI.IMyShipConnector) result = (int)BlockClass.Connector;
+            else if (block is SpaceEngineers.Game.ModAPI.IMyShipMergeBlock) result = (int)BlockClass.MergeBlock;
             else if (functionalBlock != null) result = (int)BlockClass.FunctionalBlock;
             else result = (int)BlockClass.ArmorBlock;
 
-            GetItemKeyCache.Set(block.EntityId, result);
+            GetItemKeyCache.Set(cacheKey, result);
             return result;
         }
 

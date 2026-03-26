@@ -2,7 +2,6 @@
 using Sandbox.ModAPI.Weapons;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.Collections.Generic;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -37,8 +36,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             if (!_registered || MyAPIGateway.Session == null)
                 return;
 
-            // No specific unregister calls available.
-            // TODO: Check with Devs if there is a unregister call for this somewhere else.
+            // SE API limitation: No unregister methods available for damage handlers.
+            // RegisterBeforeDamageHandler/RegisterAfterDamageHandler are permanent for the session lifetime.
+            // Setting _registered = false prevents duplicate registration on reload.
 
             _registered = false;
         }
@@ -56,7 +56,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     if (target is IMyCharacter)
                     {
-                        var logicalComponent = Mod.NanobotSystems.GetValueOrDefault(info.AttackerId);
+                        NanobotSystem logicalComponent;
+                        Mod.NanobotSystems.TryGetValue(info.AttackerId, out logicalComponent);
                         if (logicalComponent != null)
                         {
                             var terminalBlock = logicalComponent.Entity as IMyTerminalBlock;

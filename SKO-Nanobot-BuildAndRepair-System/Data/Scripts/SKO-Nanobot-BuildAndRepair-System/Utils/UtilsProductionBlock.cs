@@ -44,7 +44,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 }
 
                 amount -= amountAvail;
-                if (amount <= 0) return 0; //Allready enought available
+                if (amount <= 0) return 0; //Already enough available
             }
 
             var cnt = queueSizes.Count;

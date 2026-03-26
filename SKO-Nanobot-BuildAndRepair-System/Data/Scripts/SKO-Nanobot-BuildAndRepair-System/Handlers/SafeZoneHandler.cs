@@ -1,12 +1,13 @@
 ﻿using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
-using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Caches;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using SpaceEngineers.Game.ModAPI;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
+
 using VRage;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -16,6 +17,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 {
     public static class SafeZoneHandler
     {
+        private static readonly List<MySafeZone> EmptyZoneList = new List<MySafeZone>();
+
         public static readonly ConcurrentDictionary<long, MySafeZone> Zones = new ConcurrentDictionary<long, MySafeZone>();
 
         private static readonly TtlCache<long, long> GridIntersectingZones = new TtlCache<long, long>(
@@ -30,11 +33,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
            comparer: null,
            capacity: 100);
 
-        private static readonly TtlCache<MyTuple<long, long>, bool> ProtectedFromGindingCache = new TtlCache<MyTuple<long, long>, bool>(
+        private static readonly TtlCache<MyTuple<long, long>, bool> ProtectedFromGrindingCache = new TtlCache<MyTuple<long, long>, bool>(
            defaultTtl: TimeSpan.FromSeconds(15),
            concurrencyLevel: 4,
            comparer: new MyTupleComparer<long, long>(),
            capacity: 100);
+
+        public static int GridCacheCount { get { return GridIntersectingZones.Count; } }
+        public static int BlockCacheCount { get { return BlockIntersectingZones.Count; } }
+        public static int GrindCacheCount { get { return ProtectedFromGrindingCache.Count; } }
 
         #region Registration
 
@@ -60,6 +67,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static void GetSafeZones()
         {
+            var profilerTs = MethodProfiler.Start();
             try
             {
                 HashSet<IMyEntity> safeZones = new HashSet<IMyEntity>();
@@ -70,11 +78,18 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Zones[entity.EntityId] = entity as MySafeZone;
                 }
 
+                CleanupStaleZones();
                 GridIntersectingZones.CleanupExpired();
-                ProtectedFromGindingCache.CleanupExpired();
+                ProtectedFromGrindingCache.CleanupExpired();
                 BlockIntersectingZones.CleanupExpired();
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.GetSafeZones: {0}", ex.Message); }
+            finally
+            {
+                var _zoneCount = Zones.Count;
+                MethodProfiler.StopAndLog("SafeZoneHandler.GetSafeZones", profilerTs, () =>
+                    string.Format("zones={0}", _zoneCount));
+            }
         }
 
         public static void Unregister()
@@ -90,7 +105,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             Zones?.Clear();
             GridIntersectingZones.Clear();
-            ProtectedFromGindingCache.Clear();
+            ProtectedFromGrindingCache.Clear();
             BlockIntersectingZones.Clear();
 
             _registered = false;
@@ -108,24 +123,42 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Zones[sz.EntityId] = sz;
                 }
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.OnEntityAdd: {0}", ex.Message); }
         }
 
         private static void OnEntityRemove(IMyEntity ent)
         {
             try
             {
-                if (ent is MySafeZone)
+                var sz = ent as MySafeZone;
+                if (sz != null)
                 {
-                    var sz = ent as MySafeZone;
-                    if (sz != null)
-                    {
-                        MySafeZone removed;
-                        Zones.TryRemove(sz.EntityId, out removed);
-                    }
+                    MySafeZone removed;
+                    Zones.TryRemove(sz.EntityId, out removed);
                 }
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.OnEntityRemove: {0}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Removes stale entries from the Zones dictionary (closed or marked-for-close).
+        /// Call periodically (e.g., every 100 ticks) to guard against missed OnEntityRemove events.
+        /// </summary>
+        public static void CleanupStaleZones()
+        {
+            var staleKeys = new List<long>();
+            foreach (var pair in Zones)
+            {
+                if (pair.Value == null || pair.Value.MarkedForClose || pair.Value.Closed)
+                {
+                    staleKeys.Add(pair.Key);
+                }
+            }
+            MySafeZone removed;
+            foreach (var key in staleKeys)
+            {
+                Zones.TryRemove(key, out removed);
+            }
         }
 
         /// <summary>
@@ -135,101 +168,124 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static List<MySafeZone> GetSafeZonesInRange(IMyCubeGrid targetGrid, int range, int take = 2)
         {
-            if (Zones.Count == 0) return new List<MySafeZone>();
+            if (Zones.Count == 0) return EmptyZoneList;
 
-            var zones = Zones.Values.Where(z =>
+            List<MySafeZone> result = null;
+            var gridCenter = targetGrid.WorldAABB.Center;
+            var count = 0;
+
+            foreach (var kvp in Zones)
             {
-                if (z != null && !z.Closed && !z.MarkedForClose && z.Enabled)
-                {
-                    double distance = Vector3D.Distance(targetGrid.WorldAABB.Center, z.PositionComp.WorldAABB.Center);
-                    if (distance <= range)
-                    {
-                        return true;
-                    }
-                }
+                var z = kvp.Value;
+                if (z == null || z.Closed || z.MarkedForClose || !z.Enabled)
+                    continue;
 
-                return false;
-            }).Take(take).ToList();
+                var distance = Vector3D.Distance(gridCenter, z.PositionComp.WorldAABB.Center);
+                if (distance > range)
+                    continue;
 
-            return zones;
+                if (result == null)
+                    result = new List<MySafeZone>(take);
+
+                result.Add(z);
+                count++;
+
+                if (count >= take)
+                    break;
+            }
+
+            return result ?? EmptyZoneList;
         }
 
         public static MySafeZone GetIntersectingSafeZone(IMyCubeGrid targetGrid)
         {
-            if (targetGrid == null || Zones.Count == 0)
+            var profilerTs = MethodProfiler.Start();
+            var cacheHit = false;
+            try
             {
-                return null;
-            }
-
-            long zoneId = 0;
-            if (GridIntersectingZones.TryGet(targetGrid.EntityId, out zoneId))
-            {
-                // No zone intersection.
-                if (zoneId == 0)
+                if (targetGrid == null || Zones.Count == 0)
+                {
                     return null;
-
-                // Try get the zone.
-                MySafeZone zone;
-                if (Zones.TryGetValue(zoneId, out zone))
-                {
-                    return zone;
-                }
-            }
-
-            // Get safe-zones within 300m range.
-            var zones = GetSafeZonesInRange(targetGrid, 300);
-
-            foreach (var zone in zones)
-            {
-                if (zone == null || zone.Closed || zone.MarkedForClose || !zone.Enabled)
-                {
-                    continue;
                 }
 
-                var targetIntersects = GridIntersects(targetGrid, zone);
-                if (targetIntersects)
+                long zoneId = 0;
+                if (GridIntersectingZones.TryGet(targetGrid.EntityId, out zoneId))
                 {
-                    // It intersects, so cache this and also for its subgrids.
-                    GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
-                    CacheZoneForSubGrids(targetGrid, zone.EntityId);
+                    cacheHit = true;
 
-                    // Return the intersecting zone.
-                    return zone;
-                }
-                else
-                {
-                    // Get the subgrids.
-                    var groups = new List<IMyCubeGrid>();
-                    MyAPIGateway.GridGroups.GetGroup(targetGrid, GridLinkTypeEnum.Mechanical, groups);
+                    // No zone intersection.
+                    if (zoneId == 0)
+                        return null;
 
-                    var subGridIntersects = false;
-                    foreach (var subGrid in groups)
+                    // Try get the zone.
+                    MySafeZone zone;
+                    if (Zones.TryGetValue(zoneId, out zone) && !zone.Closed && !zone.MarkedForClose && zone.Enabled)
                     {
-                        if (subGrid.EntityId == targetGrid.EntityId)
-                            continue;
+                        return zone;
+                    }
+                }
 
-                        // If a subgrid intersects, then mark the parent too and all other subgrids.
-                        if (GridIntersects(subGrid, zone))
+                // Get safe-zones within 300m range.
+                var zones = GetSafeZonesInRange(targetGrid, 300);
+
+                foreach (var zone in zones)
+                {
+                    if (zone == null || zone.Closed || zone.MarkedForClose || !zone.Enabled)
+                    {
+                        continue;
+                    }
+
+                    var targetIntersects = GridIntersects(targetGrid, zone);
+                    if (targetIntersects)
+                    {
+                        // It intersects, so cache this and also for its subgrids.
+                        GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
+                        CacheZoneForSubGrids(targetGrid, zone.EntityId);
+
+                        // Return the intersecting zone.
+                        return zone;
+                    }
+                    else
+                    {
+                        // Get the subgrids.
+                        var groups = new List<IMyCubeGrid>();
+                        MyAPIGateway.GridGroups.GetGroup(targetGrid, GridLinkTypeEnum.Mechanical, groups);
+
+                        var subGridIntersects = false;
+                        foreach (var subGrid in groups)
                         {
-                            subGridIntersects = true;
-                            GridIntersectingZones.Set(subGrid.EntityId, zone.EntityId);
-                            GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
+                            if (subGrid.EntityId == targetGrid.EntityId)
+                                continue;
 
-                            CacheZoneForSubGrids(subGrid, zone.EntityId);
-                            return zone;
+                            // If a subgrid intersects, then mark the parent too and all other subgrids.
+                            if (GridIntersects(subGrid, zone))
+                            {
+                                subGridIntersects = true;
+                                GridIntersectingZones.Set(subGrid.EntityId, zone.EntityId);
+                                GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
+
+                                CacheZoneForSubGrids(subGrid, zone.EntityId);
+                                return zone;
+                            }
+                        }
+
+                        // If no subgrid intersection found, then nothing intersects.
+                        if (!subGridIntersects)
+                        {
+                            GridIntersectingZones.Set(targetGrid.EntityId, 0);
+                            CacheZoneForSubGrids(targetGrid, 0);
                         }
                     }
-
-                    // If no subgrid intersection found, then nothing intersects.
-                    if (!subGridIntersects)
-                    {
-                        GridIntersectingZones.Set(targetGrid.EntityId, 0);
-                        CacheZoneForSubGrids(targetGrid, 0);
-                    }
                 }
-            }
 
-            return null;
+                return null;
+            }
+            finally
+            {
+                var _hit = cacheHit;
+                MethodProfiler.StopAndLog("SafeZoneHandler.GetIntersectingSafeZone", profilerTs, () =>
+                    string.Format("cacheHit={0}", _hit));
+            }
         }
 
         private static void CacheZoneForSubGrids(IMyCubeGrid targetGrid, long zoneId)
@@ -353,7 +409,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.GetActionsAllowedForSystem: {0}", ex.Message); }
 
             return response;
         }
@@ -362,12 +418,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             if (targetBlock != null && targetBlock.FatBlock != null)
             {
-                ProtectedFromGindingCache.Set(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlockId), isProtected);
+                ProtectedFromGrindingCache.Set(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlockId), isProtected);
             }
         }
 
         public static bool IsProtectedFromGrinding(IMySlimBlock targetBlock, IMyCubeBlock attackerBlock)
         {
+            var profilerTs = MethodProfiler.Start();
+            var cacheHit = false;
             try
             {
                 if (targetBlock == null) return false;
@@ -378,8 +436,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 if (targetBlock.FatBlock != null)
                 {
                     var isProtected = false;
-                    if (ProtectedFromGindingCache.TryGet(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlock.EntityId), out isProtected))
+                    if (ProtectedFromGrindingCache.TryGet(new MyTuple<long, long>(targetBlock.FatBlock.EntityId, attackerBlock.EntityId), out isProtected))
                     {
+                        cacheHit = true;
                         return isProtected;
                     }
                 }
@@ -398,15 +457,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 if (isAllowed)
                 {
-                    //if (!BlockIntersects(targetBlock, safeZone))
-                    //{
-                    //    SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
-                    //    return false;
-                    //}
-
                     if (safeZone.SafeZoneBlockId > 0)
                     {
                         var safeZoneBlock = MyEntities.GetEntityByName(safeZone.SafeZoneBlockId.ToString()) as IMySafeZoneBlock;
+
+                        if (safeZoneBlock == null)
+                        {
+                            // Entity not loaded or cast failed — default to protected to be safe.
+                            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, true);
+                            return true;
+                        }
 
                         // Relation between safeZone owner and attacker.
                         var relationSafeZoneAttacker = attackerBlock.CubeGrid.GetRelationBetweenGridAndPlayer(safeZoneBlock.OwnerId);
@@ -468,10 +528,17 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, true);
                 return true;
             }
-            catch { }
-
-            SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
-            return false;
+            catch
+            {
+                SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
+                return false;
+            }
+            finally
+            {
+                var _hit = cacheHit;
+                MethodProfiler.StopAndLog("SafeZoneHandler.IsProtectedFromGrinding", profilerTs, () =>
+                    string.Format("cacheHit={0}", _hit));
+            }
         }
     }
 }

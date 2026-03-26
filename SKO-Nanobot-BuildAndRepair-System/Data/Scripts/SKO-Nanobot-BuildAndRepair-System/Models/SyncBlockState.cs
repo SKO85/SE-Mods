@@ -16,12 +16,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
     [ProtoContract(SkipConstructor = true, UseProtoMembersOnly = true)]
     public class SyncBlockState
     {
-        public const int MaxSyncItems = 16;
+        public const int MaxSyncItems = 24;
         private bool _Ready;
         private bool _Welding;
         private bool _NeedWelding;
         private bool _Grinding;
         private bool _NeedGrinding;
+        private bool _NeedCollecting;
         private bool _Transporting;
         private bool _InventoryFull;
         private bool _LimitsExceeded;
@@ -29,6 +30,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private bool _SafeZoneAllowsBuildingProjections;
         private bool _SafeZoneAllowsGrinding;
         private bool _IsShielded;
+        private bool _SafeZoneAndShieldsChecked;
 
         private List<SyncComponents> _MissingComponentsSync;
         private List<SyncTargetEntityData> _PossibleWeldTargetsSync;
@@ -40,10 +42,19 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private Vector3D? _CurrentTransportTarget;
         private Vector3D? _LastTransportTarget;
         private bool _CurrentTransportIsPick;
+        private bool _CurrentTransportIsCollecting;
         private TimeSpan _CurrentTransportTime = TimeSpan.Zero;
         private TimeSpan _CurrentTransportStartTime = TimeSpan.Zero;
 
         public bool Changed { get; private set; }
+
+        // Delta sync: track list hashes at last transmit to skip unchanged lists.
+        private long _lastTransmittedMissingHash;
+        private long _lastTransmittedWeldHash;
+        private long _lastTransmittedGrindHash;
+        private long _lastTransmittedFloatHash;
+        private int _fullSyncCounter;
+        private const int FullSyncInterval = 5;
 
         public override string ToString()
         {
@@ -122,6 +133,20 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
         }
 
+        [ProtoMember(44)]
+        public bool NeedCollecting
+        {
+            get { return _NeedCollecting; }
+            set
+            {
+                if (value != _NeedCollecting)
+                {
+                    _NeedCollecting = value;
+                    Changed = true;
+                }
+            }
+        }
+
         [ProtoMember(6)]
         public bool Transporting
         {
@@ -146,6 +171,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 if (value != _CurrentWeldingBlock)
                 {
+                    if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
+                    {
+                        if (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
+                            Mod.DecrementGridCount(_CurrentWeldingBlock.CubeGrid.EntityId);
+                        if (value != null && value.CubeGrid != null)
+                            Mod.IncrementGridCount(value.CubeGrid.EntityId);
+                    }
                     _CurrentWeldingBlock = value;
                     Changed = true;
                 }
@@ -172,6 +204,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 if (value != _CurrentGrindingBlock)
                 {
+                    if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
+                    {
+                        if (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
+                            Mod.DecrementGridCount(_CurrentGrindingBlock.CubeGrid.EntityId);
+                        if (value != null && value.CubeGrid != null)
+                            Mod.IncrementGridCount(value.CubeGrid.EntityId);
+                    }
                     _CurrentGrindingBlock = value;
                     Changed = true;
                 }
@@ -233,6 +272,15 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
         }
 
+        /// <summary>
+        /// Server-only: true when the current pick-transport originated from collecting (not grinding).
+        /// </summary>
+        public bool CurrentTransportIsCollecting
+        {
+            get { return _CurrentTransportIsCollecting; }
+            set { _CurrentTransportIsCollecting = value; }
+        }
+
         [ProtoMember(19)]
         public TimeSpan CurrentTransportTime
         {
@@ -268,6 +316,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         {
             get
             {
+                if ((ExcludedLists & 1) != 0) return null;
                 if (_MissingComponentsSync == null)
                 {
                     if (MissingComponents != null) _MissingComponentsSync = MissingComponents.GetSyncList();
@@ -312,6 +361,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         {
             get
             {
+                if ((ExcludedLists & 2) != 0) return null;
                 if (_PossibleWeldTargetsSync == null)
                 {
                     if (PossibleWeldTargets != null) _PossibleWeldTargetsSync = PossibleWeldTargets.GetSyncList();
@@ -328,6 +378,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         {
             get
             {
+                if ((ExcludedLists & 4) != 0) return null;
                 if (_PossibleGrindTargetsSync == null)
                 {
                     if (PossibleGrindTargets != null) _PossibleGrindTargetsSync = PossibleGrindTargets.GetSyncList();
@@ -344,6 +395,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         {
             get
             {
+                if ((ExcludedLists & 8) != 0) return null;
                 if (_PossibleFloatingTargetsSync == null)
                 {
                     if (PossibleFloatingTargets != null) _PossibleFloatingTargetsSync = PossibleFloatingTargets.GetSyncList();
@@ -409,6 +461,15 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
         }
 
+        public bool SafeZoneAndShieldsChecked
+        {
+            get { return _SafeZoneAndShieldsChecked; }
+            set { _SafeZoneAndShieldsChecked = value; }
+        }
+
+        [ProtoMember(50)]
+        public byte ExcludedLists { get; set; }
+
         public SyncBlockState()
         {
             MissingComponents = new DefinitionIdHashDictionary();
@@ -429,13 +490,79 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
         internal SyncBlockState GetTransmit()
         {
+            // Delta sync: skip lists whose hash hasn't changed since last transmit.
+            // Every FullSyncInterval transmits, force full data to correct any drift.
+            _fullSyncCounter++;
+            var forceFull = _fullSyncCounter >= FullSyncInterval;
+            if (forceFull) _fullSyncCounter = 0;
+
+            byte excluded = 0;
             _MissingComponentsSync = null;
             _PossibleWeldTargetsSync = null;
             _PossibleGrindTargetsSync = null;
             _PossibleFloatingTargetsSync = null;
+
+            if (!forceFull)
+            {
+                var missingHash = MissingComponents.CurrentHash;
+                if (missingHash == _lastTransmittedMissingHash)
+                {
+                    excluded |= 1;
+                }
+                else
+                {
+                    _lastTransmittedMissingHash = missingHash;
+                }
+
+                var weldHash = PossibleWeldTargets.CurrentHash;
+                if (weldHash == _lastTransmittedWeldHash)
+                {
+                    excluded |= 2;
+                }
+                else
+                {
+                    _lastTransmittedWeldHash = weldHash;
+                }
+
+                var grindHash = PossibleGrindTargets.CurrentHash;
+                if (grindHash == _lastTransmittedGrindHash)
+                {
+                    excluded |= 4;
+                }
+                else
+                {
+                    _lastTransmittedGrindHash = grindHash;
+                }
+
+                var floatHash = PossibleFloatingTargets.CurrentHash;
+                if (floatHash == _lastTransmittedFloatHash)
+                {
+                    excluded |= 8;
+                }
+                else
+                {
+                    _lastTransmittedFloatHash = floatHash;
+                }
+            }
+            else
+            {
+                // Full sync — update all hashes
+                _lastTransmittedMissingHash = MissingComponents.CurrentHash;
+                _lastTransmittedWeldHash = PossibleWeldTargets.CurrentHash;
+                _lastTransmittedGrindHash = PossibleGrindTargets.CurrentHash;
+                _lastTransmittedFloatHash = PossibleFloatingTargets.CurrentHash;
+            }
+
+            ExcludedLists = excluded;
             LastTransmitted = MyAPIGateway.Session.ElapsedPlayTime;
             Changed = false;
             return this;
+        }
+
+        internal void ForceFullTransmit()
+        {
+            Changed = true;
+            _fullSyncCounter = FullSyncInterval; // Next transmit will be full
         }
 
         internal void AssignReceived(SyncBlockState newState)
@@ -445,6 +572,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _NeedWelding = newState.NeedWelding;
             _Grinding = newState.Grinding;
             _NeedGrinding = newState.NeedGrinding;
+            _NeedCollecting = newState.NeedCollecting;
             _Transporting = newState.Transporting;
             _InventoryFull = newState.InventoryFull;
             _LimitsExceeded = newState.LimitsExceeded;
@@ -456,90 +584,108 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _CurrentTransportTarget = newState.CurrentTransportTarget;
             _CurrentTransportIsPick = newState.CurrentTransportIsPick;
 
-            MissingComponents.Clear();
-            var missingComponentsSync = newState.MissingComponentsSync;
-            if (missingComponentsSync != null)
+            // Delta sync: ExcludedLists bits indicate which lists were omitted
+            // because they haven't changed. Keep existing client data for those.
+            var excluded = newState.ExcludedLists;
+
+            if ((excluded & 1) == 0)
             {
-                foreach (var item in missingComponentsSync)
+                MissingComponents.Clear();
+                var missingComponentsSync = newState.MissingComponentsSync;
+                if (missingComponentsSync != null)
                 {
-                    MissingComponents.Add(item.Component, item.Amount);
+                    foreach (var item in missingComponentsSync)
+                    {
+                        MissingComponents.Add(item.Component, item.Amount);
+                    }
                 }
             }
 
-            PossibleWeldTargets.Clear();
-            var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
-
-            if (possibleWeldTargetsSync != null)
+            if ((excluded & 2) == 0)
             {
-                foreach (var item in possibleWeldTargetsSync)
-                {
-                    if (item.Entity == null)
-                        continue;
+                PossibleWeldTargets.Clear();
+                var possibleWeldTargetsSync = newState.PossibleWeldTargetsSync;
 
-                    if (item.Entity.EntityId == 0)
+                if (possibleWeldTargetsSync != null)
+                {
+                    foreach (var item in possibleWeldTargetsSync)
                     {
-                        IMyEntity gridEntity;
-                        if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
+                        if (item.Entity == null)
+                            continue;
+
+                        if (item.Entity.EntityId == 0)
                         {
-                            var grid = gridEntity as IMyCubeGrid;
-                            var block = grid?.GetCubeBlock(item.Entity.Position.Value);
-                            if (block != null)
+                            if (!item.Entity.Position.HasValue) continue;
+                            IMyEntity gridEntity;
+                            if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
                             {
-                                PossibleWeldTargets.Add(new TargetBlockData(block, item.Distance, 0));
+                                var grid = gridEntity as IMyCubeGrid;
+                                var block = grid?.GetCubeBlock(item.Entity.Position.Value);
+                                if (block != null)
+                                {
+                                    PossibleWeldTargets.Add(new TargetBlockData(block, item.Distance, 0));
+                                }
                             }
                         }
-                    }
-                    else
-                    {
-                        var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                        if (slimBlock != null)
-                            PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
-                    }
-                }
-            }
-
-            PossibleGrindTargets.Clear();
-            var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
-
-            if (possibleGrindTargetsSync != null)
-            {
-                foreach (var item in possibleGrindTargetsSync)
-                {
-                    if (item.Entity == null)
-                        continue;
-
-                    if (item.Entity.EntityId == 0)
-                    {
-                        IMyEntity gridEntity;
-                        if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
+                        else
                         {
-                            var grid = gridEntity as IMyCubeGrid;
-                            var block = grid?.GetCubeBlock(item.Entity.Position.Value);
-                            if (block != null)
-                            {
-                                PossibleGrindTargets.Add(new TargetBlockData(block, item.Distance, 0));
-                            }
+                            var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                            if (slimBlock != null)
+                                PossibleWeldTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
                         }
                     }
-                    else
+                }
+            }
+
+            if ((excluded & 4) == 0)
+            {
+                PossibleGrindTargets.Clear();
+                var possibleGrindTargetsSync = newState.PossibleGrindTargetsSync;
+
+                if (possibleGrindTargetsSync != null)
+                {
+                    foreach (var item in possibleGrindTargetsSync)
                     {
-                        var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
-                        if (slimBlock != null)
-                            PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        if (item.Entity == null)
+                            continue;
+
+                        if (item.Entity.EntityId == 0)
+                        {
+                            if (!item.Entity.Position.HasValue) continue;
+                            IMyEntity gridEntity;
+                            if (MyAPIGateway.Entities.TryGetEntityById(item.Entity.GridId, out gridEntity))
+                            {
+                                var grid = gridEntity as IMyCubeGrid;
+                                var block = grid?.GetCubeBlock(item.Entity.Position.Value);
+                                if (block != null)
+                                {
+                                    PossibleGrindTargets.Add(new TargetBlockData(block, item.Distance, 0));
+                                }
+                            }
+                        }
+                        else
+                        {
+                            var slimBlock = SyncEntityId.GetItemAsSlimBlock(item.Entity);
+                            if (slimBlock != null)
+                                PossibleGrindTargets.Add(new TargetBlockData(slimBlock, item.Distance, 0));
+                        }
                     }
                 }
             }
 
-            PossibleFloatingTargets.Clear();
-            var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
-
-            if (possibleFloatingTargetsSync != null)
+            if ((excluded & 8) == 0)
             {
-                foreach (var item in possibleFloatingTargetsSync)
+                PossibleFloatingTargets.Clear();
+                var possibleFloatingTargetsSync = newState.PossibleFloatingTargetsSync;
+
+                if (possibleFloatingTargetsSync != null)
                 {
-                    var floatingObj = SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity);
-                    if (floatingObj != null)
-                        PossibleFloatingTargets.Add(new TargetEntityData(floatingObj, item.Distance));
+                    foreach (var item in possibleFloatingTargetsSync)
+                    {
+                        var floatingObj = SyncEntityId.GetItemAs<Sandbox.Game.Entities.MyFloatingObject>(item.Entity);
+                        if (floatingObj != null)
+                            PossibleFloatingTargets.Add(new TargetEntityData(floatingObj, item.Distance));
+                    }
                 }
             }
 
@@ -547,6 +693,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _SafeZoneAllowsGrinding = newState.SafeZoneAllowsGrinding;
             _SafeZoneAllowsBuildingProjections = newState.SafeZoneAllowsBuildingProjections;
             _SafeZoneAllowsWelding = newState.SafeZoneAllowsWelding;
+            _SafeZoneAndShieldsChecked = true;
 
             Changed = true;
         }

@@ -30,7 +30,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             return texts;
         }
 
-        public static MyStringId GetStringId(Dictionary<string, string> texts, string key, int maxLineLength = Texts.TextDefaultMaxLenght)
+        public static MyStringId GetStringId(Dictionary<string, string> texts, string key, int maxLineLength = Texts.TextDefaultMaxLength)
         {
             try
             {

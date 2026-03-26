@@ -1,6 +1,7 @@
 ﻿using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
-using SKONanobotBuildAndRepairSystem.Models;
+using SKONanobotBuildAndRepairSystem.Caches;
+using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -19,6 +20,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
            comparer: new MyTupleComparer<long, long>(),
            concurrencyLevel: 4,
            capacity: 1024);
+
+        public static int CacheCount { get { return Cache.Count; } }
 
         private static readonly ConcurrentDictionary<long, long> GridLastAccess = new ConcurrentDictionary<long, long>();
 
@@ -161,8 +164,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             LastCheckTime = now;
 
+            var profilerTs = MethodProfiler.Start();
             RefreshExpiredEntries();
             Cache.CleanupExpired();
+            MethodProfiler.StopAndLog("GridOwnershipCacheHandler.Update", profilerTs, () =>
+                string.Format("cacheCount={0}", Cache.Count));
         }
 
         private static void RefreshExpiredEntries()

@@ -110,8 +110,8 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         /// </summary>
         public Logging(string modName, int workshopId, string logFileName, Type typeOfMod)
         {
-            MyLog.Default.WriteLineAndConsole(_ModName + " Create Log instance Utils=" + (MyAPIGateway.Utilities != null).ToString());
             _ModName = modName;
+            MyLog.Default.WriteLineAndConsole(_ModName + " Create Log instance Utils=" + (MyAPIGateway.Utilities != null).ToString());
             _WorkshopId = workshopId;
             _LogFilename = logFileName;
             _TypeOfMod = typeOfMod;
@@ -287,6 +287,10 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 _Indent = 0;
                 _Cache.Clear();
             }
+
+            // Clear the static singleton so a fresh instance is created on next access.
+            // Prevents stale file handles after Torch hot-reloads.
+            _instance = null;
         }
     }
 }

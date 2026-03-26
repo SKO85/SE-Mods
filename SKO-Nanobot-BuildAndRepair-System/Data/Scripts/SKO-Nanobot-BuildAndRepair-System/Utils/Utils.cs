@@ -15,14 +15,17 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         /// <summary>
         /// Is the block damaged/incomplete
         /// </summary>
-        public static bool NeedRepair(this IMySlimBlock target, bool functionalOnly)
+        public static bool NeedRepair(this IMySlimBlock target, AutoWeldOptions weldMode)
         {
             if (target == null) return false;
             if (target.IsDestroyed) return false;
             if (target.FatBlock != null && (target.FatBlock.Closed || target.FatBlock.MarkedForClose)) return false;
 
+            // FEAT-034: Skeleton mode never repairs existing blocks — only places projected blocks.
+            if (weldMode == AutoWeldOptions.WeldSkeleton) return false;
+
             // Integrity check first.
-            var neededIntegrityLevel = GetRequiredIntegrity(target, functionalOnly);
+            var neededIntegrityLevel = GetRequiredIntegrity(target, weldMode);
             var hasReachedIntegrity = target.Integrity >= neededIntegrityLevel;
 
             // Integrty is lower, so we can say it needs a repair without checking deformations.
@@ -115,9 +118,6 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var cubeGrid = target.CubeGrid as MyCubeGrid;
             if (cubeGrid == null || cubeGrid.Projector == null) return false;
 
-            //Doesn't work reliable as projector does not update Dithering
-            //return gui ? ((IMyProjector)cubeGrid.Projector).CanBuild(target, true) == BuildCheckResult.OK : target.Dithering >= -MyGridConstants.BUILDER_TRANSPARENCY;
-
             return ((IMyProjector)cubeGrid.Projector).CanBuild(target, gui) == BuildCheckResult.OK;
         }
 
@@ -131,20 +131,18 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             return Math.Max((float)inventory.CurrentVolume / (float)inventory.MaxVolume, (float)inventory.CurrentMass / (float)((MyInventory)inventory).MaxMass);
         }
 
-        public static float GetRequiredIntegrity(this IMySlimBlock target, bool isFunctionalOnly)
+        public static float GetRequiredIntegrity(this IMySlimBlock target, AutoWeldOptions weldMode)
         {
             if (target == null) return 0f;
 
-            var def = target.BlockDefinition as MyCubeBlockDefinition;
-            var requiredIntegrity = target.MaxIntegrity;
-
-            if (isFunctionalOnly)
+            if (weldMode == AutoWeldOptions.WeldFunctional)
             {
+                var def = target.BlockDefinition as MyCubeBlockDefinition;
                 var functionalIntegrity = target.MaxIntegrity * def.CriticalIntegrityRatio;
-                requiredIntegrity = SetMax(functionalIntegrity + 1, target.MaxIntegrity);
+                return SetMax(functionalIntegrity + 1, target.MaxIntegrity);
             }
 
-            return requiredIntegrity;
+            return target.MaxIntegrity;
         }
 
         public static float SetMax(float value, float maxValue)

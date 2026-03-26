@@ -577,6 +577,13 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 {
                     //Fix changed names
                     data = data.Replace("GrindColorNearFirst", "GrindNearFirst");
+
+                    // FEAT-034 backward compat: old [Flags] AutoWeldOptions serialized 0 as ""
+                    // and FunctionalOnly as "FunctionalOnly". Map to new enum names.
+                    data = data.Replace("<WeldOptions></WeldOptions>", "<WeldOptions>WeldFull</WeldOptions>");
+                    data = data.Replace("<WeldOptions />", "<WeldOptions>WeldFull</WeldOptions>");
+                    data = data.Replace("<WeldOptions>FunctionalOnly</WeldOptions>", "<WeldOptions>WeldFunctional</WeldOptions>");
+
                     settings = MyAPIGateway.Utilities.SerializeFromXML<SyncBlockSettings>(data);
                     if (settings != null)
                     {

@@ -29,10 +29,10 @@ jobs:
         with:
           ruby-version: "3.3"
           bundler-cache: true
-          working-directory: docs
+          working-directory: docs/pages
 
       - name: Build with Jekyll
-        working-directory: docs
+        working-directory: docs/pages
         run: bundle exec jekyll build --baseurl "/SE-Mods"
         env:
           JEKYLL_ENV: production
@@ -40,7 +40,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/_site
+          path: docs/pages/_site
 
   deploy:
     environment:

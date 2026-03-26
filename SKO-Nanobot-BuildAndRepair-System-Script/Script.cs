@@ -1,4 +1,7 @@
-﻿// Version: v1.10 - 02.03.2026 12:08:00
+﻿// Version: v1.12 - 26.03.2026
+// Compatible with: SKO Nanobot Build and Repair System (Maintained) v2.5.0+
+// This script only works with SKO's maintained versions of the mod.
+// It will NOT work with the original mod by Dummy08.
 
 static double UpdateIntervalAssemblerQueues = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
 static double UpdateIntervalGrinding = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
@@ -289,7 +292,7 @@ public class BuildAndRepairAutoQueuing
                     if (entity != null)
                     {
                         if (handler == null) handler = new T();
-                        handler.Init(entity);
+                        handler.Init(entity, handler.Count > 0);
                     }
                 }
             }
@@ -500,7 +503,7 @@ public class BuildAndRepairSystemQueuingGroupData
             if (display != null && settings != null)
             {
                 display.Clear();
-                if (settings.DisplayKinds != null && RepairSystems != null)
+                if (settings.DisplayKinds != null && settings.DisplayKinds.Length > 0 && RepairSystems != null)
                 {
                     if (elapsedTime > NextSwitchTime[idx])
                     {
@@ -721,7 +724,9 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         DisplayPanel,
         Lighting,
         SensorDevice,
-        CommunicationBlock
+        CommunicationBlock,
+        Connector,
+        MergeBlock
     }
 
     /// <summary> 
@@ -791,19 +796,14 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the Help Others state 
-    /// </summary> 
+    /// <summary>
+    /// Deprecated: The mod no longer uses HelpOthers. This property has no effect.
+    /// Kept for backward compatibility with existing scripts.
+    /// </summary>
     public bool HelpOther
     {
-        get
-        {
-            return _Entities.Count > 0 ? _Entities[0].HelpOthers : false;
-        }
-        set
-        {
-            foreach (var entity in _Entities) entity.HelpOthers = value;
-        }
+        get { return false; }
+        set { }
     }
 
     /// <summary> 
@@ -998,18 +998,18 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// If set block are only welded to functional level 
-    /// </summary> 
-    public bool WeldOptionFunctionalOnly
+    /// <summary>
+    /// Weld mode: 0 = WeldFull, 1 = WeldFunctional, 2 = WeldSkeleton
+    /// </summary>
+    public long WeldMode
     {
         get
         {
-            return _Entities.Count > 0 ? _Entities[0].GetValueBool("BuildAndRepair.WeldOptionFunctionalOnly") : false;
+            return _Entities.Count > 0 ? _Entities[0].GetValue<long>("BuildAndRepair.WeldMode") : 0;
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.WeldOptionFunctionalOnly", value);
+            foreach (var entity in _Entities) entity.SetValue<long>("BuildAndRepair.WeldMode", value);
         }
     }
 
@@ -1119,7 +1119,8 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 BlockClass blockClass;
                 bool enabled;
-                if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
+                if (values.Length >= 2 &&
+                   Enum.TryParse<BlockClass>(values[0], out blockClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
@@ -1199,7 +1200,8 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 BlockClass blockClass;
                 bool enabled;
-                if (Enum.TryParse<BlockClass>(values[0], out blockClass) &&
+                if (values.Length >= 2 &&
+                   Enum.TryParse<BlockClass>(values[0], out blockClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     blockList.Add(new ClassState<BlockClass>(blockClass, enabled));
@@ -1210,7 +1212,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return null;
     }
 
-    /// <summary> 
+    /// <summary>
     /// Get the grind priority of the given block class 
     /// </summary> 
     public int GetGrindPriority(BlockClass blockClass)
@@ -1279,7 +1281,8 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
                 var values = item.Split(';');
                 ComponentClass compClass;
                 bool enabled;
-                if (Enum.TryParse<ComponentClass>(values[0], out compClass) &&
+                if (values.Length >= 2 &&
+                   Enum.TryParse<ComponentClass>(values[0], out compClass) &&
                    bool.TryParse(values[1], out enabled))
                 {
                     compList.Add(new ClassState<ComponentClass>(compClass, enabled));
@@ -2032,14 +2035,14 @@ public class StatusAndLogDisplay
             return cubeBlock.BlockDefinition.SubtypeName;
         }
 
+        var cubeGrid = block as IMyCubeGrid;
+        if (cubeGrid != null) return cubeGrid.DisplayName;
+
         var entity = block as IMyEntity;
         if (entity != null)
         {
             return string.Format("{0} ({1})", entity.DisplayName, entity.EntityId);
         }
-
-        var cubeGrid = block as IMyCubeGrid;
-        if (cubeGrid != null) return cubeGrid.DisplayName;
 
         return block != null ? block.ToString() : "NULL";
     }

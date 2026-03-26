@@ -1,0 +1,37 @@
+// Base font size
+body, html {
+  font-family: sans-serif;
+  font-size: 16px !important;
+}
+
+// Inline code
+:not(pre, figure) > code {
+  background-color: #eee !important;
+  color: #333 !important;
+  padding: 6px;
+  font-size: 12px;
+}
+
+// Sidebar navigation font size
+.nav-list-link {
+  font-size: 1rem;
+}
+
+// Details / Summary styling
+details {
+  margin-bottom: 0.5em;
+
+  summary {
+    font-size: 1.1em;
+    cursor: pointer;
+    color: #333;
+  }
+
+  div {
+    border-radius: 3px;
+    padding: 0.75em 1em;
+    margin-top: 0.5em;
+    margin-bottom: 2em;
+    border-left: 10px solid lightblue;
+  }
+}
