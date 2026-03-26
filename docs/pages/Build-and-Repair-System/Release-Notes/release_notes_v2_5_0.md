@@ -171,6 +171,16 @@ Admins can temporarily override the reported simulation speed for testing purpos
 | `/nanobars sim <0.1–1.0>` | Force a specific sim-speed value. |
 | `/nanobars sim reset` | Return to the real sim-speed value. |
 
+### Mod Integration Status (Admin)
+
+Admins can check whether optional mod integrations are active:
+
+| Command | Description |
+| --- | --- |
+| `/nanobars mods` | Show status of TextHudAPI (BuildInfo) and DefenseShields integrations. |
+
+Each integration reports its status: Active, Loaded (not ready), Not detected, or Disabled.
+
 ### Custom Info Panel Refresh
 
 The terminal custom info panel now updates at most every 2 seconds when something has changed, instead of immediately on every state change. This reduces unnecessary refreshes while still keeping the displayed status current. On dedicated servers, the expensive terminal redraw is skipped entirely since no local terminal is rendered — only connected clients see the panel.
@@ -250,6 +260,15 @@ When a grid straddles a Safe Zone boundary, some Build and Repair blocks may be 
 ### Per-Grid System Limit Not Enforced Correctly
 
 The `MaxSystemsPerTargetGrid` limit could be exceeded — for example, 30+ blocks welding on the same grid with a limit of 20. This was caused by the grid system count cache being stale (rebuilt every 5 frames), allowing a burst of blocks to pass the limit check simultaneously. Additionally, blocks with an active lock-on bypassed the grid limit entirely. The system now uses a live counter that updates instantly when blocks start or stop targeting a grid, and lock-on blocks are also subject to the grid limit. Blocks that exceed the limit release their lock-on and move to another grid.
+
+### Block Assignment Leaks During Welding
+
+Block assignments (the TTL-based reservations that prevent two systems from targeting the same block) could accumulate and never be released in two scenarios:
+
+1. **Projected block transition:** When a projected block was built and became a real block, the projected block's assignment was never released. The projected and physical blocks use different cache keys (different grid EntityIds), so the old assignment sat in the cache for the full TTL duration.
+2. **Lock-on loss retry:** When a locked-on block vanished from the target list (e.g., after a projector update changed the grid's EntityId), the lock-on was cleared but the assignment was not released, holding the slot for up to 8 seconds.
+
+Both leaks have been fixed with explicit release calls before the transition/retry.
 
 ---
 
