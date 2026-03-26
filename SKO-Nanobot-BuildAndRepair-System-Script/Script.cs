@@ -1,4 +1,4 @@
-﻿// Version: v1.11 - 25.03.2026
+﻿// Version: v1.12 - 26.03.2026
 // Compatible with: SKO Nanobot Build and Repair System (Maintained) v2.5.0+
 // This script only works with SKO's maintained versions of the mod.
 // It will NOT work with the original mod by Dummy08.
@@ -292,7 +292,7 @@ public class BuildAndRepairAutoQueuing
                     if (entity != null)
                     {
                         if (handler == null) handler = new T();
-                        handler.Init(entity);
+                        handler.Init(entity, handler.Count > 0);
                     }
                 }
             }
@@ -724,7 +724,9 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         DisplayPanel,
         Lighting,
         SensorDevice,
-        CommunicationBlock
+        CommunicationBlock,
+        Connector,
+        MergeBlock
     }
 
     /// <summary> 
@@ -794,19 +796,14 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the Help Others state 
-    /// </summary> 
+    /// <summary>
+    /// Deprecated: The mod no longer uses HelpOthers. This property has no effect.
+    /// Kept for backward compatibility with existing scripts.
+    /// </summary>
     public bool HelpOther
     {
-        get
-        {
-            return _Entities.Count > 0 ? _Entities[0].HelpOthers : false;
-        }
-        set
-        {
-            foreach (var entity in _Entities) entity.HelpOthers = value;
-        }
+        get { return false; }
+        set { }
     }
 
     /// <summary> 

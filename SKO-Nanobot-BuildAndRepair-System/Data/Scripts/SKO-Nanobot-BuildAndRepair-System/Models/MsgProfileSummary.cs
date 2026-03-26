@@ -16,6 +16,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
         public float SimSpeedMin { get; set; }
         [ProtoMember(5)]
         public float SimSpeedAvg { get; set; }
+        [ProtoMember(6)]
+        public string SessionName { get; set; }
 
         [ProtoMember(10)]
         public List<ProfileDomainEntry> Domains { get; set; }

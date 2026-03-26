@@ -15,21 +15,24 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             {
                 var autoStopSeconds = MethodProfiler.DefaultAutoStopDurationSeconds;
                 if (args.Length >= 3 && !int.TryParse(args[2], out autoStopSeconds))
-                    return ChatCommandResult.Error("Invalid seconds. Usage: /nanobars profile start [seconds] [minDurationMs]");
+                    return ChatCommandResult.Error("Invalid seconds. Usage: /nanobars profile start [seconds] [minDurationMs] [sessionName]");
 
                 if (args.Length >= 4)
                 {
                     int minDuration;
                     if (!int.TryParse(args[3], out minDuration))
-                        return ChatCommandResult.Error("Invalid minDurationMs. Usage: /nanobars profile start [seconds] [minDurationMs]");
+                        return ChatCommandResult.Error("Invalid minDurationMs. Usage: /nanobars profile start [seconds] [minDurationMs] [sessionName]");
 
                     string minDurMsg;
                     if (!MethodProfiler.SetMinDurationMs(minDuration, out minDurMsg))
                         return ChatCommandResult.Error(minDurMsg);
                 }
 
+                // Optional session name (args[4]).
+                string sessionName = args.Length >= 5 ? args[4] : null;
+
                 string message;
-                MethodProfiler.StartSession(autoStopSeconds, senderSteamId, out message);
+                MethodProfiler.StartSession(autoStopSeconds, senderSteamId, out message, sessionName);
                 return ChatCommandResult.Success(message + string.Format(" (MinDurationMs={0})", MethodProfiler.MinDurationMs));
             }
 
@@ -59,6 +62,19 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 return ChatCommandResult.Success(minDurMsg);
             }
 
+            if (args[1] == "clear")
+            {
+                if (args.Length < 3)
+                    return ChatCommandResult.Error("Usage: /nanobars profile clear <sessionName|all>");
+
+                return ChatCommandResult.Success(MethodProfiler.ClearSession(args[2]));
+            }
+
+            if (args[1] == "list")
+            {
+                return ChatCommandResult.Success(MethodProfiler.GetSessionListText());
+            }
+
             return ShowHelp();
         }
 
@@ -67,10 +83,11 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             var sb = new StringBuilder();
             sb.AppendLine("Profiling Commands (admin-only, server-side):");
             sb.AppendLine();
-            sb.AppendLine("/nanobars profile start [seconds] [minDurationMs]");
+            sb.AppendLine("/nanobars profile start [seconds] [minDurationMs] [sessionName]");
             sb.AppendLine(string.Format("  Starts a profiling session. Defaults: seconds={0}, minDurationMs={1}",
                 MethodProfiler.DefaultAutoStopDurationSeconds, MethodProfiler.MinDurationMs));
             sb.AppendLine("  Use 0 for seconds to disable auto-stop.");
+            sb.AppendLine("  Session name is optional — defaults to yyyyMMddHHmmss-profiling.");
             sb.AppendLine();
             sb.AppendLine("/nanobars profile stop");
             sb.AppendLine("  Stops the current profiling session and writes summary.");
@@ -81,6 +98,12 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             sb.AppendLine("/nanobars profile summary");
             sb.AppendLine("  Toggle the profile summary HUD panel (top-right).");
             sb.AppendLine("  Shows domains, top methods, and heaviest grids. Stays visible after profiling stops.");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars profile list");
+            sb.AppendLine("  Lists all stored profiling sessions.");
+            sb.AppendLine();
+            sb.AppendLine("/nanobars profile clear <sessionName|all>");
+            sb.AppendLine("  Deletes log files for a specific session or all sessions.");
             sb.AppendLine();
             sb.AppendLine("/nanobars profile minduration <ms>");
             sb.AppendLine("  Sets the minimum method duration (0-10000ms) for logging samples.");

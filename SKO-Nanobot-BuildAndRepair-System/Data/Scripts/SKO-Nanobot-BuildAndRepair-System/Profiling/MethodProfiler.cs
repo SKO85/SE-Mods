@@ -15,7 +15,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
         private const int MaxDetailLength = 4096;
         private const int WarmupCallsPerMethod = 20;
         private const int DefaultAutoStopSeconds = 5 * 60;
-        private const string ManifestFileName = "NanobotProfiler.manifest";
+        private const string SessionsIndexFileName = "NanobotProfiler.sessions";
         private static readonly object _syncRoot = new object();
         private static readonly Dictionary<string, TextWriter> _writers = new Dictionary<string, TextWriter>();
         private static readonly Dictionary<string, MethodStats> _methodStats = new Dictionary<string, MethodStats>();
@@ -23,6 +23,8 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
         private static DateTime _startedUtc;
         private static DateTime? _autoStopUtc;
         private static ulong _startedBySteamId;
+        private static string _sessionName;
+        private static string _sessionPrefix;
 
         private static float _minSimSpeed = float.MaxValue;
         private static float _maxSimSpeed = float.MinValue;
@@ -104,6 +106,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             msg.MethodCount = methods.Count;
             msg.SimSpeedMin = _minSimSpeed == float.MaxValue ? 0f : _minSimSpeed;
             msg.SimSpeedAvg = _simSpeedSamples > 0 ? (float)(_sumSimSpeed / _simSpeedSamples) : 0f;
+            msg.SessionName = _sessionName;
 
             // Domain summary
             var domainAgg = new Dictionary<string, MethodStats>();
@@ -198,6 +201,11 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             return msg;
         }
 
+        public static string SessionName
+        {
+            get { return _sessionName; }
+        }
+
         public static bool IsEnabled
         {
             get { return _isRunning; }
@@ -245,11 +253,15 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
         {
             if (!_isRunning)
             {
-                return string.Format("Profiling status: stopped (MinDurationMs={0}).", _minDurationMs);
+                var stopped = string.Format("Profiling status: stopped (MinDurationMs={0}).", _minDurationMs);
+                if (!string.IsNullOrEmpty(_sessionName))
+                    stopped += string.Format(" Last session: {0}", _sessionName);
+                return stopped;
             }
 
             var duration = DateTime.UtcNow - _startedUtc;
-            var status = string.Format("Profiling status: running for {0:F1}s (MinDurationMs={1}).", duration.TotalSeconds, _minDurationMs);
+            var status = string.Format("Profiling status: running for {0:F1}s. Session: {1} (MinDurationMs={2}).",
+                duration.TotalSeconds, _sessionName ?? "?", _minDurationMs);
             if (_autoStopUtc.HasValue)
             {
                 var remaining = _autoStopUtc.Value - DateTime.UtcNow;
@@ -354,15 +366,15 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
 
         public static bool StartSession(out string message)
         {
-            return StartSession(DefaultAutoStopSeconds, out message);
+            return StartSession(DefaultAutoStopSeconds, 0, out message, null);
         }
 
         public static bool StartSession(int autoStopSeconds, out string message)
         {
-            return StartSession(autoStopSeconds, 0, out message);
+            return StartSession(autoStopSeconds, 0, out message, null);
         }
 
-        public static bool StartSession(int autoStopSeconds, ulong startedBySteamId, out string message)
+        public static bool StartSession(int autoStopSeconds, ulong startedBySteamId, out string message, string sessionName = null)
         {
             lock (_syncRoot)
             {
@@ -378,7 +390,12 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                     return false;
                 }
 
-                DeletePreviousLogs();
+                // Generate or sanitize session name.
+                if (string.IsNullOrEmpty(sessionName))
+                    sessionName = DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-profiling";
+                _sessionName = SanitizeName(sessionName, 60);
+                _sessionPrefix = _sessionName + ".";
+
                 CloseInternal();
                 _methodStats.Clear();
                 _gridCosts.Clear();
@@ -391,8 +408,8 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 _startedUtc = DateTime.UtcNow;
                 _autoStopUtc = autoStopSeconds > 0 ? _startedUtc.AddSeconds(autoStopSeconds) : (DateTime?)null;
                 message = autoStopSeconds > 0
-                    ? string.Format("Profiling started for {0}s. It will auto-stop unless stopped manually first.", autoStopSeconds)
-                    : "Profiling started. Use /nanobars profile stop when done.";
+                    ? string.Format("Profiling started for {0}s. Session: {1}", autoStopSeconds, _sessionName)
+                    : string.Format("Profiling started. Session: {0}. Use /nanobars profile stop when done.", _sessionName);
                 return true;
             }
         }
@@ -412,8 +429,10 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 _autoStopUtc = null;
                 WriteSummary(duration);
                 WriteManifest();
+                AppendSessionIndex();
                 CloseInternal();
-                message = string.Format("Profiling done. Session duration: {0:F1}s. Logs are in local mod storage as NanobotProfiler.<MethodName>.log.", duration.TotalSeconds);
+                message = string.Format("Profiling done. Session: {0}. Duration: {1:F1}s. Files: {0}.NanobotProfiler.*.log",
+                    _sessionName, duration.TotalSeconds);
                 return true;
             }
         }
@@ -433,8 +452,9 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 steamId = _startedBySteamId;
                 WriteSummary(duration);
                 WriteManifest();
+                AppendSessionIndex();
                 CloseInternal();
-                message = string.Format("Profiling auto-stopped after {0:F1}s.", duration.TotalSeconds);
+                message = string.Format("Profiling auto-stopped after {0:F1}s. Session: {1}", duration.TotalSeconds, _sessionName);
                 MyLog.Default.WriteLineAndConsole("MethodProfiler: " + message);
                 return true;
             }
@@ -542,9 +562,9 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             TextWriter writer = null;
             try
             {
-                writer = MyAPIGateway.Utilities.WriteFileInLocalStorage("NanobotProfiler.Summary.log", typeof(Mod));
+                writer = MyAPIGateway.Utilities.WriteFileInLocalStorage((_sessionPrefix ?? "") + "NanobotProfiler.Summary.log", typeof(Mod));
                 writer.WriteLine("# Nanobot method profiler summary");
-                writer.WriteLine(string.Format("# sessionSeconds={0:F1};warmupCallsPerMethod={1};generatedUtc={2:u}", sessionDuration.TotalSeconds, WarmupCallsPerMethod, DateTime.UtcNow));
+                writer.WriteLine(string.Format("# session={0};sessionSeconds={1:F1};warmupCallsPerMethod={2};generatedUtc={3:u}", _sessionName, sessionDuration.TotalSeconds, WarmupCallsPerMethod, DateTime.UtcNow));
                 writer.WriteLine(string.Format("# simSpeed: min={0:F2};max={1:F2};avg={2:F2};samples={3}",
                     _minSimSpeed == float.MaxValue ? 0f : _minSimSpeed,
                     _maxSimSpeed == float.MinValue ? 0f : _maxSimSpeed,
@@ -710,7 +730,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 if (_writers.TryGetValue(methodName, out writer))
                     return writer;
 
-                var fileName = "NanobotProfiler." + SanitizeMethodName(methodName) + ".log";
+                var fileName = (_sessionPrefix ?? "") + "NanobotProfiler." + SanitizeMethodName(methodName) + ".log";
                 writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(fileName, typeof(Mod));
                 writer.WriteLine("# utc;ms;simSpeed;details");
                 writer.Flush();
@@ -721,8 +741,13 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
 
         private static string SanitizeMethodName(string methodName)
         {
-            var sb = new StringBuilder(methodName.Length);
-            foreach (var ch in methodName)
+            return SanitizeName(methodName, 80);
+        }
+
+        private static string SanitizeName(string name, int maxLength)
+        {
+            var sb = new StringBuilder(name.Length);
+            foreach (var ch in name)
             {
                 if (char.IsLetterOrDigit(ch) || ch == '.' || ch == '-' || ch == '_')
                     sb.Append(ch);
@@ -731,8 +756,8 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             }
 
             var sanitized = sb.ToString();
-            if (sanitized.Length > 80)
-                sanitized = sanitized.Substring(0, 80);
+            if (sanitized.Length > maxLength)
+                sanitized = sanitized.Substring(0, maxLength);
 
             return sanitized;
         }
@@ -744,21 +769,125 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 _isRunning = false;
                 _autoStopUtc = null;
                 WriteManifest();
+                AppendSessionIndex();
                 CloseInternal();
                 _methodStats.Clear();
                 _gridCosts.Clear();
             }
         }
 
-        private static void DeletePreviousLogs()
+        /// <summary>
+        /// Clear (truncate) all files for a specific session or all sessions.
+        /// </summary>
+        public static string ClearSession(string sessionNameOrAll)
+        {
+            if (MyAPIGateway.Utilities == null)
+                return "Storage not available.";
+
+            if (_isRunning)
+                return "Cannot clear while profiling is running. Stop the session first.";
+
+            var isAll = sessionNameOrAll == "all";
+            var sessions = ReadSessionIndex();
+            if (sessions.Count == 0)
+                return "No profiling sessions found.";
+
+            var cleared = 0;
+            var toClear = new List<string>();
+
+            foreach (var session in sessions)
+            {
+                if (!isAll && session != sessionNameOrAll)
+                    continue;
+
+                var manifestName = session + ".NanobotProfiler.manifest";
+                if (MyAPIGateway.Utilities.FileExistsInLocalStorage(manifestName, typeof(Mod)))
+                {
+                    var files = new List<string>();
+                    try
+                    {
+                        var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage(manifestName, typeof(Mod));
+                        try
+                        {
+                            string line;
+                            while ((line = reader.ReadLine()) != null)
+                            {
+                                line = line.Trim();
+                                if (!string.IsNullOrEmpty(line))
+                                    files.Add(line);
+                            }
+                        }
+                        finally { reader.Close(); }
+                    }
+                    catch { }
+
+                    // Truncate each log file listed in the manifest.
+                    foreach (var file in files)
+                    {
+                        DeleteFile(file);
+                    }
+                    // Truncate the manifest itself.
+                    DeleteFile(manifestName);
+                    cleared++;
+                }
+
+                toClear.Add(session);
+            }
+
+            // Rewrite sessions index without the cleared sessions.
+            if (toClear.Count > 0)
+            {
+                var remaining = new List<string>();
+                foreach (var s in sessions)
+                {
+                    if (!toClear.Contains(s))
+                        remaining.Add(s);
+                }
+                WriteSessionIndex(remaining);
+            }
+
+            if (!isAll && cleared == 0)
+                return string.Format("Session '{0}' not found. Use /nanobars profile clear all to clear everything.", sessionNameOrAll);
+
+            return string.Format("Cleared {0} session(s).", cleared);
+        }
+
+        /// <summary>
+        /// Returns a formatted list of known profiling sessions.
+        /// </summary>
+        public static string GetSessionListText()
+        {
+            var sessions = ReadSessionIndex();
+            if (sessions.Count == 0)
+                return "No profiling sessions found.";
+
+            var sb = new StringBuilder();
+            sb.AppendLine(string.Format("{0} session(s):", sessions.Count));
+            foreach (var s in sessions)
+            {
+                sb.AppendLine(string.Format("  {0}", s));
+            }
+            return sb.ToString();
+        }
+
+        private static void DeleteFile(string fileName)
         {
             try
             {
-                if (MyAPIGateway.Utilities == null) return;
-                if (!MyAPIGateway.Utilities.FileExistsInLocalStorage(ManifestFileName, typeof(Mod))) return;
+                if (MyAPIGateway.Utilities.FileExistsInLocalStorage(fileName, typeof(Mod)))
+                    MyAPIGateway.Utilities.DeleteFileInLocalStorage(fileName, typeof(Mod));
+            }
+            catch { }
+        }
 
-                var files = new List<string>();
-                var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage(ManifestFileName, typeof(Mod));
+        private static List<string> ReadSessionIndex()
+        {
+            var sessions = new List<string>();
+            try
+            {
+                if (MyAPIGateway.Utilities == null) return sessions;
+                if (!MyAPIGateway.Utilities.FileExistsInLocalStorage(SessionsIndexFileName, typeof(Mod))) return sessions;
+                var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage(SessionsIndexFileName, typeof(Mod));
                 try
                 {
                     string line;
@@ -766,33 +895,48 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                     {
                         line = line.Trim();
                         if (!string.IsNullOrEmpty(line))
-                            files.Add(line);
+                            sessions.Add(line);
                     }
+                }
+                finally { reader.Close(); }
+            }
+            catch { }
+            return sessions;
+        }
+
+        private static void WriteSessionIndex(List<string> sessions)
+        {
+            try
+            {
+                if (MyAPIGateway.Utilities == null) return;
+                var writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(SessionsIndexFileName, typeof(Mod));
+                try
+                {
+                    foreach (var s in sessions)
+                        writer.WriteLine(s);
+                    writer.Flush();
                 }
                 finally
                 {
-                    reader.Close();
+                    writer.Close();
+                    writer.Dispose();
                 }
+            }
+            catch { }
+        }
 
-                foreach (var file in files)
+        private static void AppendSessionIndex()
+        {
+            try
+            {
+                var sessions = ReadSessionIndex();
+                if (!string.IsNullOrEmpty(_sessionName) && !sessions.Contains(_sessionName))
                 {
-                    try
-                    {
-                        if (MyAPIGateway.Utilities.FileExistsInLocalStorage(file, typeof(Mod)))
-                        {
-                            var w = MyAPIGateway.Utilities.WriteFileInLocalStorage(file, typeof(Mod));
-                            w.Flush();
-                            w.Close();
-                            w.Dispose();
-                        }
-                    }
-                    catch { }
+                    sessions.Add(_sessionName);
+                    WriteSessionIndex(sessions);
                 }
             }
-            catch (Exception ex)
-            {
-                MyLog.Default.WriteLineAndConsole("MethodProfiler: Failed to delete previous logs: " + ex.Message);
-            }
+            catch { }
         }
 
         private static void WriteManifest()
@@ -801,13 +945,15 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             {
                 if (MyAPIGateway.Utilities == null || _writers.Count == 0) return;
 
-                var writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(ManifestFileName, typeof(Mod));
+                var manifestName = (_sessionPrefix ?? "") + "NanobotProfiler.manifest";
+                var writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(manifestName, typeof(Mod));
                 try
                 {
-                    writer.WriteLine("NanobotProfiler.Summary.log");
+                    var prefix = _sessionPrefix ?? "";
+                    writer.WriteLine(prefix + "NanobotProfiler.Summary.log");
                     foreach (var methodName in _writers.Keys)
                     {
-                        writer.WriteLine("NanobotProfiler." + SanitizeMethodName(methodName) + ".log");
+                        writer.WriteLine(prefix + "NanobotProfiler." + SanitizeMethodName(methodName) + ".log");
                     }
                     writer.Flush();
                 }

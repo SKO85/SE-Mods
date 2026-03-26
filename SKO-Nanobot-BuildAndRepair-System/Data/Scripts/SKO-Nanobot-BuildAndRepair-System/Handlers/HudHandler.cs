@@ -391,6 +391,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 ProfAddRow("<color=130,180,230>--- PROFILE SUMMARY ---",
                     string.Format("<color=130,180,230>--- {0} methods tracked", s.MethodCount));
 
+            // Session name
+            if (!string.IsNullOrEmpty(s.SessionName))
+                ProfAddRow("<color=white>Session",
+                    string.Format("<color=200,255,200>{0}", s.SessionName));
+
             // Sim-speed
             if (s.SimSpeedMin > 0 || s.SimSpeedAvg > 0)
             {

@@ -179,12 +179,16 @@ Server admins can run a built-in profiler to measure the mod's performance impac
 
 | Command | Description |
 | --- | --- |
-| `/nanobars profile start [seconds] [minDurationMs]` | Start a profiling session. Defaults to 120 seconds auto-stop. |
+| `/nanobars profile start [seconds] [minDurationMs] [sessionName]` | Start a profiling session. Optional session name (default: `yyyyMMddHHmmss-profiling`). |
 | `/nanobars profile stop` | Stop the current session and write the summary. |
-| `/nanobars profile status` | Show whether profiling is active and current settings. |
-| `/nanobars profile summary` | Toggle the profile summary HUD panel (top-right). Shows domains, top methods, heaviest grids, and sim-speed (min/avg). |
+| `/nanobars profile status` | Show whether profiling is active, session name, and current settings. |
+| `/nanobars profile summary` | Toggle the profile summary HUD panel (top-right). Shows session name, domains, top methods, heaviest grids, and sim-speed (min/avg). |
+| `/nanobars profile list` | List all stored profiling sessions. |
+| `/nanobars profile clear <sessionName\|all>` | Delete log files for a specific session or all sessions. |
 | `/nanobars profile minduration <ms>` | Set the minimum method duration threshold for logging. |
 | `/nanobars profile help` | Show profiling command help. |
+
+Each profiling session stores its files with a unique prefix (e.g. `20260326170000-profiling.NanobotProfiler.Summary.log`). Multiple sessions can coexist for later comparison. Sessions are tracked in a `NanobotProfiler.sessions` index file.
 
 ### Sim-Speed Override (Admin)
 
