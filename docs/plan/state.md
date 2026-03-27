@@ -174,6 +174,7 @@ Items in `TODO/` are pending. Items in `DONE/` are completed.
 | BUG-081 | High | v2.5.0 | `NanobotSystem.Scanning.cs` | TODO | Lock ordering inconsistency: `_Welder` vs `PossibleWeldTargets` acquired in different orders across code paths — potential deadlock |
 | BUG-082 | Medium | v2.5.0 | `NanobotSystem.Scanning.cs:1392-1436` | TODO | Cross-collection consistency gap: weld/grind/float targets swapped under separate locks — one-tick mixed state possible |
 | BUG-083 | Low | v2.5.0 | `NanobotSystem.Scanning.cs:36-37` | TODO | `_LastTargetsUpdate`/`_LastSourceUpdate` (TimeSpan, 8 bytes) read without memory barrier from game loop, written from background |
+| BUG-084 | Low | v2.5.0 | `docs/pages/.../FAQ/index.md`, `Config/index.md` | Done | Documentation references removed `-cwsf` command — replaced with `/nanobars config create` |
 
 ## Previously Fixed (not in this review)
 
