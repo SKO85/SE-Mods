@@ -38,7 +38,7 @@ Most settings take effect immediately. Some changes (such as range, power, and w
 1. Load your world as normal.
 2. Type the following command in chat:
    ```plaintext
-   /nanobars -cwsf
+   /nanobars config create
    ```
 3. A confirmation message appears in chat with the file path:
 

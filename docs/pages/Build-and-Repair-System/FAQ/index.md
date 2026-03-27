@@ -138,7 +138,7 @@ Yes. The system checks whether the owner of the Build and Repair block has the r
 <ol>
   <li>Make a backup of your current <code>ModSettings.xml</code>.</li>
   <li>Delete the original file and restart the server or session.</li>
-  <li>Generate a fresh configuration file using <code>/nanobars -cwsf</code> or <code>/nanobars config save</code>.</li>
+  <li>Generate a fresh configuration file using <code>/nanobars config create</code>.</li>
   <li>Compare the new file with your backup and merge any custom settings you need back into the new file.</li>
 </ol>
 <p>This ensures you are using a configuration file that matches the current version of the mod.</p>
@@ -312,11 +312,7 @@ Yes. Many options can be configured through the <code>ModSettings.xml</code> fil
 <details>
 <summary>How do I create the server configuration file?</summary>
 <div>
-<p>There are two ways:</p>
-<ul>
-  <li><strong>From chat:</strong> Run <code>/nanobars config save</code> in-game (admin only). This saves the current settings to <code>ModSettings.xml</code> in the mod's storage folder.</li>
-  <li><strong>Legacy command:</strong> Run <code>/nanobars -cwsf</code> in-game. This generates a <code>ModSettings.xml</code> file in your local Space Engineers folder that you can then copy to your dedicated server.</li>
-</ul>
+<p>Run <code>/nanobars config create</code> in-game (admin only). This saves the current settings to <code>ModSettings.xml</code> in the mod's storage folder.</p>
 <p>On a dedicated server, you can also change settings at runtime using <code>/nanobars config set &lt;setting&gt; &lt;value&gt;</code> and then save them with <code>/nanobars config save</code>. Most settings take effect immediately, but some changes (such as range, power, and welder-specific settings) require a session restart to apply.</p>
 </div>
 </details>
