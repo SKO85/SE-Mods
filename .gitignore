@@ -349,5 +349,8 @@ healthchecksdb
 # Temporary files from testing / debugging
 _temp/
 
+# Steam Workshop release tooling
+_Scripts/SteamRelease/
+
 # Ignore Claude MD file for now.
 CLAUDE.md
