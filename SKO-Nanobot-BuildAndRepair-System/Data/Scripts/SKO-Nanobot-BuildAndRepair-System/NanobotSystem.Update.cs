@@ -103,8 +103,16 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
 
+                    // Ensure we only execute once per cycle (WorkSpeed throttle).
+                    // Each cycle spans (cycleDivisor / 10) Update10 ticks; without this guard
+                    // the BaR would fire on every tick within the cycle instead of just one.
+                    if (isMyTurn && cycle == _lastWorkCycle)
+                    {
+                        isMyTurn = false;
+                    }
                     if (isMyTurn)
                     {
+                        _lastWorkCycle = cycle;
                         ServerTryWeldingGrindingCollecting();
                     }
 

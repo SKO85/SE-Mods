@@ -132,6 +132,7 @@ namespace SKONanobotBuildAndRepairSystem
         private int _transmitBackoffMultiplier = 1;
 
         private TimeSpan _PeriodicExtraChecksLast;
+        private long _lastWorkCycle = -1;
 
         public TimeSpan _TryAutoPushInventoryLast;
         public TimeSpan _TryPushInventoryLast;
