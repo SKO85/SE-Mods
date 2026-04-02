@@ -287,6 +287,17 @@ namespace SKONanobotBuildAndRepairSystem.Models
                         adjusted = true;
                     }
 
+                    if (settings.Welder.WorkSpeed < 1)
+                    {
+                        settings.Welder.WorkSpeed = 1;
+                        adjusted = true;
+                    }
+                    else if (settings.Welder.WorkSpeed > 10)
+                    {
+                        settings.Welder.WorkSpeed = 10;
+                        adjusted = true;
+                    }
+
                     Logging.Instance.Write(Logging.Level.Info, "NanobotBuildAndRepairSystemSettings: Settings {0}", settings);
                 }
                 else
@@ -339,6 +350,15 @@ namespace SKONanobotBuildAndRepairSystem.Models
             if (settings.Version <= 4 && settings.Welder.WeldingMultiplier == 0) settings.Welder.WeldingMultiplier = 1;
             if (settings.Version <= 4 && settings.Welder.GrindingMultiplier == 0) settings.Welder.GrindingMultiplier = 1;
             if (settings.Version <= 5 && settings.Welder.AllowedGrindJanitorRelations == 0) settings.Welder.AllowedGrindJanitorRelations = AutoGrindRelation.NoOwnership | AutoGrindRelation.Enemies | AutoGrindRelation.Neutral;
+
+            // Migrate: multiplier > 10 used to switch from Update100 to Update10.
+            // Now that frequency is decoupled, auto-set WorkSpeed = 10 to preserve behavior.
+            if (settings.Welder.WorkSpeed <= 1)
+            {
+                var maxMultiplier = Math.Max(settings.Welder.WeldingMultiplier, settings.Welder.GrindingMultiplier);
+                if (maxMultiplier > 10) settings.Welder.WorkSpeed = 10;
+            }
+
             settings.Version = CurrentSettingsVersion;
             return true;
         }

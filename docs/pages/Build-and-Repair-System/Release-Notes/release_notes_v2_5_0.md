@@ -209,6 +209,25 @@ Admins can check whether optional mod integrations are active:
 
 Each integration reports its status: Active, Loaded (not ready), Not detected, or Disabled.
 
+### Work Speed Setting (Decoupled from Multipliers)
+
+A new `WorkSpeed` setting (1–10, default 1) controls how often Build and Repair operations run, independently from the weld/grind multipliers.
+
+Previously, the only way to increase update frequency was to set `WeldingMultiplier` or `GrindingMultiplier` above 10, which caused a sudden 10x speed jump and had no middle ground. Now, multipliers only control how much work is done per tick, while `WorkSpeed` controls how frequently operations run:
+
+| WorkSpeed | Update interval | Relative frequency |
+|---|---|---|
+| 1 (default) | ~1.67 seconds | 1x |
+| 5 | ~0.33 seconds | 5x |
+| 10 | ~0.17 seconds | 10x |
+
+Configure via `ModSettings.xml` (`<WorkSpeed>5</WorkSpeed>` inside the `<Welder>` element) or at runtime:
+```
+/nanobars config set WorkSpeed 5
+```
+
+Existing worlds with a multiplier above 10 will automatically have `WorkSpeed` set to `10` on first load, preserving the previous effective speed.
+
 ### Custom Info Panel Refresh
 
 The terminal custom info panel now updates at most every 2 seconds when something has changed, instead of immediately on every state change. This reduces unnecessary refreshes while still keeping the displayed status current. On dedicated servers, the expensive terminal redraw is skipped entirely since no local terminal is rendered — only connected clients see the panel.
@@ -216,6 +235,16 @@ The terminal custom info panel now updates at most every 2 seconds when somethin
 ---
 
 ## Bug Fixes
+
+### Block Settings Lost and Housekeeping Skipped at High Multipliers
+
+Fixed a bug where setting `WeldingMultiplier` or `GrindingMultiplier` above 10 caused critical housekeeping operations to be permanently skipped. This could result in:
+
+- **Block settings not saving** — terminal changes were lost on world reload.
+- **Stale power display** — the power draw shown in the terminal was never recalculated.
+- **Memory leak** — internal damage tracking records accumulated indefinitely.
+
+The root cause was that high multipliers triggered a faster update path that intentionally skipped these operations as an optimisation, not accounting for the fact that they were already self-throttled internally. This has been resolved as part of the new `WorkSpeed` setting (see above), which removed the fast-mode code path entirely.
 
 ### Build and Repair Blocks Going Idle When Other Grids Are Available
 

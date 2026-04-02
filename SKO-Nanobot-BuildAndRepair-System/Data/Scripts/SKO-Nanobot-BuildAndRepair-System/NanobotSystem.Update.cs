@@ -46,16 +46,10 @@ namespace SKONanobotBuildAndRepairSystem
         public override void UpdateBeforeSimulation10()
         {
             base.UpdateBeforeSimulation10();
-            UpdateBeforeSimulation10_100(true);
+            UpdateBeforeSimulation10_100();
         }
 
-        public override void UpdateBeforeSimulation100()
-        {
-            base.UpdateBeforeSimulation100();
-            UpdateBeforeSimulation10_100(false);
-        }
-
-        private void UpdateBeforeSimulation10_100(bool fast)
+        private void UpdateBeforeSimulation10_100()
         {
             var profilerTs = MethodProfiler.Start();
             try
@@ -77,18 +71,15 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     CreativeModeActive = MyAPIGateway.Session.CreativeMode;
 
-                    if (!fast)
-                    {
-                        CleanupFriendlyDamage();
-                    }
+                    CleanupFriendlyDamage();
 
-                    // OPT 2: Stagger heavy work across ticks. Only this BaR's assigned group
-                    // runs the weld/grind/collect logic each cycle. UI, state sync, and power
-                    // updates always run (not staggered).
-                    // Only stagger when cluster is large enough to cause load issues.
-                    // Gradual ramp: 1-5 no stagger, 6-10→2, 11+→3 groups (max ~500ms interval).
-                    // When sim-speed drops, increase stagger to help the server recover.
-                    var cycle = MyAPIGateway.Session.GameplayFrameCounter / (fast ? 10 : 100);
+                    // WorkSpeed controls operation frequency:
+                    //   1 = every 100 frames (same as old Update100, default)
+                    //  10 = every 10 frames (same as old Update10, fastest)
+                    // Stagger distributes BaRs within each cycle.
+                    var workSpeed = Math.Max(1, Math.Min(10, Mod.Settings.Welder.WorkSpeed));
+                    var cycleDivisor = 100 / workSpeed;
+                    var cycle = MyAPIGateway.Session.GameplayFrameCounter / cycleDivisor;
                     var clusterSize = AssignedCluster != null ? AssignedCluster.Members.Count : 1;
                     var effectiveGroups = clusterSize < 6 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), clusterSize - 3);
 
@@ -112,8 +103,16 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
 
+                    // Ensure we only execute once per cycle (WorkSpeed throttle).
+                    // Each cycle spans (cycleDivisor / 10) Update10 ticks; without this guard
+                    // the BaR would fire on every tick within the cycle instead of just one.
+                    if (isMyTurn && cycle == _lastWorkCycle)
+                    {
+                        isMyTurn = false;
+                    }
                     if (isMyTurn)
                     {
+                        _lastWorkCycle = cycle;
                         ServerTryWeldingGrindingCollecting();
                     }
 
@@ -128,22 +127,19 @@ namespace SKONanobotBuildAndRepairSystem
                         catch { }
                     }
 
-                    if (!fast)
+                    if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdatePowerSinkLast).TotalSeconds >= 2)
                     {
-                        if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdatePowerSinkLast).TotalSeconds >= 2)
+                        _UpdatePowerSinkLast = MyAPIGateway.Session.ElapsedPlayTime;
+                        var resourceSink = _Welder.ResourceSink as Sandbox.Game.EntityComponents.MyResourceSinkComponent;
+                        if (resourceSink != null)
                         {
-                            _UpdatePowerSinkLast = MyAPIGateway.Session.ElapsedPlayTime;
-                            var resourceSink = _Welder.ResourceSink as Sandbox.Game.EntityComponents.MyResourceSinkComponent;
-                            if (resourceSink != null)
-                            {
-                                resourceSink.Update();
-                            }
+                            resourceSink.Update();
                         }
-
-                        Settings.TrySave(Entity, Mod.ModGuid);
-
-                        TryTransmitState();
                     }
+
+                    Settings.TrySave(Entity, Mod.ModGuid);
+
+                    TryTransmitState();
                 }
                 else
                 {
@@ -172,16 +168,17 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (Logging.Instance.ShouldLog(Logging.Level.Error))
                 {
-                    Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemBlock {0}: UpdateBeforeSimulation10/100 Exception:{1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), ex);
+                    Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemBlock {0}: UpdateBeforeSimulation10 Exception:{1}", Logging.BlockName(_Welder, Logging.BlockNameOptions.None), ex);
                 }
             }
             finally
             {
                 if (profilerTs != 0L)
                 {
+                    var workSpeed = Math.Max(1, Math.Min(10, Mod.Settings.Welder.WorkSpeed));
                     MethodProfiler.StopAndLog("UpdateBeforeSimulation10_100", profilerTs, () =>
-                        string.Format("entityId={0};fast={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5}",
-                            _Welder != null ? _Welder.EntityId : 0, fast, _IsInit, _Delay,
+                        string.Format("entityId={0};workSpeed={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5}",
+                            _Welder != null ? _Welder.EntityId : 0, workSpeed, _IsInit, _Delay,
                             AssignedCluster != null ? AssignedCluster.Members.Count : 1,
                             AssignedCluster != null ? (AssignedCluster.Members.Count < 5 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), AssignedCluster.Members.Count - 3)) : 1));
                 }
