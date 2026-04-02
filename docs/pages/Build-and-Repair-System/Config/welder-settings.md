@@ -29,8 +29,31 @@ Power values are in **MW**. These set the upper limit; actual draw scales with a
 
 | Setting              | Default | Description                                                                   |
 | -------------------- | ------- | ----------------------------------------------------------------------------- |
-| `WeldingMultiplier`  | `1`     | Multiplier applied to welding speed. `2` doubles the speed, `0.5` halves it.  |
-| `GrindingMultiplier` | `1`     | Multiplier applied to grinding speed. `2` doubles the speed, `0.5` halves it. |
+| `WeldingMultiplier`  | `1`     | Multiplier applied to welding speed per tick. `2` doubles the per-tick amount, `0.5` halves it.  |
+| `GrindingMultiplier` | `1`     | Multiplier applied to grinding speed per tick. `2` doubles the per-tick amount, `0.5` halves it. |
+
+---
+
+## Update Speed
+
+| Setting     | Default | Description                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WorkSpeed` | `1`     | Controls how often Build and Repair operations run, from `1` (slowest) to `10` (fastest). At `1`, operations fire roughly every 1.67 seconds. At `10`, they fire roughly every 0.17 seconds — 10x more frequently. This setting is independent of `WeldingMultiplier` and `GrindingMultiplier`, which control how much work is done per tick. Accepted range: 1–10. |
+
+### Speed examples
+
+The total effective speed is `WorkSpeed × Multiplier`. Some common combinations:
+
+| WeldingMultiplier | WorkSpeed | Per-tick amount | Updates/sec | Relative speed vs defaults |
+|---|---|---|---|---|
+| 1 | 1 (default) | 1x | ~0.6 | 1x (baseline) |
+| 2 | 1 | 2x | ~0.6 | 2x |
+| 1 | 5 | 1x | ~3 | 5x |
+| 2 | 5 | 2x | ~3 | 10x |
+| 10 | 10 | 10x | ~6 | 100x |
+
+{: .note }
+> In previous versions (before v2.5.0), setting `WeldingMultiplier` or `GrindingMultiplier` above 10 also changed the update frequency. This is no longer the case — multipliers now only affect the per-tick amount. Use `WorkSpeed` to control update frequency independently. Existing worlds with a multiplier above 10 will automatically have `WorkSpeed` set to `10` on first load.
 
 ---
 
