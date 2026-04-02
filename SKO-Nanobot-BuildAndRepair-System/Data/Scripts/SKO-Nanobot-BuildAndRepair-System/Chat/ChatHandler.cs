@@ -81,6 +81,11 @@ namespace SKONanobotBuildAndRepairSystem.Chat
             if (args[0] == "profile" && args.Length >= 2 && args[1] == "summary")
             {
                 if (!IsLocalAdmin(console)) return;
+                if (!HudHandler.IsApiReady)
+                {
+                    console.ShowMessage("Nanobars", "Text HUD API (BuildInfo mod) not detected. Profile summary HUD is not available.");
+                    return;
+                }
                 var enabled = HudHandler.ToggleProfileSummary();
                 console.ShowMessage("Nanobars", enabled
                     ? "Profile summary HUD enabled (top-right). Use the same command to toggle off."
@@ -132,6 +137,11 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                 // Local-only: show/hide the HUD panel on this client
                 if (sub == "show")
                 {
+                    if (!HudHandler.IsApiReady)
+                    {
+                        console.ShowMessage("Nanobars", "Text HUD API (BuildInfo mod) not detected. Debug HUD is not available.");
+                        return;
+                    }
                     HudHandler.SetLocalDebugVisible(true);
                     console.ShowMessage("Nanobars", "Debug HUD shown locally.");
                     return;
@@ -146,6 +156,11 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                 // Local-only: position + auto-show
                 if (sub == "left" || sub == "right")
                 {
+                    if (!HudHandler.IsApiReady)
+                    {
+                        console.ShowMessage("Nanobars", "Text HUD API (BuildInfo mod) not detected. Debug HUD is not available.");
+                        return;
+                    }
                     HudHandler.SetPosition(sub == "right");
                     HudHandler.SetLocalDebugVisible(true);
                     console.ShowMessage("Nanobars", string.Format("Debug HUD positioned {0} and shown.", sub));

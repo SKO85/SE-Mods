@@ -18,6 +18,9 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(11), XmlElement]
         public float GrindingMultiplier { get; set; }
 
+        [ProtoMember(12), XmlElement]
+        public int WorkSpeed { get; set; }
+
         [ProtoMember(90), XmlElement]
         public SearchModes AllowedSearchModes { get; set; }
 
@@ -124,6 +127,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
             WeldingMultiplier = 1f;
             GrindingMultiplier = 1f;
+            WorkSpeed = 1;
 
             AllowedSearchModes = SearchModes.Grids | SearchModes.BoundingBox;
             SearchModeDefault = SearchModes.Grids;

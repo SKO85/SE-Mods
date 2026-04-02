@@ -239,14 +239,14 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             tsMark = Stopwatch.GetTimestamp();
-            if ((float)_TransportInventory.CurrentVolume >= _MaxTransportVolume || target.IsFullyDismounted)
+            if ((float)_TransportInventory.CurrentVolume >= _MaxGrindTransportVolume || target.IsFullyDismounted)
             {
                 //Transport started
                 State.CurrentTransportIsPick = true;
                 State.CurrentTransportIsCollecting = false;
                 State.CurrentTransportTarget = ComputePosition(target);
                 State.CurrentTransportStartTime = playTime;
-                State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.TransportSpeed);
+                State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.GrindTransportSpeed);
 
                 ServerEmptyTransportInventory(true);
                 transporting = true;

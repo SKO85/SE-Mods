@@ -30,8 +30,8 @@ namespace SKONanobotBuildAndRepairSystem
         public const int WELDER_OFFSET_MAX_DEFAULT_IN_M = 200;
         public const int WELDER_OFFSET_MAX_IN_M = 2000;
 
-        public const float WELDING_GRINDING_MULTIPLIER_MIN = 0.001f;
-        public const float WELDING_GRINDING_MULTIPLIER_MAX = 1000f;
+        public const float WELDING_GRINDING_MULTIPLIER_MIN = 0.1f;
+        public const float WELDING_GRINDING_MULTIPLIER_MAX = 100f;
 
         public const float WELDER_REQUIRED_ELECTRIC_POWER_STANDBY_DEFAULT = 50.0f / 1000; // 50 kW
         public const float WELDER_REQUIRED_ELECTRIC_POWER_WELDING_DEFAULT = 200.0f / 1000; // 200 kW
@@ -113,6 +113,8 @@ namespace SKONanobotBuildAndRepairSystem
         private bool _UpdateCustomInfoNeeded;
         internal bool _firstSettingsReceived = false;
         private float _MaxTransportVolume;
+        private float _MaxWeldTransportVolume;
+        private float _MaxGrindTransportVolume;
 
 
         private TimeSpan _LastFriendlyDamageCleanup;

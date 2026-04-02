@@ -542,7 +542,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (IsTransportRunning(playTime))
                     return true;
 
-                var remainingVolume = _MaxTransportVolume;
+                var remainingVolume = _MaxWeldTransportVolume;
                 _TempMissingComponents.Clear();
                 var picked = false;
                 var cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;
@@ -605,14 +605,14 @@ namespace SKONanobotBuildAndRepairSystem
                     ServerFindMissingComponents(targetData, ref remainingVolume);
                 }
 
-                if (remainingVolume < _MaxTransportVolume || (CreativeModeActive && _TempMissingComponents.Count > 0))
+                if (remainingVolume < _MaxWeldTransportVolume || (CreativeModeActive && _TempMissingComponents.Count > 0))
                 {
                     //Transport startet
                     State.CurrentTransportIsPick = false;
                     State.CurrentTransportIsCollecting = false;
                     State.CurrentTransportTarget = ComputePosition(targetData.Block);
                     State.CurrentTransportStartTime = playTime;
-                    State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.TransportSpeed);
+                    State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.WeldTransportSpeed);
 
                     return true;
                 }

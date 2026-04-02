@@ -486,6 +486,10 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
         [XmlIgnore]
         public float TransportSpeed { get; private set; }
+        [XmlIgnore]
+        public float WeldTransportSpeed { get; private set; }
+        [XmlIgnore]
+        public float GrindTransportSpeed { get; private set; }
 
         [XmlIgnore]
         public float MaximumRequiredElectricPowerStandby { get; private set; }
@@ -726,7 +730,10 @@ namespace SKONanobotBuildAndRepairSystem.Models
             MaximumRequiredElectricPowerGrinding = Mod.Settings.Welder.MaximumRequiredElectricPowerGrinding / scale;
 
             var maxMultiplier = Math.Max(Mod.Settings.Welder.WeldingMultiplier, Mod.Settings.Welder.GrindingMultiplier);
-            TransportSpeed = maxMultiplier * NanobotSystem.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT * Math.Min(Mod.Settings.Range / NanobotSystem.WELDER_RANGE_DEFAULT_IN_M, 4.0f);
+            var rangeScale = Math.Min(Mod.Settings.Range / NanobotSystem.WELDER_RANGE_DEFAULT_IN_M, 4.0f);
+            TransportSpeed = maxMultiplier * NanobotSystem.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT * rangeScale;
+            WeldTransportSpeed = Mod.Settings.Welder.WeldingMultiplier * NanobotSystem.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT * rangeScale;
+            GrindTransportSpeed = Mod.Settings.Welder.GrindingMultiplier * NanobotSystem.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT * rangeScale;
 
             if (Mod.Settings.Welder.AllowBuildFixed || init)
             {

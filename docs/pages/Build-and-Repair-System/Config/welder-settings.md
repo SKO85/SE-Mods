@@ -29,8 +29,8 @@ Power values are in **MW**. These set the upper limit; actual draw scales with a
 
 | Setting              | Default | Description                                                                   |
 | -------------------- | ------- | ----------------------------------------------------------------------------- |
-| `WeldingMultiplier`  | `1`     | Multiplier applied to welding speed per tick. `2` doubles the per-tick amount, `0.5` halves it.  |
-| `GrindingMultiplier` | `1`     | Multiplier applied to grinding speed per tick. `2` doubles the per-tick amount, `0.5` halves it. |
+| `WeldingMultiplier`  | `1`     | Multiplier applied to welding speed per tick. `2` doubles the per-tick amount, `0.5` halves it. Accepted range: 0.1–100. |
+| `GrindingMultiplier` | `1`     | Multiplier applied to grinding speed per tick. `2` doubles the per-tick amount, `0.5` halves it. Accepted range: 0.1–100. |
 
 ---
 

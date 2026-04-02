@@ -21,8 +21,9 @@ namespace SKONanobotBuildAndRepairSystem
         {
             base.Init(objectBuilder);
 
-            // Set frame update rate.
-            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
+            // Set frame update rate — always use EACH_10TH_FRAME.
+            // Actual operation frequency is controlled by WorkSpeed setting via cycle math.
+            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME;
 
             if (Entity.GameLogic is MyCompositeGameLogicComponent)
             {
@@ -63,12 +64,16 @@ namespace SKONanobotBuildAndRepairSystem
                 resourceSink.Update();
             }
 
-            var maxMultiplier = Math.Max(Mod.Settings.Welder.WeldingMultiplier, Mod.Settings.Welder.GrindingMultiplier);
-            if (maxMultiplier > 10) NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME;
-            else NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
+            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME;
 
+            var maxMultiplier = Math.Max(Mod.Settings.Welder.WeldingMultiplier, Mod.Settings.Welder.GrindingMultiplier);
             var multiplier = (maxMultiplier > WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER ? WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER : maxMultiplier);
             _MaxTransportVolume = ((float)_TransportInventory.MaxVolume * multiplier) / WELDER_TRANSPORTVOLUME_DIVISOR;
+
+            var weldMult = Math.Min(Mod.Settings.Welder.WeldingMultiplier, WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER);
+            _MaxWeldTransportVolume = ((float)_TransportInventory.MaxVolume * weldMult) / WELDER_TRANSPORTVOLUME_DIVISOR;
+            var grindMult = Math.Min(Mod.Settings.Welder.GrindingMultiplier, WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER);
+            _MaxGrindTransportVolume = ((float)_TransportInventory.MaxVolume * grindMult) / WELDER_TRANSPORTVOLUME_DIVISOR;
 
             UpdateCustomInfo(true);
         }

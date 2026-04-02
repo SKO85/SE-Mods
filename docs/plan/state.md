@@ -175,6 +175,8 @@ Items in `TODO/` are pending. Items in `DONE/` are completed.
 | BUG-082 | Medium | v2.5.0 | `NanobotSystem.Scanning.cs:1392-1436` | TODO | Cross-collection consistency gap: weld/grind/float targets swapped under separate locks — one-tick mixed state possible |
 | BUG-083 | Low | v2.5.0 | `NanobotSystem.Scanning.cs:36-37` | TODO | `_LastTargetsUpdate`/`_LastSourceUpdate` (TimeSpan, 8 bytes) read without memory barrier from game loop, written from background |
 | BUG-084 | Low | v2.5.0 | `docs/pages/.../FAQ/index.md`, `Config/index.md` | Done | Documentation references removed `-cwsf` command — replaced with `/nanobars config create` |
+| BUG-085 | High | v2.5.0 | `NanobotSystem.Update.cs` | Done | Fast mode (multiplier > 10) skips housekeeping: settings never save, friendly damage never cleaned, resource sink stale, state sync broken (v2.4.4) |
+| FEAT-066 | High | v2.5.0 | Done | Decouple update frequency from multiplier — new `WorkSpeed` setting (1-10) controls operation tick rate independently. Fixes BUG-085 |
 
 ## Previously Fixed (not in this review)
 

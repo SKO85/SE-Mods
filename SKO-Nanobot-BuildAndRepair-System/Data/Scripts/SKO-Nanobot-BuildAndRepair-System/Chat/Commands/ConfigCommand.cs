@@ -85,10 +85,13 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                     v => { Mod.Settings.AssignmentTtlSeconds = v; }, 2, 30),
                 FloatSetting("WeldingMultiplier",
                     () => Mod.Settings.Welder.WeldingMultiplier,
-                    v => { Mod.Settings.Welder.WeldingMultiplier = v; }, 0.1f, 1000f),
+                    v => { Mod.Settings.Welder.WeldingMultiplier = v; }, 0.1f, 100f),
                 FloatSetting("GrindingMultiplier",
                     () => Mod.Settings.Welder.GrindingMultiplier,
-                    v => { Mod.Settings.Welder.GrindingMultiplier = v; }, 0.1f, 1000f),
+                    v => { Mod.Settings.Welder.GrindingMultiplier = v; }, 0.1f, 100f),
+                IntSetting("WorkSpeed",
+                    () => Mod.Settings.Welder.WorkSpeed,
+                    v => { Mod.Settings.Welder.WorkSpeed = v; }, 1, 10),
             };
 
             _lookup = new Dictionary<string, SettingEntry>(StringComparer.OrdinalIgnoreCase);
