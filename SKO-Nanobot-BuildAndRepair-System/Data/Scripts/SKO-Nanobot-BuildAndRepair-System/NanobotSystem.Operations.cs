@@ -16,6 +16,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var profilerTs = MethodProfiler.Start();
             var primaryStuck = false;
+            var transportBlocked = false;
             try
             {
             var inventoryFull = State.InventoryFull;
@@ -101,6 +102,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if ((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) == 0 && !transporting)
                         ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);
 
+                    transportBlocked = transporting;
                     if (!transporting)
                     {
                         State.MissingComponents.Clear();
@@ -270,13 +272,17 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (profilerTs != 0L)
                 {
+                    var _transportBlocked = transportBlocked;
+                    var _transportTimeMs = State.CurrentTransportTime.TotalMilliseconds;
+                    var _workSpeed = Mod.Settings.Welder.WorkSpeed;
                     MethodProfiler.StopAndLog("ServerTryWeldingGrindingCollecting", profilerTs, () =>
-                        string.Format("entityId={0};workMode={1};welding={2};grinding={3};needCollecting={4};transporting={5};transportIsCollecting={6};weldTargets={7};grindTargets={8};floatingTargets={9};inventoryFull={10};scanReady={11};pushFull={12};primaryStuck={13}",
+                        string.Format("entityId={0};workMode={1};welding={2};grinding={3};needCollecting={4};transporting={5};transportIsCollecting={6};weldTargets={7};grindTargets={8};floatingTargets={9};inventoryFull={10};scanReady={11};pushFull={12};primaryStuck={13};transportBlocked={14};transportTimeMs={15:F1};workSpeed={16}",
                             _Welder.EntityId, Settings.WorkMode, State.Welding, State.Grinding,
                             State.NeedCollecting, State.Transporting, State.CurrentTransportIsCollecting,
                             State.PossibleWeldTargets.CurrentCount, State.PossibleGrindTargets.CurrentCount,
                             State.PossibleFloatingTargets.CurrentCount, State.InventoryFull,
-                            _InitialScanCompleted, _PushTargetsFull, primaryStuck));
+                            _InitialScanCompleted, _PushTargetsFull, primaryStuck,
+                            _transportBlocked, _transportTimeMs, _workSpeed));
                 }
             }
         }

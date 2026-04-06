@@ -83,7 +83,10 @@ namespace SKONanobotBuildAndRepairSystem
                     // will find one through normal iteration.
                     if (lookingForNext)
                     {
-                        lookingForNextChecked++;
+                        // Only count non-ignored blocks against the cap.
+                        // Ignored blocks are O(1) to skip and don't cause perf issues.
+                        if (!targetData.Ignore)
+                            lookingForNextChecked++;
                         if (lookingForNextChecked >= 20)
                             break;
                     }
@@ -395,6 +398,7 @@ namespace SKONanobotBuildAndRepairSystem
             var welderInventory = _Welder.GetInventory(0);
             var welding = false;
             var created = false;
+            float appliedWeldAmount = 0f;
             var target = targetData.Block;
             var hasIgnoreColor = ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0) && IsColorNearlyEquals(Settings.IgnoreColorPacked, target.GetColorMask());
 
@@ -491,6 +495,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                         if (welding)
                         {
+                            appliedWeldAmount = weldAmount;
                             tsMount = Stopwatch.GetTimestamp();
                             target.IncreaseMountLevel(weldAmount, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, false);
                             tsMount = Stopwatch.GetTimestamp() - tsMount;
@@ -516,15 +521,20 @@ namespace SKONanobotBuildAndRepairSystem
                 var _tsBuild = tsBuild;
                 var _tsStockpile = tsStockpile;
                 var _tsMount = tsMount;
+                var _weldAmount = appliedWeldAmount;
+                var _integrityRatio = target != null && target.MaxIntegrity > 0f ? target.Integrity / target.MaxIntegrity : 0f;
+                var _completed = targetData.Ignore;
+                var _distance = targetData.Distance;
                 MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
-                    string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};stockpileMs={7:F3};mountMs={8:F3}",
+                    string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};stockpileMs={7:F3};mountMs={8:F3};weldAmount={9:F2};integrityRatio={10:F3};completed={11};distance={12:F1}",
                         _Welder.EntityId,
                         targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
                         (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
                         created, welding, result,
                         _tsBuild * 1000.0 / Stopwatch.Frequency,
                         _tsStockpile * 1000.0 / Stopwatch.Frequency,
-                        _tsMount * 1000.0 / Stopwatch.Frequency));
+                        _tsMount * 1000.0 / Stopwatch.Frequency,
+                        _weldAmount, _integrityRatio, _completed, _distance));
             }
             return result;
         }
@@ -623,11 +633,16 @@ namespace SKONanobotBuildAndRepairSystem
                 _TempMissingComponents.Clear();
                 if (profilerTs != 0L)
                 {
+                    var _transportStarted = State.CurrentTransportStartTime > TimeSpan.Zero;
+                    var _transportTimeS = State.CurrentTransportTime.TotalSeconds;
+                    var _distance = targetData.Distance;
+                    var _weldTransportSpeed = Settings.WeldTransportSpeed;
                     MethodProfiler.StopAndLog("ServerFindMissingComponents", profilerTs, () =>
-                        string.Format("entityId={0};block={1};projected={2}",
+                        string.Format("entityId={0};block={1};projected={2};transportStarted={3};transportTimeS={4:F3};distance={5:F1};weldTransportSpeed={6:F1}",
                             _Welder.EntityId,
                             targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
-                            (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0));
+                            (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
+                            _transportStarted, _transportTimeS, _distance, _weldTransportSpeed));
                 }
             }
         }

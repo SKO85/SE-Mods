@@ -52,6 +52,7 @@ namespace SKONanobotBuildAndRepairSystem
         private void UpdateBeforeSimulation10_100()
         {
             var profilerTs = MethodProfiler.Start();
+            var throttleReason = "none";
             try
             {
                 if (_Welder == null) return;
@@ -61,6 +62,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (_Delay > 0)
                 {
                     _Delay--;
+                    throttleReason = "delay";
                     return;
                 }
 
@@ -91,6 +93,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
 
                     var isMyTurn = _staggerSlot < 0 || effectiveGroups <= 1 || (cycle % effectiveGroups) == (_staggerSlot % effectiveGroups);
+                    throttleReason = isMyTurn ? "fired" : "stagger";
 
                     // When sim-speed override is active, simulate the reduced tick rate.
                     // Real low sim-speed naturally halves ticks; the override must replicate that.
@@ -99,7 +102,11 @@ namespace SKONanobotBuildAndRepairSystem
                         var skipInterval = (int)Math.Round(1.0 / Mod.SimSpeedOverride.Value);
                         if (skipInterval > 1)
                         {
-                            isMyTurn = (cycle % skipInterval) == 0;
+                            if ((cycle % skipInterval) != 0)
+                            {
+                                isMyTurn = false;
+                                throttleReason = "simSkip";
+                            }
                         }
                     }
 
@@ -109,6 +116,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (isMyTurn && cycle == _lastWorkCycle)
                     {
                         isMyTurn = false;
+                        throttleReason = "workCycle";
                     }
                     if (isMyTurn)
                     {
@@ -176,11 +184,13 @@ namespace SKONanobotBuildAndRepairSystem
                 if (profilerTs != 0L)
                 {
                     var workSpeed = Math.Max(1, Math.Min(10, Mod.Settings.Welder.WorkSpeed));
+                    var _throttleReason = throttleReason;
                     MethodProfiler.StopAndLog("UpdateBeforeSimulation10_100", profilerTs, () =>
-                        string.Format("entityId={0};workSpeed={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5}",
+                        string.Format("entityId={0};workSpeed={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5};throttle={6}",
                             _Welder != null ? _Welder.EntityId : 0, workSpeed, _IsInit, _Delay,
                             AssignedCluster != null ? AssignedCluster.Members.Count : 1,
-                            AssignedCluster != null ? (AssignedCluster.Members.Count < 5 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), AssignedCluster.Members.Count - 3)) : 1));
+                            AssignedCluster != null ? (AssignedCluster.Members.Count < 5 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), AssignedCluster.Members.Count - 3)) : 1,
+                            _throttleReason));
                 }
             }
         }
