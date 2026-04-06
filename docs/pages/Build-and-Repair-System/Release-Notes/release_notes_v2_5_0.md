@@ -9,7 +9,7 @@ nav_order: 1
 # Pre-Release Notes – v2.5.0 (UNRELEASED)
 
 - Status: **Pre-release** — this version is under active development and has not been published yet. Features and details are subject to change.
-- Expected release: End of March 2026
+- Expected release: April 2026
 - Notes: Major performance and stability release. Focused on server performance with many active Build and Repair systems, bug fixes, and quality-of-life improvements.
 
 > **Note:** This release also includes all changes from [v2.4.5](release_notes_v2_4_5), which was not separately published. Please review those notes as well for a complete picture of what changed since v2.4.4.
@@ -213,7 +213,7 @@ Each integration reports its status: Active, Loaded (not ready), Not detected, o
 
 A new `WorkSpeed` setting (1–10, default 1) controls how often Build and Repair operations run, independently from the weld/grind multipliers.
 
-Previously, the only way to increase update frequency was to set `WeldingMultiplier` or `GrindingMultiplier` above 10, which caused a sudden 10x speed jump and had no middle ground. Now, multipliers only control how much work is done per tick, while `WorkSpeed` controls how frequently operations run:
+Previously, the only way to increase update frequency was to set `WeldingMultiplier` or `GrindingMultiplier` above 10, which caused a sudden 10x speed jump and had no middle ground. Now, multipliers only control how much work is done per tick, while `WorkSpeed` controls how frequently operations run and how fast transport animations complete:
 
 | WorkSpeed | Update interval | Relative frequency |
 |---|---|---|
@@ -227,6 +227,8 @@ Configure via `ModSettings.xml` (`<WorkSpeed>5</WorkSpeed>` inside the `<Welder>
 ```
 
 Existing worlds with a multiplier above 10 will automatically have `WorkSpeed` set to `10` on first load, preserving the previous effective speed.
+
+Transport speed also scales with `WorkSpeed`, so higher values make the beam animation complete faster to match the increased operation frequency.
 
 ### Custom Info Panel Refresh
 
@@ -326,6 +328,14 @@ Block assignments (the TTL-based reservations that prevent two systems from targ
 2. **Lock-on loss retry:** When a locked-on block vanished from the target list (e.g., after a projector update changed the grid's EntityId), the lock-on was cleared but the assignment was not released, holding the slot for up to 8 seconds.
 
 Both leaks have been fixed with explicit release calls before the transition/retry.
+
+### Welding Target Search Stopping Too Early
+
+When searching for the next weld target after the current one was completed, already-finished blocks were counted against the 20-block search cap. On grids with many completed blocks at the top of the priority list, the search could hit the cap before reaching any valid targets, causing the system to go idle. The cap now only counts blocks that actually need evaluation, so completed blocks are skipped without affecting the search budget.
+
+### Blocks on Newly Placed Grids Not Welded Until Power Block Placed
+
+When placing blocks on a brand-new small grid (e.g. armor blocks and a landing gear), the Build and Repair system would not start welding until a power-producing block (like a battery) was placed on the grid. This happened because freshly placed construction sites haven't reached their ownership integrity threshold, so the grid reported no ownership and the system refused to weld. The system now falls back to checking who placed the block — if the builder is the Build and Repair block's owner or a faction member, welding proceeds normally.
 
 ### Debug HUD Not Counting Projection-Blocked Safe Zones
 
