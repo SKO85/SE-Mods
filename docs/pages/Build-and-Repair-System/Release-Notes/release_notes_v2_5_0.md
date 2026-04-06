@@ -106,8 +106,10 @@ Server admins can now view and change most settings at runtime without restartin
 | `/nanobars config get <setting>` | Get a specific setting's current value. |
 | `/nanobars config set <setting> <value>` | Change a setting immediately. |
 | `/nanobars config save` | Save current settings to `ModSettings.xml`. |
+| `/nanobars config create` | Alias for `config save` (creates the file if it doesn't exist). |
 | `/nanobars config reload` | Reload settings from `ModSettings.xml`. |
 | `/nanobars config reset` | Reset all settings to defaults. |
+| `/nanobars config delete` | Reset all settings to defaults and delete `ModSettings.xml`. |
 
 **Examples:**
 ```
@@ -196,6 +198,7 @@ Admins can temporarily override the reported simulation speed for testing purpos
 
 | Command | Description |
 | --- | --- |
+| `/nanobars sim` | Show current sim-speed override status. |
 | `/nanobars sim <0.1–1.0>` | Force a specific sim-speed value. |
 | `/nanobars sim reset` | Return to the real sim-speed value. |
 
@@ -208,6 +211,24 @@ Admins can check whether optional mod integrations are active:
 | `/nanobars mods` | Show status of TextHudAPI (BuildInfo) and DefenseShields integrations. |
 
 Each integration reports its status: Active, Loaded (not ready), Not detected, or Disabled.
+
+### Remote System Management (Admin)
+
+Admins can list, count, enable, and disable Build and Repair blocks across the server:
+
+| Command | Description |
+| --- | --- |
+| `/nanobars systems list` | List all BaR blocks on the server. |
+| `/nanobars systems list --owner <player>` | List BaR blocks owned by a specific player. |
+| `/nanobars systems count` | Show BaR count per player and faction. |
+| `/nanobars systems enable all` | Enable all BaR blocks. |
+| `/nanobars systems disable all` | Disable all BaR blocks. |
+| `/nanobars systems enable --grid <name>` | Enable BaR blocks on a matching grid. |
+| `/nanobars systems disable --grid <name>` | Disable BaR blocks on a matching grid. |
+| `/nanobars systems enable --owner <player>` | Enable BaR blocks owned by a matching player. |
+| `/nanobars systems disable --owner <player>` | Disable BaR blocks owned by a matching player. |
+
+Grid and player name filters are case-insensitive and support partial matches.
 
 ### Work Speed Setting (Decoupled from Multipliers)
 
