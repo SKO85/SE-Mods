@@ -319,6 +319,8 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool IsTransportRunning(TimeSpan playTime)
         {
+            var profilerTs = MethodProfiler.Start();
+            var result = false;
             if (State.CurrentTransportStartTime > TimeSpan.Zero)
             {
                 // Transport started
@@ -326,22 +328,36 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if (!ServerEmptyTransportInventory(true))
                     {
-                        return true;
+                        result = true;
                     }
                 }
 
-                if (playTime.Subtract(State.CurrentTransportStartTime) < State.CurrentTransportTime)
+                if (!result && playTime.Subtract(State.CurrentTransportStartTime) < State.CurrentTransportTime)
                 {
                     // Last transport still running -> wait
-                    return true;
+                    result = true;
                 }
 
-                State.CurrentTransportStartTime = TimeSpan.Zero;
-                State.LastTransportTarget = State.CurrentTransportTarget;
-                State.CurrentTransportTarget = null;
+                if (!result)
+                {
+                    State.CurrentTransportStartTime = TimeSpan.Zero;
+                    State.LastTransportTarget = State.CurrentTransportTarget;
+                    State.CurrentTransportTarget = null;
+                }
             }
             else State.CurrentTransportTarget = null;
-            return false;
+
+            if (profilerTs != 0L)
+            {
+                var _result = result;
+                var _elapsedS = result ? playTime.Subtract(State.CurrentTransportStartTime).TotalSeconds : 0.0;
+                var _totalS = result ? State.CurrentTransportTime.TotalSeconds : 0.0;
+                var _isPick = State.CurrentTransportIsPick;
+                MethodProfiler.StopAndLog("IsTransportRunning", profilerTs, () =>
+                    string.Format("entityId={0};running={1};elapsedS={2:F3};totalS={3:F3};isPick={4}",
+                        _Welder.EntityId, _result, _elapsedS, _totalS, _isPick));
+            }
+            return result;
         }
     }
 }

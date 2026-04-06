@@ -1,3 +1,4 @@
+using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Profiling;
@@ -105,7 +106,20 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var relation = _Welder.OwnerId == 0 ? MyRelationsBetweenPlayerAndBlock.NoOwnership : block.GetUserRelationToOwner(_Welder.OwnerId);
             if (relation == MyRelationsBetweenPlayerAndBlock.Enemies) return false;
-            if (relation == MyRelationsBetweenPlayerAndBlock.Neutral || relation == MyRelationsBetweenPlayerAndBlock.NoOwnership) return false;
+            if (relation == MyRelationsBetweenPlayerAndBlock.Neutral) return false;
+            if (relation == MyRelationsBetweenPlayerAndBlock.NoOwnership)
+            {
+                // Grid has no ownership yet (e.g., freshly placed construction sites
+                // that haven't reached OwnershipIntegrityRatio). Fall back to checking
+                // who placed the block — allow welding if the builder is the BaR owner
+                // or a faction member. This avoids welding derelict/NPC grids.
+                var builtBy = block.BuiltBy;
+                if (builtBy <= 0) return false;
+                if (builtBy == _Welder.OwnerId) return true;
+                var builderRelation = MyIDModule.GetRelationPlayerBlock(builtBy, _Welder.OwnerId, MyOwnershipShareModeEnum.Faction);
+                return builderRelation == MyRelationsBetweenPlayerAndBlock.Owner
+                    || builderRelation == MyRelationsBetweenPlayerAndBlock.FactionShare;
+            }
             return true;
         }
 
