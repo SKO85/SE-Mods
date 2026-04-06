@@ -1,4 +1,4 @@
-﻿// Version: v1.12 - 26.03.2026
+﻿// Version: v2.5.0 - 07.04.2026
 // Compatible with: SKO Nanobot Build and Repair System (Maintained) v2.5.0+
 // This script only works with SKO's maintained versions of the mod.
 // It will NOT work with the original mod by Dummy08.

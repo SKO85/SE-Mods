@@ -1,15 +1,14 @@
 ---
 layout: default
-title: 'Pre-Release Notes – v2.5.0'
+title: 'Release Notes – v2.5.0'
 parent: Release Notes
 grand_parent: Build and Repair System
 nav_order: 1
 ---
 
-# Pre-Release Notes – v2.5.0 (UNRELEASED)
+# Release Notes – v2.5.0
 
-- Status: **Pre-release** — this version is under active development and has not been published yet. Features and details are subject to change.
-- Expected release: April 2026
+- Status: **Released** — April 2026
 - Notes: Major performance and stability release. Focused on server performance with many active Build and Repair systems, bug fixes, and quality-of-life improvements.
 
 > **Note:** This release also includes all changes from [v2.4.5](release_notes_v2_4_5), which was not separately published. Please review those notes as well for a complete picture of what changed since v2.4.4.
