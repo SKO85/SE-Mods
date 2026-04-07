@@ -164,7 +164,22 @@ Yes. The system checks whether the owner of the Build and Repair block has the r
   <li>Are you using a server plugin that <strong>protects grids</strong>, such as the <code>!protect</code> command from ALE PCU Transferrer? Protected grids cannot be welded or ground.</li>
   <li>Check whether the block's search mode is set to <strong>Fly</strong> or <strong>Walk</strong> mode. Try switching between them — the wrong mode for your situation can prevent the system from finding targets.</li>
   <li>Check the <strong>info panel</strong> in the terminal — it often shows a specific reason why the system is idle.</li>
+  <li>Are you using a <strong>block or PCU limiter plugin</strong> on the server (e.g. BuildLimiter for Torch)? These plugins can silently prevent blocks from being placed or welded without any visible error message. Ask your server admin whether any build limits are in effect.</li>
 </ul>
+</div>
+</details>
+
+<details>
+<summary>Could a build limiter plugin be blocking my blocks?</summary>
+<div>
+<p>Yes. Some dedicated servers run plugins that enforce block count, PCU, or block-type limits — for example <strong>BuildLimiter</strong> (a Torch plugin). When a limit is reached, the plugin silently prevents new blocks from being placed or welded. The Build and Repair system sees the block as a valid target and tries to weld it, but the plugin intercepts the operation and nothing happens. There is no error message — the block simply appears stuck.</p>
+<p><strong>How to check:</strong></p>
+<ul>
+  <li>Ask your server admin if a build limiter or PCU limiter plugin is installed and whether you have hit a limit.</li>
+  <li>Try manually welding the same block with your hand torch. If manual welding also does nothing, a plugin is likely blocking the operation.</li>
+  <li>Check if only certain block types are affected — limiter plugins often restrict specific types (e.g. turrets, refineries) rather than all blocks.</li>
+</ul>
+<p>This is not a bug in the Build and Repair system. The mod cannot detect or bypass server plugin restrictions. Contact your server admin to adjust the limits or free up capacity.</p>
 </div>
 </details>
 
