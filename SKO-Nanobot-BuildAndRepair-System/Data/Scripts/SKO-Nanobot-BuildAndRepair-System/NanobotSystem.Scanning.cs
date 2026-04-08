@@ -975,6 +975,8 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
                                 if (res != 0) return res;
+                                var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
+                                if (gridCmp != 0) return gridCmp;
                             }
 
                             double distA, distB;
@@ -1190,9 +1192,12 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Sorts a subrange of the candidate list by priority+distance and removes excess.
+        /// Sorts a subrange of the candidate list and removes excess.
         /// Called after per-grid collection to enforce the per-grid budget while keeping
-        /// the best candidates (highest priority, nearest distance).
+        /// the best candidates based on the user's sort settings.
+        /// BUG-086: Must respect GrindIgnorePriorityOrder — when priority is disabled,
+        /// the cap must select by distance/grid-size so it keeps the blocks the user
+        /// actually wants (e.g., farthest), not the highest-priority ones.
         /// </summary>
         private void SortAndCapGridCandidates(List<ClusterTargetCandidate> list, int startIndex, int count, int maxKeep, bool isGrinding, ref MyOrientedBoundingBoxD areaBox)
         {
@@ -1200,18 +1205,24 @@ namespace SKONanobotBuildAndRepairSystem
             var priorityHandler = isGrinding ? BlockGrindPriority : BlockWeldPriority;
             var grindNearFirst = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
             var grindSmallestFirst = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
+            var grindIgnorePriority = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) != 0;
 
             list.Sort(startIndex, count, Comparer<ClusterTargetCandidate>.Create((a, b) =>
             {
-                var priorityA = priorityHandler.GetPriority(a.Block);
-                var priorityB = priorityHandler.GetPriority(b.Block);
-                if (priorityA != priorityB)
-                    return priorityA - priorityB;
+                if (!grindIgnorePriority)
+                {
+                    var priorityA = priorityHandler.GetPriority(a.Block);
+                    var priorityB = priorityHandler.GetPriority(b.Block);
+                    if (priorityA != priorityB)
+                        return priorityA - priorityB;
+                }
 
                 if (grindSmallestFirst)
                 {
                     var gridRes = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
                     if (gridRes != 0) return gridRes;
+                    var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
+                    if (gridCmp != 0) return gridCmp;
                 }
 
                 var posA = a.Block.CubeGrid.GridIntegerToWorld(a.Block.Position);
@@ -1284,7 +1295,8 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                // Sort weld targets by priority then distance (skip if coordinator pre-sorted)
+                // Pre-sort weld targets (skip if coordinator pre-sorted — truncation
+                // only needs approximate order to select good candidates per grid).
                 if (!result.PreSorted)
                 {
                     try
@@ -1317,7 +1329,39 @@ namespace SKONanobotBuildAndRepairSystem
                 preTruncateWeld = _TempPossibleWeldTargets.Count;
                 TruncateGridAware(_TempPossibleWeldTargets, MaxPossibleWeldTargets);
 
-                // Sort grind targets (skip if coordinator pre-sorted)
+                // BUG-086: Re-sort after truncation. TruncateGridAware enforces per-grid
+                // minimum quotas by moving excess items to an overflow list appended at the
+                // end, which disrupts the sort order. Also needed for pre-sorted results
+                // to apply this member's own distances instead of the coordinator's.
+                if (preTruncateWeld > MaxPossibleWeldTargets || result.PreSorted)
+                {
+                    try
+                    {
+                        _TempPossibleWeldTargets.Sort((a, b) =>
+                        {
+                            var priorityA = BlockWeldPriority.GetPriority(a.Block);
+                            var priorityB = BlockWeldPriority.GetPriority(b.Block);
+                            if (priorityA != priorityB) return priorityA - priorityB;
+
+                            var distCmp = Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                            if (distCmp != 0) return distCmp;
+
+                            var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
+                            if (gridCmp != 0) return gridCmp;
+                            var posA = a.Block.Position;
+                            var posB = b.Block.Position;
+                            if (posA.X != posB.X) return posA.X - posB.X;
+                            if (posA.Y != posB.Y) return posA.Y - posB.Y;
+                            return posA.Z - posB.Z;
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.Instance.Error("Error on post-truncate .Sort for _TempPossibleWeldTargets. Exception: {0}", ex);
+                    }
+                }
+
+                // Pre-sort grind targets (skip if coordinator pre-sorted).
                 if (!result.PreSorted)
                 {
                     try
@@ -1340,7 +1384,10 @@ namespace SKONanobotBuildAndRepairSystem
                                 if (grindSmallestGridFirst)
                                 {
                                     var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                                    return res != 0 ? res : Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                    if (res != 0) return res;
+                                    var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
+                                    if (gridCmp != 0) return gridCmp;
+                                    return Utils.Utils.CompareDistance(a.Distance, b.Distance);
                                 }
                                 if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
                                 return Utils.Utils.CompareDistance(b.Distance, a.Distance);
@@ -1359,6 +1406,48 @@ namespace SKONanobotBuildAndRepairSystem
                 // Truncate after sorting, preserving blocks from multiple grids.
                 preTruncateGrind = _TempPossibleGrindTargets.Count;
                 TruncateGridAware(_TempPossibleGrindTargets, MaxPossibleGrindTargets);
+
+                // BUG-086: Re-sort after truncation (see weld comment above).
+                if (preTruncateGrind > MaxPossibleGrindTargets || result.PreSorted)
+                {
+                    try
+                    {
+                        var grindUsePriority = (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0;
+                        var grindSmallestGridFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
+                        var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
+                        _TempPossibleGrindTargets.Sort((a, b) =>
+                        {
+                            if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
+                            {
+                                if (grindUsePriority)
+                                {
+                                    var priorityA = BlockGrindPriority.GetPriority(a.Block);
+                                    var priorityB = BlockGrindPriority.GetPriority(b.Block);
+                                    if (priorityA != priorityB)
+                                        return priorityA - priorityB;
+                                }
+
+                                if (grindSmallestGridFirst)
+                                {
+                                    var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
+                                    if (res != 0) return res;
+                                    var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
+                                    if (gridCmp != 0) return gridCmp;
+                                    return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                }
+                                if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                return Utils.Utils.CompareDistance(b.Distance, a.Distance);
+                            }
+                            else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
+                            else if ((b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return 1;
+                            return 0;
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.Instance.Error("Error on post-truncate .Sort for _TempPossibleGrindTargets. Exception: {0}", ex);
+                    }
+                }
 
                 // Sort floating targets
                 try
@@ -1458,7 +1547,21 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                     _TempPossibleSources.Clear();
                     _TempPossiblePushTargets.Clear();
-                    _PushTargetsFull = false;
+
+                    // Only reset _PushTargetsFull when push targets actually changed
+                    // (container added/removed) or after a 60s safety backoff.
+                    // This prevents push retry storms where all BaRs simultaneously
+                    // attempt expensive pushes into the same full containers on every
+                    // 30s source rescan.
+                    if (_PushTargetsFull)
+                    {
+                        var pushTargetCountChanged = _PossiblePushTargets.Count != _PushTargetsFullCount;
+                        var backoffExpired = MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PushTargetsFullSince).TotalSeconds >= 60;
+                        if (pushTargetCountChanged || backoffExpired)
+                        {
+                            _PushTargetsFull = false;
+                        }
+                    }
                 }
             }
             finally

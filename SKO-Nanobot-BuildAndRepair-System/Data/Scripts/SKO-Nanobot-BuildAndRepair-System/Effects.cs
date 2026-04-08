@@ -23,10 +23,16 @@ namespace SKONanobotBuildAndRepairSystem
         public const string PARTICLE_EFFECT_TRANSPORT1_PICK = "GrindNanobotTrace1";
         public const string PARTICLE_EFFECT_TRANSPORT1_DELIVER = "WeldNanobotTrace1";
 
-        public static readonly int MaxTransportEffects = 50;
+        public static readonly int MaxTransportEffects = 150;
         public static int _ActiveTransportEffects = 0;
-        public static readonly int MaxWorkingEffects = 80;
+        public static readonly int MaxWorkingEffects = 150;
         public static int _ActiveWorkingEffects = 0;
+
+        /// <summary>
+        /// Maximum distance (squared) from the camera beyond which effects are suppressed.
+        /// Avoids rendering particles/sounds for BaRs used by other players far away.
+        /// </summary>
+        private const double MaxEffectDistanceSq = 1500.0 * 1500.0;
 
         public Vector3 EmitterPosition;
         public WorkingState WorkingStateSet = WorkingState.Invalid;
@@ -80,6 +86,22 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         public void UpdateEffects(NanobotSystem system)
         {
+            // Suppress all effects when the camera is far from this BaR.
+            var camera = MyAPIGateway.Session.Camera;
+            if (camera != null && system.Welder != null)
+            {
+                var distSq = (camera.WorldMatrix.Translation - system.Welder.GetPosition()).LengthSquared();
+                if (distSq > MaxEffectDistanceSq)
+                {
+                    // Out of range — tear down any active effects and return.
+                    if (_TransportStateSet) SetTransportEffects(system, false);
+                    if (WorkingStateSet != WorkingState.Invalid) SetWorkingEffects(system, WorkingState.Invalid);
+                    WorkingStateSet = WorkingState.Invalid;
+                    _TransportStateSet = false;
+                    return;
+                }
+            }
+
             var disableParticleEffects = Mod.Settings.DisableParticleEffects || ((system.Settings.Flags & SyncBlockSettings.Settings.DisableParticleEffects) != 0);
             var particleEffectsChanged = disableParticleEffects != _DisableParticleEffectsSet;
             _DisableParticleEffectsSet = disableParticleEffects;

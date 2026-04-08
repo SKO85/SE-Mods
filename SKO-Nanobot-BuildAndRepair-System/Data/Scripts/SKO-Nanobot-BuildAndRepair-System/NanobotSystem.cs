@@ -67,6 +67,8 @@ namespace SKONanobotBuildAndRepairSystem
         private volatile bool _AsyncUpdateSourcesAndTargetsRunning = false;
         private volatile bool _InitialScanCompleted = false;
         private volatile bool _PushTargetsFull = false;
+        private int _PushTargetsFullCount;
+        private TimeSpan _PushTargetsFullSince;
 
         /// <summary>
         /// When true, the welding loop found nothing on its last full iteration

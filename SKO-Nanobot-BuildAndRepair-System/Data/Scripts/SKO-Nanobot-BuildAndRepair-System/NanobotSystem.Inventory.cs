@@ -91,10 +91,12 @@ namespace SKONanobotBuildAndRepairSystem
 
                 // BUG-016: If we attempted to push but nothing moved, mark push targets as full.
                 // This prevents constant iteration over full containers every tick.
-                // The flag is reset when push targets are rescanned (~30s).
+                // The flag is reset when push targets change or after a safety backoff.
                 if (anyAttempted && !anyPushed)
                 {
                     _PushTargetsFull = true;
+                    _PushTargetsFullCount = _PossiblePushTargets.Count;
+                    _PushTargetsFullSince = MyAPIGateway.Session.ElapsedPlayTime;
                 }
                 else if (anyPushed)
                 {
@@ -140,6 +142,8 @@ namespace SKONanobotBuildAndRepairSystem
                                 {
                                     // BUG-016: Mark push targets as full to avoid retrying every tick.
                                     _PushTargetsFull = true;
+                                    _PushTargetsFullCount = _PossiblePushTargets.Count;
+                                    _PushTargetsFullSince = MyAPIGateway.Session.ElapsedPlayTime;
                                     _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
                                 }
                                 else
