@@ -183,3 +183,6 @@ Items in `TODO/` are pending. Items in `DONE/` are completed.
 These were identified and fixed on the `fix/v2.5.1` branch — see MEMORY for details:
 - Idle BaRs when `MaxSystemsPerTargetGrid` limit fires (welding loop)
 - Idle BaRs when `MaxSystemsPerTargetGrid` limit fires (grinding loop)
+
+| BUG-086 | High | v2.5.1 | `NanobotSystem.Scanning.cs` | Done | Grind sort ignores user settings: per-grid cap overrides `GrindIgnorePriorityOrder`, `TruncateGridAware` disrupts sort, smallest-grid interleaves blocks from same-size grids |
+| BUG-087 | Low | v2.5.1 | `Effects.cs` | TODO | Effects no distance culling |
