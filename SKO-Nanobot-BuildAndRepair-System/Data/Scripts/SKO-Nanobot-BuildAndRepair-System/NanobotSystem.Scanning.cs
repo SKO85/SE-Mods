@@ -995,6 +995,30 @@ namespace SKONanobotBuildAndRepairSystem
                         distances[c.Block] = MinSquaredDistanceToClusterMembers(ref blockPos, ref coordCenter);
                     }
 
+                    // BUG-091: Build per-grid minimum-distance lookup so GrindSmallestGridFirst
+                    // orders same-size grids by proximity of their nearest block instead of by
+                    // arbitrary EntityId. Skip when not needed to keep the pre-pass cost zero
+                    // for the common path.
+                    if (grindSmallestGridFirst)
+                    {
+                        _gridMinDistLookup.Clear();
+                        foreach (var c in grindCandidates)
+                        {
+                            double bd;
+                            distances.TryGetValue(c.Block, out bd);
+                            var gid = c.Block.CubeGrid.EntityId;
+                            double existing;
+                            if (_gridMinDistLookup.TryGetValue(gid, out existing))
+                            {
+                                if (bd < existing) _gridMinDistLookup[gid] = bd;
+                            }
+                            else
+                            {
+                                _gridMinDistLookup[gid] = bd;
+                            }
+                        }
+                    }
+
                     grindCandidates.Sort((a, b) =>
                     {
                         if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
@@ -1011,6 +1035,17 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
                                 if (res != 0) return res;
+
+                                // BUG-091: spatial tiebreaker — nearest equal-size grid wins.
+                                // Blocks within the same grid share a minDist so they stay grouped.
+                                double minA, minB;
+                                _gridMinDistLookup.TryGetValue(a.Block.CubeGrid.EntityId, out minA);
+                                _gridMinDistLookup.TryGetValue(b.Block.CubeGrid.EntityId, out minB);
+                                var minCmp = minA.CompareTo(minB);
+                                if (minCmp != 0) return minCmp;
+
+                                // Stable deterministic fallback for the rare case where two
+                                // same-size grids also have identical min-distance.
                                 var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
                                 if (gridCmp != 0) return gridCmp;
                             }
@@ -1452,6 +1487,30 @@ namespace SKONanobotBuildAndRepairSystem
                         var grindUsePriority = (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0;
                         var grindSmallestGridFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
                         var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
+
+                        // BUG-091: Build per-grid minimum-distance lookup from this member's
+                        // own per-block distances so GrindSmallestGridFirst orders same-size
+                        // grids by proximity of their nearest block instead of by arbitrary
+                        // EntityId. Skip the pre-pass when the feature isn't enabled.
+                        if (grindSmallestGridFirst)
+                        {
+                            _gridMinDistLookup.Clear();
+                            for (int i = 0; i < _TempPossibleGrindTargets.Count; i++)
+                            {
+                                var c = _TempPossibleGrindTargets[i];
+                                var gid = c.Block.CubeGrid.EntityId;
+                                double existing;
+                                if (_gridMinDistLookup.TryGetValue(gid, out existing))
+                                {
+                                    if (c.Distance < existing) _gridMinDistLookup[gid] = c.Distance;
+                                }
+                                else
+                                {
+                                    _gridMinDistLookup[gid] = c.Distance;
+                                }
+                            }
+                        }
+
                         _TempPossibleGrindTargets.Sort((a, b) =>
                         {
                             if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
@@ -1468,6 +1527,16 @@ namespace SKONanobotBuildAndRepairSystem
                                 {
                                     var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
                                     if (res != 0) return res;
+
+                                    // BUG-091: spatial tiebreaker — nearest equal-size grid wins.
+                                    // Blocks within the same grid share a minDist so they stay grouped.
+                                    double minA, minB;
+                                    _gridMinDistLookup.TryGetValue(a.Block.CubeGrid.EntityId, out minA);
+                                    _gridMinDistLookup.TryGetValue(b.Block.CubeGrid.EntityId, out minB);
+                                    var minCmp = minA.CompareTo(minB);
+                                    if (minCmp != 0) return minCmp;
+
+                                    // Stable deterministic fallback for rare min-dist ties.
                                     var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
                                     if (gridCmp != 0) return gridCmp;
                                     return Utils.Utils.CompareDistance(a.Distance, b.Distance);
@@ -1498,6 +1567,30 @@ namespace SKONanobotBuildAndRepairSystem
                         var grindUsePriority = (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) == 0;
                         var grindSmallestGridFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
                         var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
+
+                        // BUG-091: Rebuild per-grid min-distance lookup from the (possibly
+                        // truncated) list so equal-size grids are ordered by proximity.
+                        // TruncateGridAware may have removed blocks, so the pre-sort dict
+                        // can't be reused — rebuild fresh from what remains.
+                        if (grindSmallestGridFirst)
+                        {
+                            _gridMinDistLookup.Clear();
+                            for (int i = 0; i < _TempPossibleGrindTargets.Count; i++)
+                            {
+                                var c = _TempPossibleGrindTargets[i];
+                                var gid = c.Block.CubeGrid.EntityId;
+                                double existing;
+                                if (_gridMinDistLookup.TryGetValue(gid, out existing))
+                                {
+                                    if (c.Distance < existing) _gridMinDistLookup[gid] = c.Distance;
+                                }
+                                else
+                                {
+                                    _gridMinDistLookup[gid] = c.Distance;
+                                }
+                            }
+                        }
+
                         _TempPossibleGrindTargets.Sort((a, b) =>
                         {
                             if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
@@ -1514,6 +1607,16 @@ namespace SKONanobotBuildAndRepairSystem
                                 {
                                     var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
                                     if (res != 0) return res;
+
+                                    // BUG-091: spatial tiebreaker — nearest equal-size grid wins.
+                                    // Blocks within the same grid share a minDist so they stay grouped.
+                                    double minA, minB;
+                                    _gridMinDistLookup.TryGetValue(a.Block.CubeGrid.EntityId, out minA);
+                                    _gridMinDistLookup.TryGetValue(b.Block.CubeGrid.EntityId, out minB);
+                                    var minCmp = minA.CompareTo(minB);
+                                    if (minCmp != 0) return minCmp;
+
+                                    // Stable deterministic fallback for rare min-dist ties.
                                     var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
                                     if (gridCmp != 0) return gridCmp;
                                     return Utils.Utils.CompareDistance(a.Distance, b.Distance);
@@ -1678,9 +1781,9 @@ namespace SKONanobotBuildAndRepairSystem
                     // 30s source rescan.
                     if (_PushTargetsFull)
                     {
-                        var pushTargetCountChanged = _PossiblePushTargets.Count != _PushTargetsFullCount;
+                        var pushTargetsChanged = ComputePushTargetsSignature() != _PushTargetsFullSignature;
                         var backoffExpired = MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PushTargetsFullSince).TotalSeconds >= 60;
-                        if (pushTargetCountChanged || backoffExpired)
+                        if (pushTargetsChanged || backoffExpired)
                         {
                             _PushTargetsFull = false;
                         }

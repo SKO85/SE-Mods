@@ -68,7 +68,7 @@ namespace SKONanobotBuildAndRepairSystem
         private volatile bool _AsyncUpdateSourcesAndTargetsRunning = false;
         private volatile bool _InitialScanCompleted = false;
         private volatile bool _PushTargetsFull = false;
-        private int _PushTargetsFullCount;
+        private long _PushTargetsFullSignature;
         private TimeSpan _PushTargetsFullSince;
 
         /// <summary>
@@ -100,6 +100,11 @@ namespace SKONanobotBuildAndRepairSystem
         private Dictionary<long, int> _truncateKeptPerGrid = new Dictionary<long, int>();
         private List<TargetBlockData> _truncateKept = new List<TargetBlockData>();
         private List<TargetBlockData> _truncateOverflow = new List<TargetBlockData>();
+
+        // BUG-091: Per-grid minimum distance used by GrindSmallestGridFirst sorts so
+        // same-size grids are ordered by their closest block (spatial), not by arbitrary
+        // EntityId. Pooled dict cleared and refilled by each sort pre-pass.
+        private Dictionary<long, double> _gridMinDistLookup = new Dictionary<long, double>();
 
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
         // Rebuilt by RebuildSaturatedGrids(), used as fast-path in IsGridOverSystemLimit().

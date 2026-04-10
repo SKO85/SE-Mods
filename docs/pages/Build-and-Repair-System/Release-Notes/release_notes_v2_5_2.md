@@ -53,6 +53,20 @@ The cause was an internal "idle fast-path" (added in v2.5.0 as a performance opt
 
 **Fix:** the idle fast-path now also checks whether the welder inventory is non-empty when an auto-push option is enabled. If items are sitting there waiting, the normal dispatch runs and auto-push fires on its usual 5–10 second cadence. BaRs with auto-push disabled take the fast-path exactly as before — no regression on the hot path.
 
+### Smallest-Grid Sort Picks Nearest Equal-Size Grid First (BUG-091)
+
+With the **Grind Smallest Grid First** option enabled, the BaR could travel to a farther equal-size grid before a nearby one. If two grids had the same block count, the internal tiebreaker was an arbitrary grid-creation number rather than distance — so the grid that was spawned first was always chosen first, even if it was 10× farther away.
+
+This was a follow-up to the v2.5.1 BUG-086 fix, which introduced the "group by grid" behavior to stop same-size grids from being interleaved block-by-block. The grouping behavior was the right call; the choice of tiebreaker was not.
+
+**Symptoms:**
+
+- **Grind Smallest Grid First** is enabled.
+- Two or more grids within the working area have the same block count (common with debris fields, drone swarms, or identical prefab stations).
+- The BaR appears to pick the "wrong" equal-size grid first — processing a far one while a close one sits untouched.
+
+**Fix:** same-size grids are now ordered by their nearest block's distance to the BaR, so the closest equal-size grid is processed first. The "group by grid" behavior from v2.5.1 is preserved: once a grid is selected, all its blocks are still processed before the BaR moves on to the next grid (no interleaving). Only BaRs with **Grind Smallest Grid First** enabled see any change.
+
 ---
 
 ## New Features

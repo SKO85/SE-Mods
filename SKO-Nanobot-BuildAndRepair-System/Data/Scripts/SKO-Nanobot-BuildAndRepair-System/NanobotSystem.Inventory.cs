@@ -16,6 +16,21 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public partial class NanobotSystem
     {
+        // Cheap signature for the current push-target list. XOR of owner EntityIds
+        // mixed with the count; detects container swaps that leave the count unchanged.
+        private long ComputePushTargetsSignature()
+        {
+            long sig = _PossiblePushTargets.Count;
+            for (int i = 0; i < _PossiblePushTargets.Count; i++)
+            {
+                var inv = _PossiblePushTargets[i];
+                if (inv == null) continue;
+                var owner = inv.Owner as IMyEntity;
+                if (owner != null) sig ^= owner.EntityId;
+            }
+            return sig;
+        }
+
         /// <summary>
         /// Push ore/ingot out of the welder
         /// </summary>
@@ -95,7 +110,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (anyAttempted && !anyPushed)
                 {
                     _PushTargetsFull = true;
-                    _PushTargetsFullCount = _PossiblePushTargets.Count;
+                    _PushTargetsFullSignature = ComputePushTargetsSignature();
                     _PushTargetsFullSince = MyAPIGateway.Session.ElapsedPlayTime;
                 }
                 else if (anyPushed)
@@ -142,7 +157,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 {
                                     // BUG-016: Mark push targets as full to avoid retrying every tick.
                                     _PushTargetsFull = true;
-                                    _PushTargetsFullCount = _PossiblePushTargets.Count;
+                                    _PushTargetsFullSignature = ComputePushTargetsSignature();
                                     _PushTargetsFullSince = MyAPIGateway.Session.ElapsedPlayTime;
                                     _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
                                 }
