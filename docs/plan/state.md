@@ -186,3 +186,7 @@ These were identified and fixed on the `fix/v2.5.1` branch — see MEMORY for de
 
 | BUG-086 | High | v2.5.1 | `NanobotSystem.Scanning.cs` | Done | Grind sort ignores user settings: per-grid cap overrides `GrindIgnorePriorityOrder`, `TruncateGridAware` disrupts sort, smallest-grid interleaves blocks from same-size grids |
 | BUG-087 | Low | v2.5.1 | `Effects.cs` | TODO | Effects no distance culling |
+| BUG-088 | High | v2.5.2 | `NanobotSystem.Scanning.cs` | Done | Cluster distant members starved on large single-grid bases — coordinator-centric collection cap and sort starve BaRs >150m from the coordinator; companion PB script shows `NULL` target |
+| FEAT-067 | Medium | v2.5.2 | Done | `/nanobars version` chat command — prints client version, and on dedicated servers also the server version via a network roundtrip, so players can diagnose version mismatches |
+| BUG-089 | Medium | v2.5.2 | `NanobotSystem.Operations.cs` | Done | Idle fast-path (FEAT-039) skips `ServerTryPushInventory` when BaR has leftover items but is not full — auto-push silently stops while idle; items stuck until next target acquired |
+| FEAT-068 | Medium | v2.5.2 | Done | Companion script — per-LCD config: `[BaR:group]` name tag with multi-surface `@0,1,2`, unscoped + scoped `@BaR@<surfaceIdx>` Custom Data blocks, `FontSize=<n>/auto` key, forced Monospace font for column alignment, auto-seeded default template in empty Custom Data, `Auto-queuing` state line on the Status page, reinit interval 120 s → 30 s, and script comment cleanup (2634 → 2075 lines) |

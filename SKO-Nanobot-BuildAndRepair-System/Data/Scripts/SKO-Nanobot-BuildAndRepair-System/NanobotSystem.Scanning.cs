@@ -587,12 +587,13 @@ namespace SKONanobotBuildAndRepairSystem
                 // Capture end timestamp before StopAndLog so grid cost doesn't include logging overhead.
                 var endTs = System.Diagnostics.Stopwatch.GetTimestamp();
 
+                var _clusterMembers = _ClusterMemberAreaCenters != null ? _ClusterMemberAreaCenters.Count : 0;
                 MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
-                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};skipRange={5}",
+                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};skipRange={5};clusterMembers={6}",
                         _Welder.EntityId, _gridEid, newBlocks.Count,
                         clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
                         clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
-                        blockSkipRange));
+                        blockSkipRange, _clusterMembers));
 
                 // Report per-grid scan cost for profile summary.
                 var gridMs = (double)(endTs - profilerTs) / System.Diagnostics.Stopwatch.Frequency * 1000.0;
@@ -794,9 +795,16 @@ namespace SKONanobotBuildAndRepairSystem
 
                 updateSource &= _Welder.UseConveyorSystem;
 
-                // Increased caps for cluster scan: serve multiple members
+                // Collection budget: gather enough candidates so that SortAndCapGridCandidates
+                // can select the BEST 256 per grid (nearest/farthest by user setting), rather
+                // than keeping the first 256 in arbitrary grid iteration order.
+                // Minimum 4x ensures solo BaRs scanning a grid with >256 qualifying blocks
+                // still collect enough to find the truly nearest/farthest targets.
+                // Multi-member clusters scale linearly with member count (capped at 16x) so
+                // that members placed far from the coordinator still get candidates in their
+                // own working area after the member-aware sort+truncate.
                 var memberCount = cluster.Members.Count;
-                var capMultiplier = memberCount < 4 ? memberCount : 4;
+                var capMultiplier = Math.Max(4, Math.Min(memberCount * 4, 16));
                 var maxWeld = MaxPossibleWeldTargets * capMultiplier;
                 var maxGrind = MaxPossibleGrindTargets * capMultiplier;
                 var maxFloat = MaxPossibleFloatingTargets * capMultiplier;
@@ -819,6 +827,29 @@ namespace SKONanobotBuildAndRepairSystem
                     // Solo coordinators scan with range checks (same as legacy behavior).
                     // Multi-member coordinators skip range checks — members apply their own filtering.
                     var skipRangeCheck = cluster.Members.Count > 1;
+
+                    // Snapshot each cluster member's working-area center so collect/sort
+                    // comparators can score candidates by proximity to ANY member instead
+                    // of just the coordinator. Without this, BaRs placed far from the
+                    // coordinator on the same grid are starved of targets because the
+                    // per-grid cap keeps only blocks near the coordinator.
+                    if (memberCount > 1)
+                    {
+                        if (_ClusterMemberAreaCenters == null)
+                            _ClusterMemberAreaCenters = new List<Vector3D>(memberCount);
+                        else
+                            _ClusterMemberAreaCenters.Clear();
+
+                        for (int i = 0; i < cluster.Members.Count; i++)
+                        {
+                            var member = cluster.Members[i];
+                            if (member == null || member.Welder == null) continue;
+                            var memberMatrix = member.Welder.WorldMatrix;
+                            memberMatrix.Translation = Vector3D.Transform(member.Settings.CorrectedAreaOffset, memberMatrix);
+                            var memberBox = new MyOrientedBoundingBoxD(member.Settings.CorrectedAreaBoundingBox, memberMatrix);
+                            _ClusterMemberAreaCenters.Add(memberBox.Center);
+                        }
+                    }
 
                     // Scan own grid
                     AsyncAddBlocksOfGrid(ref areaOrientedBox, ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0), ref ignoreColor, ((Settings.Flags & SyncBlockSettings.Settings.UseGrindColor) != 0), ref grindColor, Settings.UseGrindJanitorOn, Settings.GrindJanitorOptions, _Welder.CubeGrid, grids, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
@@ -913,6 +944,11 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
+                // Release cluster member snapshot so stale member references don't leak
+                // across scan cycles. Next multi-member scan will repopulate.
+                if (_ClusterMemberAreaCenters != null)
+                    _ClusterMemberAreaCenters.Clear();
+
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 if (updateSource) _LastSourceUpdate = _LastTargetsUpdate;
                 lock (_Welder)
@@ -956,7 +992,7 @@ namespace SKONanobotBuildAndRepairSystem
                     foreach (var c in grindCandidates)
                     {
                         var blockPos = c.Block.CubeGrid.GridIntegerToWorld(c.Block.Position);
-                        distances[c.Block] = (coordCenter - blockPos).LengthSquared();
+                        distances[c.Block] = MinSquaredDistanceToClusterMembers(ref blockPos, ref coordCenter);
                     }
 
                     grindCandidates.Sort((a, b) =>
@@ -996,7 +1032,7 @@ namespace SKONanobotBuildAndRepairSystem
                     foreach (var c in weldCandidates)
                     {
                         var blockPos = c.Block.CubeGrid.GridIntegerToWorld(c.Block.Position);
-                        distances[c.Block] = (coordCenter - blockPos).LengthSquared();
+                        distances[c.Block] = MinSquaredDistanceToClusterMembers(ref blockPos, ref coordCenter);
                     }
 
                     weldCandidates.Sort((a, b) =>
@@ -1029,11 +1065,12 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 var _grindCount = grindCandidates != null ? grindCandidates.Count : 0;
                 var _weldCount = weldCandidates != null ? weldCandidates.Count : 0;
+                var _clusterMembers = _ClusterMemberAreaCenters != null ? _ClusterMemberAreaCenters.Count : 0;
                 if (profilerTs != 0L)
                 {
                     MethodProfiler.StopAndLog("PreSortClusterCandidates", profilerTs, () =>
-                        string.Format("entityId={0};grindCandidates={1};weldCandidates={2}",
-                            _Welder.EntityId, _grindCount, _weldCount));
+                        string.Format("entityId={0};grindCandidates={1};weldCandidates={2};clusterMembers={3}",
+                            _Welder.EntityId, _grindCount, _weldCount, _clusterMembers));
                 }
             }
         }
@@ -1199,6 +1236,30 @@ namespace SKONanobotBuildAndRepairSystem
         /// the cap must select by distance/grid-size so it keeps the blocks the user
         /// actually wants (e.g., farthest), not the highest-priority ones.
         /// </summary>
+        /// <summary>
+        /// Returns the minimum squared distance from <paramref name="blockPos"/> to any
+        /// snapshotted cluster member area center. Falls back to <paramref name="fallbackCenter"/>
+        /// when the snapshot is empty (solo cluster). Keeps multi-member clusters member-aware
+        /// so distant members aren't starved of targets by a coordinator-centric sort.
+        /// </summary>
+        private double MinSquaredDistanceToClusterMembers(ref Vector3D blockPos, ref Vector3D fallbackCenter)
+        {
+            var centers = _ClusterMemberAreaCenters;
+            if (centers == null || centers.Count == 0)
+            {
+                return (fallbackCenter - blockPos).LengthSquared();
+            }
+
+            var best = double.MaxValue;
+            for (int i = 0; i < centers.Count; i++)
+            {
+                var c = centers[i];
+                var d = (c - blockPos).LengthSquared();
+                if (d < best) best = d;
+            }
+            return best;
+        }
+
         private void SortAndCapGridCandidates(List<ClusterTargetCandidate> list, int startIndex, int count, int maxKeep, bool isGrinding, ref MyOrientedBoundingBoxD areaBox)
         {
             var center = areaBox.Center;
@@ -1206,6 +1267,11 @@ namespace SKONanobotBuildAndRepairSystem
             var grindNearFirst = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
             var grindSmallestFirst = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
             var grindIgnorePriority = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) != 0;
+
+            // Capture snapshot presence once — comparator runs many times and the field
+            // is only written at scan start / cleared in finally (same background thread).
+            var memberCenters = _ClusterMemberAreaCenters;
+            var useMemberAware = memberCenters != null && memberCenters.Count > 0;
 
             list.Sort(startIndex, count, Comparer<ClusterTargetCandidate>.Create((a, b) =>
             {
@@ -1227,8 +1293,25 @@ namespace SKONanobotBuildAndRepairSystem
 
                 var posA = a.Block.CubeGrid.GridIntegerToWorld(a.Block.Position);
                 var posB = b.Block.CubeGrid.GridIntegerToWorld(b.Block.Position);
-                var distA = (center - posA).LengthSquared();
-                var distB = (center - posB).LengthSquared();
+                double distA, distB;
+                if (useMemberAware)
+                {
+                    distA = double.MaxValue;
+                    distB = double.MaxValue;
+                    for (int i = 0; i < memberCenters.Count; i++)
+                    {
+                        var c = memberCenters[i];
+                        var dA = (c - posA).LengthSquared();
+                        if (dA < distA) distA = dA;
+                        var dB = (c - posB).LengthSquared();
+                        if (dB < distB) distB = dB;
+                    }
+                }
+                else
+                {
+                    distA = (center - posA).LengthSquared();
+                    distB = (center - posB).LengthSquared();
+                }
                 return (isGrinding && !grindNearFirst) ? distB.CompareTo(distA) : distA.CompareTo(distB);
             }));
 
@@ -1446,6 +1529,46 @@ namespace SKONanobotBuildAndRepairSystem
                     catch (Exception ex)
                     {
                         Logging.Instance.Error("Error on post-truncate .Sort for _TempPossibleGrindTargets. Exception: {0}", ex);
+                    }
+                }
+
+                // Locality refinement: within distance bands, prefer blocks near the last
+                // grind position. This keeps the primary nearest/farthest ordering intact
+                // while adding spatial locality as a tiebreaker so the BaR grinds nearby
+                // blocks in sequence instead of jumping across the grid.
+                if (_HasLastGrindPosition && _TempPossibleGrindTargets.Count > 1)
+                {
+                    var lastPos = _LastGrindWorldPosition;
+                    var bandSize = 2.0; // meters — blocks within this BaR-distance range are re-sorted by locality
+                    int bandStart = 0;
+                    while (bandStart < _TempPossibleGrindTargets.Count)
+                    {
+                        var baseDist = _TempPossibleGrindTargets[bandStart].Distance;
+                        int bandEnd = bandStart + 1;
+                        while (bandEnd < _TempPossibleGrindTargets.Count &&
+                               Math.Abs(_TempPossibleGrindTargets[bandEnd].Distance - baseDist) < bandSize)
+                        {
+                            bandEnd++;
+                        }
+                        if (bandEnd - bandStart > 1)
+                        {
+                            var localLastPos = lastPos;
+                            _TempPossibleGrindTargets.Sort(bandStart, bandEnd - bandStart,
+                                Comparer<TargetBlockData>.Create((a, b) =>
+                                {
+                                    // Preserve autogrind-first ordering within the band.
+                                    var autoA = (a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0;
+                                    var autoB = (b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0;
+                                    if (autoA != autoB) return autoA ? -1 : 1;
+
+                                    var posA = a.Block.CubeGrid.GridIntegerToWorld(a.Block.Position);
+                                    var posB = b.Block.CubeGrid.GridIntegerToWorld(b.Block.Position);
+                                    var dA = (localLastPos - posA).LengthSquared();
+                                    var dB = (localLastPos - posB).LengthSquared();
+                                    return dA.CompareTo(dB);
+                                }));
+                        }
+                        bandStart = bandEnd;
                     }
                 }
 

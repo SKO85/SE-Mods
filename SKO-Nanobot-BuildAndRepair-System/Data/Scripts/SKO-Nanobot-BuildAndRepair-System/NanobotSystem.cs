@@ -10,6 +10,7 @@ using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.Utils;
+using VRageMath;
 using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
 using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 
@@ -82,6 +83,17 @@ namespace SKONanobotBuildAndRepairSystem
         private List<TargetEntityData> _TempPossibleFloatingTargets = new List<TargetEntityData>();
         private List<IMyInventory> _TempPossibleSources = new List<IMyInventory>();
         private List<IMyInventory> _TempPossiblePushTargets = new List<IMyInventory>();
+
+        // Locality-aware grind sorting: after destroying a block, prefer nearby blocks
+        // within the same distance band. Set on main thread, read on background scan thread.
+        internal Vector3D _LastGrindWorldPosition;
+        internal bool _HasLastGrindPosition;
+
+        // Snapshot of cluster member area box centers, populated by the coordinator at
+        // scan start for multi-member clusters. Used by collect/sort comparators to score
+        // candidates by proximity to ANY member instead of just the coordinator, so distant
+        // members on the same grid aren't starved of targets. Null on solo scans.
+        private List<Vector3D> _ClusterMemberAreaCenters;
 
         // Reusable pools for TruncateGridAware — avoids 8 allocations per ApplyClusterResultToSelf call.
         private HashSet<long> _truncateGridIds = new HashSet<long>();
