@@ -7,7 +7,7 @@ nav_order: 3
 
 # Chat Commands
 
-All chat commands start with `/nanobars` (or the alias `/nanoboars`). Commands are **admin-only** — you need Admin, SpaceMaster, or Owner permissions to use them.
+All chat commands start with `/nanobars` (or the alias `/nanoboars`). Most commands are **admin-only** — they require Admin, SpaceMaster, or Owner permissions. A few player-facing commands (such as `version`) are available to everyone.
 
 On dedicated servers, commands are automatically forwarded to the server and responses are sent back to the client.
 
@@ -21,6 +21,27 @@ Type `/nanobars` or `/nanobars -help` in the chat to see the help overview in-ga
 |---|---|
 | `/nanobars` | Show the help overview |
 | `/nanobars -help` | Same as above |
+
+---
+
+## Version
+
+Available to **all players** (not just admins). Used to diagnose version mismatches between your client and the server you are connected to.
+
+| Command | Description |
+|---|---|
+| `/nanobars version` | Show the client version and, on dedicated servers, also the server version |
+
+On a dedicated server the response looks like:
+
+```
+BaR Mod Client: v2.5.2
+BaR Mod Server: v2.5.2
+```
+
+On a local (single-player or listen) game session only the client line is shown, since there is no separate server process.
+
+If the two lines differ, one side should update before reporting issues — version drift commonly causes subtle sync glitches or missing features that look like bugs.
 
 ---
 

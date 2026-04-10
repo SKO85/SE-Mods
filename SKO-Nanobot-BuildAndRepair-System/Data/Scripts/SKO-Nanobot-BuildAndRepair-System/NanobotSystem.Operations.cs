@@ -72,6 +72,19 @@ namespace SKONanobotBuildAndRepairSystem
                         && _TransportInventory.CurrentVolume == 0
                         && !State.InventoryFull;
 
+                    // BUG-089: Don't take the idle fast-path when auto-push is enabled and
+                    // the welder still has leftover items — otherwise ServerTryPushInventory
+                    // never runs and items from the last grind cycle pile up indefinitely.
+                    // GetInventory is only called in the idle corner case with push enabled,
+                    // so the hot path pays nothing extra.
+                    if (isIdleNoWork
+                        && (Settings.Flags & (SyncBlockSettings.Settings.PushIngotOreImmediately | SyncBlockSettings.Settings.PushComponentImmediately | SyncBlockSettings.Settings.PushItemsImmediately)) != 0)
+                    {
+                        var welderInv = _Welder.GetInventory(0);
+                        if (welderInv != null && !welderInv.Empty())
+                            isIdleNoWork = false;
+                    }
+
                     if (!isIdleNoWork)
                     {
                     ServerTryPushInventory();

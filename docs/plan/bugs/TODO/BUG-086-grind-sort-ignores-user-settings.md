@@ -50,3 +50,7 @@ Add a post-truncation re-sort that always runs when truncation occurred or when 
 
 ### Fix 3 — Smallest-grid sort: group blocks by grid (all 4 sort locations)
 When `GrindSmallestGridFirst` is selected, blocks from different grids of the same size were interleaved by distance, causing "all over the place" grinding. Added grid entity ID as a secondary sort key between grid-size and distance, so all blocks from the same grid stay together and are sorted nearest-first within that grid. Sort order is now: smallest grid → group by grid → nearest within grid.
+
+## Follow-ups
+
+- **BUG-091 (v2.5.2):** the grid-EntityId grouping key from Fix 3 turned out to be arbitrary with respect to position — for two grids with identical `BlocksCount`, the lower-EntityId grid was always picked first regardless of distance. This could make the BaR travel to a farther equal-size grid before the closer one. BUG-091 keeps the "group by grid" behavior intact but replaces the EntityId tiebreaker with a per-grid minimum-distance lookup so the closest equal-size grid wins. See `docs/plan/bugs/TODO/BUG-091-grind-smallest-grid-arbitrary-tiebreak.md`.

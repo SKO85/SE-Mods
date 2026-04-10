@@ -10,6 +10,7 @@ using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.Utils;
+using VRageMath;
 using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
 using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 
@@ -67,7 +68,7 @@ namespace SKONanobotBuildAndRepairSystem
         private volatile bool _AsyncUpdateSourcesAndTargetsRunning = false;
         private volatile bool _InitialScanCompleted = false;
         private volatile bool _PushTargetsFull = false;
-        private int _PushTargetsFullCount;
+        private long _PushTargetsFullSignature;
         private TimeSpan _PushTargetsFullSince;
 
         /// <summary>
@@ -83,11 +84,27 @@ namespace SKONanobotBuildAndRepairSystem
         private List<IMyInventory> _TempPossibleSources = new List<IMyInventory>();
         private List<IMyInventory> _TempPossiblePushTargets = new List<IMyInventory>();
 
+        // Locality-aware grind sorting: after destroying a block, prefer nearby blocks
+        // within the same distance band. Set on main thread, read on background scan thread.
+        internal Vector3D _LastGrindWorldPosition;
+        internal bool _HasLastGrindPosition;
+
+        // Snapshot of cluster member area box centers, populated by the coordinator at
+        // scan start for multi-member clusters. Used by collect/sort comparators to score
+        // candidates by proximity to ANY member instead of just the coordinator, so distant
+        // members on the same grid aren't starved of targets. Null on solo scans.
+        private List<Vector3D> _ClusterMemberAreaCenters;
+
         // Reusable pools for TruncateGridAware — avoids 8 allocations per ApplyClusterResultToSelf call.
         private HashSet<long> _truncateGridIds = new HashSet<long>();
         private Dictionary<long, int> _truncateKeptPerGrid = new Dictionary<long, int>();
         private List<TargetBlockData> _truncateKept = new List<TargetBlockData>();
         private List<TargetBlockData> _truncateOverflow = new List<TargetBlockData>();
+
+        // BUG-091: Per-grid minimum distance used by GrindSmallestGridFirst sorts so
+        // same-size grids are ordered by their closest block (spatial), not by arbitrary
+        // EntityId. Pooled dict cleared and refilled by each sort pre-pass.
+        private Dictionary<long, double> _gridMinDistLookup = new Dictionary<long, double>();
 
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
         // Rebuilt by RebuildSaturatedGrids(), used as fast-path in IsGridOverSystemLimit().

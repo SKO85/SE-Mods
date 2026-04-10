@@ -11,6 +11,11 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             sb.AppendLine(string.Format("Version: {0}", Constants.ModVersion));
             sb.AppendLine();
 
+            sb.AppendLine("--- Player Commands ---");
+            sb.AppendLine();
+            sb.AppendLine("[version]: Show client and (on dedicated servers) server mod version");
+            sb.AppendLine();
+
             if (isAdmin)
             {
                 sb.AppendLine("--- Admin Commands ---");

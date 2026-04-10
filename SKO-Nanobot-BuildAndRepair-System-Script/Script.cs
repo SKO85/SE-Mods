@@ -1,4 +1,4 @@
-﻿// Version: v2.5.0 - 07.04.2026
+﻿// Version: v2.5.2 - 10.04.2026
 // Compatible with: SKO Nanobot Build and Repair System (Maintained) v2.5.0+
 // This script only works with SKO's maintained versions of the mod.
 // It will NOT work with the original mod by Dummy08.
@@ -6,10 +6,26 @@
 static double UpdateIntervalAssemblerQueues = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
 static double UpdateIntervalGrinding = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
 
-/// <summary> 
-/// Configure the groups with their block names and/or group names.
-/// You can access screens from TextSurfaceProvider like Cockpits with their name followed by [screenindex] e.g. "Cockpit[0]" 
-/// </summary> 
+// Configure groups below. Full docs:
+// https://sko85.github.io/SE-Mods/pages/Build-and-Repair-System/Companion-Script/
+//
+// LCDs can also be auto-attached via a [BaR:group] tag in the block name, e.g.
+//   "Hangar LCD [BaR:1]"           -> group 1
+//   "Cockpit [BaR:1@0,1,2]"        -> surfaces 0,1,2 of the cockpit -> group 1
+// group = group Name or 1-based index into BuildAndRepairSystemQueuingGroups.
+//
+// Per-LCD overrides go in Custom Data:
+//   @BaR                   (unscoped; cockpit-wide base)
+//   Kinds=Status,WeldTargets,MissingItems
+//   MaxLines=15
+//   SwitchTime=4
+//   FontSize=auto          (number or 'auto' to fit surface)
+//   @/BaR
+//   @BaR@0 ... @/BaR       (scoped: overrides for surface 0 only)
+//
+// Valid Kinds: ShortStatus, Status, WeldTargets, GrindTargets, CollectTargets,
+//              MissingItems, BlockWeldPriority, BlockGrindPriority
+// Tag and Custom Data reload every ~30 s; recompile the PB for immediate effect.
 static BuildAndRepairSystemQueuingGroup[] BuildAndRepairSystemQueuingGroups = {
    new BuildAndRepairSystemQueuingGroup() {
       BuildAndRepairSystemGroupName = "BuildAndRepairGroup1",
@@ -25,68 +41,8 @@ static BuildAndRepairSystemQueuingGroup[] BuildAndRepairSystemQueuingGroups = {
    }
 };
 
-/* Complex Example with multiple groups, displays, .. 
-static BuildAndRepairSystemQueuingGroup[] BuildAndRepairSystemQueuingGroups = { 
-   new BuildAndRepairSystemQueuingGroup() { 
-      Name = "Hangar BaR Group1", 
-      BuildAndRepairSystemNames = new [] { "Hangar1BaRSystem1", "Hangar1BaRSystem2" }, 
-      AssemblerNames = new[] { "Hangar1Assembler1", "Hangar1Assembler2", "Hangar1Assembler3" }, 
-      Displays = new[] { 
-         new DisplayDefinition { 
-            DisplayNames = new [] { "BaRStatusPanel" }, 
-            DisplayKinds = new [] { DisplayKind.Status, DisplayKind.MissingItems, DisplayKind.WeldTargets, DisplayKind.GrindTargets, DisplayKind.CollectTargets }, 
-            DisplayMaxLines = 19, 
-            DisplaySwitchTime = 4 
-         } 
-      } 
-   }, 
-   new BuildAndRepairSystemQueuingGroup() { 
-      Name = "Hangar BaR Group2", 
-      BuildAndRepairSystemNames = new[] { "Hangar1BaRSystem1", "Hangar1BaRSystem2" }, 
-      AssemblerNames = new[] { "Hangar1Assembler1", "Hangar1Assembler2", "Hangar1Assembler3" }, 
-      Displays = new [] { 
-         new DisplayDefinition { 
-            DisplayNames = new [] { "Hangar1BaRSystemStatusPanel1", "Hangar1BaRSystemStatusPanel2" }, 
-            DisplayKinds = new [] { DisplayKind.Status }, 
-            DisplayMaxLines = 19, 
-            DisplaySwitchTime = 0 
-         }, 
-         new DisplayDefinition { 
-            DisplayNames = new [] { "Hangar1BaRSystemStatusPanel3", "Hangar1BaRSystemStatusPanel4" }, 
-            DisplayKinds = new [] { DisplayKind.Status, DisplayKind.MissingItems, DisplayKind.WeldTargets, DisplayKind.GrindTargets, DisplayKind.CollectTargets }, 
-            DisplayMaxLines = 10, 
-            DisplaySwitchTime = 4 
-         } 
-      } 
-   }, 
-   new BuildAndRepairSystemQueuingGroup() { 
-      Name = "Hangar BaR Group3", 
-      BuildAndRepairSystemNames = new[] { "BuildAndRepair1.1", "BuildAndRepair1.2" }, 
-      AssemblerNames = new[] { "Assembler1.1", "Assembler1.2", "Assembler1.3" } 
-   }, 
-   new BuildAndRepairSystemQueuingGroup() { 
-      Name = "Hangar BaR Group4", 
-      BuildAndRepairSystemGroupName = "BuildAndRepairGroup1", 
-      AssemblerNames = new[] { "Assembler1.1", "Assembler1.2", "Assembler1.3" } 
-   }, 
-   new BuildAndRepairSystemQueuingGroup() { 
-      Name = "Hangar BaR Group5", 
-      BuildAndRepairSystemGroupName = "BuildAndRepairGroup1", 
-      AssemblerNames = new[] { "Assembler1.1", "Assembler1.2", "Assembler1.3" } 
-   }, 
-   new BuildAndRepairSystemQueuingGroup() { 
-      Name = "Hangar BaR Group6", 
-      BuildAndRepairSystemGroupName = "BuildAndRepairGroup1", 
-      AssemblerGroupName = "AssemblerGroup1" 
-   } 
-}; 
-*/
+// No user changeable settings behind this point
 
-// No user changeable settings behind this point 
-
-/// <summary> 
-/// Kind of Display 
-/// </summary> 
 public enum DisplayKind
 {
     ShortStatus,
@@ -114,12 +70,6 @@ void Main(string arg)
     _AutoQueuing.Handle();
 }
 
-/// <summary> 
-/// Group configuration. 
-/// Grouped Systems/Assembler could be defined either by list 
-/// their Names (BuildAndRepairSystemNames\AssemblerNames) and or by giving 
-/// a group name (BuildAndRepairSystemGroupName\AssemblerGroupName) 
-/// </summary> 
 public class BuildAndRepairSystemQueuingGroup
 {
     public string Name { get; set; }
@@ -132,35 +82,16 @@ public class BuildAndRepairSystemQueuingGroup
     public DisplayDefinition[] Displays { get; set; }
 }
 
-/// <summary>
-/// Definition for multiple displays
-/// </summary> 
 public class DisplayDefinition
 {
-    /// <summary> 
-    /// List of Displaynames 
-    /// </summary> 
     public string[] DisplayNames { get; set; }
-
-    /// <summary> 
-    /// You can choose the display pages you need from enum DisplayKind. They will be switched every DisplaySwitchTime seconds 
-    /// </summary> 
     public DisplayKind[] DisplayKinds { get; set; } = new[] { DisplayKind.Status };
-
-    /// <summary> 
-    /// The maximum of lines that should be displayed in case of list items (Blocks to build, grind, missing, ..) 
-    /// </summary> 
     public int DisplayMaxLines { get; set; } = 19;
-
-    /// <summary> 
-    /// Autoswitch time [s] 
-    /// </summary> 
     public double DisplaySwitchTime { get; set; } = 5;
+    public float FontSize { get; set; } = 0f;
+    public bool AutoFitFontSize { get; set; } = false;
 }
 
-/// <summary> 
-/// Build and repair system automatic queuing of missing components 
-/// </summary> 
 public class BuildAndRepairAutoQueuing
 {
     private Program _Program;
@@ -174,6 +105,30 @@ public class BuildAndRepairAutoQueuing
     public string InitializationResultMessage { get; private set; }
 
     private bool _InfoOnly = false;
+
+    // Seeded into empty Custom Data of tagged LCDs so users can discover the options in the UI.
+    private const string DefaultCustomDataTemplate =
+        "@BaR\n" +
+        "# BaR display config for this LCD. Remove or comment a line to fall back to the script default.\n" +
+        "# Kinds: comma-separated list of pages to cycle through.\n" +
+        "#   Valid: ShortStatus, Status, WeldTargets, GrindTargets, CollectTargets, MissingItems, BlockWeldPriority, BlockGrindPriority\n" +
+        "Kinds=Status,WeldTargets,GrindTargets,MissingItems\n" +
+        "# MaxLines: line cap for list pages (positive integer).\n" +
+        "MaxLines=19\n" +
+        "# SwitchTime: seconds between page switches. 0 = no rotation.\n" +
+        "SwitchTime=5\n" +
+        "# FontSize: explicit font size (e.g. 1.2) or 'auto' to fit the surface.\n" +
+        "#FontSize=auto\n" +
+        "@/BaR\n" +
+        "\n" +
+        "# For cockpits with multiple surfaces you can add per-surface blocks like:\n" +
+        "#@BaR@0\n" +
+        "#Kinds=Status\n" +
+        "#@/BaR\n" +
+        "#@BaR@1\n" +
+        "#Kinds=WeldTargets,MissingItems\n" +
+        "#@/BaR\n";
+
     public BuildAndRepairAutoQueuing(Program program)
     {
         _Program = program;
@@ -184,17 +139,14 @@ public class BuildAndRepairAutoQueuing
         _InfoOnly = infoOnly;
     }
 
-    /// <summary> 
-    /// Autorepair 
-    /// </summary> 
     public void Handle()
     {
         _ElapsedTime += _Program.Runtime.TimeSinceLastRun.TotalSeconds;
         if (!_IsInit)
         {
             Initialize();
-            _ReInit = _ElapsedTime + 120; //Refresh every 2 Minutes 
-            _NextUpdateAssemblerQueues = _ElapsedTime - 1; //Next refesh now 
+            _ReInit = _ElapsedTime + 30;
+            _NextUpdateAssemblerQueues = _ElapsedTime - 1;
             _NextUpdateGrinding = _NextUpdateAssemblerQueues;
             if (!string.IsNullOrWhiteSpace(InitializationResultMessage))
             {
@@ -215,16 +167,10 @@ public class BuildAndRepairAutoQueuing
             }
             RefreshDisplays();
 
-            if (_ElapsedTime > _ReInit)
-            {
-                _IsInit = false; //Refresh 
-            }
+            if (_ElapsedTime > _ReInit) _IsInit = false;
         }
     }
 
-    /// <summary> 
-    /// Initialize lists with blocks to manage 
-    /// </summary> 
     private void Initialize()
     {
         _IsInit = false;
@@ -239,11 +185,23 @@ public class BuildAndRepairAutoQueuing
 
         _GroupData = new BuildAndRepairSystemQueuingGroupData[BuildAndRepairSystemQueuingGroups.Length];
 
+        // Tagged panels win over explicit DisplayNames referencing the same surface.
+        var taggedByGroup = ScanTaggedPanels();
+        var taggedSurfaces = new HashSet<IMyTextSurface>();
+        if (taggedByGroup != null)
+        {
+            for (var g = 0; g < taggedByGroup.Length; g++)
+            {
+                if (taggedByGroup[g] == null) continue;
+                foreach (var tp in taggedByGroup[g]) if (tp.Surface != null) taggedSurfaces.Add(tp.Surface);
+            }
+        }
+
         var idx = 0;
         foreach (var queuingGroup in BuildAndRepairSystemQueuingGroups)
         {
             var displays = (queuingGroup != null && queuingGroup.Displays != null) ? queuingGroup.Displays : new DisplayDefinition[0];
-            _GroupData[idx] = new BuildAndRepairSystemQueuingGroupData(displays.Length);
+            _GroupData[idx] = new BuildAndRepairSystemQueuingGroupData();
             _GroupData[idx].Settings = queuingGroup;
             _GroupData[idx].RepairSystems = InitHandler<RepairSystemHandler>(queuingGroup);
             if (_GroupData[idx].RepairSystems != null)
@@ -251,24 +209,58 @@ public class BuildAndRepairAutoQueuing
                 _GroupData[idx].RepairSystems.SetProgram(_Program);
             }
             _GroupData[idx].Assemblers = InitAssemblerList(queuingGroup);
-            _GroupData[idx].StatusDisplays = new List<StatusAndLogDisplay>();
+            _GroupData[idx].DisplayEntries = new List<DisplayEntry>();
+            var groupLabel = string.IsNullOrEmpty(queuingGroup != null ? queuingGroup.Name : null) ? "BaR Group " + idx : queuingGroup.Name;
+
             for (int d = 0; d < displays.Length; d++)
             {
                 var displayDef = displays[d];
-                var statusDisplay = new StatusAndLogDisplay(_Program, string.IsNullOrEmpty(queuingGroup != null ? queuingGroup.Name : null) ? "BaR Group " + idx : queuingGroup.Name, displayDef != null ? displayDef.DisplayNames : null, null);
-                _GroupData[idx].StatusDisplays.Add(statusDisplay);
-                statusDisplay.Clear();
-                statusDisplay.UpdateDisplay();
+                var names = displayDef != null ? displayDef.DisplayNames : null;
+                if (names == null || names.Length == 0)
+                {
+                    var empty = new StatusAndLogDisplay(_Program, groupLabel, null, null);
+                    empty.Clear();
+                    empty.UpdateDisplay();
+                    _GroupData[idx].DisplayEntries.Add(new DisplayEntry { EffectiveSettings = displayDef, Display = empty });
+                    continue;
+                }
+
+                foreach (var name in names)
+                {
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+                    var resolved = ResolveSurfaceByName(name);
+                    if (resolved != null && taggedSurfaces.Contains(resolved)) continue;
+
+                    var effective = BuildEffectiveDisplayDefinition(displayDef, name);
+                    var statusDisplay = new StatusAndLogDisplay(_Program, groupLabel, new[] { name }, null);
+                    ApplyDisplayDefinitionToStatusDisplay(statusDisplay, effective);
+                    statusDisplay.Clear();
+                    statusDisplay.UpdateDisplay();
+                    _GroupData[idx].DisplayEntries.Add(new DisplayEntry { EffectiveSettings = effective, Display = statusDisplay });
+                }
             }
+
+            if (taggedByGroup != null && idx < taggedByGroup.Length && taggedByGroup[idx] != null)
+            {
+                var baseDef = (displays.Length > 0 && displays[0] != null) ? displays[0] : MakeDefaultDisplayDefinition();
+                foreach (var tp in taggedByGroup[idx])
+                {
+                    if (tp == null || tp.Surface == null) continue;
+                    var effective = BuildEffectiveDisplayDefinitionFromBlock(baseDef, tp.Block, tp.SurfaceIndex);
+                    var statusDisplay = new StatusAndLogDisplay(_Program, groupLabel, tp.Surface);
+                    ApplyDisplayDefinitionToStatusDisplay(statusDisplay, effective);
+                    statusDisplay.Clear();
+                    statusDisplay.UpdateDisplay();
+                    _GroupData[idx].DisplayEntries.Add(new DisplayEntry { EffectiveSettings = effective, Display = statusDisplay });
+                }
+            }
+
             idx++;
         }
 
         _IsInit = true;
     }
 
-    /// <summary> 
-    /// Init the group/list of items handler 
-    /// </summary> 
     private T InitHandler<T>(BuildAndRepairSystemQueuingGroup queuingGroup) where T : EntityHandler, new()
     {
         T handler = null;
@@ -298,12 +290,11 @@ public class BuildAndRepairAutoQueuing
             }
         }
 
-        // Fallback: auto-detect Build&Repair blocks if none found by explicit group/names
+        // Fallback: auto-detect BaR blocks by probing for known properties.
         if (handler == null || handler.Count == 0)
         {
             try
             {
-                // Only supported for RepairSystemHandler (the only T used by this script)
                 if (typeof(T) == typeof(RepairSystemHandler) && _Program != null && _Program.GridTerminalSystem != null)
                 {
                     var auto = new RepairSystemHandler();
@@ -311,7 +302,6 @@ public class BuildAndRepairAutoQueuing
                     {
                         try
                         {
-                            // Test for known BuildAndRepair properties; an exception likely means not our block
                             var _ = blk.GetValueBool("BuildAndRepair.ScriptControlled");
                             return true;
                         }
@@ -344,10 +334,6 @@ public class BuildAndRepairAutoQueuing
         return handler;
     }
 
-    /// <summary> 
-    /// Build list of assemblers 
-    /// </summary> 
-    /// <returns></returns> 
     private List<long> InitAssemblerList(BuildAndRepairSystemQueuingGroup queuingGroup)
     {
         List<long> assemblers = null;
@@ -399,14 +385,12 @@ public class BuildAndRepairAutoQueuing
         {
             if (groupData != null)
             {
+                groupData.InfoOnly = _InfoOnly;
                 groupData.RefreshDisplay(_ElapsedTime);
             }
         }
     }
 
-    /// <summary> 
-    /// This the basic algorithm and spread the items over the list of assemblers. 
-    /// </summary> 
     private void CheckAssemblerQueues()
     {
         if (_GroupData == null || _GroupData.Length == 0) return;
@@ -419,43 +403,342 @@ public class BuildAndRepairAutoQueuing
         }
     }
 
-    /// <summary> 
-    /// Place your code here to handle specialized Grind handling 
-    /// </summary> 
+    private DisplayDefinition BuildEffectiveDisplayDefinition(DisplayDefinition baseDef, string displayName)
+    {
+        if (_Program == null || _Program.GridTerminalSystem == null || string.IsNullOrWhiteSpace(displayName)) return baseDef;
+        string blockName;
+        int surfaceIdx;
+        ParseDisplayName(displayName, out blockName, out surfaceIdx);
+        var block = _Program.GridTerminalSystem.GetBlockWithName(blockName) as IMyTerminalBlock;
+        return BuildEffectiveDisplayDefinitionFromBlock(baseDef, block, surfaceIdx);
+    }
+
+    // Applies unscoped @BaR first, then @BaR@<surfaceIdx> scoped block on top.
+    private DisplayDefinition BuildEffectiveDisplayDefinitionFromBlock(DisplayDefinition baseDef, IMyTerminalBlock block, int surfaceIdx)
+    {
+        if (baseDef == null) baseDef = MakeDefaultDisplayDefinition();
+        if (block == null) return baseDef;
+        var customData = block.CustomData;
+        if (string.IsNullOrEmpty(customData)) return baseDef;
+
+        var blocks = ParseAllBaRBlocks(customData);
+        if (blocks.Count == 0) return baseDef;
+
+        var result = baseDef;
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            if (blocks[i].Key == -1) result = ApplyCustomDataBody(result, blocks[i].Value);
+        }
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            if (blocks[i].Key == surfaceIdx) result = ApplyCustomDataBody(result, blocks[i].Value);
+        }
+        return result;
+    }
+
+    // Returns each @BaR block in Custom Data as (surfaceIdx or -1, body).
+    private static List<KeyValuePair<int, string>> ParseAllBaRBlocks(string customData)
+    {
+        var result = new List<KeyValuePair<int, string>>();
+        if (string.IsNullOrEmpty(customData)) return result;
+        var pos = 0;
+        while (pos < customData.Length)
+        {
+            var start = customData.IndexOf("@BaR", pos, StringComparison.Ordinal);
+            if (start < 0) break;
+            var after = start + 4;
+            var surfaceIdx = -1;
+            if (after < customData.Length && customData[after] == '@')
+            {
+                var numStart = after + 1;
+                var numEnd = numStart;
+                while (numEnd < customData.Length && customData[numEnd] >= '0' && customData[numEnd] <= '9') numEnd++;
+                if (numEnd > numStart)
+                {
+                    int parsed;
+                    if (int.TryParse(customData.Substring(numStart, numEnd - numStart), out parsed) && parsed >= 0)
+                    {
+                        surfaceIdx = parsed;
+                        after = numEnd;
+                    }
+                }
+            }
+            var end = customData.IndexOf("@/BaR", after, StringComparison.Ordinal);
+            if (end < 0) break;
+            result.Add(new KeyValuePair<int, string>(surfaceIdx, customData.Substring(after, end - after)));
+            pos = end + 5;
+        }
+        return result;
+    }
+
+    private static DisplayDefinition ApplyCustomDataBody(DisplayDefinition baseDef, string body)
+    {
+        var result = new DisplayDefinition
+        {
+            DisplayNames = baseDef.DisplayNames,
+            DisplayKinds = baseDef.DisplayKinds,
+            DisplayMaxLines = baseDef.DisplayMaxLines,
+            DisplaySwitchTime = baseDef.DisplaySwitchTime,
+            FontSize = baseDef.FontSize,
+            AutoFitFontSize = baseDef.AutoFitFontSize
+        };
+
+        var lines = body.Split('\n');
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0 || line.StartsWith("#") || line.StartsWith("//")) continue;
+            var eq = line.IndexOf('=');
+            if (eq <= 0) continue;
+            var key = line.Substring(0, eq).Trim();
+            var value = line.Substring(eq + 1).Trim();
+
+            if (key.Equals("Kinds", StringComparison.OrdinalIgnoreCase) || key.Equals("DisplayKinds", StringComparison.OrdinalIgnoreCase))
+            {
+                var parts = value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                var kinds = new List<DisplayKind>();
+                foreach (var p in parts)
+                {
+                    DisplayKind kind;
+                    if (TryParseDisplayKind(p.Trim(), out kind)) kinds.Add(kind);
+                }
+                if (kinds.Count > 0) result.DisplayKinds = kinds.ToArray();
+            }
+            else if (key.Equals("MaxLines", StringComparison.OrdinalIgnoreCase) || key.Equals("DisplayMaxLines", StringComparison.OrdinalIgnoreCase))
+            {
+                int n;
+                if (int.TryParse(value, out n) && n > 0) result.DisplayMaxLines = n;
+            }
+            else if (key.Equals("SwitchTime", StringComparison.OrdinalIgnoreCase) || key.Equals("DisplaySwitchTime", StringComparison.OrdinalIgnoreCase))
+            {
+                double d;
+                if (double.TryParse(value, out d) && d >= 0) result.DisplaySwitchTime = d;
+            }
+            else if (key.Equals("FontSize", StringComparison.OrdinalIgnoreCase))
+            {
+                if (value.Equals("auto", StringComparison.OrdinalIgnoreCase) || value.Equals("fit", StringComparison.OrdinalIgnoreCase))
+                {
+                    result.AutoFitFontSize = true;
+                    result.FontSize = 0f;
+                }
+                else
+                {
+                    float f;
+                    if (float.TryParse(value, out f) && f > 0f)
+                    {
+                        result.FontSize = f;
+                        result.AutoFitFontSize = false;
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    private static DisplayDefinition MakeDefaultDisplayDefinition()
+    {
+        return new DisplayDefinition
+        {
+            DisplayKinds = new[] { DisplayKind.Status },
+            DisplayMaxLines = 19,
+            DisplaySwitchTime = 5
+        };
+    }
+
+    private static void ApplyDisplayDefinitionToStatusDisplay(StatusAndLogDisplay display, DisplayDefinition def)
+    {
+        if (display == null || def == null) return;
+        display.OverrideFontSize = def.FontSize;
+        display.AutoFitFontSize = def.AutoFitFontSize;
+    }
+
+    private IMyTextSurface ResolveSurfaceByName(string displayName)
+    {
+        if (_Program == null || _Program.GridTerminalSystem == null || string.IsNullOrWhiteSpace(displayName)) return null;
+        string blockName;
+        int surfaceIdx;
+        ParseDisplayName(displayName, out blockName, out surfaceIdx);
+        var block = _Program.GridTerminalSystem.GetBlockWithName(blockName);
+        if (block == null) return null;
+        var surface = block as IMyTextSurface;
+        if (surface != null) return surface;
+        var provider = block as IMyTextSurfaceProvider;
+        if (provider != null && provider.SurfaceCount > surfaceIdx) return provider.GetSurface(surfaceIdx);
+        return null;
+    }
+
+    private List<TaggedPanel>[] ScanTaggedPanels()
+    {
+        var result = new List<TaggedPanel>[BuildAndRepairSystemQueuingGroups.Length];
+        if (_Program == null || _Program.GridTerminalSystem == null) return result;
+
+        var blocks = new List<IMyTerminalBlock>();
+        _Program.GridTerminalSystem.GetBlocks(blocks);
+        foreach (var block in blocks)
+        {
+            if (block == null) continue;
+            string groupId;
+            int[] surfaceIndices;
+            if (!TryParseBaRTag(block.CustomName, out groupId, out surfaceIndices)) continue;
+
+            int groupIndex;
+            if (!MatchGroupId(groupId, out groupIndex)) continue;
+
+            if (string.IsNullOrWhiteSpace(block.CustomData))
+            {
+                try { block.CustomData = DefaultCustomDataTemplate; } catch { }
+            }
+
+            var ts = block as IMyTextSurface;
+            var tsp = block as IMyTextSurfaceProvider;
+
+            foreach (var surfaceIdx in surfaceIndices)
+            {
+                IMyTextSurface surface = null;
+                if (ts != null)
+                {
+                    surface = ts;
+                }
+                else if (tsp != null)
+                {
+                    if (tsp.SurfaceCount > surfaceIdx) surface = tsp.GetSurface(surfaceIdx);
+                }
+
+                if (surface == null)
+                {
+                    InitializationResultMessage += string.Format("\nInfo: [BaR:{0}@{1}] on '{2}' could not be resolved to a text surface.", groupId, surfaceIdx, block.CustomName);
+                    continue;
+                }
+
+                if (result[groupIndex] == null) result[groupIndex] = new List<TaggedPanel>();
+                result[groupIndex].Add(new TaggedPanel { Block = block, Surface = surface, SurfaceIndex = surfaceIdx });
+            }
+        }
+        return result;
+    }
+
+    private static bool TryParseBaRTag(string customName, out string groupId, out int[] surfaceIndices)
+    {
+        groupId = null;
+        surfaceIndices = null;
+        if (string.IsNullOrEmpty(customName)) return false;
+        var start = customName.IndexOf("[BaR:", StringComparison.OrdinalIgnoreCase);
+        if (start < 0) return false;
+        var end = customName.IndexOf(']', start);
+        if (end < 0) return false;
+        var inside = customName.Substring(start + 5, end - start - 5).Trim();
+        if (inside.Length == 0) return false;
+
+        var at = inside.LastIndexOf('@');
+        if (at >= 0)
+        {
+            var idxPart = inside.Substring(at + 1).Trim();
+            if (idxPart.Length == 0) return false;
+            var parts = idxPart.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+            var indices = new List<int>();
+            foreach (var p in parts)
+            {
+                int parsed;
+                if (!int.TryParse(p.Trim(), out parsed) || parsed < 0) return false;
+                if (!indices.Contains(parsed)) indices.Add(parsed);
+            }
+            if (indices.Count == 0) return false;
+            surfaceIndices = indices.ToArray();
+            groupId = inside.Substring(0, at).Trim();
+        }
+        else
+        {
+            surfaceIndices = new[] { 0 };
+            groupId = inside;
+        }
+        return groupId.Length > 0;
+    }
+
+    private static bool MatchGroupId(string groupId, out int groupIndex)
+    {
+        groupIndex = -1;
+        if (string.IsNullOrEmpty(groupId) || BuildAndRepairSystemQueuingGroups == null) return false;
+
+        int oneBased;
+        if (int.TryParse(groupId, out oneBased))
+        {
+            var zero = oneBased - 1;
+            if (zero >= 0 && zero < BuildAndRepairSystemQueuingGroups.Length)
+            {
+                groupIndex = zero;
+                return true;
+            }
+            return false;
+        }
+
+        for (var i = 0; i < BuildAndRepairSystemQueuingGroups.Length; i++)
+        {
+            var g = BuildAndRepairSystemQueuingGroups[i];
+            if (g != null && !string.IsNullOrEmpty(g.Name) && g.Name.Equals(groupId, StringComparison.OrdinalIgnoreCase))
+            {
+                groupIndex = i;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private class TaggedPanel
+    {
+        public IMyTerminalBlock Block;
+        public IMyTextSurface Surface;
+        public int SurfaceIndex;
+    }
+
+    private static void ParseDisplayName(string name, out string blockName, out int index)
+    {
+        index = 0;
+        var idxStart = name.LastIndexOf('[');
+        if (idxStart >= 0)
+        {
+            var idxEnd = name.LastIndexOf(']');
+            if (idxEnd >= 0 && idxEnd > idxStart)
+            {
+                if (int.TryParse(name.Substring(idxStart + 1, idxEnd - idxStart - 1), out index))
+                {
+                    blockName = name.Substring(0, idxStart);
+                    return;
+                }
+            }
+        }
+        blockName = name;
+    }
+
+    private static bool TryParseDisplayKind(string s, out DisplayKind kind)
+    {
+        kind = DisplayKind.Status;
+        if (string.IsNullOrEmpty(s)) return false;
+        switch (s.ToLowerInvariant())
+        {
+            case "status": kind = DisplayKind.Status; return true;
+            case "shortstatus": case "short": kind = DisplayKind.ShortStatus; return true;
+            case "weldtargets": case "weld": kind = DisplayKind.WeldTargets; return true;
+            case "grindtargets": case "grind": kind = DisplayKind.GrindTargets; return true;
+            case "collecttargets": case "collect": kind = DisplayKind.CollectTargets; return true;
+            case "missingitems": case "missing": kind = DisplayKind.MissingItems; return true;
+            case "blockweldpriority": case "weldpriority": kind = DisplayKind.BlockWeldPriority; return true;
+            case "blockgrindpriority": case "grindpriority": kind = DisplayKind.BlockGrindPriority; return true;
+        }
+        return false;
+    }
+
+    // Hook for user-supplied script-controlled grind logic. Empty by default.
     private void ScriptControlledGrinding()
     {
-        //Simple example of Script controlled grind handling 
-        //foreach (var groupData in _GroupData) 
-        //{ 
-        //   groupData.RepairSystems.ScriptControlled = true; 
-        //   var listGrindable = groupData.RepairSystems.PossibleGrindTargets(); 
-        //   //If nothing to grind or current grinding object no longer in list (allready grinded) 
-        //   if (groupData.RepairSystems.CurrentPickedGrindTarget == null || listGrindable.IndexOf(groupData.RepairSystems.CurrentPickedGrindTarget) < 0) 
-        //   { 
-        //      foreach (var entry in listGrindable) 
-        //      { 
-        //         var antenna = entry.FatBlock as IMyRadioAntenna; 
-        //         if (antenna != null) 
-        //         { 
-        //            groupData.RepairSystems.CurrentPickedGrindTarget = entry; 
-        //            break; 
-        //         } 
-        //         var reactor = entry.FatBlock as IMyReactor; 
-        //         if (reactor != null) 
-        //         { 
-        //            groupData.RepairSystems.CurrentPickedGrindTarget = entry; 
-        //            break; 
-        //         } 
-        //         var guns = entry.FatBlock as IMyUserControllableGun; 
-        //         if (guns != null) 
-        //         { 
-        //            groupData.RepairSystems.CurrentPickedGrindTarget = entry; 
-        //            break; 
-        //         } 
-        //      } 
-        //   } 
-        //} 
     }
+}
+
+public class DisplayEntry
+{
+    public DisplayDefinition EffectiveSettings;
+    public StatusAndLogDisplay Display;
+    public int DisplayKindIdx;
+    public double NextSwitchTime;
 }
 
 public class BuildAndRepairSystemQueuingGroupData
@@ -463,14 +746,11 @@ public class BuildAndRepairSystemQueuingGroupData
     public BuildAndRepairSystemQueuingGroup Settings { get; set; }
     public RepairSystemHandler RepairSystems { get; set; }
     public List<long> Assemblers { get; set; }
-    public List<StatusAndLogDisplay> StatusDisplays { get; set; }
-    private int[] DisplayKindIdx { get; set; }
-    private double[] NextSwitchTime { get; set; }
+    public List<DisplayEntry> DisplayEntries { get; set; }
+    public bool InfoOnly { get; set; }
 
-    public BuildAndRepairSystemQueuingGroupData(int count)
+    public BuildAndRepairSystemQueuingGroupData()
     {
-        DisplayKindIdx = new int[count];
-        NextSwitchTime = new double[count];
     }
 
     public void CheckAssemblerQueues()
@@ -488,65 +768,57 @@ public class BuildAndRepairSystemQueuingGroupData
         }
     }
 
-    /// <summary> 
-    /// Refresh the status display 
-    /// </summary> 
     public void RefreshDisplay(double elapsedTime)
     {
-        if (StatusDisplays == null || Settings == null || Settings.Displays == null) return;
-        var count = StatusDisplays.Count;
-        if (count > Settings.Displays.Length) count = Settings.Displays.Length;
-        for (var idx = 0; idx < count; idx++)
+        if (DisplayEntries == null || DisplayEntries.Count == 0) return;
+        for (var idx = 0; idx < DisplayEntries.Count; idx++)
         {
-            var display = StatusDisplays[idx];
-            var settings = Settings.Displays[idx];
-            if (display != null && settings != null)
-            {
-                display.Clear();
-                if (settings.DisplayKinds != null && settings.DisplayKinds.Length > 0 && RepairSystems != null)
-                {
-                    if (elapsedTime > NextSwitchTime[idx])
-                    {
-                        DisplayKindIdx[idx] = (DisplayKindIdx[idx] + 1) % settings.DisplayKinds.Length;
-                        NextSwitchTime[idx] = elapsedTime + settings.DisplaySwitchTime;
-                    }
-                    switch (settings.DisplayKinds[DisplayKindIdx[idx]])
-                    {
-                        case DisplayKind.Status:
-                            DisplayStatus(settings, display);
-                            break;
-                        case DisplayKind.ShortStatus:
-                            DisplayShortStatus(settings, display);
-                            break;
-                        case DisplayKind.WeldTargets:
-                            DisplayWeldTargets(settings, display);
-                            break;
-                        case DisplayKind.GrindTargets:
-                            DisplayGrindTargets(settings, display);
-                            break;
-                        case DisplayKind.CollectTargets:
-                            DisplayCollectTargets(settings, display);
-                            break;
-                        case DisplayKind.MissingItems:
-                            DisplayMissingItems(settings, display);
-                            break;
-                        case DisplayKind.BlockWeldPriority:
-                            DisplayBlockWeldPriorityList(settings, display);
-                            break;
-                        case DisplayKind.BlockGrindPriority:
-                            DisplayBlockGrindPriorityList(settings, display);
-                            break;
-                    }
+            var entry = DisplayEntries[idx];
+            if (entry == null) continue;
+            var display = entry.Display;
+            var settings = entry.EffectiveSettings;
+            if (display == null || settings == null) continue;
 
-                    display.UpdateDisplay();
-                }
+            display.Clear();
+            if (settings.DisplayKinds == null || settings.DisplayKinds.Length == 0 || RepairSystems == null) continue;
+
+            if (elapsedTime > entry.NextSwitchTime)
+            {
+                entry.DisplayKindIdx = (entry.DisplayKindIdx + 1) % settings.DisplayKinds.Length;
+                entry.NextSwitchTime = elapsedTime + settings.DisplaySwitchTime;
             }
+            switch (settings.DisplayKinds[entry.DisplayKindIdx])
+            {
+                case DisplayKind.Status:
+                    DisplayStatus(settings, display);
+                    break;
+                case DisplayKind.ShortStatus:
+                    DisplayShortStatus(settings, display);
+                    break;
+                case DisplayKind.WeldTargets:
+                    DisplayWeldTargets(settings, display);
+                    break;
+                case DisplayKind.GrindTargets:
+                    DisplayGrindTargets(settings, display);
+                    break;
+                case DisplayKind.CollectTargets:
+                    DisplayCollectTargets(settings, display);
+                    break;
+                case DisplayKind.MissingItems:
+                    DisplayMissingItems(settings, display);
+                    break;
+                case DisplayKind.BlockWeldPriority:
+                    DisplayBlockWeldPriorityList(settings, display);
+                    break;
+                case DisplayKind.BlockGrindPriority:
+                    DisplayBlockGrindPriorityList(settings, display);
+                    break;
+            }
+
+            display.UpdateDisplay();
         }
     }
 
-    /// <summary> 
-    /// Show the short status of the BaR-System 
-    /// </summary> 
     private void DisplayShortStatus(DisplayDefinition settings, StatusAndLogDisplay display)
     {
         display.AddStatus(string.Format("Online            : {0}", RepairSystems.CountOfWorking > 0));
@@ -561,9 +833,6 @@ public class BuildAndRepairSystemQueuingGroupData
         display.AddStatus(string.Format("Missing item kinds: {0}", RepairSystems.MissingComponents().Count));
     }
 
-    /// <summary> 
-    /// Show the detailed status of the BaR-System 
-    /// </summary> 
     private void DisplayStatus(DisplayDefinition settings, StatusAndLogDisplay display)
     {
         DisplayShortStatus(settings, display);
@@ -572,11 +841,16 @@ public class BuildAndRepairSystemQueuingGroupData
         display.AddStatus(string.Format("Build projected   : {0}", RepairSystems.AllowBuild));
         display.AddStatus(string.Format("UseIgnoreColor    : {0}", RepairSystems.UseIgnoreColor));
         display.AddStatus(string.Format("Script Controlled : {0}", RepairSystems.ScriptControlled));
+        display.AddStatus(string.Format("Auto-queuing      : {0}", AutoQueuingStateText()));
     }
 
-    /// <summary> 
-    /// Show the List of blocks to weld 
-    /// </summary> 
+    private string AutoQueuingStateText()
+    {
+        if (InfoOnly) return "Disabled (info-only)";
+        if (Assemblers == null || Assemblers.Count == 0) return "Disabled (no assemblers)";
+        return string.Format("Enabled ({0} assembler{1})", Assemblers.Count, Assemblers.Count == 1 ? "" : "s");
+    }
+
     private void DisplayWeldTargets(DisplayDefinition settings, StatusAndLogDisplay display)
     {
         var list = RepairSystems.PossibleTargets();
@@ -595,9 +869,6 @@ public class BuildAndRepairSystemQueuingGroupData
         }
     }
 
-    /// <summary> 
-    /// Show the List of blocks to grind 
-    /// </summary> 
     private void DisplayGrindTargets(DisplayDefinition settings, StatusAndLogDisplay display)
     {
         var list = RepairSystems.PossibleGrindTargets();
@@ -616,9 +887,6 @@ public class BuildAndRepairSystemQueuingGroupData
         }
     }
 
-    /// <summary> 
-    /// Show the List of collectable floating objects 
-    /// </summary> 
     private void DisplayCollectTargets(DisplayDefinition settings, StatusAndLogDisplay display)
     {
         var list = RepairSystems.PossibleCollectTargets();
@@ -637,9 +905,6 @@ public class BuildAndRepairSystemQueuingGroupData
         }
     }
 
-    /// <summary> 
-    /// Show the List of missing materials 
-    /// </summary> 
     private void DisplayMissingItems(DisplayDefinition settings, StatusAndLogDisplay display)
     {
         var list = RepairSystems.MissingComponents();
@@ -658,9 +923,6 @@ public class BuildAndRepairSystemQueuingGroupData
         }
     }
 
-    /// <summary> 
-    /// Show the List of block classes and there enabled state 
-    /// </summary> 
     private void DisplayBlockWeldPriorityList(DisplayDefinition settings, StatusAndLogDisplay display)
     {
         display.AddStatus("Weld Priority:");
@@ -672,9 +934,6 @@ public class BuildAndRepairSystemQueuingGroupData
         }
     }
 
-    /// <summary> 
-    /// Show the List of block classes and there enabled state 
-    /// </summary> 
     private void DisplayBlockGrindPriorityList(DisplayDefinition settings, StatusAndLogDisplay display)
     {
         display.AddStatus("Grind Priority:");
@@ -688,9 +947,6 @@ public class BuildAndRepairSystemQueuingGroupData
 
 }
 
-/// <summary> 
-///    Class to handle the RepairSystems 
-/// </summary> 
 public class RepairSystemHandler : EntityHandler<IMyShipWelder>
 {
     private Program _Program;
@@ -702,9 +958,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
 
     private Func<IEnumerable<long>, VRage.Game.MyDefinitionId, int, int> _EnsureQueued;
     private Func<IMyProjector, Dictionary<VRage.Game.MyDefinitionId, VRage.MyFixedPoint>, int> _NeededComponents4Blueprint;
-    /// <summary> 
-    /// The block classes the system distinguish 
-    /// </summary> 
+
     public enum BlockClass
     {
         AutoRepairSystem = 1,
@@ -729,9 +983,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         MergeBlock
     }
 
-    /// <summary> 
-    /// The componet classes the system distinguish 
-    /// </summary> 
     public enum ComponentClass
     {
         Material = 1,
@@ -741,50 +992,21 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         Gravel
     }
 
-    /// <summary> 
-    /// The search modes supported by the block 
-    /// </summary> 
     public enum SearchModes
     {
         Grids = 0x0001,
         BoundingBox = 0x0002
     }
 
-    /// <summary> 
-    /// The work modes supported by the block 
-    /// </summary> 
     public enum WorkModes
     {
-        /// <summary> 
-        /// Grind only if nothing to weld 
-        /// </summary> 
         WeldBeforeGrind = 0x0001,
-
-        /// <summary> 
-        /// Weld only if nothing to grind 
-        /// </summary> 
         GrindBeforeWeld = 0x0002,
-
-        /// <summary> 
-        /// Grind only if nothing to weld or 
-        /// build waiting for missing items 
-        /// </summary> 
         GrindIfWeldGetStuck = 0x0004,
-
-        /// <summary> 
-        /// Only welding is allowed 
-        /// </summary> 
         WeldOnly = 0x0008,
-
-        /// <summary> 
-        /// Only grinding is allowed 
-        /// </summary> 
         GrindOnly = 0x0010
     }
 
-    /// <summary> 
-    /// Block/Component class and it's state 
-    /// </summary> 
     public class ClassState<T> where T : struct
     {
         public T ItemClass { get; }
@@ -796,19 +1018,13 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary>
-    /// Deprecated: The mod no longer uses HelpOthers. This property has no effect.
-    /// Kept for backward compatibility with existing scripts.
-    /// </summary>
+    // Deprecated: no-op, kept for backward compatibility.
     public bool HelpOther
     {
         get { return false; }
         set { }
     }
 
-    /// <summary> 
-    /// Set AllowBuild (projected blocks) 
-    /// </summary> 
     public bool AllowBuild
     {
         get
@@ -821,9 +1037,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the search mode of the block 
-    /// </summary> 
     public SearchModes SearchMode
     {
         get
@@ -836,9 +1049,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary>
-    /// Set the work mode of the block
-    /// </summary>
     public WorkModes WorkMode
     {
         get
@@ -851,13 +1061,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Enable/Disable the use of the Ignore Color 
-    /// If enabled block's with color 'IgnoreColor' 
-    /// will be ignored. 
-    /// You could use this do have intentionally unweldet block's 
-    /// and still use autorepair of the rest. 
-    /// </summary> 
     public bool UseIgnoreColor
     {
         get
@@ -870,12 +1073,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the ignore color 
-    /// X=Hue         0 .. 1 -> * 360 -> Displayed value 
-    /// Y=Saturation -1 .. 1 -> * 100 -> Displayed value 
-    /// Z=Value      -1 .. 1 -> * 100 -> Displayed value 
-    /// </summary> 
     public Vector3 IgnoreColor
     {
         get
@@ -888,11 +1085,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Enable/Disable the use of the Grind Color 
-    /// If enabled block's with color 'GrindColor' 
-    /// will be grinded. 
-    /// </summary> 
     public bool UseGrindColor
     {
         get
@@ -905,12 +1097,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the grind color 
-    /// X=Hue         0 .. 1 -> * 360 -> Displayed value 
-    /// Y=Saturation -1 .. 1 -> * 100 -> Displayed value 
-    /// Z=Value      -1 .. 1 -> * 100 -> Displayed value 
-    /// </summary> 
     public Vector3 GrindColor
     {
         get
@@ -923,9 +1109,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// If set autogrind enemy blocks in range 
-    /// </summary> 
     public bool GrindJanitorEnemies
     {
         get
@@ -938,9 +1121,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// If set autogrind not owned blocks in range 
-    /// </summary> 
     public bool GrindJanitorNotOwned
     {
         get
@@ -953,9 +1133,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// If set autogrind blocks owned by neutrals in range 
-    /// </summary> 
     public bool GrindJanitorNeutrals
     {
         get
@@ -968,9 +1145,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// If set autogrind grinds blocks only down to the 'Out of order' level 
-    /// </summary> 
     public bool GrindJanitorOptionDisableOnly
     {
         get
@@ -983,9 +1157,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// If set autogrind grinds blocks only down to the 'Hack' level 
-    /// </summary> 
     public bool GrindJanitorOptionHackOnly
     {
         get
@@ -998,9 +1169,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary>
-    /// Weld mode: 0 = WeldFull, 1 = WeldFunctional, 2 = WeldSkeleton
-    /// </summary>
+    // 0 = WeldFull, 1 = WeldFunctional, 2 = WeldSkeleton
     public long WeldMode
     {
         get
@@ -1014,9 +1183,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     }
 
 
-    /// <summary> 
-    /// Set the width of the working area 
-    /// </summary> 
     public float AreaWidth
     {
         get
@@ -1029,9 +1195,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the left/right offset of the working area from block center 
-    /// </summary> 
     public float AreaOffsetLeftRight
     {
         get
@@ -1044,9 +1207,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the height of the working area 
-    /// </summary> 
     public float AreaHeight
     {
         get
@@ -1059,9 +1219,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the up/down offset of the working area from block center 
-    /// </summary> 
     public float AreaOffsetUpDown
     {
         get
@@ -1074,9 +1231,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set the depth of the working area 
-    /// </summary> 
     public float AreaDepth
     {
         get
@@ -1089,9 +1243,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary>
-    /// Set the front/back offset of the working area from block center
-    /// </summary>
     public float AreaOffsetFrontBack
     {
         get
@@ -1104,10 +1255,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get a list with all known block classes and there 
-    /// weld enabled state in descending order of priority. 
-    /// </summary> 
     public MemorySafeList<ClassState<BlockClass>> WeldPriorityList()
     {
         if (_Entities.Count > 0)
@@ -1131,9 +1278,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return null;
     }
 
-    /// <summary> 
-    /// Get the weld priority of the given block class 
-    /// </summary> 
     public int GetWeldPriority(BlockClass blockClass)
     {
         if (_Entities.Count > 0)
@@ -1144,10 +1288,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         else return int.MaxValue;
     }
 
-    /// <summary> 
-    /// Set the weld priority of the given block class 
-    /// (lower number higher priority) 
-    /// </summary> 
     public void SetWeldPriority(BlockClass blockClass, int prio)
     {
         foreach (var entity in _Entities)
@@ -1157,11 +1297,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get the weld enabled state of the given block class 
-    /// Enabled=True Block of that class will be repaired/build 
-    /// Enabled=False Block's of that class will be ignored 
-    /// </summary> 
     public bool GetWeldEnabled(BlockClass blockClass)
     {
         if (_Entities.Count > 0)
@@ -1172,10 +1307,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         else return false;
     }
 
-    /// <summary> 
-    /// Set the weld enabled state of the given block class 
-    /// (see GetEnabled) 
-    /// </summary> 
     public void SetWeldEnabled(BlockClass blockClass, bool enabled)
     {
         foreach (var entity in _Entities)
@@ -1185,10 +1316,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get a list with all known block classes and there 
-    /// grind enabled state in descending order of priority. 
-    /// </summary> 
     public MemorySafeList<ClassState<BlockClass>> GrindPriorityList()
     {
         if (_Entities.Count > 0)
@@ -1212,9 +1339,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return null;
     }
 
-    /// <summary>
-    /// Get the grind priority of the given block class 
-    /// </summary> 
     public int GetGrindPriority(BlockClass blockClass)
     {
         if (_Entities.Count > 0)
@@ -1225,10 +1349,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         else return int.MaxValue;
     }
 
-    /// <summary> 
-    /// Set the grind priority of the given block class 
-    /// (lower number higher priority) 
-    /// </summary> 
     public void SetGrindPriority(BlockClass blockClass, int prio)
     {
         foreach (var entity in _Entities)
@@ -1238,11 +1358,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get the grind enabled state of the given block class 
-    /// Enabled=True Block of that class will be grinded 
-    /// Enabled=False Block's of that class will be ignored 
-    /// </summary> 
     public bool GetGrindEnabled(BlockClass blockClass)
     {
         if (_Entities.Count > 0)
@@ -1253,10 +1368,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         else return false;
     }
 
-    /// <summary> 
-    /// Set the grind enabled state of the given block class 
-    /// (see GetEnabled) 
-    /// </summary> 
     public void SetGrindEnabled(BlockClass blockClass, bool enabled)
     {
         foreach (var entity in _Entities)
@@ -1266,10 +1377,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get a list with all known component classes and their
-    /// enabled state in descending order of priority. 
-    /// </summary> 
     public MemorySafeList<ClassState<ComponentClass>> ComponentClassList()
     {
         if (_Entities.Count > 0)
@@ -1293,9 +1400,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return null;
     }
 
-    /// <summary> 
-    /// Get the priority of the given component class 
-    /// </summary> 
     public int GetCollectPriority(ComponentClass compClass)
     {
         if (_Entities.Count > 0)
@@ -1306,10 +1410,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         else return int.MaxValue;
     }
 
-    /// <summary> 
-    /// Set the priority of the given component class 
-    /// (lower number higher priority) 
-    /// </summary> 
     public void SetCollectPriority(ComponentClass compClass, int prio)
     {
         foreach (var entity in _Entities)
@@ -1319,11 +1419,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get the enabled state of the given component class 
-    /// Enabled=True Component of that class will be collected 
-    /// Enabled=False Component's of that class will be ignored 
-    /// </summary> 
     public bool GetCollectEnabled(ComponentClass compClass)
     {
         if (_Entities.Count > 0)
@@ -1334,10 +1429,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         else return false;
     }
 
-    /// <summary> 
-    /// Set the enabled state of the given component class 
-    /// (see GetEnabled) 
-    /// </summary> 
     public void SetCollectEnabled(ComponentClass compClass, bool enabled)
     {
         foreach (var entity in _Entities)
@@ -1347,10 +1438,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set if the Block should only collect floating items (ore/ingot/material) 
-    /// if nothing else to do (no welding, no grinding, no material for welding) 
-    /// </summary> 
     public bool CollectIfIdle
     {
         get
@@ -1363,10 +1450,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set if the Block should push all ore/ingot immediately out of its inventory, 
-    /// else this will happen only if no more room to store the next items to be picked. 
-    /// </summary> 
     public bool PushIngotOreImmediately
     {
         get
@@ -1379,9 +1462,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get the block that is currently being repaired/build. 
-    /// </summary> 
     public IMySlimBlock CurrentTarget
     {
         get
@@ -1390,9 +1470,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get the block that is currently being grinded. 
-    /// </summary> 
     public IMySlimBlock CurrentGrindTarget
     {
         get
@@ -1401,11 +1478,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Set if the Block is controlled by script. 
-    /// (If controlled by script use PossibleTargets and CurrentPickedTarget  
-    /// to set the block that should be build/repaired) 
-    /// </summary> 
     public bool ScriptControlled
     {
         get
@@ -1418,17 +1490,13 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get a list of missing components. 
-    /// </summary> 
     public MemorySafeDictionary<VRage.Game.MyDefinitionId, int> MissingComponents()
     {
         var missingItems = new MemorySafeDictionary<VRage.Game.MyDefinitionId, int>();
         foreach (var entity in _Entities)
         {
             var dict = entity.GetValue<MemorySafeDictionary<VRage.Game.MyDefinitionId, int>>("BuildAndRepair.MissingComponents");
-            //Merge dictionaries but only first report of an item or higher amount 
-            //(do not add up the missings, as overlapping systems report same missing items) 
+            // Take max across overlapping systems, don't sum (they report the same items).
             if (dict != null && dict.Count > 0)
             {
                 int value;
@@ -1448,10 +1516,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return missingItems;
     }
 
-    /// <summary> 
-    /// Get a list of possible repair/build targets. 
-    /// (Contains only damaged/deformed/new block's in range of the system) 
-    /// </summary> 
     public MemorySafeList<IMySlimBlock> PossibleTargets()
     {
         if (_Entities.Count > 0)
@@ -1465,25 +1529,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         if (_Entities.Count > 0)
         {
-            try
-            {
-                return _Entities[0].GetValue<T>(propertyName);
-            }
-            catch (Exception)
-            {
-                // ignored
-            }
+            try { return _Entities[0].GetValue<T>(propertyName); }
+            catch (Exception) { }
         }
         return default(T);
     }
 
-    /// <summary> 
-    /// Get the block that should currently be repaired/built. 
-    /// In order to build the given block the property 'ScriptControlled' has to be true and 
-    /// the block has to be in the list of 'PossibleTargets'. 
-    /// If 'ScriptControlled' is true and the block is not in the 'PossibleTargets' 
-    /// the system will do nothing. 
-    /// </summary> 
     public IMySlimBlock CurrentPickedTarget
     {
         get
@@ -1496,9 +1547,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary> 
-    /// Get a list of possible grind targets. 
-    /// </summary> 
     public MemorySafeList<IMySlimBlock> PossibleGrindTargets()
     {
         if (_Entities.Count > 0)
@@ -1508,13 +1556,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return null;
     }
 
-    /// <summary> 
-    /// Get the block that should currently be grinded. 
-    /// In order to grind the given block the property 'ScriptControlled' has to be true and 
-    /// the block has to be in the list of 'PossibleGrindTargets'. 
-    /// If 'ScriptControlled' is true and the block is not in the 'PossibleGrindTargets' 
-    /// the system will do nothing. 
-    /// </summary> 
     public IMySlimBlock CurrentPickedGrindTarget
     {
         get
@@ -1527,9 +1568,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
     }
 
-    /// <summary>
-    /// Get a list of possible collect targets.
-    /// </summary>
     public MemorySafeList<IMyEntity> PossibleCollectTargets()
     {
         if (_Entities.Count > 0)
@@ -1539,10 +1577,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return null;
     }
 
-    /// <summary> 
-    /// Ensures that the given amount is either in inventory or the production 
-    /// queue of the given production blocks 
-    /// </summary> 
     public int EnsureQueued(IEnumerable<long> productionBlockIds, VRage.Game.MyDefinitionId materialId, int amount)
     {
         if (_Entities.Count > 0)
@@ -1561,13 +1595,6 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return -2;
     }
 
-    /// <summary> 
-    /// Retrieve the total components amount needed to build the projected 
-    /// blueprint 
-    /// </summary> 
-    /// <param name="projector"></param> 
-    /// <param name="componentList"></param> 
-    /// <returns></returns> 
     public int NeededComponents4Blueprint(IMyProjector projector, Dictionary<VRage.Game.MyDefinitionId, VRage.MyFixedPoint> componentList)
     {
         if (_Entities.Count > 0)
@@ -1586,11 +1613,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return -2;
     }
 }
-// NOTE: Rely on mod-provided MemorySafeList/MemorySafeDictionary types exposed to PB; do not redefine here to avoid conflicts.
 
-/// <summary> 
-///    Class to handle Entities 
-/// </summary> 
 public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
 {
     protected readonly List<T> _Entities = new List<T>();
@@ -1623,9 +1646,6 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
 
     public bool AreEnabled { get; private set; }
 
-    /// <summary> 
-    /// Count of Working Entities (on and functional) 
-    /// </summary> 
     public int CountOfWorking
     {
         get
@@ -1636,17 +1656,11 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         }
     }
 
-    /// <summary> 
-    /// Get total count 
-    /// </summary> 
     protected override int GetCount()
     {
         return _Entities.Count;
     }
 
-    /// <summary> 
-    /// Load entities from group 
-    /// </summary> 
     public override void Init(IMyBlockGroup group, bool add = false)
     {
         if (!add) { _Entities.Clear(); AreEnabled = false; }
@@ -1659,9 +1673,6 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         CheckEnabled();
     }
 
-    /// <summary>
-    /// Load entity by name
-    /// </summary>
     public override void Init(VRage.Game.ModAPI.Ingame.IMyEntity newEntity, bool add = false)
     {
         if (!add) { _Entities.Clear(); AreEnabled = false; }
@@ -1672,9 +1683,6 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         }
     }
 
-    /// <summary>
-    /// Load entity filtered by given collect function
-    /// </summary>
     public void Init(IMyGridTerminalSystem gridTerminalSystem, Func<T, bool> collect = null, bool add = false)
     {
         if (!add) { _Entities.Clear(); AreEnabled = false; }
@@ -1690,9 +1698,6 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         }
     }
 
-    /// <summary>
-    /// Add an entity to the handler's tracked list
-    /// </summary>
     protected virtual bool AddEntity(T entity)
     {
         if (entity == null || _Entities.IndexOf(entity) >= 0) return false;
@@ -1720,9 +1725,6 @@ public class EntityHandler<T> : EntityHandler where T : class, IMyTerminalBlock
         return true;
     }
 
-    /// <summary>
-    /// Enable or disable all tracked entities
-    /// </summary>
     public void Enabled(bool enabled)
     {
         foreach (var entity in _Entities)
@@ -1770,9 +1772,6 @@ public abstract class EntityHandler
         return customData.Substring(start + tag.Length, end - start - tag.Length);
     }
 }
-/// <summary> 
-/// Status and Log functions 
-/// </summary> 
 public class StatusAndLogDisplay
 {
     private readonly MyGridProgram _Program;
@@ -1787,11 +1786,12 @@ public class StatusAndLogDisplay
     private readonly string[] _LcdStatusPanels;
     private readonly string[] _LcdLogPanels;
 
-    /// <summary> 
-    /// Count of Lines in Log Display 
-    /// </summary> 
     public int MaxLogLines { get; set; }
     public bool ShowHeader { get; set; }
+    public float OverrideFontSize { get; set; }
+    public bool AutoFitFontSize { get; set; }
+
+    private readonly HashSet<IMyTextSurface> _FontApplied = new HashSet<IMyTextSurface>();
 
     public StatusAndLogDisplay(MyGridProgram caller, string name, string[] lcdStatusPanels, string[] lcdLogPanels)
     {
@@ -1800,13 +1800,22 @@ public class StatusAndLogDisplay
         _AIName = name;
         _LcdStatusPanels = lcdStatusPanels;
         _LcdLogPanels = lcdLogPanels;
-        MaxLogLines = 20; //Default 
+        MaxLogLines = 20;
         ReloadDisplays();
     }
 
-    /// <summary> 
-    /// Reload the displays (after renaming, adding) 
-    /// </summary> 
+    // Direct-surface ctor for tagged LCDs; no name resolution needed.
+    public StatusAndLogDisplay(MyGridProgram caller, string name, IMyTextSurface surface)
+    {
+        ShowHeader = true;
+        _Program = caller;
+        _AIName = name;
+        _LcdStatusPanels = null;
+        _LcdLogPanels = null;
+        MaxLogLines = 20;
+        if (surface != null) _StatusPanels.Add(surface);
+    }
+
     public string ReloadDisplays()
     {
         var res = FindPanels(_Program, _LcdStatusPanels, _StatusPanels);
@@ -1814,9 +1823,6 @@ public class StatusAndLogDisplay
         return res;
     }
 
-    /// <summary> 
-    /// Cyclic tries to reload the DisplayPanels (so the LCD could be added dynamically) 
-    /// </summary> 
     public void CyclicReloadDisplays()
     {
         _RefreshDelay--;
@@ -1826,9 +1832,6 @@ public class StatusAndLogDisplay
         _RefreshDelay = 20;
     }
 
-    /// <summary> 
-    /// Write a Log text 
-    /// </summary> 
     public void Log(string msg)
     {
         var useHeadline = !string.IsNullOrEmpty(_AIName);
@@ -1845,34 +1848,22 @@ public class StatusAndLogDisplay
         }
     }
 
-    /// <summary> 
-    /// Clears Status und Error 
-    /// </summary> 
     public void Clear()
     {
         _StatusText = "";
         _ErrorText = "";
     }
 
-    /// <summary> 
-    ///  
-    /// </summary> 
     internal void AddStatus(string line)
     {
         _StatusText += line + "\n";
     }
 
-    /// <summary> 
-    ///  
-    /// </summary> 
     internal void AddError(string line)
     {
         _ErrorText = line + "\n";
     }
 
-    /// <summary> 
-    /// Write Status, Error, Log to the configured panels 
-    /// </summary> 
     public void UpdateDisplay()
     {
         var text = string.Empty;
@@ -1880,16 +1871,61 @@ public class StatusAndLogDisplay
         if (!string.IsNullOrEmpty(_ErrorText)) text += _ErrorText;
         if (!string.IsNullOrEmpty(_StatusText)) text += _StatusText;
 
-        foreach (var panel in _StatusPanels) if (panel != null) SetPanelText(panel, text);
+        foreach (var panel in _StatusPanels)
+        {
+            if (panel == null) continue;
+            EnsureFontApplied(panel, text);
+            SetPanelText(panel, text);
+        }
         if (_Program != null) _Program.Echo(!string.IsNullOrEmpty(_ErrorText) ? _ErrorText : text);
 
-        text = !string.IsNullOrEmpty(_AIName) ? _AIName + _LogText : _LogText;
-        foreach (var panel in _LogPanels) if (panel != null) SetPanelText(panel, text);
+        var logText = !string.IsNullOrEmpty(_AIName) ? _AIName + _LogText : _LogText;
+        foreach (var panel in _LogPanels)
+        {
+            if (panel == null) continue;
+            EnsureFontApplied(panel, logText);
+            SetPanelText(panel, logText);
+        }
     }
 
-    /// <summary> 
-    /// Finds TextPanels with the given names 
-    /// </summary> 
+    // Applies font size once per panel. Auto-fit waits for non-empty text.
+    private void EnsureFontApplied(IMyTextSurface panel, string text)
+    {
+        if (_FontApplied.Contains(panel)) return;
+        if (OverrideFontSize <= 0f && !AutoFitFontSize)
+        {
+            _FontApplied.Add(panel);
+            return;
+        }
+        if (OverrideFontSize > 0f)
+        {
+            try { panel.FontSize = OverrideFontSize; } catch { }
+            _FontApplied.Add(panel);
+            return;
+        }
+        if (string.IsNullOrEmpty(text) || text.IndexOf('\n') < 0) return;
+        try
+        {
+            panel.ContentType = ContentType.TEXT_AND_IMAGE;
+            if (panel.Font != "Monospace") panel.Font = "Monospace";
+            var sb = new StringBuilder(text);
+            var measured = panel.MeasureStringInPixels(sb, panel.Font, 1f);
+            var surf = panel.SurfaceSize;
+            var padPct = panel.TextPadding / 100f;
+            var availW = surf.X * (1f - padPct * 2f);
+            var availH = surf.Y * (1f - padPct * 2f);
+            if (measured.X > 0 && measured.Y > 0 && availW > 0 && availH > 0)
+            {
+                var scale = Math.Min(availW / measured.X, availH / measured.Y) * 0.98f;
+                if (scale < 0.1f) scale = 0.1f;
+                if (scale > 10f) scale = 10f;
+                panel.FontSize = scale;
+            }
+            _FontApplied.Add(panel);
+        }
+        catch { _FontApplied.Add(panel); }
+    }
+
     private static string FindPanels(MyGridProgram caller, IReadOnlyList<string> names, ICollection<IMyTextSurface> list)
     {
         string res = string.Empty;
@@ -1959,18 +1995,14 @@ public class StatusAndLogDisplay
         else blockName = name;
     }
 
-    /// <summary> 
-    /// Sets panel text if its title is either default or our name.  
-    /// </summary> 
+    // Forces Monospace so column-aligned status lines render correctly.
     public static void SetPanelText(IMyTextSurface panel, string text)
     {
         panel.ContentType = ContentType.TEXT_AND_IMAGE;
+        if (panel.Font != "Monospace") panel.Font = "Monospace";
         panel.WriteText(text, false);
     }
 
-    /// <summary> 
-    /// Convert displayed values (Terminal) with correct units -> MW 
-    /// </summary> 
     public static float PowerUnitMultiple(string unit)
     {
         if (unit.StartsWith("W")) return 0.000001f;
@@ -1997,11 +2029,6 @@ public class StatusAndLogDisplay
         return rad * 180 / Math.PI;
     }
 
-    /// <summary> 
-    /// Get Name of Block 
-    /// </summary> 
-    /// <param name="block"></param> 
-    /// <returns></returns> 
     public static string BlockName(object block, bool includeGrid = false)
     {
         var inventory = block as IMyInventory;

@@ -114,6 +114,20 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                 return;
             }
 
+            // "version" — always show the client version locally. On a dedicated-server
+            // session, also forward to the server so the server's own version is
+            // returned via MsgModCommandResponse (appears as a second chat line).
+            // On a local game session the client IS the server, so we only show one line.
+            if (args[0] == "version")
+            {
+                console.ShowMessage("Nanobars", string.Format("BaR Mod Client: v{0}", Constants.ModVersion));
+                if (!MyAPIGateway.Session.IsServer)
+                {
+                    NetworkMessagingHandler.MsgModCommandSend("version");
+                }
+                return;
+            }
+
             // "debug" command: local subcommands (show/hide/left/right) stay client-side,
             // server subcommands (on/off/true/false) are forwarded to the server.
             if (args[0] == "debug")
@@ -249,6 +263,9 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                     break;
                 case "systems":
                     result = SystemsCommand.Execute(args);
+                    break;
+                case "version":
+                    result = VersionCommand.Execute();
                     break;
                 default:
                     result = ChatCommandResult.Error("Unknown command: " + args[0]);

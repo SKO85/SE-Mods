@@ -76,6 +76,12 @@ namespace SKONanobotBuildAndRepairSystem
                         if (grinding)
                         {
                             currentGrindingBlock = targetData.Block;
+                            // Record world position for locality-aware sort in next scan cycle.
+                            if (targetData.Block != null && targetData.Block.CubeGrid != null)
+                            {
+                                _LastGrindWorldPosition = targetData.Block.CubeGrid.GridIntegerToWorld(targetData.Block.Position);
+                                _HasLastGrindPosition = true;
+                            }
                             break; //Only grind one block at once
                         }
 

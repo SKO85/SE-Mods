@@ -59,3 +59,7 @@ This skips all sub-method calls when there's clearly nothing to do.
 2. Verify BaRs that HAVE targets still work normally.
 3. Verify a BaR that transitions from idle to active (targets appear after scan) resumes work promptly.
 4. Verify transport-in-progress BaRs are NOT skipped (they need to complete transport).
+
+## Follow-ups
+
+- **BUG-089 (v2.5.2):** the original idle condition only checked `State.InventoryFull`, so a BaR with leftover items but free space still took the fast-path — and `ServerTryPushInventory` never ran, leaving auto-push silently broken while idle. The fast-path now also falls through when any `Push ... Immediately` flag is set and the welder inventory is non-empty. See `docs/plan/bugs/TODO/BUG-089-idle-fast-path-skips-auto-push.md`.

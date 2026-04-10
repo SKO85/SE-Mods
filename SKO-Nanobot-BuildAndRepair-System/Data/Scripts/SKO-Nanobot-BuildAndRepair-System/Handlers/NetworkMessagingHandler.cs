@@ -120,8 +120,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             {
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModCommand>(data);
 
+                // "version" is informational and available to any player so version
+                // mismatches between client and server can be diagnosed from the client.
+                var cmdFirstWord = (msgRcv.Command ?? string.Empty).Trim();
+                var spaceIdx = cmdFirstWord.IndexOf(' ');
+                if (spaceIdx >= 0) cmdFirstWord = cmdFirstWord.Substring(0, spaceIdx);
+                var isPublicCommand = cmdFirstWord == "version";
+
                 // Validate admin using the sender parameter from SE API (tamper-proof)
-                if (!IsRemoteAdmin(sender))
+                if (!isPublicCommand && !IsRemoteAdmin(sender))
                 {
                     SendCommandResponse(sender, "Command requires admin permissions.", true, false, null, null);
                     return;
