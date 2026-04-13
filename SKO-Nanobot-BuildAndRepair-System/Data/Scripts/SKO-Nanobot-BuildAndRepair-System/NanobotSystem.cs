@@ -113,6 +113,16 @@ namespace SKONanobotBuildAndRepairSystem
         // EntityId. Pooled dict cleared and refilled by each sort pre-pass.
         private Dictionary<long, double> _gridMinDistLookup = new Dictionary<long, double>();
 
+        // BUG-099: Per-candidate min-squared-distance-to-any-cluster-member cache used by
+        // SortAndCapGridCandidates. Populated once during the BUG-096 partition loop (while
+        // we already have the block world position for the OBB test) so the sort comparator
+        // can do a dict lookup instead of recomputing 2 * memberCount squared distances per
+        // comparison. Profiling on a 58-member cluster showed the inline recompute dominated
+        // sort cost (~70-125 ms per call on 11k candidates); cached lookup drops it to ~6-10 ms.
+        // Pooled field: cleared and reused between calls; one background scan per BaR runs
+        // at a time so no concurrent access within one instance.
+        private Dictionary<IMySlimBlock, double> _sortCandidateDistances = new Dictionary<IMySlimBlock, double>();
+
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
         // Rebuilt by RebuildSaturatedGrids(), used as fast-path in IsGridOverSystemLimit().
         private HashSet<long> _saturatedGridIds = new HashSet<long>();
