@@ -462,10 +462,17 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
 
-                // Collect all qualifying candidates from this grid (no per-grid cap during iteration).
-                // The per-grid budget is enforced after iteration via sort+truncate so that the
-                // BEST candidates (by priority+distance) are retained, not arbitrary ones.
-                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, grindTargetsForGrid, maxWeld, maxGrind, blockSkipRange);
+                // BUG-094: Pass int.MaxValue for the per-block count gates so EVERY qualifying
+                // block on this grid enters the candidate list. The global cap (maxWeld/maxGrind)
+                // must not short-circuit the per-block add here, because on grids larger than
+                // the cap the iteration would keep whatever blocks happened to be first in the
+                // grid-cache order — not the true top-N by priority/distance.
+                // The per-grid budget (MaxPossibleWeldTargets / MaxPossibleGrindTargets) is
+                // enforced after the loop via SortAndCapGridCandidates (below), which sorts
+                // the qualifying candidates and keeps the user's preferred top-N (nearest,
+                // farthest, smallest-grid-first, etc.). Regression introduced in v2.5.0 when
+                // the full-grid pre-sort was removed but the cap-gate short-circuit was kept.
+                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, grindTargetsForGrid, int.MaxValue, int.MaxValue, blockSkipRange);
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -755,10 +762,19 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false)
             {
+                // BUG-095: Defer cleanup if a scan enqueued on a prior tick is still
+                // running. Force-clearing the flag here would let the next tick enqueue
+                // a second concurrent scan on a disable→enable bounce, producing
+                // interleaved target-list swaps. The background finally at line 961
+                // clears the flag under the same lock; the next tick's early-exit
+                // will do the cleanup then if we're still disabled.
+                lock (_Welder)
+                {
+                    if (_AsyncUpdateSourcesAndTargetsRunning) return;
+                }
                 lock (State.PossibleWeldTargets) { State.PossibleWeldTargets.Clear(); State.PossibleWeldTargets.RebuildHash(); }
                 lock (State.PossibleGrindTargets) { State.PossibleGrindTargets.Clear(); State.PossibleGrindTargets.RebuildHash(); }
                 lock (State.PossibleFloatingTargets) { State.PossibleFloatingTargets.Clear(); State.PossibleFloatingTargets.RebuildHash(); }
-                _AsyncUpdateSourcesAndTargetsRunning = false;
                 _InitialScanCompleted = false;
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 _LastSourceUpdate = _LastTargetsUpdate;
@@ -1123,10 +1139,19 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false)
             {
+                // BUG-095: Defer cleanup if a scan enqueued on a prior tick is still
+                // running. Force-clearing the flag here would let the next tick enqueue
+                // a second concurrent scan on a disable→enable bounce, producing
+                // interleaved target-list swaps. The background finally at line 1184
+                // clears the flag under the same lock; the next tick's early-exit
+                // will do the cleanup then if we're still disabled.
+                lock (_Welder)
+                {
+                    if (_AsyncUpdateSourcesAndTargetsRunning) return;
+                }
                 lock (State.PossibleWeldTargets) { State.PossibleWeldTargets.Clear(); State.PossibleWeldTargets.RebuildHash(); }
                 lock (State.PossibleGrindTargets) { State.PossibleGrindTargets.Clear(); State.PossibleGrindTargets.RebuildHash(); }
                 lock (State.PossibleFloatingTargets) { State.PossibleFloatingTargets.Clear(); State.PossibleFloatingTargets.RebuildHash(); }
-                _AsyncUpdateSourcesAndTargetsRunning = false;
                 _InitialScanCompleted = false;
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 _LastSourceUpdate = _LastTargetsUpdate;
@@ -1792,16 +1817,26 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
-                // Count unique grids using the pooled HashSet (no allocation)
-                _truncateGridIds.Clear();
-                foreach (var t in State.PossibleWeldTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
-                var weldGridCount = _truncateGridIds.Count;
-                _truncateGridIds.Clear();
-                foreach (var t in State.PossibleGrindTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
-                var grindGridCount = _truncateGridIds.Count;
-
                 if (profilerTs != 0L)
                 {
+                    // Count unique grids for the profiler line. Iterate under the same locks
+                    // as the swap above: StartAsyncClusterScan's early-exit path (BaR disabled /
+                    // unpowered mid-scan) Clears these lists from the main thread, and this
+                    // finally runs on the background thread without holding the swap lock.
+                    _truncateGridIds.Clear();
+                    lock (State.PossibleWeldTargets)
+                    {
+                        foreach (var t in State.PossibleWeldTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
+                    }
+                    var weldGridCount = _truncateGridIds.Count;
+
+                    _truncateGridIds.Clear();
+                    lock (State.PossibleGrindTargets)
+                    {
+                        foreach (var t in State.PossibleGrindTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
+                    }
+                    var grindGridCount = _truncateGridIds.Count;
+
                     MethodProfiler.StopAndLog("ApplyClusterResultToSelf", profilerTs, () =>
                         string.Format("entityId={0};weldTargets={1}(pre={2},grids={3});grindTargets={4}(pre={5},grids={6});floatingTargets={7}",
                             _Welder.EntityId,

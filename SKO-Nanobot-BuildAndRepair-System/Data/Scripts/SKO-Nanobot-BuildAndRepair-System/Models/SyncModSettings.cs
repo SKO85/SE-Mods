@@ -188,115 +188,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 if (settings != null)
                 {
                     var adjusted = AdjustSettings(settings);
-                    if (settings.MaxBackgroundTasks > Mod.MaxBackgroundTasks_Max)
-                    {
-                        settings.MaxBackgroundTasks = Mod.MaxBackgroundTasks_Max;
-                        adjusted = true;
-                    }
-                    else if (settings.MaxBackgroundTasks < Mod.MaxBackgroundTasks_Min)
-                    {
-                        settings.MaxBackgroundTasks = Mod.MaxBackgroundTasks_Min;
-                        adjusted = true;
-                    }
-
-                    if (settings.Range > NanobotSystem.WELDER_RANGE_MAX_IN_M)
-                    {
-                        settings.Range = NanobotSystem.WELDER_RANGE_MAX_IN_M;
-                        adjusted = true;
-                    }
-                    else if (settings.Range < NanobotSystem.WELDER_RANGE_MIN_IN_M)
-                    {
-                        settings.Range = NanobotSystem.WELDER_RANGE_MIN_IN_M;
-                        adjusted = true;
-                    }
-
-                    if (settings.MaximumOffset > NanobotSystem.WELDER_OFFSET_MAX_IN_M)
-                    {
-                        settings.MaximumOffset = NanobotSystem.WELDER_OFFSET_MAX_IN_M;
-                        adjusted = true;
-                    }
-                    else if (settings.MaximumOffset < 0)
-                    {
-                        settings.MaximumOffset = 0;
-                        adjusted = true;
-                    }
-
-                    if (settings.Welder.WeldingMultiplier < NanobotSystem.WELDING_GRINDING_MULTIPLIER_MIN)
-                    {
-                        settings.Welder.WeldingMultiplier = NanobotSystem.WELDING_GRINDING_MULTIPLIER_MIN;
-                        adjusted = true;
-                    }
-                    else if (settings.Welder.WeldingMultiplier >= NanobotSystem.WELDING_GRINDING_MULTIPLIER_MAX)
-                    {
-                        settings.Welder.WeldingMultiplier = NanobotSystem.WELDING_GRINDING_MULTIPLIER_MAX;
-                        adjusted = true;
-                    }
-
-                    if (settings.Welder.GrindingMultiplier < NanobotSystem.WELDING_GRINDING_MULTIPLIER_MIN)
-                    {
-                        settings.Welder.GrindingMultiplier = NanobotSystem.WELDING_GRINDING_MULTIPLIER_MIN;
-                        adjusted = true;
-                    }
-                    else if (settings.Welder.GrindingMultiplier >= NanobotSystem.WELDING_GRINDING_MULTIPLIER_MAX)
-                    {
-                        settings.Welder.GrindingMultiplier = NanobotSystem.WELDING_GRINDING_MULTIPLIER_MAX;
-                        adjusted = true;
-                    }
-
-                    if (settings.EmptyGridRescanDelaySeconds < 0)
-                    {
-                        settings.EmptyGridRescanDelaySeconds = 0;
-                        adjusted = true;
-                    }
-                    else if (settings.EmptyGridRescanDelaySeconds > 300)
-                    {
-                        settings.EmptyGridRescanDelaySeconds = 300;
-                        adjusted = true;
-                    }
-
-                    if (settings.StaggerGroupCount < 0)
-                    {
-                        settings.StaggerGroupCount = 0;
-                        adjusted = true;
-                    }
-                    else if (settings.StaggerGroupCount > 10)
-                    {
-                        settings.StaggerGroupCount = 10;
-                        adjusted = true;
-                    }
-
-                    if (settings.MaxGrindsPerTick < 0)
-                    {
-                        settings.MaxGrindsPerTick = 0;
-                        adjusted = true;
-                    }
-                    else if (settings.MaxGrindsPerTick > 100)
-                    {
-                        settings.MaxGrindsPerTick = 100;
-                        adjusted = true;
-                    }
-
-                    if (settings.AssignmentTtlSeconds < 2)
-                    {
-                        settings.AssignmentTtlSeconds = 2;
-                        adjusted = true;
-                    }
-                    else if (settings.AssignmentTtlSeconds > 30)
-                    {
-                        settings.AssignmentTtlSeconds = 30;
-                        adjusted = true;
-                    }
-
-                    if (settings.Welder.WorkSpeed < 1)
-                    {
-                        settings.Welder.WorkSpeed = 1;
-                        adjusted = true;
-                    }
-                    else if (settings.Welder.WorkSpeed > 10)
-                    {
-                        settings.Welder.WorkSpeed = 10;
-                        adjusted = true;
-                    }
+                    adjusted |= ValidateAndClamp(settings);
 
                     Logging.Instance.Write(Logging.Level.Info, "NanobotBuildAndRepairSystemSettings: Settings {0}", settings);
                 }
@@ -336,6 +228,143 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     writer.Write(MyAPIGateway.Utilities.SerializeToXML(settings));
                 }
             }
+        }
+
+        /// <summary>
+        /// Clamps every bounded field to its valid range and repairs invariants that
+        /// cannot be derived from the XML deserializer's constructor defaults
+        /// (notably the BUG-093 empty-janitor-mask defense). Runs on BOTH the file-load
+        /// path AND the client-receive path — a server broadcasting mutated runtime
+        /// settings must not propagate out-of-range values that bypass the Load() clamps.
+        /// Returns true if any field was modified.
+        /// </summary>
+        public static bool ValidateAndClamp(SyncModSettings settings)
+        {
+            var adjusted = false;
+
+            if (settings.MaxBackgroundTasks > Mod.MaxBackgroundTasks_Max)
+            {
+                settings.MaxBackgroundTasks = Mod.MaxBackgroundTasks_Max;
+                adjusted = true;
+            }
+            else if (settings.MaxBackgroundTasks < Mod.MaxBackgroundTasks_Min)
+            {
+                settings.MaxBackgroundTasks = Mod.MaxBackgroundTasks_Min;
+                adjusted = true;
+            }
+
+            if (settings.Range > NanobotSystem.WELDER_RANGE_MAX_IN_M)
+            {
+                settings.Range = NanobotSystem.WELDER_RANGE_MAX_IN_M;
+                adjusted = true;
+            }
+            else if (settings.Range < NanobotSystem.WELDER_RANGE_MIN_IN_M)
+            {
+                settings.Range = NanobotSystem.WELDER_RANGE_MIN_IN_M;
+                adjusted = true;
+            }
+
+            if (settings.MaximumOffset > NanobotSystem.WELDER_OFFSET_MAX_IN_M)
+            {
+                settings.MaximumOffset = NanobotSystem.WELDER_OFFSET_MAX_IN_M;
+                adjusted = true;
+            }
+            else if (settings.MaximumOffset < 0)
+            {
+                settings.MaximumOffset = 0;
+                adjusted = true;
+            }
+
+            if (settings.Welder.WeldingMultiplier < NanobotSystem.WELDING_GRINDING_MULTIPLIER_MIN)
+            {
+                settings.Welder.WeldingMultiplier = NanobotSystem.WELDING_GRINDING_MULTIPLIER_MIN;
+                adjusted = true;
+            }
+            else if (settings.Welder.WeldingMultiplier >= NanobotSystem.WELDING_GRINDING_MULTIPLIER_MAX)
+            {
+                settings.Welder.WeldingMultiplier = NanobotSystem.WELDING_GRINDING_MULTIPLIER_MAX;
+                adjusted = true;
+            }
+
+            if (settings.Welder.GrindingMultiplier < NanobotSystem.WELDING_GRINDING_MULTIPLIER_MIN)
+            {
+                settings.Welder.GrindingMultiplier = NanobotSystem.WELDING_GRINDING_MULTIPLIER_MIN;
+                adjusted = true;
+            }
+            else if (settings.Welder.GrindingMultiplier >= NanobotSystem.WELDING_GRINDING_MULTIPLIER_MAX)
+            {
+                settings.Welder.GrindingMultiplier = NanobotSystem.WELDING_GRINDING_MULTIPLIER_MAX;
+                adjusted = true;
+            }
+
+            if (settings.EmptyGridRescanDelaySeconds < 0)
+            {
+                settings.EmptyGridRescanDelaySeconds = 0;
+                adjusted = true;
+            }
+            else if (settings.EmptyGridRescanDelaySeconds > 300)
+            {
+                settings.EmptyGridRescanDelaySeconds = 300;
+                adjusted = true;
+            }
+
+            if (settings.StaggerGroupCount < 0)
+            {
+                settings.StaggerGroupCount = 0;
+                adjusted = true;
+            }
+            else if (settings.StaggerGroupCount > 10)
+            {
+                settings.StaggerGroupCount = 10;
+                adjusted = true;
+            }
+
+            if (settings.MaxGrindsPerTick < 0)
+            {
+                settings.MaxGrindsPerTick = 0;
+                adjusted = true;
+            }
+            else if (settings.MaxGrindsPerTick > 100)
+            {
+                settings.MaxGrindsPerTick = 100;
+                adjusted = true;
+            }
+
+            if (settings.AssignmentTtlSeconds < 2)
+            {
+                settings.AssignmentTtlSeconds = 2;
+                adjusted = true;
+            }
+            else if (settings.AssignmentTtlSeconds > 30)
+            {
+                settings.AssignmentTtlSeconds = 30;
+                adjusted = true;
+            }
+
+            if (settings.Welder.WorkSpeed < 1)
+            {
+                settings.Welder.WorkSpeed = 1;
+                adjusted = true;
+            }
+            else if (settings.Welder.WorkSpeed > 10)
+            {
+                settings.Welder.WorkSpeed = 10;
+                adjusted = true;
+            }
+
+            // BUG-093: An empty AllowedGrindJanitorRelations silently breaks grinding
+            // on every BaR in the world — SyncBlockSettings masks each block's
+            // UseGrindJanitorOn against this value, so 0 here clobbers the per-block
+            // janitor setting. Apply the default unconditionally whenever the value
+            // is empty — there's no legitimate "all janitor relations disabled" state;
+            // users should disable the feature via UseGrindJanitorFixed instead.
+            if (settings.Welder.AllowedGrindJanitorRelations == 0)
+            {
+                settings.Welder.AllowedGrindJanitorRelations = AutoGrindRelation.NoOwnership | AutoGrindRelation.Enemies | AutoGrindRelation.Neutral;
+                adjusted = true;
+            }
+
+            return adjusted;
         }
 
         public static bool AdjustSettings(SyncModSettings settings)
