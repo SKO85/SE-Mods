@@ -132,6 +132,59 @@ The partition becomes slower in absolute terms (~4 ms → ~10 ms), but the overa
 
 Sim speed dips correlated with the big-sort calls (min 0.77 during them). Expected: dips should flatten out.
 
+## Measured impact (verified against profiling session `20260413215939-profiling`)
+
+Re-profiled 120 s session on the same game state — same 58-member cluster, same target grid (`entityId=72284997404792000`). Per-call comparison for the big-sort calls:
+
+| Metric | Before | After | Delta |
+|---|---|---|---|
+| `partitionMs` avg | 4.5 | 6.2 | +1.7 ms (+38%) |
+| **`sortMs` avg** | **92.4** | **28.5** | **-63.9 ms (-69%)** |
+| **`totalMs` avg per call** | **97.0** | **34.7** | **-62.3 ms (-64%)** |
+| **`totalMs` max per call** | **125.1** | **46.5** | **-78.6 ms (-63%)** |
+
+Per-method summary:
+
+| Metric | Before | After |
+|---|---|---|
+| `SortAndCapGridCandidates` totalMs | 1,133 | **381** (-66%) |
+
+Parent methods (inclusive times — they contain `SortAndCapGridCandidates` nested):
+
+| Method | Before totalMs | After totalMs | Delta |
+|---|---|---|---|
+| `AsyncClusterScan` | 1,618 | 674 | **-58%** |
+| `AsyncAddBlocksOfBox` | 1,502 | 607 | **-59%** |
+| `AsyncAddBlocksOfGrid` | 1,878 | 742 | **-60%** |
+| `PreSortClusterCandidates` | 16.7 | 6.2 | -63% |
+
+Domain aggregates (120 s session):
+
+| Domain | Before totalMs | After totalMs | Delta |
+|---|---|---|---|
+| Utility | 6,462 | 2,913 | **-55%** |
+| Scan | 1,828 | 827 | **-55%** |
+| **Total (all domains)** | **12,985** | **8,469** | **-35%** |
+
+Sim speed:
+
+| Metric | Before | After |
+|---|---|---|
+| avg | 0.99 | **1.00** |
+| min | **0.77** | **0.80** |
+| max | 1.07 | 1.05 |
+
+Main-thread max spike (`ServerTryWeldingGrindingCollecting`): **15.569 → 12.869 ms (-17%)** — the weld tick occasionally stalls on the scan-result publication lock; with the scan cheaper, the stall window shrunk.
+
+### Reality vs. prediction
+
+- Predicted: ~5× speedup per call (94 → ~18 ms)
+- Actual: ~2.8× speedup per call (97 → 34.7 ms)
+
+The sort dropped 3.2× (92 → 28.5 ms) — matching the theoretical win from eliminating the 18M distance recomputes. The remaining 28.5 ms is now bounded by the comparator's per-call **priority lookups** (`BlockGrindPriority.GetPriority(...)` is 2 dict lookups × 2 blocks × ~140k compares ≈ 17 ms) plus ~11 ms of `TryGetValue` + autogrind branches. Priority caching via the same pattern (piggyback on partition) would claw back another ~17 ms per sort × 11 big calls = ~190 ms per 120 s session (~1.5% of session time) — below the cost/benefit threshold to implement now, but documented as a possible follow-up if a future workload proves it matters.
+
+The +38% partition growth (4.5 → 6.2 ms) matches the added 58-iter min-distance loop exactly; the absolute cost is absorbed by the much larger sort savings.
+
 ## Memory cost
 
 `_sortCandidateDistances` grows to hold one entry per in-range candidate on the current grid. On the worst-case 11.5k-block grid, the dict capacity grows to ~16k buckets (~600 KB). Per-BaR field, so 20 BaRs × 600 KB = ~12 MB peak if every BaR also scans a mega-base grid (only coordinators do heavy sorts — most BaRs are cluster members and call `ApplyClusterResultToSelf` instead). Acceptable.
@@ -144,11 +197,12 @@ The dict is `Clear()`ed, not re-allocated, between calls — amortized cost is z
 2. **Regression — solo BaR farthest-first**: unchanged path (`distCache == null`), sort output identical to pre-fix.
 3. **Regression — nearest-first multi-member**: output identical (same comparator ordering, just faster).
 4. **Regression — `GrindSmallestGridFirst` multi-member**: output identical (BUG-091 per-grid tiebreaker still runs in `CompareGrindNonDistance`, distance is only the final tiebreaker).
-5. **Perf verification**: repeat the 58-member mega-base profile run. Expect:
-   - `SortAndCapGridCandidates` avg ms: 28.5 → ~4–6 ms
-   - `sortMs` in the per-call log: 70–125 → 6–10 ms
-   - `partitionMs` in the per-call log: 3–5 → 9–12 ms (added distance compute)
-   - Sim-speed dip during big scans: 0.77–0.93 → should flatten toward 0.95+
+5. **Perf verification** — ✓ verified against profiling session `20260413215939-profiling` (see Measured Impact section above). Actual numbers differed from prediction:
+   - `SortAndCapGridCandidates` avg ms: 28.5 → **34.7** (partition grew, sort dropped — net ~3× speedup, not the predicted ~5×)
+   - `sortMs` per call: 70–125 → **23.9–34.6** (-69% avg)
+   - `partitionMs` per call: 3–5 → **4.3–14.8** (+38% avg)
+   - Sim-speed min during big scans: 0.77 → **0.80** (+0.03)
+   - Total mod CPU per 120 s session: 12,985 ms → **8,469 ms** (-35%)
 6. **Correctness — same-block distance**: background scan creates new `IMySlimBlock` references every cycle. The cache is populated and sorted within a single `SortAndCapGridCandidates` call (same references throughout), so no stale reference issue.
 
 ## See also
