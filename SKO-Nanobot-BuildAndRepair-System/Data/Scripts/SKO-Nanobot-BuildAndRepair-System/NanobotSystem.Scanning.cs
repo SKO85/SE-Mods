@@ -629,11 +629,18 @@ namespace SKONanobotBuildAndRepairSystem
                 var endTs = System.Diagnostics.Stopwatch.GetTimestamp();
 
                 var _clusterMembers = _ClusterMemberAreaCenters != null ? _ClusterMemberAreaCenters.Count : 0;
+                // BUG-096 diagnostics: cap-skip flags + per-grid added counts so a scan that
+                // contributed nothing can be attributed (cap at entry vs truly empty vs scenario/immune).
+                var _weldCapSkipped = weldCapSkipped;
+                var _grindCapSkipped = grindCapSkipped;
+                var _weldAddedHere = weldAfter - weldBefore;
+                var _grindAddedHere = grindAfter - grindBefore;
                 MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
-                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};skipRange={5};clusterMembers={6}",
+                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};weldAdded={5};grindAdded={6};weldCapSkip={7};grindCapSkip={8};skipRange={9};clusterMembers={10}",
                         _Welder.EntityId, _gridEid, newBlocks.Count,
                         clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
                         clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
+                        _weldAddedHere, _grindAddedHere, _weldCapSkipped, _grindCapSkipped,
                         blockSkipRange, _clusterMembers));
 
                 // Report per-grid scan cost for profile summary.
@@ -1364,6 +1371,14 @@ namespace SKONanobotBuildAndRepairSystem
 
         private void SortAndCapGridCandidates(List<ClusterTargetCandidate> list, int startIndex, int count, int maxKeep, bool isGrinding, ref MyOrientedBoundingBoxD areaBox)
         {
+            var profilerTs = MethodProfiler.Start();
+            // Sub-timings so a single profile line reveals which phase (partition/sort) dominates.
+            // Background-thread only; main-thread cost is zero (lazy log line inside profilerTs gate).
+            var partitionTicks = 0L;
+            var sortTicks = 0L;
+            var tsFreq = System.Diagnostics.Stopwatch.Frequency;
+            long tsMark;
+
             var center = areaBox.Center;
             var priorityHandler = isGrinding ? BlockGrindPriority : BlockWeldPriority;
             var grindNearFirst = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
@@ -1386,8 +1401,11 @@ namespace SKONanobotBuildAndRepairSystem
             // during collection and skip this step.
             var memberBoxes = _ClusterMemberAreaBoxes;
             var effectiveCount = count;
+            var partitionRan = false;
             if (useMemberAware && memberBoxes != null && memberBoxes.Count > 0)
             {
+                partitionRan = true;
+                tsMark = System.Diagnostics.Stopwatch.GetTimestamp();
                 var end = startIndex + count;
                 var writeIdx = startIndex;
                 for (int readIdx = startIndex; readIdx < end; readIdx++)
@@ -1424,6 +1442,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
                 effectiveCount = writeIdx - startIndex;
+                partitionTicks = System.Diagnostics.Stopwatch.GetTimestamp() - tsMark;
             }
 
             // Nothing reachable — drop everything this grid contributed. Member-level
@@ -1432,9 +1451,21 @@ namespace SKONanobotBuildAndRepairSystem
             if (effectiveCount == 0)
             {
                 list.RemoveRange(startIndex, count);
+                if (profilerTs != 0L)
+                {
+                    var _count = count;
+                    var _isGrinding = isGrinding;
+                    var _maxKeep = maxKeep;
+                    var _partitionMs = partitionTicks * 1000.0 / tsFreq;
+                    var _memberCount = memberBoxes != null ? memberBoxes.Count : 0;
+                    MethodProfiler.StopAndLog("SortAndCapGridCandidates", profilerTs, () =>
+                        string.Format("entityId={0};isGrinding={1};count={2};effectiveCount=0;maxKeep={3};partitionRan=True;members={4};partitionMs={5:F3};sortMs=0.000;action=dropAll",
+                            _Welder.EntityId, _isGrinding, _count, _maxKeep, _memberCount, _partitionMs));
+                }
                 return;
             }
 
+            tsMark = System.Diagnostics.Stopwatch.GetTimestamp();
             list.Sort(startIndex, effectiveCount, Comparer<ClusterTargetCandidate>.Create((a, b) =>
             {
                 if (!grindIgnorePriority)
@@ -1476,6 +1507,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 return (isGrinding && !grindNearFirst) ? distB.CompareTo(distA) : distA.CompareTo(distB);
             }));
+            sortTicks = System.Diagnostics.Stopwatch.GetTimestamp() - tsMark;
 
             // Trim: drop the out-of-range tail (effectiveCount..count) and any overflow
             // beyond maxKeep from the sorted in-range prefix. keep = min(maxKeep, effectiveCount).
@@ -1483,6 +1515,22 @@ namespace SKONanobotBuildAndRepairSystem
             if (count > keep)
             {
                 list.RemoveRange(startIndex + keep, count - keep);
+            }
+
+            if (profilerTs != 0L)
+            {
+                var _count = count;
+                var _effective = effectiveCount;
+                var _keep = keep;
+                var _maxKeep = maxKeep;
+                var _isGrinding = isGrinding;
+                var _partitionRan = partitionRan;
+                var _memberCount = memberBoxes != null ? memberBoxes.Count : 0;
+                var _partitionMs = partitionTicks * 1000.0 / tsFreq;
+                var _sortMs = sortTicks * 1000.0 / tsFreq;
+                MethodProfiler.StopAndLog("SortAndCapGridCandidates", profilerTs, () =>
+                    string.Format("entityId={0};isGrinding={1};count={2};effectiveCount={3};maxKeep={4};kept={5};partitionRan={6};members={7};partitionMs={8:F3};sortMs={9:F3}",
+                        _Welder.EntityId, _isGrinding, _count, _effective, _maxKeep, _keep, _partitionRan, _memberCount, _partitionMs, _sortMs));
             }
         }
 
