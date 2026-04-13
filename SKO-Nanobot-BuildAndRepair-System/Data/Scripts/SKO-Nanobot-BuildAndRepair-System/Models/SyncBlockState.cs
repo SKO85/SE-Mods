@@ -173,10 +173,23 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 {
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
-                        if (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
-                            Mod.DecrementGridCount(_CurrentWeldingBlock.CubeGrid.EntityId);
-                        if (value != null && value.CubeGrid != null)
-                            Mod.IncrementGridCount(value.CubeGrid.EntityId);
+                        // BUG-097: When the welding loop refreshes the lock-on reference for
+                        // the SAME physical block (background scan produces new IMySlimBlock
+                        // instances every cycle — IsSameBlock matches on grid+position), the
+                        // old and new references share a CubeGrid EntityId. Skip the Dec/Inc
+                        // pair in that case — otherwise GridSystemCount briefly dips by 1
+                        // between the two AddOrUpdate calls and a concurrent
+                        // GetCachedSystemCountOnGrid call from another BaR could pass the
+                        // MaxSystemsPerTargetGrid check during the dip.
+                        var oldGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
+                            ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
+                        var newGridId = (value != null && value.CubeGrid != null)
+                            ? value.CubeGrid.EntityId : 0L;
+                        if (oldGridId != newGridId)
+                        {
+                            if (oldGridId != 0L) Mod.DecrementGridCount(oldGridId);
+                            if (newGridId != 0L) Mod.IncrementGridCount(newGridId);
+                        }
                     }
                     _CurrentWeldingBlock = value;
                     Changed = true;
@@ -206,10 +219,18 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 {
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
-                        if (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
-                            Mod.DecrementGridCount(_CurrentGrindingBlock.CubeGrid.EntityId);
-                        if (value != null && value.CubeGrid != null)
-                            Mod.IncrementGridCount(value.CubeGrid.EntityId);
+                        // BUG-097: see CurrentWeldingBlock comment above — same-grid
+                        // reference swap must skip the Dec/Inc pair to avoid the count-dip
+                        // race against concurrent GetCachedSystemCountOnGrid callers.
+                        var oldGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
+                            ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
+                        var newGridId = (value != null && value.CubeGrid != null)
+                            ? value.CubeGrid.EntityId : 0L;
+                        if (oldGridId != newGridId)
+                        {
+                            if (oldGridId != 0L) Mod.DecrementGridCount(oldGridId);
+                            if (newGridId != 0L) Mod.IncrementGridCount(newGridId);
+                        }
                     }
                     _CurrentGrindingBlock = value;
                     Changed = true;

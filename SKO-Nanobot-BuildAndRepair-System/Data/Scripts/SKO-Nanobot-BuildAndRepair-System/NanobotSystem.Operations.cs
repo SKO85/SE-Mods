@@ -149,8 +149,17 @@ namespace SKONanobotBuildAndRepairSystem
 
                             case WorkModes.GrindIfWeldGetStuck:
                                 ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
-                                if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
+                                // BUG-097: This mode means "grind ONLY if welding is actively stuck"
+                                // (has targets but cannot proceed — e.g. missing components, safe zone,
+                                // priority-starved). WeldBeforeGrind's looser "nothing welding right now"
+                                // condition made this mode functionally identical to WeldBeforeGrind.
+                                // Require needWelding=true && !welding && !transporting so grinding
+                                // only kicks in when weld is truly blocked; if there's nothing to weld
+                                // the BaR stays idle instead of falling through to grind.
+                                var weldStuck = needWelding && !welding && !transporting;
+                                if (weldStuck || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
                                 {
+                                    primaryStuck = true;
                                     ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
                                 }
                                 break;
