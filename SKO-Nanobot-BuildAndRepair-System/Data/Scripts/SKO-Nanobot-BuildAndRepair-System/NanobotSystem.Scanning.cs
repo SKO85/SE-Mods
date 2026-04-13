@@ -422,9 +422,38 @@ namespace SKONanobotBuildAndRepairSystem
             var weldBefore = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
             var grindBefore = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
 
+            // BUG-096 (Codex follow-up to BUG-094): enforce per-type cluster caps at grid entry.
+            // BUG-094 disabled the per-block cap gate on AsyncAddBlockIfTarget (int.MaxValue) so
+            // the per-grid sort sees every qualifying block on a grid — correct for sort quality,
+            // but ShouldStopScan only fires when BOTH lists are full, so when one type never
+            // fills (e.g. grind-only workload with weld still enabled, or vice versa), the other
+            // type grew unbounded across scanned grids (each grid contributed up to 256 via the
+            // per-grid sort, times N grids). PreSortClusterCandidates and ApplyClusterResultToSelf
+            // then paid O(n log n) on that unbounded list.
+            //
+            // Fix: at grid entry, null the per-type target list if that type's cluster cap is
+            // already hit. The per-block path for this grid becomes a no-op for the capped type,
+            // but the other type still gets full-grid input so its per-grid sort stays accurate.
+            // Cap-skipped flags suppress the empty-grid-cache update below so we don't evict a
+            // grid that we literally didn't look at.
+            var weldCapSkipped = false;
+            var weldTargetsForGrid = clusterWeldTargets;
+            if (weldTargetsForGrid != null && weldTargetsForGrid.Count >= maxWeld)
+            {
+                weldTargetsForGrid = null;
+                weldCapSkipped = true;
+            }
+
+            var grindCapSkipped = false;
+            var grindTargetsForGrid = clusterGrindTargets;
+            if (grindTargetsForGrid != null && grindTargetsForGrid.Count >= maxGrind)
+            {
+                grindTargetsForGrid = null;
+                grindCapSkipped = true;
+            }
+
             // Pre-compute grid-level grind eligibility so per-block checks are skipped entirely
             // when the grid can't be ground (scenario mode, indestructible, immune).
-            var grindTargetsForGrid = clusterGrindTargets;
             if (grindTargetsForGrid != null)
             {
                 if ((MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode)
@@ -472,7 +501,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // the qualifying candidates and keeps the user's preferred top-N (nearest,
                 // farthest, smallest-grid-first, etc.). Regression introduced in v2.5.0 when
                 // the full-grid pre-sort was removed but the cap-gate short-circuit was kept.
-                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, grindTargetsForGrid, int.MaxValue, int.MaxValue, blockSkipRange);
+                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, weldTargetsForGrid, grindTargetsForGrid, int.MaxValue, int.MaxValue, blockSkipRange);
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -507,7 +536,7 @@ namespace SKONanobotBuildAndRepairSystem
                     continue;
                 }
 
-                if (clusterWeldTargets != null && ((Settings.Flags & SyncBlockSettings.Settings.AllowBuild) != 0))
+                if (weldTargetsForGrid != null && ((Settings.Flags & SyncBlockSettings.Settings.AllowBuild) != 0))
                 {
                     var projector = fatBlock as Sandbox.ModAPI.IMyProjector;
                     if (projector != null)
@@ -545,9 +574,11 @@ namespace SKONanobotBuildAndRepairSystem
                                         double distance;
                                         if (skipRangeCheck || block.IsInRange(ref areaBox, out distance))
                                         {
-                                            if (clusterWeldTargets.Count < maxWeld)
+                                            // Cluster weld cap respected via weldTargetsForGrid.Count (not clusterWeldTargets.Count);
+                                            // once this grid's per-block loop pushes it past maxWeld the guard stops further adds.
+                                            if (weldTargetsForGrid.Count < maxWeld)
                                             {
-                                                clusterWeldTargets.Add(new ClusterTargetCandidate(block, TargetBlockData.AttributeFlags.Projected));
+                                                weldTargetsForGrid.Add(new ClusterTargetCandidate(block, TargetBlockData.AttributeFlags.Projected));
                                             }
                                         }
                                     }
@@ -573,14 +604,17 @@ namespace SKONanobotBuildAndRepairSystem
                 SortAndCapGridCandidates(clusterWeldTargets, weldBefore, weldAdded, MaxPossibleWeldTargets, false, ref areaBox);
             }
 
-            // Update empty grid cache: remember grids that contributed no targets
+            // Update empty grid cache: remember grids that contributed no targets.
+            // BUG-096: skip this update if we cap-skipped either type at grid entry — the grid
+            // may still have valid targets we literally didn't evaluate, and marking it empty
+            // would suppress it for EmptyGridRescanDelaySeconds even after the cluster cap frees.
             var weldAfter = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
             var grindAfter = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
-            if (weldAfter == weldBefore && grindAfter == grindBefore)
+            if (weldAfter == weldBefore && grindAfter == grindBefore && !weldCapSkipped && !grindCapSkipped)
             {
                 _EmptyGridCache[gridEntityId] = playTime;
             }
-            else
+            else if (weldAfter != weldBefore || grindAfter != grindBefore)
             {
                 TimeSpan dummy;
                 _EmptyGridCache.TryRemove(gridEntityId, out dummy);
@@ -856,6 +890,11 @@ namespace SKONanobotBuildAndRepairSystem
                         else
                             _ClusterMemberAreaCenters.Clear();
 
+                        if (_ClusterMemberAreaBoxes == null)
+                            _ClusterMemberAreaBoxes = new List<MyOrientedBoundingBoxD>(memberCount);
+                        else
+                            _ClusterMemberAreaBoxes.Clear();
+
                         for (int i = 0; i < cluster.Members.Count; i++)
                         {
                             var member = cluster.Members[i];
@@ -864,6 +903,7 @@ namespace SKONanobotBuildAndRepairSystem
                             memberMatrix.Translation = Vector3D.Transform(member.Settings.CorrectedAreaOffset, memberMatrix);
                             var memberBox = new MyOrientedBoundingBoxD(member.Settings.CorrectedAreaBoundingBox, memberMatrix);
                             _ClusterMemberAreaCenters.Add(memberBox.Center);
+                            _ClusterMemberAreaBoxes.Add(memberBox);
                         }
                     }
 
@@ -964,6 +1004,8 @@ namespace SKONanobotBuildAndRepairSystem
                 // across scan cycles. Next multi-member scan will repopulate.
                 if (_ClusterMemberAreaCenters != null)
                     _ClusterMemberAreaCenters.Clear();
+                if (_ClusterMemberAreaBoxes != null)
+                    _ClusterMemberAreaBoxes.Clear();
 
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 if (updateSource) _LastSourceUpdate = _LastTargetsUpdate;
@@ -1333,7 +1375,67 @@ namespace SKONanobotBuildAndRepairSystem
             var memberCenters = _ClusterMemberAreaCenters;
             var useMemberAware = memberCenters != null && memberCenters.Count > 0;
 
-            list.Sort(startIndex, count, Comparer<ClusterTargetCandidate>.Create((a, b) =>
+            // BUG-096: Multi-member cluster scans run with skipRangeCheck=true so the collection
+            // loop doesn't filter out-of-range blocks per-member. If we sort that raw set with
+            // farthest-first (largest min-distance wins), the kept top-N is *deliberately* the
+            // blocks nobody can reach, and every member's own IsInRange filter in
+            // ApplyClusterResultToSelf then throws them away — members go idle while the grid
+            // still has plenty of in-range targets. Partition in-range-to-any-member candidates
+            // to the front of the subrange before sorting so farthest-first picks the farthest
+            // reachable block. Solo scans (useMemberAware=false) already filtered per-block
+            // during collection and skip this step.
+            var memberBoxes = _ClusterMemberAreaBoxes;
+            var effectiveCount = count;
+            if (useMemberAware && memberBoxes != null && memberBoxes.Count > 0)
+            {
+                var end = startIndex + count;
+                var writeIdx = startIndex;
+                for (int readIdx = startIndex; readIdx < end; readIdx++)
+                {
+                    var candidate = list[readIdx];
+                    if (candidate.Block == null || candidate.Block.CubeGrid == null) continue;
+
+                    Vector3 halfExtents;
+                    candidate.Block.ComputeScaledHalfExtents(out halfExtents);
+                    var blockMatrix = candidate.Block.CubeGrid.WorldMatrix;
+                    blockMatrix.Translation = candidate.Block.CubeGrid.GridIntegerToWorld(candidate.Block.Position);
+                    var blockObb = new MyOrientedBoundingBoxD(new BoundingBoxD(-(halfExtents), (halfExtents)), blockMatrix);
+
+                    var inRange = false;
+                    for (int mi = 0; mi < memberBoxes.Count; mi++)
+                    {
+                        var mb = memberBoxes[mi];
+                        if (mb.Intersects(ref blockObb))
+                        {
+                            inRange = true;
+                            break;
+                        }
+                    }
+
+                    if (inRange)
+                    {
+                        if (writeIdx != readIdx)
+                        {
+                            var tmp = list[writeIdx];
+                            list[writeIdx] = candidate;
+                            list[readIdx] = tmp;
+                        }
+                        writeIdx++;
+                    }
+                }
+                effectiveCount = writeIdx - startIndex;
+            }
+
+            // Nothing reachable — drop everything this grid contributed. Member-level
+            // IsInRange would have filtered them anyway; dropping here frees cluster slots
+            // for other grids that may still have reachable blocks on subsequent iterations.
+            if (effectiveCount == 0)
+            {
+                list.RemoveRange(startIndex, count);
+                return;
+            }
+
+            list.Sort(startIndex, effectiveCount, Comparer<ClusterTargetCandidate>.Create((a, b) =>
             {
                 if (!grindIgnorePriority)
                 {
@@ -1375,7 +1477,13 @@ namespace SKONanobotBuildAndRepairSystem
                 return (isGrinding && !grindNearFirst) ? distB.CompareTo(distA) : distA.CompareTo(distB);
             }));
 
-            list.RemoveRange(startIndex + maxKeep, count - maxKeep);
+            // Trim: drop the out-of-range tail (effectiveCount..count) and any overflow
+            // beyond maxKeep from the sorted in-range prefix. keep = min(maxKeep, effectiveCount).
+            var keep = effectiveCount < maxKeep ? effectiveCount : maxKeep;
+            if (count > keep)
+            {
+                list.RemoveRange(startIndex + keep, count - keep);
+            }
         }
 
         private void ApplyClusterResultToSelf(ScanClusterResult result, bool updateSource)

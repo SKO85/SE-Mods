@@ -47,7 +47,7 @@ namespace SKONanobotBuildAndRepairSystem
         public const float WELDER_SOUND_VOLUME = 2f;
 
         private const int MaxPossibleWeldTargets = 256;
-        private const int MaxPossibleGrindTargets = 256;
+        private const int MaxPossibleGrindTargets = 1024;
         private const int MaxPossibleFloatingTargets = 16;
 
         private const int TransmitStateMinIntervalSeconds = 1;
@@ -94,6 +94,13 @@ namespace SKONanobotBuildAndRepairSystem
         // candidates by proximity to ANY member instead of just the coordinator, so distant
         // members on the same grid aren't starved of targets. Null on solo scans.
         private List<Vector3D> _ClusterMemberAreaCenters;
+
+        // BUG-096: Snapshot of each cluster member's full working-area OBB. Captured in
+        // parallel with _ClusterMemberAreaCenters so SortAndCapGridCandidates can drop
+        // candidates that no member can actually reach before it applies farthest-first
+        // sorting — without this, farthest-first on a grid extending beyond the cluster's
+        // reach deliberately kept the blocks nobody could weld/grind and starved the members.
+        private List<MyOrientedBoundingBoxD> _ClusterMemberAreaBoxes;
 
         // Reusable pools for TruncateGridAware — avoids 8 allocations per ApplyClusterResultToSelf call.
         private HashSet<long> _truncateGridIds = new HashSet<long>();
