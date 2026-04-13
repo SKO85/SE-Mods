@@ -53,8 +53,12 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
                         }
                     }
                 }
-                MethodProfiler.StopAndLog("AddIfConnectedToInventory", profilerTs, () =>
-                    string.Format("blockId={0};welderId={1};cached=true;connected={2}", terminalBlock.EntityId, welder.EntityId, cachedConnected));
+                if (profilerTs != 0L)
+                {
+                    var _cachedConnected = cachedConnected;
+                    MethodProfiler.StopAndLog("AddIfConnectedToInventory", profilerTs, () =>
+                        string.Format("blockId={0};welderId={1};cached=true;connected={2}", terminalBlock.EntityId, welder.EntityId, _cachedConnected));
+                }
                 return cachedConnected;
             }
 
@@ -74,8 +78,12 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             }
 
             ConnectionCache.Set(key, isConnected);
-            MethodProfiler.StopAndLog("AddIfConnectedToInventory", profilerTs, () =>
-                string.Format("blockId={0};welderId={1};cached=false;connected={2}", terminalBlock.EntityId, welder.EntityId, isConnected));
+            if (profilerTs != 0L)
+            {
+                var _isConnected = isConnected;
+                MethodProfiler.StopAndLog("AddIfConnectedToInventory", profilerTs, () =>
+                    string.Format("blockId={0};welderId={1};cached=false;connected={2}", terminalBlock.EntityId, welder.EntityId, _isConnected));
+            }
             return isConnected;
         }
 

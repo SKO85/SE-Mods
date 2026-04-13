@@ -401,16 +401,22 @@ namespace SKONanobotBuildAndRepairSystem
             if (!State.IsTransmitNeeded() || !MyAPIGateway.Multiplayer.MultiplayerActive)
             {
                 Mod.ReportSyncSkipped();
-                MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
-                    string.Format("entityId={0};action=skip;reason=notNeeded", _Welder.EntityId));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
+                        string.Format("entityId={0};action=skip;reason=notNeeded", _Welder.EntityId));
+                }
                 return;
             }
 
             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdateStateTransmitLast).TotalSeconds < _UpdateStateTransmitInterval)
             {
                 Mod.ReportSyncSkipped();
-                MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
-                    string.Format("entityId={0};action=skip;reason=interval;backoff={1}", _Welder.EntityId, _transmitBackoffMultiplier));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
+                        string.Format("entityId={0};action=skip;reason=interval;backoff={1}", _Welder.EntityId, _transmitBackoffMultiplier));
+                }
                 return;
             }
 
@@ -431,9 +437,12 @@ namespace SKONanobotBuildAndRepairSystem
             NetworkMessagingHandler.MsgBlockStateSend(0, this);
             Mod.ReportSyncSent();
 
-            MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
-                string.Format("entityId={0};action=send;fpChanged={1};backoff={2};excluded={3}",
-                    _Welder.EntityId, fingerprintChanged, _transmitBackoffMultiplier, excludedBefore));
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
+                    string.Format("entityId={0};action=send;fpChanged={1};backoff={2};excluded={3}",
+                        _Welder.EntityId, fingerprintChanged, _transmitBackoffMultiplier, excludedBefore));
+            }
         }
 
         /// <summary>
