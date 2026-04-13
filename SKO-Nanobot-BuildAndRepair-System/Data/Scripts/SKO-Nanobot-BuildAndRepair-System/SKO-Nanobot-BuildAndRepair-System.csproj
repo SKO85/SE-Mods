@@ -148,7 +148,7 @@
     <Compile Include="Handlers\NetworkMessagingHandler.cs" />
     <Compile Include="Helpers\PowerHelper.cs" />
     <Compile Include="Helpers\SlimBlockHelper.cs" />
-<Compile Include="Localization\LocalizationHelper.cs" />
+    <Compile Include="Localization\LocalizationHelper.cs" />
     <Compile Include="Collections\DefinitionIdHashDictionary.cs" />
     <Compile Include="Collections\TargetBlockDataHashList.cs" />
     <Compile Include="Collections\TargetEntityDataHashList.cs" />
@@ -206,8 +206,8 @@
     <Compile Include="Utils\UtilsInventory.cs" />
     <Compile Include="Utils\UtilsPlayer.cs" />
     <Compile Include="Utils\UtilsProductionBlock.cs" />
-<Compile Include="Utils\UtilsSynchronization.cs" />
-<Compile Include="Utils\UtilsText.cs" />
+    <Compile Include="Utils\UtilsSynchronization.cs" />
+    <Compile Include="Utils\UtilsText.cs" />
     <Compile Include="Caches\SharedGridBlockCache.cs" />
     <Compile Include="Caches\SharedEntityCache.cs" />
   </ItemGroup>

@@ -95,6 +95,13 @@ namespace SKONanobotBuildAndRepairSystem
         // members on the same grid aren't starved of targets. Null on solo scans.
         private List<Vector3D> _ClusterMemberAreaCenters;
 
+        // BUG-096: Snapshot of each cluster member's full working-area OBB. Captured in
+        // parallel with _ClusterMemberAreaCenters so SortAndCapGridCandidates can drop
+        // candidates that no member can actually reach before it applies farthest-first
+        // sorting — without this, farthest-first on a grid extending beyond the cluster's
+        // reach deliberately kept the blocks nobody could weld/grind and starved the members.
+        private List<MyOrientedBoundingBoxD> _ClusterMemberAreaBoxes;
+
         // Reusable pools for TruncateGridAware — avoids 8 allocations per ApplyClusterResultToSelf call.
         private HashSet<long> _truncateGridIds = new HashSet<long>();
         private Dictionary<long, int> _truncateKeptPerGrid = new Dictionary<long, int>();
@@ -105,6 +112,26 @@ namespace SKONanobotBuildAndRepairSystem
         // same-size grids are ordered by their closest block (spatial), not by arbitrary
         // EntityId. Pooled dict cleared and refilled by each sort pre-pass.
         private Dictionary<long, double> _gridMinDistLookup = new Dictionary<long, double>();
+
+        // BUG-099: Per-candidate min-squared-distance-to-any-cluster-member cache used by
+        // SortAndCapGridCandidates. Populated once during the BUG-096 partition loop (while
+        // we already have the block world position for the OBB test) so the sort comparator
+        // can do a dict lookup instead of recomputing 2 * memberCount squared distances per
+        // comparison. Profiling on a 58-member cluster showed the inline recompute dominated
+        // sort cost (~70-125 ms per call on 11k candidates); cached lookup drops it to ~6-10 ms.
+        // Pooled field: cleared and reused between calls; one background scan per BaR runs
+        // at a time so no concurrent access within one instance.
+        private Dictionary<IMySlimBlock, double> _sortCandidateDistances = new Dictionary<IMySlimBlock, double>();
+
+        // BUG-100: Per-candidate priority cache used by SortAndCapGridCandidates. After
+        // BUG-099 eliminated the distance recompute, profile session 20260413220505 showed
+        // the sort was bounded by the comparator's per-call BlockGrindPriority.GetPriority
+        // (BlockWeldPriority for the weld branch) — 2 blocks × ~132k comparisons × ~130 ns
+        // per GetPriority call = ~34 ms of priority lookup cost per 9.9k-candidate sort.
+        // Populated once per candidate during the partition loop (same pattern as distance
+        // cache), the sort comparator reads cached priorities in ~40 ns per lookup. Expected
+        // drop from ~37 ms to ~12 ms per big sort call on the 58-member cluster workload.
+        private Dictionary<IMySlimBlock, int> _sortCandidatePriorities = new Dictionary<IMySlimBlock, int>();
 
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
         // Rebuilt by RebuildSaturatedGrids(), used as fast-path in IsGridOverSystemLimit().

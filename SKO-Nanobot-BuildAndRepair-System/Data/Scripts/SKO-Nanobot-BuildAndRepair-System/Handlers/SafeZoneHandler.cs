@@ -86,9 +86,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.GetSafeZones: {0}", ex.Message); }
             finally
             {
-                var _zoneCount = Zones.Count;
-                MethodProfiler.StopAndLog("SafeZoneHandler.GetSafeZones", profilerTs, () =>
-                    string.Format("zones={0}", _zoneCount));
+                if (profilerTs != 0L)
+                {
+                    var _zoneCount = Zones.Count;
+                    MethodProfiler.StopAndLog("SafeZoneHandler.GetSafeZones", profilerTs, () =>
+                        string.Format("zones={0}", _zoneCount));
+                }
             }
         }
 
@@ -282,9 +285,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
             finally
             {
-                var _hit = cacheHit;
-                MethodProfiler.StopAndLog("SafeZoneHandler.GetIntersectingSafeZone", profilerTs, () =>
-                    string.Format("cacheHit={0}", _hit));
+                if (profilerTs != 0L)
+                {
+                    var _hit = cacheHit;
+                    MethodProfiler.StopAndLog("SafeZoneHandler.GetIntersectingSafeZone", profilerTs, () =>
+                        string.Format("cacheHit={0}", _hit));
+                }
             }
         }
 
@@ -535,9 +541,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
             finally
             {
-                var _hit = cacheHit;
-                MethodProfiler.StopAndLog("SafeZoneHandler.IsProtectedFromGrinding", profilerTs, () =>
-                    string.Format("cacheHit={0}", _hit));
+                if (profilerTs != 0L)
+                {
+                    var _hit = cacheHit;
+                    MethodProfiler.StopAndLog("SafeZoneHandler.IsProtectedFromGrinding", profilerTs, () =>
+                        string.Format("cacheHit={0}", _hit));
+                }
             }
         }
     }

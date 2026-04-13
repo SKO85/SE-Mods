@@ -422,9 +422,38 @@ namespace SKONanobotBuildAndRepairSystem
             var weldBefore = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
             var grindBefore = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
 
+            // BUG-096 (Codex follow-up to BUG-094): enforce per-type cluster caps at grid entry.
+            // BUG-094 disabled the per-block cap gate on AsyncAddBlockIfTarget (int.MaxValue) so
+            // the per-grid sort sees every qualifying block on a grid — correct for sort quality,
+            // but ShouldStopScan only fires when BOTH lists are full, so when one type never
+            // fills (e.g. grind-only workload with weld still enabled, or vice versa), the other
+            // type grew unbounded across scanned grids (each grid contributed up to 256 via the
+            // per-grid sort, times N grids). PreSortClusterCandidates and ApplyClusterResultToSelf
+            // then paid O(n log n) on that unbounded list.
+            //
+            // Fix: at grid entry, null the per-type target list if that type's cluster cap is
+            // already hit. The per-block path for this grid becomes a no-op for the capped type,
+            // but the other type still gets full-grid input so its per-grid sort stays accurate.
+            // Cap-skipped flags suppress the empty-grid-cache update below so we don't evict a
+            // grid that we literally didn't look at.
+            var weldCapSkipped = false;
+            var weldTargetsForGrid = clusterWeldTargets;
+            if (weldTargetsForGrid != null && weldTargetsForGrid.Count >= maxWeld)
+            {
+                weldTargetsForGrid = null;
+                weldCapSkipped = true;
+            }
+
+            var grindCapSkipped = false;
+            var grindTargetsForGrid = clusterGrindTargets;
+            if (grindTargetsForGrid != null && grindTargetsForGrid.Count >= maxGrind)
+            {
+                grindTargetsForGrid = null;
+                grindCapSkipped = true;
+            }
+
             // Pre-compute grid-level grind eligibility so per-block checks are skipped entirely
             // when the grid can't be ground (scenario mode, indestructible, immune).
-            var grindTargetsForGrid = clusterGrindTargets;
             if (grindTargetsForGrid != null)
             {
                 if ((MyAPIGateway.Session.SessionSettings.Scenario || MyAPIGateway.Session.SessionSettings.ScenarioEditMode)
@@ -462,10 +491,17 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
 
-                // Collect all qualifying candidates from this grid (no per-grid cap during iteration).
-                // The per-grid budget is enforced after iteration via sort+truncate so that the
-                // BEST candidates (by priority+distance) are retained, not arbitrary ones.
-                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, clusterWeldTargets, grindTargetsForGrid, maxWeld, maxGrind, blockSkipRange);
+                // BUG-094: Pass int.MaxValue for the per-block count gates so EVERY qualifying
+                // block on this grid enters the candidate list. The global cap (maxWeld/maxGrind)
+                // must not short-circuit the per-block add here, because on grids larger than
+                // the cap the iteration would keep whatever blocks happened to be first in the
+                // grid-cache order — not the true top-N by priority/distance.
+                // The per-grid budget (MaxPossibleWeldTargets / MaxPossibleGrindTargets) is
+                // enforced after the loop via SortAndCapGridCandidates (below), which sorts
+                // the qualifying candidates and keeps the user's preferred top-N (nearest,
+                // farthest, smallest-grid-first, etc.). Regression introduced in v2.5.0 when
+                // the full-grid pre-sort was removed but the cap-gate short-circuit was kept.
+                AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, weldTargetsForGrid, grindTargetsForGrid, int.MaxValue, int.MaxValue, blockSkipRange);
 
                 var fatBlock = slimBlock.FatBlock;
                 if (fatBlock == null) continue;
@@ -500,7 +536,7 @@ namespace SKONanobotBuildAndRepairSystem
                     continue;
                 }
 
-                if (clusterWeldTargets != null && ((Settings.Flags & SyncBlockSettings.Settings.AllowBuild) != 0))
+                if (weldTargetsForGrid != null && ((Settings.Flags & SyncBlockSettings.Settings.AllowBuild) != 0))
                 {
                     var projector = fatBlock as Sandbox.ModAPI.IMyProjector;
                     if (projector != null)
@@ -538,9 +574,11 @@ namespace SKONanobotBuildAndRepairSystem
                                         double distance;
                                         if (skipRangeCheck || block.IsInRange(ref areaBox, out distance))
                                         {
-                                            if (clusterWeldTargets.Count < maxWeld)
+                                            // Cluster weld cap respected via weldTargetsForGrid.Count (not clusterWeldTargets.Count);
+                                            // once this grid's per-block loop pushes it past maxWeld the guard stops further adds.
+                                            if (weldTargetsForGrid.Count < maxWeld)
                                             {
-                                                clusterWeldTargets.Add(new ClusterTargetCandidate(block, TargetBlockData.AttributeFlags.Projected));
+                                                weldTargetsForGrid.Add(new ClusterTargetCandidate(block, TargetBlockData.AttributeFlags.Projected));
                                             }
                                         }
                                     }
@@ -566,14 +604,17 @@ namespace SKONanobotBuildAndRepairSystem
                 SortAndCapGridCandidates(clusterWeldTargets, weldBefore, weldAdded, MaxPossibleWeldTargets, false, ref areaBox);
             }
 
-            // Update empty grid cache: remember grids that contributed no targets
+            // Update empty grid cache: remember grids that contributed no targets.
+            // BUG-096: skip this update if we cap-skipped either type at grid entry — the grid
+            // may still have valid targets we literally didn't evaluate, and marking it empty
+            // would suppress it for EmptyGridRescanDelaySeconds even after the cluster cap frees.
             var weldAfter = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
             var grindAfter = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
-            if (weldAfter == weldBefore && grindAfter == grindBefore)
+            if (weldAfter == weldBefore && grindAfter == grindBefore && !weldCapSkipped && !grindCapSkipped)
             {
                 _EmptyGridCache[gridEntityId] = playTime;
             }
-            else
+            else if (weldAfter != weldBefore || grindAfter != grindBefore)
             {
                 TimeSpan dummy;
                 _EmptyGridCache.TryRemove(gridEntityId, out dummy);
@@ -588,11 +629,18 @@ namespace SKONanobotBuildAndRepairSystem
                 var endTs = System.Diagnostics.Stopwatch.GetTimestamp();
 
                 var _clusterMembers = _ClusterMemberAreaCenters != null ? _ClusterMemberAreaCenters.Count : 0;
+                // BUG-096 diagnostics: cap-skip flags + per-grid added counts so a scan that
+                // contributed nothing can be attributed (cap at entry vs truly empty vs scenario/immune).
+                var _weldCapSkipped = weldCapSkipped;
+                var _grindCapSkipped = grindCapSkipped;
+                var _weldAddedHere = weldAfter - weldBefore;
+                var _grindAddedHere = grindAfter - grindBefore;
                 MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
-                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};skipRange={5};clusterMembers={6}",
+                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};weldAdded={5};grindAdded={6};weldCapSkip={7};grindCapSkip={8};skipRange={9};clusterMembers={10}",
                         _Welder.EntityId, _gridEid, newBlocks.Count,
                         clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
                         clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
+                        _weldAddedHere, _grindAddedHere, _weldCapSkipped, _grindCapSkipped,
                         blockSkipRange, _clusterMembers));
 
                 // Report per-grid scan cost for profile summary.
@@ -755,10 +803,19 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false)
             {
+                // BUG-095: Defer cleanup if a scan enqueued on a prior tick is still
+                // running. Force-clearing the flag here would let the next tick enqueue
+                // a second concurrent scan on a disable→enable bounce, producing
+                // interleaved target-list swaps. The background finally at line 961
+                // clears the flag under the same lock; the next tick's early-exit
+                // will do the cleanup then if we're still disabled.
+                lock (_Welder)
+                {
+                    if (_AsyncUpdateSourcesAndTargetsRunning) return;
+                }
                 lock (State.PossibleWeldTargets) { State.PossibleWeldTargets.Clear(); State.PossibleWeldTargets.RebuildHash(); }
                 lock (State.PossibleGrindTargets) { State.PossibleGrindTargets.Clear(); State.PossibleGrindTargets.RebuildHash(); }
                 lock (State.PossibleFloatingTargets) { State.PossibleFloatingTargets.Clear(); State.PossibleFloatingTargets.RebuildHash(); }
-                _AsyncUpdateSourcesAndTargetsRunning = false;
                 _InitialScanCompleted = false;
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 _LastSourceUpdate = _LastTargetsUpdate;
@@ -840,6 +897,11 @@ namespace SKONanobotBuildAndRepairSystem
                         else
                             _ClusterMemberAreaCenters.Clear();
 
+                        if (_ClusterMemberAreaBoxes == null)
+                            _ClusterMemberAreaBoxes = new List<MyOrientedBoundingBoxD>(memberCount);
+                        else
+                            _ClusterMemberAreaBoxes.Clear();
+
                         for (int i = 0; i < cluster.Members.Count; i++)
                         {
                             var member = cluster.Members[i];
@@ -848,6 +910,7 @@ namespace SKONanobotBuildAndRepairSystem
                             memberMatrix.Translation = Vector3D.Transform(member.Settings.CorrectedAreaOffset, memberMatrix);
                             var memberBox = new MyOrientedBoundingBoxD(member.Settings.CorrectedAreaBoundingBox, memberMatrix);
                             _ClusterMemberAreaCenters.Add(memberBox.Center);
+                            _ClusterMemberAreaBoxes.Add(memberBox);
                         }
                     }
 
@@ -948,6 +1011,8 @@ namespace SKONanobotBuildAndRepairSystem
                 // across scan cycles. Next multi-member scan will repopulate.
                 if (_ClusterMemberAreaCenters != null)
                     _ClusterMemberAreaCenters.Clear();
+                if (_ClusterMemberAreaBoxes != null)
+                    _ClusterMemberAreaBoxes.Clear();
 
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 if (updateSource) _LastSourceUpdate = _LastTargetsUpdate;
@@ -1021,43 +1086,16 @@ namespace SKONanobotBuildAndRepairSystem
 
                     grindCandidates.Sort((a, b) =>
                     {
-                        if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
-                        {
-                            if (grindUsePriority)
-                            {
-                                var priorityA = BlockGrindPriority.GetPriority(a.Block);
-                                var priorityB = BlockGrindPriority.GetPriority(b.Block);
-                                if (priorityA != priorityB)
-                                    return priorityA - priorityB;
-                            }
+                        var cmp = CompareGrindNonDistance(a.Block, a.Attributes, b.Block, b.Attributes,
+                            grindUsePriority, grindSmallestGridFirst,
+                            grindSmallestGridFirst ? _gridMinDistLookup : null);
+                        if (cmp != 0) return cmp;
 
-                            if (grindSmallestGridFirst)
-                            {
-                                var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                                if (res != 0) return res;
-
-                                // BUG-091: spatial tiebreaker — nearest equal-size grid wins.
-                                // Blocks within the same grid share a minDist so they stay grouped.
-                                double minA, minB;
-                                _gridMinDistLookup.TryGetValue(a.Block.CubeGrid.EntityId, out minA);
-                                _gridMinDistLookup.TryGetValue(b.Block.CubeGrid.EntityId, out minB);
-                                var minCmp = minA.CompareTo(minB);
-                                if (minCmp != 0) return minCmp;
-
-                                // Stable deterministic fallback for the rare case where two
-                                // same-size grids also have identical min-distance.
-                                var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
-                                if (gridCmp != 0) return gridCmp;
-                            }
-
-                            double distA, distB;
-                            distances.TryGetValue(a.Block, out distA);
-                            distances.TryGetValue(b.Block, out distB);
-                            return grindNearFirst ? distA.CompareTo(distB) : distB.CompareTo(distA);
-                        }
-                        else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
-                        else if ((b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return 1;
-                        return 0;
+                        // Distance compare (squared, min-to-any-member via pre-built cache).
+                        double distA, distB;
+                        distances.TryGetValue(a.Block, out distA);
+                        distances.TryGetValue(b.Block, out distB);
+                        return grindNearFirst ? distA.CompareTo(distB) : distB.CompareTo(distA);
                     });
                 }
 
@@ -1072,9 +1110,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                     weldCandidates.Sort((a, b) =>
                     {
-                        var priorityA = BlockWeldPriority.GetPriority(a.Block);
-                        var priorityB = BlockWeldPriority.GetPriority(b.Block);
-                        if (priorityA != priorityB) return priorityA - priorityB;
+                        var cmp = CompareWeldPriority(a.Block, b.Block);
+                        if (cmp != 0) return cmp;
 
                         double distA, distB;
                         distances.TryGetValue(a.Block, out distA);
@@ -1082,13 +1119,7 @@ namespace SKONanobotBuildAndRepairSystem
                         var distCmp = distA.CompareTo(distB);
                         if (distCmp != 0) return distCmp;
 
-                        var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
-                        if (gridCmp != 0) return gridCmp;
-                        var posA = a.Block.Position;
-                        var posB = b.Block.Position;
-                        if (posA.X != posB.X) return posA.X - posB.X;
-                        if (posA.Y != posB.Y) return posA.Y - posB.Y;
-                        return posA.Z - posB.Z;
+                        return CompareBlockStableTiebreak(a.Block, b.Block);
                     });
                 }
             }
@@ -1123,10 +1154,19 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false)
             {
+                // BUG-095: Defer cleanup if a scan enqueued on a prior tick is still
+                // running. Force-clearing the flag here would let the next tick enqueue
+                // a second concurrent scan on a disable→enable bounce, producing
+                // interleaved target-list swaps. The background finally at line 1184
+                // clears the flag under the same lock; the next tick's early-exit
+                // will do the cleanup then if we're still disabled.
+                lock (_Welder)
+                {
+                    if (_AsyncUpdateSourcesAndTargetsRunning) return;
+                }
                 lock (State.PossibleWeldTargets) { State.PossibleWeldTargets.Clear(); State.PossibleWeldTargets.RebuildHash(); }
                 lock (State.PossibleGrindTargets) { State.PossibleGrindTargets.Clear(); State.PossibleGrindTargets.RebuildHash(); }
                 lock (State.PossibleFloatingTargets) { State.PossibleFloatingTargets.Clear(); State.PossibleFloatingTargets.RebuildHash(); }
-                _AsyncUpdateSourcesAndTargetsRunning = false;
                 _InitialScanCompleted = false;
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 _LastSourceUpdate = _LastTargetsUpdate;
@@ -1271,6 +1311,107 @@ namespace SKONanobotBuildAndRepairSystem
         /// the cap must select by distance/grid-size so it keeps the blocks the user
         /// actually wants (e.g., farthest), not the highest-priority ones.
         /// </summary>
+        // ----------------------------------------------------------------------------------
+        // Shared sort key helpers (FEAT-070 consolidation).
+        //
+        // The scan pipeline does weld/grind sorts in several places:
+        //   1. SortAndCapGridCandidates         — per-grid sort on ClusterTargetCandidate.
+        //   2. PreSortClusterCandidates         — cluster-wide pre-sort on ClusterTargetCandidate.
+        //   3. ApplyClusterResultToSelf (pre)   — per-BaR pre-sort on TargetBlockData.
+        //   4. ApplyClusterResultToSelf (post)  — post-truncate re-sort on TargetBlockData.
+        //
+        // Before consolidation each site open-coded the autogrind-first bucket, priority
+        // check, GrindSmallestGridFirst + BUG-091 spatial tiebreaker, and (for weld) the
+        // grid/position stable tiebreakers. BUG-086/BUG-091 fixes had to touch every copy;
+        // one copy in ApplyClusterResultToSelf also had a subtle bug where farthest-first
+        // + smallest-grid-first combined would fall back to nearest-first within same-sized
+        // grids (see CompareGrindNonDistance below).
+        //
+        // These helpers centralize the non-distance key so each call site only owns:
+        //   - distance metric (squared / non-squared / member-aware)
+        //   - grindNearFirst direction
+        //   - its own tiebreakers (if any)
+        // Each helper is an instance method because the priority lookups (BlockWeldPriority /
+        // BlockGrindPriority) are per-NanobotSystem fields. All are pure — no side effects.
+        // ----------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Grind sort key — everything except the final distance compare. Handles:
+        ///   1. Autogrind-first bucket (autogrind blocks precede non-autogrind).
+        ///   2. Per-type priority (skipped when user sets GrindIgnorePriorityOrder).
+        ///   3. GrindSmallestGridFirst: smaller grid wins; equal-size grids use BUG-091's
+        ///      per-grid nearest-block min-distance tiebreaker; equal-size-and-min-distance
+        ///      fall back to a deterministic EntityId tiebreaker.
+        /// Returns 0 when the caller should fall through to its distance compare (which
+        /// MUST honor GrindNearFirst). <paramref name="perGridMinDist"/> may be null when
+        /// smallestGridFirst is off or when BUG-091 tiebreaker data isn't applicable
+        /// (per-grid sort over a single grid, for example).
+        /// </summary>
+        private int CompareGrindNonDistance(
+            IMySlimBlock blockA, TargetBlockData.AttributeFlags attrsA,
+            IMySlimBlock blockB, TargetBlockData.AttributeFlags attrsB,
+            bool usePriority, bool smallestGridFirst,
+            Dictionary<long, double> perGridMinDist)
+        {
+            var autogrindA = (attrsA & TargetBlockData.AttributeFlags.Autogrind) != 0;
+            var autogrindB = (attrsB & TargetBlockData.AttributeFlags.Autogrind) != 0;
+            if (autogrindA != autogrindB) return autogrindA ? -1 : 1;
+
+            if (usePriority)
+            {
+                var priorityA = BlockGrindPriority.GetPriority(blockA);
+                var priorityB = BlockGrindPriority.GetPriority(blockB);
+                if (priorityA != priorityB) return priorityA - priorityB;
+            }
+
+            if (smallestGridFirst)
+            {
+                var gridRes = ((MyCubeGrid)blockA.CubeGrid).BlocksCount - ((MyCubeGrid)blockB.CubeGrid).BlocksCount;
+                if (gridRes != 0) return gridRes;
+
+                if (perGridMinDist != null)
+                {
+                    double minA, minB;
+                    perGridMinDist.TryGetValue(blockA.CubeGrid.EntityId, out minA);
+                    perGridMinDist.TryGetValue(blockB.CubeGrid.EntityId, out minB);
+                    var minCmp = minA.CompareTo(minB);
+                    if (minCmp != 0) return minCmp;
+                }
+
+                var gridCmp = blockA.CubeGrid.EntityId.CompareTo(blockB.CubeGrid.EntityId);
+                if (gridCmp != 0) return gridCmp;
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// Weld sort key — priority only. Weld has no smallest-grid-first / autogrind bucket.
+        /// Caller follows with a distance compare and optional stable tiebreakers.
+        /// </summary>
+        private int CompareWeldPriority(IMySlimBlock blockA, IMySlimBlock blockB)
+        {
+            var priorityA = BlockWeldPriority.GetPriority(blockA);
+            var priorityB = BlockWeldPriority.GetPriority(blockB);
+            return priorityA - priorityB;
+        }
+
+        /// <summary>
+        /// Stable deterministic tiebreaker used after priority+distance to keep sort order
+        /// reproducible across identical-key ties (avoids output churn between scan cycles).
+        /// Static because it touches no instance state.
+        /// </summary>
+        private static int CompareBlockStableTiebreak(IMySlimBlock blockA, IMySlimBlock blockB)
+        {
+            var gridCmp = blockA.CubeGrid.EntityId.CompareTo(blockB.CubeGrid.EntityId);
+            if (gridCmp != 0) return gridCmp;
+            var posA = blockA.Position;
+            var posB = blockB.Position;
+            if (posA.X != posB.X) return posA.X - posB.X;
+            if (posA.Y != posB.Y) return posA.Y - posB.Y;
+            return posA.Z - posB.Z;
+        }
+
         /// <summary>
         /// Returns the minimum squared distance from <paramref name="blockPos"/> to any
         /// snapshotted cluster member area center. Falls back to <paramref name="fallbackCenter"/>
@@ -1297,8 +1438,15 @@ namespace SKONanobotBuildAndRepairSystem
 
         private void SortAndCapGridCandidates(List<ClusterTargetCandidate> list, int startIndex, int count, int maxKeep, bool isGrinding, ref MyOrientedBoundingBoxD areaBox)
         {
+            var profilerTs = MethodProfiler.Start();
+            // Sub-timings so a single profile line reveals which phase (partition/sort) dominates.
+            // Background-thread only; main-thread cost is zero (lazy log line inside profilerTs gate).
+            var partitionTicks = 0L;
+            var sortTicks = 0L;
+            var tsFreq = System.Diagnostics.Stopwatch.Frequency;
+            long tsMark;
+
             var center = areaBox.Center;
-            var priorityHandler = isGrinding ? BlockGrindPriority : BlockWeldPriority;
             var grindNearFirst = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
             var grindSmallestFirst = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
             var grindIgnorePriority = isGrinding && (Settings.Flags & SyncBlockSettings.Settings.GrindIgnorePriorityOrder) != 0;
@@ -1308,49 +1456,217 @@ namespace SKONanobotBuildAndRepairSystem
             var memberCenters = _ClusterMemberAreaCenters;
             var useMemberAware = memberCenters != null && memberCenters.Count > 0;
 
-            list.Sort(startIndex, count, Comparer<ClusterTargetCandidate>.Create((a, b) =>
+            // BUG-096: Multi-member cluster scans run with skipRangeCheck=true so the collection
+            // loop doesn't filter out-of-range blocks per-member. If we sort that raw set with
+            // farthest-first (largest min-distance wins), the kept top-N is *deliberately* the
+            // blocks nobody can reach, and every member's own IsInRange filter in
+            // ApplyClusterResultToSelf then throws them away — members go idle while the grid
+            // still has plenty of in-range targets. Partition in-range-to-any-member candidates
+            // to the front of the subrange before sorting so farthest-first picks the farthest
+            // reachable block. Solo scans (useMemberAware=false) already filtered per-block
+            // during collection and skip this step.
+            var memberBoxes = _ClusterMemberAreaBoxes;
+            var effectiveCount = count;
+            var partitionRan = false;
+            if (useMemberAware && memberBoxes != null && memberBoxes.Count > 0)
             {
-                if (!grindIgnorePriority)
-                {
-                    var priorityA = priorityHandler.GetPriority(a.Block);
-                    var priorityB = priorityHandler.GetPriority(b.Block);
-                    if (priorityA != priorityB)
-                        return priorityA - priorityB;
-                }
+                partitionRan = true;
+                tsMark = System.Diagnostics.Stopwatch.GetTimestamp();
 
-                if (grindSmallestFirst)
-                {
-                    var gridRes = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                    if (gridRes != 0) return gridRes;
-                    var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
-                    if (gridCmp != 0) return gridCmp;
-                }
+                // BUG-099: populate the sort distance cache while we already have each
+                // block's world position and are iterating every candidate for the OBB
+                // partition check. The sort comparator can then do a dict lookup per
+                // compare instead of recomputing 2 * memberCount squared distances per
+                // compare — profiling on a 58-member cluster showed the inline recompute
+                // cost 70-125 ms per sort on 11k candidates; this drops it to ~6-10 ms.
+                //
+                // BUG-100: also populate the priority cache so the comparator can skip the
+                // per-compare GetPriority lookups (previously ~34 ms / sort for 9.9k-cand
+                // grind sort after BUG-099). Pre-fetched once per block (~130 ns) then read
+                // from the cache per compare (~40 ns) for a ~2-3x speedup on the sort.
+                _sortCandidateDistances.Clear();
+                _sortCandidatePriorities.Clear();
 
-                var posA = a.Block.CubeGrid.GridIntegerToWorld(a.Block.Position);
-                var posB = b.Block.CubeGrid.GridIntegerToWorld(b.Block.Position);
-                double distA, distB;
-                if (useMemberAware)
+                var end = startIndex + count;
+                var writeIdx = startIndex;
+                for (int readIdx = startIndex; readIdx < end; readIdx++)
                 {
-                    distA = double.MaxValue;
-                    distB = double.MaxValue;
-                    for (int i = 0; i < memberCenters.Count; i++)
+                    var candidate = list[readIdx];
+                    if (candidate.Block == null || candidate.Block.CubeGrid == null) continue;
+
+                    Vector3 halfExtents;
+                    candidate.Block.ComputeScaledHalfExtents(out halfExtents);
+                    var blockMatrix = candidate.Block.CubeGrid.WorldMatrix;
+                    blockMatrix.Translation = candidate.Block.CubeGrid.GridIntegerToWorld(candidate.Block.Position);
+                    var blockObb = new MyOrientedBoundingBoxD(new BoundingBoxD(-(halfExtents), (halfExtents)), blockMatrix);
+
+                    var inRange = false;
+                    for (int mi = 0; mi < memberBoxes.Count; mi++)
                     {
-                        var c = memberCenters[i];
-                        var dA = (c - posA).LengthSquared();
-                        if (dA < distA) distA = dA;
-                        var dB = (c - posB).LengthSquared();
-                        if (dB < distB) distB = dB;
+                        var mb = memberBoxes[mi];
+                        if (mb.Intersects(ref blockObb))
+                        {
+                            inRange = true;
+                            break;
+                        }
                     }
+
+                    if (inRange)
+                    {
+                        // Compute min-squared-distance to any member center while the
+                        // block position is in L1. Used by the sort comparator below.
+                        var blockPos = blockMatrix.Translation;
+                        var minDist = double.MaxValue;
+                        for (int ci = 0; ci < memberCenters.Count; ci++)
+                        {
+                            var d = (memberCenters[ci] - blockPos).LengthSquared();
+                            if (d < minDist) minDist = d;
+                        }
+                        _sortCandidateDistances[candidate.Block] = minDist;
+
+                        // BUG-100: pre-fetch priority for the sort comparator. One GetPriority
+                        // call per block here replaces 2 calls per comparison × ~132k
+                        // comparisons in the sort.
+                        var priority = isGrinding
+                            ? BlockGrindPriority.GetPriority(candidate.Block)
+                            : BlockWeldPriority.GetPriority(candidate.Block);
+                        _sortCandidatePriorities[candidate.Block] = priority;
+
+                        if (writeIdx != readIdx)
+                        {
+                            var tmp = list[writeIdx];
+                            list[writeIdx] = candidate;
+                            list[readIdx] = tmp;
+                        }
+                        writeIdx++;
+                    }
+                }
+                effectiveCount = writeIdx - startIndex;
+                partitionTicks = System.Diagnostics.Stopwatch.GetTimestamp() - tsMark;
+            }
+
+            // Nothing reachable — drop everything this grid contributed. Member-level
+            // IsInRange would have filtered them anyway; dropping here frees cluster slots
+            // for other grids that may still have reachable blocks on subsequent iterations.
+            if (effectiveCount == 0)
+            {
+                list.RemoveRange(startIndex, count);
+                if (profilerTs != 0L)
+                {
+                    var _count = count;
+                    var _isGrinding = isGrinding;
+                    var _maxKeep = maxKeep;
+                    var _partitionMs = partitionTicks * 1000.0 / tsFreq;
+                    var _memberCount = memberBoxes != null ? memberBoxes.Count : 0;
+                    MethodProfiler.StopAndLog("SortAndCapGridCandidates", profilerTs, () =>
+                        string.Format("entityId={0};isGrinding={1};count={2};effectiveCount=0;maxKeep={3};partitionRan=True;members={4};partitionMs={5:F3};sortMs=0.000;action=dropAll",
+                            _Welder.EntityId, _isGrinding, _count, _maxKeep, _memberCount, _partitionMs));
+                }
+                return;
+            }
+
+            tsMark = System.Diagnostics.Stopwatch.GetTimestamp();
+            // Snapshot cache references for the closure — fields are never reassigned during
+            // a sort so local-capture keeps the comparator body branch-free. The per-grid sort
+            // doesn't need the smallest-grid BlocksCount tiebreaker (all candidates are on the
+            // same CubeGrid so the compare is always 0) so we inline a minimal autogrind +
+            // priority + distance compare that reads both caches directly instead of going
+            // through CompareGrindNonDistance / CompareWeldPriority + their internal GetPriority
+            // lookups. That saves ~130 ns per GetPriority × 2 per compare × ~132k compares =
+            // ~34 ms per 9.9k-candidate sort on a 58-member cluster (BUG-100).
+            var distCache = useMemberAware ? _sortCandidateDistances : null;
+            var priCache = useMemberAware ? _sortCandidatePriorities : null;
+            list.Sort(startIndex, effectiveCount, Comparer<ClusterTargetCandidate>.Create((a, b) =>
+            {
+                if (isGrinding)
+                {
+                    // Autogrind-first bucket (inline — no method call).
+                    var autoMask = TargetBlockData.AttributeFlags.Autogrind;
+                    var autoA = (a.Attributes & autoMask) != 0;
+                    var autoB = (b.Attributes & autoMask) != 0;
+                    if (autoA != autoB) return autoA ? -1 : 1;
+
+                    // Priority check (unless user disabled). Cached when member-aware,
+                    // else fall back to the shared helper for the uncached solo path.
+                    if (!grindIgnorePriority)
+                    {
+                        int priA, priB;
+                        if (priCache != null)
+                        {
+                            priCache.TryGetValue(a.Block, out priA);
+                            priCache.TryGetValue(b.Block, out priB);
+                        }
+                        else
+                        {
+                            priA = BlockGrindPriority.GetPriority(a.Block);
+                            priB = BlockGrindPriority.GetPriority(b.Block);
+                        }
+                        if (priA != priB) return priA - priB;
+                    }
+
+                    // grindSmallestFirst is a no-op for per-grid sort (same grid for all).
                 }
                 else
                 {
+                    // Weld: priority-only compare.
+                    int priA, priB;
+                    if (priCache != null)
+                    {
+                        priCache.TryGetValue(a.Block, out priA);
+                        priCache.TryGetValue(b.Block, out priB);
+                    }
+                    else
+                    {
+                        priA = BlockWeldPriority.GetPriority(a.Block);
+                        priB = BlockWeldPriority.GetPriority(b.Block);
+                    }
+                    if (priA != priB) return priA - priB;
+                }
+
+                // Distance compare. Member-aware path reads from the pre-computed cache
+                // populated during the partition pass above (BUG-099). Solo path uses the
+                // inline single-center squared distance — no cache needed because it's a
+                // single op per block, not memberCount ops.
+                double distA, distB;
+                if (distCache != null)
+                {
+                    distCache.TryGetValue(a.Block, out distA);
+                    distCache.TryGetValue(b.Block, out distB);
+                }
+                else
+                {
+                    var posA = a.Block.CubeGrid.GridIntegerToWorld(a.Block.Position);
+                    var posB = b.Block.CubeGrid.GridIntegerToWorld(b.Block.Position);
                     distA = (center - posA).LengthSquared();
                     distB = (center - posB).LengthSquared();
                 }
                 return (isGrinding && !grindNearFirst) ? distB.CompareTo(distA) : distA.CompareTo(distB);
             }));
+            sortTicks = System.Diagnostics.Stopwatch.GetTimestamp() - tsMark;
 
-            list.RemoveRange(startIndex + maxKeep, count - maxKeep);
+            // Trim: drop the out-of-range tail (effectiveCount..count) and any overflow
+            // beyond maxKeep from the sorted in-range prefix. keep = min(maxKeep, effectiveCount).
+            var keep = effectiveCount < maxKeep ? effectiveCount : maxKeep;
+            if (count > keep)
+            {
+                list.RemoveRange(startIndex + keep, count - keep);
+            }
+
+            if (profilerTs != 0L)
+            {
+                var _count = count;
+                var _effective = effectiveCount;
+                var _keep = keep;
+                var _maxKeep = maxKeep;
+                var _isGrinding = isGrinding;
+                var _partitionRan = partitionRan;
+                var _memberCount = memberBoxes != null ? memberBoxes.Count : 0;
+                var _partitionMs = partitionTicks * 1000.0 / tsFreq;
+                var _sortMs = sortTicks * 1000.0 / tsFreq;
+                MethodProfiler.StopAndLog("SortAndCapGridCandidates", profilerTs, () =>
+                    string.Format("entityId={0};isGrinding={1};count={2};effectiveCount={3};maxKeep={4};kept={5};partitionRan={6};members={7};partitionMs={8:F3};sortMs={9:F3}",
+                        _Welder.EntityId, _isGrinding, _count, _effective, _maxKeep, _keep, _partitionRan, _memberCount, _partitionMs, _sortMs));
+            }
         }
 
         private void ApplyClusterResultToSelf(ScanClusterResult result, bool updateSource)
@@ -1421,20 +1737,13 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         _TempPossibleWeldTargets.Sort((a, b) =>
                         {
-                            var priorityA = BlockWeldPriority.GetPriority(a.Block);
-                            var priorityB = BlockWeldPriority.GetPriority(b.Block);
-                            if (priorityA != priorityB) return priorityA - priorityB;
+                            var cmp = CompareWeldPriority(a.Block, b.Block);
+                            if (cmp != 0) return cmp;
 
                             var distCmp = Utils.Utils.CompareDistance(a.Distance, b.Distance);
                             if (distCmp != 0) return distCmp;
 
-                            var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
-                            if (gridCmp != 0) return gridCmp;
-                            var posA = a.Block.Position;
-                            var posB = b.Block.Position;
-                            if (posA.X != posB.X) return posA.X - posB.X;
-                            if (posA.Y != posB.Y) return posA.Y - posB.Y;
-                            return posA.Z - posB.Z;
+                            return CompareBlockStableTiebreak(a.Block, b.Block);
                         });
                     }
                     catch (Exception ex)
@@ -1457,20 +1766,13 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         _TempPossibleWeldTargets.Sort((a, b) =>
                         {
-                            var priorityA = BlockWeldPriority.GetPriority(a.Block);
-                            var priorityB = BlockWeldPriority.GetPriority(b.Block);
-                            if (priorityA != priorityB) return priorityA - priorityB;
+                            var cmp = CompareWeldPriority(a.Block, b.Block);
+                            if (cmp != 0) return cmp;
 
                             var distCmp = Utils.Utils.CompareDistance(a.Distance, b.Distance);
                             if (distCmp != 0) return distCmp;
 
-                            var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
-                            if (gridCmp != 0) return gridCmp;
-                            var posA = a.Block.Position;
-                            var posB = b.Block.Position;
-                            if (posA.X != posB.X) return posA.X - posB.X;
-                            if (posA.Y != posB.Y) return posA.Y - posB.Y;
-                            return posA.Z - posB.Z;
+                            return CompareBlockStableTiebreak(a.Block, b.Block);
                         });
                     }
                     catch (Exception ex)
@@ -1513,40 +1815,19 @@ namespace SKONanobotBuildAndRepairSystem
 
                         _TempPossibleGrindTargets.Sort((a, b) =>
                         {
-                            if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
-                            {
-                                if (grindUsePriority)
-                                {
-                                    var priorityA = BlockGrindPriority.GetPriority(a.Block);
-                                    var priorityB = BlockGrindPriority.GetPriority(b.Block);
-                                    if (priorityA != priorityB)
-                                        return priorityA - priorityB;
-                                }
+                            var cmp = CompareGrindNonDistance(a.Block, a.Attributes, b.Block, b.Attributes,
+                                grindUsePriority, grindSmallestGridFirst,
+                                grindSmallestGridFirst ? _gridMinDistLookup : null);
+                            if (cmp != 0) return cmp;
 
-                                if (grindSmallestGridFirst)
-                                {
-                                    var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                                    if (res != 0) return res;
-
-                                    // BUG-091: spatial tiebreaker — nearest equal-size grid wins.
-                                    // Blocks within the same grid share a minDist so they stay grouped.
-                                    double minA, minB;
-                                    _gridMinDistLookup.TryGetValue(a.Block.CubeGrid.EntityId, out minA);
-                                    _gridMinDistLookup.TryGetValue(b.Block.CubeGrid.EntityId, out minB);
-                                    var minCmp = minA.CompareTo(minB);
-                                    if (minCmp != 0) return minCmp;
-
-                                    // Stable deterministic fallback for rare min-dist ties.
-                                    var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
-                                    if (gridCmp != 0) return gridCmp;
-                                    return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                }
-                                if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                return Utils.Utils.CompareDistance(b.Distance, a.Distance);
-                            }
-                            else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
-                            else if ((b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return 1;
-                            return 0;
+                            // FEAT-070 behavior fix: previously this site unconditionally used
+                            // nearest-first distance after GrindSmallestGridFirst's tiebreakers,
+                            // even when the user had GrindNearFirst off (farthest-first). The
+                            // coordinator pre-sort already honored grindNearFirst here; now the
+                            // member sort matches. CompareDistance preserves the existing epsilon.
+                            return grindNearFirst
+                                ? Utils.Utils.CompareDistance(a.Distance, b.Distance)
+                                : Utils.Utils.CompareDistance(b.Distance, a.Distance);
                         });
                     }
                     catch (Exception ex)
@@ -1593,40 +1874,14 @@ namespace SKONanobotBuildAndRepairSystem
 
                         _TempPossibleGrindTargets.Sort((a, b) =>
                         {
-                            if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) == (b.Attributes & TargetBlockData.AttributeFlags.Autogrind))
-                            {
-                                if (grindUsePriority)
-                                {
-                                    var priorityA = BlockGrindPriority.GetPriority(a.Block);
-                                    var priorityB = BlockGrindPriority.GetPriority(b.Block);
-                                    if (priorityA != priorityB)
-                                        return priorityA - priorityB;
-                                }
+                            var cmp = CompareGrindNonDistance(a.Block, a.Attributes, b.Block, b.Attributes,
+                                grindUsePriority, grindSmallestGridFirst,
+                                grindSmallestGridFirst ? _gridMinDistLookup : null);
+                            if (cmp != 0) return cmp;
 
-                                if (grindSmallestGridFirst)
-                                {
-                                    var res = ((MyCubeGrid)a.Block.CubeGrid).BlocksCount - ((MyCubeGrid)b.Block.CubeGrid).BlocksCount;
-                                    if (res != 0) return res;
-
-                                    // BUG-091: spatial tiebreaker — nearest equal-size grid wins.
-                                    // Blocks within the same grid share a minDist so they stay grouped.
-                                    double minA, minB;
-                                    _gridMinDistLookup.TryGetValue(a.Block.CubeGrid.EntityId, out minA);
-                                    _gridMinDistLookup.TryGetValue(b.Block.CubeGrid.EntityId, out minB);
-                                    var minCmp = minA.CompareTo(minB);
-                                    if (minCmp != 0) return minCmp;
-
-                                    // Stable deterministic fallback for rare min-dist ties.
-                                    var gridCmp = a.Block.CubeGrid.EntityId.CompareTo(b.Block.CubeGrid.EntityId);
-                                    if (gridCmp != 0) return gridCmp;
-                                    return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                }
-                                if (grindNearFirst) return Utils.Utils.CompareDistance(a.Distance, b.Distance);
-                                return Utils.Utils.CompareDistance(b.Distance, a.Distance);
-                            }
-                            else if ((a.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return -1;
-                            else if ((b.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0) return 1;
-                            return 0;
+                            return grindNearFirst
+                                ? Utils.Utils.CompareDistance(a.Distance, b.Distance)
+                                : Utils.Utils.CompareDistance(b.Distance, a.Distance);
                         });
                     }
                     catch (Exception ex)
@@ -1792,16 +2047,26 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
-                // Count unique grids using the pooled HashSet (no allocation)
-                _truncateGridIds.Clear();
-                foreach (var t in State.PossibleWeldTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
-                var weldGridCount = _truncateGridIds.Count;
-                _truncateGridIds.Clear();
-                foreach (var t in State.PossibleGrindTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
-                var grindGridCount = _truncateGridIds.Count;
-
                 if (profilerTs != 0L)
                 {
+                    // Count unique grids for the profiler line. Iterate under the same locks
+                    // as the swap above: StartAsyncClusterScan's early-exit path (BaR disabled /
+                    // unpowered mid-scan) Clears these lists from the main thread, and this
+                    // finally runs on the background thread without holding the swap lock.
+                    _truncateGridIds.Clear();
+                    lock (State.PossibleWeldTargets)
+                    {
+                        foreach (var t in State.PossibleWeldTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
+                    }
+                    var weldGridCount = _truncateGridIds.Count;
+
+                    _truncateGridIds.Clear();
+                    lock (State.PossibleGrindTargets)
+                    {
+                        foreach (var t in State.PossibleGrindTargets) _truncateGridIds.Add(t.Block.CubeGrid.EntityId);
+                    }
+                    var grindGridCount = _truncateGridIds.Count;
+
                     MethodProfiler.StopAndLog("ApplyClusterResultToSelf", profilerTs, () =>
                         string.Format("entityId={0};weldTargets={1}(pre={2},grids={3});grindTargets={4}(pre={5},grids={6});floatingTargets={7}",
                             _Welder.EntityId,

@@ -3,7 +3,7 @@ layout: default
 title: "Release Notes – v2.4.5"
 parent: Release Notes
 grand_parent: Build and Repair System
-nav_order: 3
+nav_order: 4
 ---
 
 # Release Notes – v2.4.5
