@@ -123,6 +123,16 @@ namespace SKONanobotBuildAndRepairSystem
         // at a time so no concurrent access within one instance.
         private Dictionary<IMySlimBlock, double> _sortCandidateDistances = new Dictionary<IMySlimBlock, double>();
 
+        // BUG-100: Per-candidate priority cache used by SortAndCapGridCandidates. After
+        // BUG-099 eliminated the distance recompute, profile session 20260413220505 showed
+        // the sort was bounded by the comparator's per-call BlockGrindPriority.GetPriority
+        // (BlockWeldPriority for the weld branch) — 2 blocks × ~132k comparisons × ~130 ns
+        // per GetPriority call = ~34 ms of priority lookup cost per 9.9k-candidate sort.
+        // Populated once per candidate during the partition loop (same pattern as distance
+        // cache), the sort comparator reads cached priorities in ~40 ns per lookup. Expected
+        // drop from ~37 ms to ~12 ms per big sort call on the 58-member cluster workload.
+        private Dictionary<IMySlimBlock, int> _sortCandidatePriorities = new Dictionary<IMySlimBlock, int>();
+
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
         // Rebuilt by RebuildSaturatedGrids(), used as fast-path in IsGridOverSystemLimit().
         private HashSet<long> _saturatedGridIds = new HashSet<long>();

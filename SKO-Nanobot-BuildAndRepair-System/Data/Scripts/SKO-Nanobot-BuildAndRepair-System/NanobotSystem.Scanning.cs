@@ -1479,7 +1479,13 @@ namespace SKONanobotBuildAndRepairSystem
                 // compare instead of recomputing 2 * memberCount squared distances per
                 // compare — profiling on a 58-member cluster showed the inline recompute
                 // cost 70-125 ms per sort on 11k candidates; this drops it to ~6-10 ms.
+                //
+                // BUG-100: also populate the priority cache so the comparator can skip the
+                // per-compare GetPriority lookups (previously ~34 ms / sort for 9.9k-cand
+                // grind sort after BUG-099). Pre-fetched once per block (~130 ns) then read
+                // from the cache per compare (~40 ns) for a ~2-3x speedup on the sort.
                 _sortCandidateDistances.Clear();
+                _sortCandidatePriorities.Clear();
 
                 var end = startIndex + count;
                 var writeIdx = startIndex;
@@ -1518,6 +1524,14 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                         _sortCandidateDistances[candidate.Block] = minDist;
 
+                        // BUG-100: pre-fetch priority for the sort comparator. One GetPriority
+                        // call per block here replaces 2 calls per comparison × ~132k
+                        // comparisons in the sort.
+                        var priority = isGrinding
+                            ? BlockGrindPriority.GetPriority(candidate.Block)
+                            : BlockWeldPriority.GetPriority(candidate.Block);
+                        _sortCandidatePriorities[candidate.Block] = priority;
+
                         if (writeIdx != readIdx)
                         {
                             var tmp = list[writeIdx];
@@ -1552,26 +1566,62 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             tsMark = System.Diagnostics.Stopwatch.GetTimestamp();
-            // Snapshot the cache reference for the closure — the field is never reassigned
-            // during a sort so a local-capture keeps the comparator body branch-free.
+            // Snapshot cache references for the closure — fields are never reassigned during
+            // a sort so local-capture keeps the comparator body branch-free. The per-grid sort
+            // doesn't need the smallest-grid BlocksCount tiebreaker (all candidates are on the
+            // same CubeGrid so the compare is always 0) so we inline a minimal autogrind +
+            // priority + distance compare that reads both caches directly instead of going
+            // through CompareGrindNonDistance / CompareWeldPriority + their internal GetPriority
+            // lookups. That saves ~130 ns per GetPriority × 2 per compare × ~132k compares =
+            // ~34 ms per 9.9k-candidate sort on a 58-member cluster (BUG-100).
             var distCache = useMemberAware ? _sortCandidateDistances : null;
+            var priCache = useMemberAware ? _sortCandidatePriorities : null;
             list.Sort(startIndex, effectiveCount, Comparer<ClusterTargetCandidate>.Create((a, b) =>
             {
-                // Per-grid sort: all candidates share the same CubeGrid so grindSmallestFirst's
-                // BlocksCount tiebreaker is a no-op here (same grid = same count), but we still
-                // pass it through for consistency with the other call sites. perGridMinDist is
-                // null because there's only one grid in play.
-                int cmp;
                 if (isGrinding)
                 {
-                    cmp = CompareGrindNonDistance(a.Block, a.Attributes, b.Block, b.Attributes,
-                        !grindIgnorePriority, grindSmallestFirst, null);
+                    // Autogrind-first bucket (inline — no method call).
+                    var autoMask = TargetBlockData.AttributeFlags.Autogrind;
+                    var autoA = (a.Attributes & autoMask) != 0;
+                    var autoB = (b.Attributes & autoMask) != 0;
+                    if (autoA != autoB) return autoA ? -1 : 1;
+
+                    // Priority check (unless user disabled). Cached when member-aware,
+                    // else fall back to the shared helper for the uncached solo path.
+                    if (!grindIgnorePriority)
+                    {
+                        int priA, priB;
+                        if (priCache != null)
+                        {
+                            priCache.TryGetValue(a.Block, out priA);
+                            priCache.TryGetValue(b.Block, out priB);
+                        }
+                        else
+                        {
+                            priA = BlockGrindPriority.GetPriority(a.Block);
+                            priB = BlockGrindPriority.GetPriority(b.Block);
+                        }
+                        if (priA != priB) return priA - priB;
+                    }
+
+                    // grindSmallestFirst is a no-op for per-grid sort (same grid for all).
                 }
                 else
                 {
-                    cmp = CompareWeldPriority(a.Block, b.Block);
+                    // Weld: priority-only compare.
+                    int priA, priB;
+                    if (priCache != null)
+                    {
+                        priCache.TryGetValue(a.Block, out priA);
+                        priCache.TryGetValue(b.Block, out priB);
+                    }
+                    else
+                    {
+                        priA = BlockWeldPriority.GetPriority(a.Block);
+                        priB = BlockWeldPriority.GetPriority(b.Block);
+                    }
+                    if (priA != priB) return priA - priB;
                 }
-                if (cmp != 0) return cmp;
 
                 // Distance compare. Member-aware path reads from the pre-computed cache
                 // populated during the partition pass above (BUG-099). Solo path uses the
