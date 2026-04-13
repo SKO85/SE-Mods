@@ -47,7 +47,7 @@ namespace SKONanobotBuildAndRepairSystem
         public const float WELDER_SOUND_VOLUME = 2f;
 
         private const int MaxPossibleWeldTargets = 256;
-        private const int MaxPossibleGrindTargets = 1024;
+        private const int MaxPossibleGrindTargets = 256;
         private const int MaxPossibleFloatingTargets = 16;
 
         private const int TransmitStateMinIntervalSeconds = 1;
