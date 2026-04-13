@@ -142,6 +142,102 @@ The sim-speed dips correlated with scan cycle bursts (sim min 0.68 at 22:07:00 w
 
 Main-thread spikes caused by SE API internals (`DecreaseMountLevel` up to 14.9 ms, `RazeBlock` up to 7 ms) are **unaffected** — those are outside mod control. This fix reduces *background* cost only.
 
+## Measured impact (re-profile session `20260413222549-profiling`)
+
+Same workload (58-member cluster, 4 large grids, 180 s), re-profiled after the fix landed. The target grid had slightly fewer candidates this session (~8,100-9,100 per scan vs ~9,700-9,976 pre-fix) because grinding had removed some blocks, so direct-number comparisons need workload normalization.
+
+### Sim speed (user-visible)
+
+| | Pre | Post | Delta |
+|---|---|---|---|
+| avg | 0.96 | **0.99** | +0.03 |
+| min | **0.68** | **0.80** | **+0.12** |
+| max | 1.10 | 1.08 | -0.02 |
+
+**Min sim speed jumped from 0.68 → 0.80.** This is the headline user-visible improvement — the deepest dip moved from "noticeable stutter" to "barely perceptible". Average is also up, essentially at full speed.
+
+### Main-thread spikes (directly cost sim speed)
+
+| Method | Pre max | Post max | Delta |
+|---|---|---|---|
+| `ServerTryWeldingGrindingCollecting` | 16.826 ms | **11.830 ms** | **-30%** |
+| `ServerTryGrinding` | 15.107 ms | **11.202 ms** | **-26%** |
+| `ServerDoGrind` | 14.992 ms | **10.965 ms** | **-27%** |
+| `UpdateBeforeSimulation10_100` | 16.954 ms | **11.938 ms** | **-30%** |
+
+**All max spikes dropped ~30%.** The worst single tick went from ~17 ms (over the 16.67 ms per-frame budget, causing a full frame drop) to ~12 ms (under budget, no frame drop). That's the mechanism by which min sim speed improved — scan cycles no longer coincide with SE API spikes to push a tick past the frame budget.
+
+### `SortAndCapGridCandidates` (the direct target)
+
+| | Pre | Post | Delta |
+|---|---|---|---|
+| calls | 58 | 60 | similar |
+| **totalMs** | **2,678** | **2,007** | **-671 (-25%)** |
+| **avgMs** | **46.2** | **33.4** | **-12.7 (-28%)** |
+| **steadyAvgMs** | **48.2** | **30.6** | **-17.6 (-37%)** |
+| **maxMs** | 67.7 | 53.8 | -13.9 (-21%) |
+
+Per-call partition/sort breakdown from the log (pre had `count~9,800`, post had `count~8,600` — workload shrunk ~12% as blocks got ground):
+
+| | Pre @ ~9,800 | Post @ ~8,600 |
+|---|---|---|
+| partitionMs avg | ~6 | ~5.5 |
+| sortMs avg | ~37 | ~27 |
+
+Normalizing post to pre's workload (scale by `n log n` ratio = 1.156): post-normalized sort ≈ 31 ms, which is **~16% faster than pre's 37 ms at same count**. Less than the predicted -68%, more on that below.
+
+### Cascading savings on parent methods (inclusive times)
+
+| Method | Pre totalMs | Post totalMs | Delta |
+|---|---|---|---|
+| `AsyncClusterScan` | 4,049 | 3,177 | **-872 (-21.5%)** |
+| `AsyncAddBlocksOfBox` | 3,725 | 3,002 | **-723 (-19%)** |
+| `AsyncAddBlocksOfGrid` | 4,077 | 3,201 | **-876 (-21.5%)** |
+
+### Domain aggregates (180 s session)
+
+| Domain | Pre | Post | Delta |
+|---|---|---|---|
+| Utility | 13,295 | 10,851 | **-2,444 (-18%)** |
+| Scan | 4,336 | 3,553 | **-783 (-18%)** |
+| Grind | 2,811 | 2,693 | -118 (-4%) |
+| Update | 3,555 | 3,607 | +52 (~flat) |
+| Weld | 1,695 | 1,742 | +47 (~flat) |
+| Inventory | 406 | 473 | +67 (~flat) |
+| **TOTAL** | **26,098** | **22,919** | **-3,179 (-12%)** |
+
+**12% less total mod CPU over the 180 s session.** Background-thread domains (Utility, Scan) carry most of the savings as expected.
+
+### Reality vs. prediction
+
+- Predicted sort savings: ~34 ms per call (removing priority lookups)
+- Observed sort savings: ~10 ms per call (workload-normalized ~16%)
+- **Actual ≈ 30% of predicted magnitude.**
+
+The priority cache is doing its job — `TryGetValue` replaces `GetPriority` — but the per-lookup cost differential is smaller in practice than theory suggests. Likely contributors:
+1. `Dictionary<IMySlimBlock, int>.TryGetValue` with reference-type (interface) keys is slower than estimated because the hash code path goes through virtual dispatch on `IMySlimBlock.GetHashCode`, which may bounce into SE's internal implementation.
+2. The `_PrioHash` cache inside `BlockPriorityHandling` was already hot — its lookup cost was probably lower than my ~130 ns estimate after JIT warmup.
+3. Cache miss behavior: the dict doesn't fit in L1 and each lookup misses into L2 or L3.
+
+But the **user-visible** metrics (sim speed min +0.12, max spike -30%, session mod CPU -12%) are all strong improvements. The fix shipped the intended direction even if the predicted magnitude was optimistic.
+
+### Remaining optimization headroom (not pursued)
+
+After BUG-099 + BUG-100, the sort comparator's remaining cost is distributed across:
+- Dict lookups (priority + distance): ~40 ns × 4 = 160 ns
+- Autogrind bit check + branches: ~20 ns
+- `CompareTo` on doubles: ~5 ns
+- List.Sort machinery per compare: ~20 ns
+
+Total per compare ≈ 200 ns × 132k compares = ~26 ms per sort. Matches observed.
+
+Further optimizations available but below cost/benefit threshold:
+- Partial sort (top-K heap): avoid full `n log n`, save ~40% of sort cost.
+- Packed sort key (autogrind bit + priority in one int): remove the branch, save ~3 ms per sort.
+- Struct-valued dict: combine priority + distance into one lookup, save one `TryGetValue` per compare (~5-8 ms per sort).
+
+None of these are worth the complexity given the workload is now acceptable. The sim speed min of 0.80 is in "healthy" territory and the max spikes are all under-budget.
+
 ## Memory cost
 
 `_sortCandidatePriorities` adds one `int` entry per in-range candidate, per BaR. At 9,900-candidate worst case: `~9.9k × ~20 bytes per entry = ~200 KB` per BaR. Most BaRs are cluster members and never hit `SortAndCapGridCandidates` directly — only coordinators do, typically 1 per cluster. Negligible total footprint.
@@ -155,12 +251,13 @@ The dict is `Clear()`ed, not re-allocated, between calls — amortized per-call 
 3. **Regression — nearest-first / farthest-first multi-member**: priority and distance cache lookups return the same values the inline code would have computed. Sort order is identical to pre-fix.
 4. **Regression — `GrindIgnorePriorityOrder`**: when the flag is set, the comparator skips the priority check entirely. The cache is still populated (trivial cost) but not read. Output unchanged.
 5. **Regression — weld sort**: the weld branch now uses the same cache. Priority comparison is `priA - priB` — identical semantics to the helper's `CompareWeldPriority`.
-6. **Perf verification**: re-profile session after fix on the same 58-member / 4-large-grid workload. Expected:
-   - `SortAndCapGridCandidates` avgMs: 46.2 → **~19** (-59%)
-   - `sortMs` in per-call log: 33-46 → **~10-13**
-   - `partitionMs` in per-call log: 5-15 → **~6-16** (+1 ms for priority pre-fetch)
-   - Total mod CPU over 180 s: 25,700 → **~24,100** (-6%)
-   - Sim-speed min during scan bursts: 0.68 → should improve toward 0.80+
+6. **Perf verification** — ✓ verified against re-profile session `20260413222549-profiling` (see Measured Impact section). Actual numbers:
+   - `SortAndCapGridCandidates` avgMs: 46.2 → **33.4** (-28%, less than predicted ~59% — see reality-vs-prediction notes above)
+   - `sortMs` in per-call log: 33-46 → **~18-48** (avg ~27)
+   - `partitionMs` in per-call log: ~6 → **~5.5** (roughly flat; priority pre-fetch cost absorbed in noise)
+   - Total mod CPU over 180 s: 26,098 → **22,919** (-12%)
+   - **Sim-speed min: 0.68 → 0.80** ← headline win
+   - **Main-thread max spikes: all down ~30%** (16.826 → 11.830 ms for `ServerTryWeldingGrindingCollecting`)
 
 ## Follow-up already considered
 
