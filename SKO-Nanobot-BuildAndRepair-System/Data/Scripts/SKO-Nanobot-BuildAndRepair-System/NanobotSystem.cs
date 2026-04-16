@@ -144,6 +144,13 @@ namespace SKONanobotBuildAndRepairSystem
         private ConcurrentDictionary<long, TimeSpan> _EmptyGridCache = new ConcurrentDictionary<long, TimeSpan>();
         public int EmptyGridCacheCount { get { return _EmptyGridCache.Count; } }
 
+        /// <summary>
+        /// FEAT-073: Static predicate for filtering to fat-block-only lists.
+        /// Used in the empty-grid-cache connection-discovery path to avoid iterating
+        /// all blocks on large grids when only connection blocks (always fat) are needed.
+        /// </summary>
+        private static readonly Func<IMySlimBlock, bool> _fatBlockFilter = block => block.FatBlock != null;
+
         private IMyShipWelder _Welder;
         public IMyInventory _TransportInventory;
         private Effects _Effects = new Effects();
@@ -267,6 +274,15 @@ namespace SKONanobotBuildAndRepairSystem
         internal int MissedResultCycles;
 
         /// <summary>
+        /// FEAT-071: Counts consecutive cluster scans that produced zero targets.
+        /// After IdleScansBeforeBackoff consecutive empty scans, the coordinator
+        /// extends its scan interval to reduce background work.
+        /// </summary>
+        internal int _consecutiveEmptyScans;
+        internal const int IdleScansBeforeBackoff = 3;
+        internal static readonly TimeSpan IdleScanInterval = TimeSpan.FromSeconds(20);
+
+        /// <summary>
         /// Stagger slot (0..StaggerGroupCount-1) assigned at init. Only BaRs whose slot
         /// matches the current cycle run ServerTryWeldingGrindingCollecting(), spreading
         /// the per-tick main-thread load across multiple ticks.
@@ -278,5 +294,12 @@ namespace SKONanobotBuildAndRepairSystem
         /// settings changes and skip the full rebuild when nothing changed.
         /// </summary>
         internal string _lastClusterKey;
+
+        /// <summary>
+        /// FEAT-072: Cached numeric hash of cluster-relevant fields.
+        /// Compared in the RebuildClusters fast path instead of recomputing
+        /// the full cluster key string every second.
+        /// </summary>
+        internal int _lastClusterKeyHash;
     }
 }

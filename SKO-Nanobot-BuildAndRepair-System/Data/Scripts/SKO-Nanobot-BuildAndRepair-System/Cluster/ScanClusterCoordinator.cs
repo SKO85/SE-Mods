@@ -45,6 +45,9 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                 var systemCount = Mod.NanobotSystems.Count;
                 if (systemCount == _lastSystemCount && _clusters.Count > 0)
                 {
+                    // FEAT-072: Use cheap numeric hash comparison instead of recomputing
+                    // the full cluster key string for every BaR every second.
+                    // ComputeClusterKeyHash uses only integer/bool fields — no string allocation.
                     var anyChanged = false;
                     foreach (var system in Mod.NanobotSystems.Values)
                     {
@@ -54,8 +57,8 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                             if (system.AssignedCluster != null) { anyChanged = true; break; }
                             continue;
                         }
-                        var key = ComputeClusterKey(system);
-                        if (key != system._lastClusterKey) { anyChanged = true; break; }
+                        var hash = ComputeClusterKeyHash(system);
+                        if (hash != system._lastClusterKeyHash) { anyChanged = true; break; }
                     }
                     if (!anyChanged)
                     {
@@ -79,11 +82,13 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                     {
                         system.AssignedCluster = null;
                         system._lastClusterKey = null;
+                        system._lastClusterKeyHash = 0;
                         continue;
                     }
 
                     var key = ComputeClusterKey(system);
                     system._lastClusterKey = key;
+                    system._lastClusterKeyHash = ComputeClusterKeyHash(system);
 
                     ScanCluster cluster;
                     if (!_clusters.TryGetValue(key, out cluster))
@@ -129,6 +134,57 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                 MethodProfiler.StopAndLog("ScanClusterCoordinator.RebuildClusters", profilerTs, () =>
                     string.Format("clusters={0};clusteredSystems={1};totalSystems={2};skipped={3}",
                         _clusterCount, _clusteredSystems, _totalSystems, _skipped));
+            }
+        }
+
+        /// <summary>
+        /// FEAT-072: Computes a numeric hash of all cluster-relevant fields.
+        /// Used in the fast path to detect settings changes without string allocation.
+        /// The full string key (ComputeClusterKey) is only computed when a rebuild is needed.
+        /// </summary>
+        public static int ComputeClusterKeyHash(NanobotSystem system)
+        {
+            var s = system.Settings;
+            var flags = (int)(s.Flags & ClusterRelevantFlags);
+
+            // FNV-1a style hash combining — fast, no allocation, good distribution.
+            unchecked
+            {
+                int hash = (int)2166136261;
+                hash = (hash ^ (int)(system.Welder.CubeGrid.EntityId >> 32)) * 16777619;
+                hash = (hash ^ (int)(system.Welder.CubeGrid.EntityId)) * 16777619;
+                hash = (hash ^ (int)s.WorkMode) * 16777619;
+                hash = (hash ^ (int)s.SearchMode) * 16777619;
+                hash = (hash ^ flags) * 16777619;
+
+                // Priority strings — hash their .NET hash codes (stable within a session)
+                hash = (hash ^ (s.WeldPriority != null ? s.WeldPriority.GetHashCode() : 0)) * 16777619;
+                hash = (hash ^ (s.GrindPriority != null ? s.GrindPriority.GetHashCode() : 0)) * 16777619;
+                hash = (hash ^ (s.ComponentCollectPriority != null ? s.ComponentCollectPriority.GetHashCode() : 0)) * 16777619;
+
+                // Color settings (only relevant if flag is set)
+                if ((flags & (int)SyncBlockSettings.Settings.UseIgnoreColor) != 0)
+                    hash = (hash ^ (int)s.IgnoreColorPacked) * 16777619;
+                if ((flags & (int)SyncBlockSettings.Settings.UseGrindColor) != 0)
+                    hash = (hash ^ (int)s.GrindColorPacked) * 16777619;
+
+                // Grind janitor settings
+                hash = (hash ^ (int)s.UseGrindJanitorOn) * 16777619;
+                hash = (hash ^ (int)s.GrindJanitorOptions) * 16777619;
+
+                // Weld options
+                hash = (hash ^ (int)s.WeldOptions) * 16777619;
+
+                // Ownership settings
+                hash = (hash ^ (int)(system.Welder.OwnerId >> 32)) * 16777619;
+                hash = (hash ^ (int)(system.Welder.OwnerId)) * 16777619;
+                hash = (hash ^ (system.Welder.UseConveyorSystem ? 1 : 0)) * 16777619;
+
+                // Safe zone state
+                hash = (hash ^ (system.State.SafeZoneAllowsWelding ? 1 : 0)) * 16777619;
+                hash = (hash ^ (system.State.SafeZoneAllowsGrinding ? 1 : 0)) * 16777619;
+
+                return hash;
             }
         }
 

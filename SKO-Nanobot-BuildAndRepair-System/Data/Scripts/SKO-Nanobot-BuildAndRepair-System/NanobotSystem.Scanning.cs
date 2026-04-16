@@ -33,18 +33,28 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
-            var updateTargets = playTime.Subtract(_LastTargetsUpdate) >= Mod.Settings.TargetsUpdateInterval;
+
+            // Capture cluster reference (atomic read) early — needed for idle check.
+            var cluster = AssignedCluster;
+            if (cluster == null)
+            {
+                // Not yet assigned to a cluster (first tick or system excluded from clustering) — skip this cycle
+                return;
+            }
+
+            // FEAT-071: When the coordinator has seen consecutive empty scans,
+            // use a longer interval to reduce wasted background work.
+            // Members inherit the coordinator's idle state so they don't keep
+            // enqueuing apply-result tasks when the coordinator hasn't rescanned.
+            var coordinator = cluster.Coordinator;
+            var idleCount = coordinator != null ? coordinator._consecutiveEmptyScans : 0;
+            var effectiveTargetInterval = idleCount >= IdleScansBeforeBackoff
+                ? IdleScanInterval
+                : Mod.Settings.TargetsUpdateInterval;
+            var updateTargets = playTime.Subtract(_LastTargetsUpdate) >= effectiveTargetInterval;
             var updateSources = updateTargets && playTime.Subtract(_LastSourceUpdate) >= Mod.Settings.SourcesUpdateInterval;
             if (updateTargets)
             {
-                // Capture cluster reference (atomic read)
-                var cluster = AssignedCluster;
-                if (cluster == null)
-                {
-                    // Not yet assigned to a cluster (first tick or system excluded from clustering) — skip this cycle
-                    return;
-                }
-
                 if (cluster.IsCoordinator(this))
                 {
                     StartAsyncClusterScan(cluster, updateSources);
@@ -378,12 +388,19 @@ namespace SKONanobotBuildAndRepairSystem
                 if (_EmptyGridCache.TryGetValue(gridEntityId, out emptyTime)
                     && playTime.Subtract(emptyTime).TotalSeconds < emptyDelay)
                 {
-                    var rawBlocks = SharedGridBlockCache.GetBlocks(cubeGrid);
-                    foreach (var slimBlock in rawBlocks)
+                    // FEAT-073: Only iterate fat blocks for connection discovery.
+                    // Connection blocks (mechanical, attachable, connector) always have
+                    // a FatBlock. Skipping slim-only blocks (armor etc.) avoids iterating
+                    // hundreds of blocks on large grids just to find a few connections.
+                    // Uses a local list (not instance field) because this method recurses
+                    // for connected grids — a shared field would be clobbered.
+                    var fatBlocks = new List<IMySlimBlock>();
+                    cubeGrid.GetBlocks(fatBlocks, _fatBlockFilter);
+                    foreach (var slimBlock in fatBlocks)
                     {
-                        var fatBlock = slimBlock.FatBlock;
-                        if (fatBlock == null) continue;
                         if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
+
+                        var fatBlock = slimBlock.FatBlock;
 
                         var mechanical = fatBlock as Sandbox.ModAPI.IMyMechanicalConnectionBlock;
                         if (mechanical != null)
@@ -1004,6 +1021,18 @@ namespace SKONanobotBuildAndRepairSystem
                 MissedResultCycles = 0;
                 _InitialScanCompleted = true;
 
+                // FEAT-071: Track consecutive empty scans for idle backoff.
+                // When all candidate lists are empty, increment the counter so
+                // UpdateSourcesAndTargetsTimer can extend the scan interval.
+                // Reset immediately when any targets are found.
+                var hasTargets = result.WeldCandidates.Count > 0
+                    || result.GrindCandidates.Count > 0
+                    || result.FloatingCandidates.Count > 0;
+                if (hasTargets)
+                    _consecutiveEmptyScans = 0;
+                else
+                    _consecutiveEmptyScans++;
+
             }
             finally
             {
@@ -1436,6 +1465,82 @@ namespace SKONanobotBuildAndRepairSystem
             return best;
         }
 
+        // ----------------------------------------------------------------------------------
+        // FEAT-074: Quickselect (Hoare's selection algorithm).
+        //
+        // Partially reorders list[left..right] so that list[left..left+k-1] contains
+        // the k smallest elements according to the comparator (unordered among
+        // themselves). Average O(n), vs O(n log n) for a full sort.
+        //
+        // Used by SortAndCapGridCandidates when the candidate count far exceeds
+        // maxKeep, to avoid sorting thousands of items only to discard most of them.
+        // After quickselect, only the top-k are sorted with list.Sort().
+        //
+        // Uses median-of-three pivot selection for robustness against sorted/reverse
+        // inputs. Falls back to insertion sort for small partitions (<=16 elements).
+        // ----------------------------------------------------------------------------------
+        private static void QuickSelect(List<ClusterTargetCandidate> list, int left, int right, int k, IComparer<ClusterTargetCandidate> comparer)
+        {
+            var targetPos = left + k - 1;
+            while (left < right)
+            {
+                // Insertion sort for small partitions
+                if (right - left < 16)
+                {
+                    for (int i = left + 1; i <= right; i++)
+                    {
+                        var key = list[i];
+                        int j = i - 1;
+                        while (j >= left && comparer.Compare(list[j], key) > 0)
+                        {
+                            list[j + 1] = list[j];
+                            j--;
+                        }
+                        list[j + 1] = key;
+                    }
+                    return;
+                }
+
+                // Median-of-three pivot selection
+                int mid = left + (right - left) / 2;
+                if (comparer.Compare(list[mid], list[left]) < 0)
+                {
+                    var t = list[left]; list[left] = list[mid]; list[mid] = t;
+                }
+                if (comparer.Compare(list[right], list[left]) < 0)
+                {
+                    var t = list[left]; list[left] = list[right]; list[right] = t;
+                }
+                if (comparer.Compare(list[right], list[mid]) < 0)
+                {
+                    var t = list[mid]; list[mid] = list[right]; list[right] = t;
+                }
+
+                // Place pivot (median value) at right-1
+                var tmp = list[mid]; list[mid] = list[right - 1]; list[right - 1] = tmp;
+                var pivot = list[right - 1];
+
+                // Partition: elements < pivot to the left, > pivot to the right
+                int lo = left;
+                int hi = right - 1;
+                while (true)
+                {
+                    while (comparer.Compare(list[++lo], pivot) < 0) { }
+                    while (comparer.Compare(list[--hi], pivot) > 0) { }
+                    if (lo >= hi) break;
+                    var swap = list[lo]; list[lo] = list[hi]; list[hi] = swap;
+                }
+                // Restore pivot to its final position
+                var restore = list[lo]; list[lo] = list[right - 1]; list[right - 1] = restore;
+
+                // lo is the pivot's sorted position. Narrow the search.
+                if (targetPos <= lo)
+                    right = lo - 1;
+                else
+                    left = lo + 1;
+            }
+        }
+
         private void SortAndCapGridCandidates(List<ClusterTargetCandidate> list, int startIndex, int count, int maxKeep, bool isGrinding, ref MyOrientedBoundingBoxD areaBox)
         {
             var profilerTs = MethodProfiler.Start();
@@ -1576,7 +1681,7 @@ namespace SKONanobotBuildAndRepairSystem
             // ~34 ms per 9.9k-candidate sort on a 58-member cluster (BUG-100).
             var distCache = useMemberAware ? _sortCandidateDistances : null;
             var priCache = useMemberAware ? _sortCandidatePriorities : null;
-            list.Sort(startIndex, effectiveCount, Comparer<ClusterTargetCandidate>.Create((a, b) =>
+            var comparator = Comparer<ClusterTargetCandidate>.Create((a, b) =>
             {
                 if (isGrinding)
                 {
@@ -1641,12 +1746,28 @@ namespace SKONanobotBuildAndRepairSystem
                     distB = (center - posB).LengthSquared();
                 }
                 return (isGrinding && !grindNearFirst) ? distB.CompareTo(distA) : distA.CompareTo(distB);
-            }));
+            });
+
+            // FEAT-074: For large candidate sets, use quickselect O(n) to find
+            // the top-k candidates, then sort only those k items O(k log k).
+            // This replaces the full O(n log n) sort which on an 11,732-candidate
+            // grid costs 20-33ms just to keep 256 items. Threshold: only use
+            // quickselect when candidates exceed 4× maxKeep (below that the
+            // full sort is fast enough and quickselect overhead isn't worth it).
+            var keep = effectiveCount < maxKeep ? effectiveCount : maxKeep;
+            if (effectiveCount > maxKeep * 4 && keep < effectiveCount)
+            {
+                QuickSelect(list, startIndex, startIndex + effectiveCount - 1, keep, comparator);
+                list.Sort(startIndex, keep, comparator);
+            }
+            else
+            {
+                list.Sort(startIndex, effectiveCount, comparator);
+            }
             sortTicks = System.Diagnostics.Stopwatch.GetTimestamp() - tsMark;
 
             // Trim: drop the out-of-range tail (effectiveCount..count) and any overflow
             // beyond maxKeep from the sorted in-range prefix. keep = min(maxKeep, effectiveCount).
-            var keep = effectiveCount < maxKeep ? effectiveCount : maxKeep;
             if (count > keep)
             {
                 list.RemoveRange(startIndex + keep, count - keep);
