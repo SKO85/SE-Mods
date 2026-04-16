@@ -57,13 +57,96 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (cluster.IsCoordinator(this))
                 {
+                    // FEAT-075: Skip the expensive full-grid scan when the coordinator
+                    // still has plenty of valid (non-destroyed) targets. A quick count
+                    // of live targets (~12µs for 256 entries) avoids the 50ms+ scan that
+                    // would produce a nearly identical result.
+                    // Safety: force a rescan every MaxScanSkipDuration (60s) to catch
+                    // new blocks, external changes, or edge cases.
+                    var timeSinceFullScan = playTime.Subtract(_lastFullScanTime);
+                    // Only honor forced rescan if enough time passed since the last scan,
+                    // so multiple member signals within one interval coalesce into one rescan.
+                    var forceRescan = _rescanForced && timeSinceFullScan >= Mod.Settings.TargetsUpdateInterval;
+                    if (_InitialScanCompleted
+                        && !forceRescan
+                        && timeSinceFullScan < MaxScanSkipDuration
+                        && IsTargetListSaturated())
+                    {
+                        _LastTargetsUpdate = playTime;
+                        _scanSkippedSaturated = true;
+                        return;
+                    }
+                    _scanSkippedSaturated = false;
+                    _rescanForced = false;
                     StartAsyncClusterScan(cluster, updateSources);
                 }
                 else
                 {
+                    // FEAT-075: When the coordinator skipped due to saturation,
+                    // members also skip — applying the same cached result is wasteful.
+                    if (coordinator != null && coordinator._scanSkippedSaturated)
+                    {
+                        _LastTargetsUpdate = playTime;
+                        return;
+                    }
                     StartAsyncApplyClusterResults(cluster, updateSources);
                 }
             }
+        }
+
+        /// <summary>
+        /// FEAT-075: Quickly checks whether the coordinator's target lists still have
+        /// enough live (non-destroyed) targets to skip a full rescan.
+        /// Checks each active work type independently — if grind is saturated but
+        /// weld targets have been consumed, the scan must run to discover new weld
+        /// targets for grid-limited BaRs that fall through to welding.
+        /// If a type was never found by the last scan (count == 0), it genuinely
+        /// doesn't exist and doesn't block the skip.
+        /// </summary>
+        private bool IsTargetListSaturated()
+        {
+            // Check grind targets
+            var grindActive = Settings.WorkMode != WorkModes.WeldOnly;
+            if (grindActive && _lastScanGrindCandidateCount > 0)
+            {
+                int liveGrind = 0;
+                lock (State.PossibleGrindTargets)
+                {
+                    foreach (var t in State.PossibleGrindTargets)
+                    {
+                        if (t.Block != null && t.Block.CubeGrid != null
+                            && (t.Block.FatBlock == null || !t.Block.FatBlock.Closed))
+                        {
+                            liveGrind++;
+                            if (liveGrind > SaturatedRescanThreshold) break;
+                        }
+                    }
+                }
+                if (liveGrind <= SaturatedRescanThreshold) return false;
+            }
+
+            // Check weld targets
+            var weldActive = Settings.WorkMode != WorkModes.GrindOnly;
+            if (weldActive && _lastScanWeldCandidateCount > 0)
+            {
+                int liveWeld = 0;
+                lock (State.PossibleWeldTargets)
+                {
+                    foreach (var t in State.PossibleWeldTargets)
+                    {
+                        if (t.Block != null && t.Block.CubeGrid != null)
+                        {
+                            liveWeld++;
+                            if (liveWeld > SaturatedRescanThreshold) break;
+                        }
+                    }
+                }
+                if (liveWeld <= SaturatedRescanThreshold) return false;
+            }
+
+            // At least one active type must be saturated for the skip to apply.
+            // If both types had 0 candidates on last scan, the idle backoff (FEAT-071) handles it.
+            return _lastScanGrindCandidateCount > 0 || _lastScanWeldCandidateCount > 0;
         }
 
         /// <summary>
@@ -1033,6 +1116,11 @@ namespace SKONanobotBuildAndRepairSystem
                 else
                     _consecutiveEmptyScans++;
 
+                // FEAT-075 fix: record per-type candidate counts so IsTargetListSaturated
+                // can distinguish "type depleted" from "type never existed".
+                _lastScanWeldCandidateCount = result.WeldCandidates.Count;
+                _lastScanGrindCandidateCount = result.GrindCandidates.Count;
+
             }
             finally
             {
@@ -1044,6 +1132,7 @@ namespace SKONanobotBuildAndRepairSystem
                     _ClusterMemberAreaBoxes.Clear();
 
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
+                _lastFullScanTime = _LastTargetsUpdate; // FEAT-075: track when a real scan ran
                 if (updateSource) _LastSourceUpdate = _LastTargetsUpdate;
                 lock (_Welder)
                 {

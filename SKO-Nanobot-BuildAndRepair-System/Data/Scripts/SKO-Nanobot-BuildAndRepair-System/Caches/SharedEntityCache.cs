@@ -64,10 +64,13 @@ namespace SKONanobotBuildAndRepairSystem.Caches
             }
             finally
             {
-                var _key = key;
-                var _hit = cacheHit;
-                MethodProfiler.StopAndLog("SharedEntityCache.GetEntitiesInBox", profilerTs, () =>
-                    string.Format("quantizedKey={0};cacheHit={1}", _key, _hit));
+                if (profilerTs != 0L)
+                {
+                    var _key = key;
+                    var _hit = cacheHit;
+                    MethodProfiler.StopAndLog("SharedEntityCache.GetEntitiesInBox", profilerTs, () =>
+                        string.Format("quantizedKey={0};cacheHit={1}", _key, _hit));
+                }
             }
         }
 

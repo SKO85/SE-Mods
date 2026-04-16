@@ -594,8 +594,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 s.ProfilingMinDuration = MethodProfiler.MinDurationMs;
             }
 
-            MethodProfiler.StopAndLog("HudHandler.BuildStats", profilerTs, () =>
-                string.Format("systems={0};active={1}", s.TotalSystems, s.Active));
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("HudHandler.BuildStats", profilerTs, () =>
+                    string.Format("systems={0};active={1}", s.TotalSystems, s.Active));
+            }
             return s;
         }
 

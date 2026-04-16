@@ -108,7 +108,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             var profilerTs = MethodProfiler.Start();
             Cache.CleanupExpired();
-            MethodProfiler.StopAndLog("BlockSystemAssigningHandler.Cleanup", profilerTs);
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("BlockSystemAssigningHandler.Cleanup", profilerTs);
+            }
         }
 
         public static void Clear()

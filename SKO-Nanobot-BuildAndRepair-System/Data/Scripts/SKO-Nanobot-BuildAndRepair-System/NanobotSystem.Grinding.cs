@@ -32,6 +32,18 @@ namespace SKONanobotBuildAndRepairSystem
 
             lock (State.PossibleGrindTargets)
             {
+                // FEAT-076: Skip the full 256-entry iteration when the previous run found
+                // nothing grindable (all targets grid-limited, assigned, or destroyed).
+                // Resets when: target list hash changes (new scan), or the saturated grid
+                // set changes (a BaR on the target grid left, freeing a slot).
+                if (_grindLoopExhausted
+                    && State.PossibleGrindTargets.CurrentHash == _grindExhaustedAtHash
+                    && _saturatedGridIds.Count == _grindExhaustedSaturatedCount)
+                {
+                    return;
+                }
+                _grindLoopExhausted = false;
+
                 long lastRejectedGridId = 0;
                 foreach (var targetData in State.PossibleGrindTargets)
                 {
@@ -91,6 +103,16 @@ namespace SKONanobotBuildAndRepairSystem
                             targetData.Block.ReleaseFromSystem();
                         }
                     }
+                }
+
+                // FEAT-076: Mark exhausted when the full iteration found nothing grindable.
+                // The loop will be skipped on subsequent ticks until the target list changes
+                // (scan swap updates hash) or the saturated grid set changes (a slot frees up).
+                if (!grinding && !needGrinding)
+                {
+                    _grindLoopExhausted = true;
+                    _grindExhaustedAtHash = State.PossibleGrindTargets.CurrentHash;
+                    _grindExhaustedSaturatedCount = _saturatedGridIds.Count;
                 }
             }
 

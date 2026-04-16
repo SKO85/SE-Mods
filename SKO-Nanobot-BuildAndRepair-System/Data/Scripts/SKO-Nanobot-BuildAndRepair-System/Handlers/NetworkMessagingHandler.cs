@@ -488,13 +488,19 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 }
 
                 var payloadBytes = bytes.Length;
-                MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs, () =>
-                    string.Format("entityId={0};steamId={1};bytes={2}",
-                        system.Entity.EntityId, steamId, payloadBytes));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs, () =>
+                        string.Format("entityId={0};steamId={1};bytes={2}",
+                            system.Entity.EntityId, steamId, payloadBytes));
+                }
             }
             catch
             {
-                MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs);
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs);
+                }
             }
         }
 

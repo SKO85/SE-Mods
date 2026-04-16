@@ -127,13 +127,16 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             }
             finally
             {
-                var _clusterCount = clusterCount;
-                var _clusteredSystems = clusteredSystems;
-                var _totalSystems = Mod.NanobotSystems.Count;
-                var _skipped = skipped;
-                MethodProfiler.StopAndLog("ScanClusterCoordinator.RebuildClusters", profilerTs, () =>
-                    string.Format("clusters={0};clusteredSystems={1};totalSystems={2};skipped={3}",
-                        _clusterCount, _clusteredSystems, _totalSystems, _skipped));
+                if (profilerTs != 0L)
+                {
+                    var _clusterCount = clusterCount;
+                    var _clusteredSystems = clusteredSystems;
+                    var _totalSystems = Mod.NanobotSystems.Count;
+                    var _skipped = skipped;
+                    MethodProfiler.StopAndLog("ScanClusterCoordinator.RebuildClusters", profilerTs, () =>
+                        string.Format("clusters={0};clusteredSystems={1};totalSystems={2};skipped={3}",
+                            _clusterCount, _clusteredSystems, _totalSystems, _skipped));
+                }
             }
         }
 

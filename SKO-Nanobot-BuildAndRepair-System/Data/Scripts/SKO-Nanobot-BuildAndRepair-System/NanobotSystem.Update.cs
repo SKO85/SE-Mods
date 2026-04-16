@@ -73,7 +73,13 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     CreativeModeActive = MyAPIGateway.Session.CreativeMode;
 
+                    var friendlyDmgTs = MethodProfiler.Start();
                     CleanupFriendlyDamage();
+                    if (friendlyDmgTs != 0L)
+                    {
+                        MethodProfiler.StopAndLog("CleanupFriendlyDamage", friendlyDmgTs, () =>
+                            string.Format("entityId={0};entries={1}", _Welder.EntityId, FriendlyDamage.Count));
+                    }
 
                     // WorkSpeed controls operation frequency:
                     //   1 = every 100 frames (same as old Update100, default)

@@ -25,8 +25,11 @@ namespace SKONanobotBuildAndRepairSystem.Caches
             }
             finally
             {
-                MethodProfiler.StopAndLog("SharedGridBlockCache.GetBlocks", profilerTs, () =>
-                    string.Format("gridId={0}", grid.EntityId));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("SharedGridBlockCache.GetBlocks", profilerTs, () =>
+                        string.Format("gridId={0}", grid.EntityId));
+                }
             }
         }
 

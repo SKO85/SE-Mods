@@ -35,8 +35,11 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 finally
                 {
-                    MethodProfiler.StopAndLog("UpdateCustomInfo", profilerTs, () =>
-                        string.Format("entityId={0}", _Welder.EntityId));
+                    if (profilerTs != 0L)
+                    {
+                        MethodProfiler.StopAndLog("UpdateCustomInfo", profilerTs, () =>
+                            string.Format("entityId={0}", _Welder.EntityId));
+                    }
                 }
 
                 _UpdateCustomInfoLast = playTime;

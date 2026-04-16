@@ -78,6 +78,16 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private bool _weldLoopExhausted = false;
         private long _weldExhaustedAtHash;
+
+        /// <summary>
+        /// FEAT-076: Same as _weldLoopExhausted but for the grind loop.
+        /// When true, all grind targets were grid-limited, assigned, or destroyed
+        /// on the last iteration. The loop is skipped until the target list hash
+        /// changes (new scan) or the saturated grid set changes.
+        /// </summary>
+        private bool _grindLoopExhausted = false;
+        private long _grindExhaustedAtHash;
+        private int _grindExhaustedSaturatedCount;
         private List<TargetBlockData> _TempPossibleWeldTargets = new List<TargetBlockData>();
         private List<TargetBlockData> _TempPossibleGrindTargets = new List<TargetBlockData>();
         private List<TargetEntityData> _TempPossibleFloatingTargets = new List<TargetEntityData>();
@@ -281,6 +291,34 @@ namespace SKONanobotBuildAndRepairSystem
         internal int _consecutiveEmptyScans;
         internal const int IdleScansBeforeBackoff = 3;
         internal static readonly TimeSpan IdleScanInterval = TimeSpan.FromSeconds(20);
+
+        /// <summary>
+        /// FEAT-075: Set by the coordinator when it skips a scan because the
+        /// target list is still saturated (plenty of live targets remain).
+        /// Members check this flag to also skip their apply-result cycle.
+        /// </summary>
+        internal volatile bool _scanSkippedSaturated;
+        /// <summary>
+        /// FEAT-075: When a member signals the coordinator to rescan (e.g., member ran
+        /// out of weld targets), this flag bypasses the saturated skip so the coordinator
+        /// actually performs the scan instead of checking its own (still-full) target lists.
+        /// </summary>
+        internal volatile bool _rescanForced;
+        /// <summary>
+        /// FEAT-075: Timestamp of the last full scan that actually ran.
+        /// Used to enforce a maximum skip duration (force rescan every 60s).
+        /// </summary>
+        internal TimeSpan _lastFullScanTime;
+        internal const int SaturatedRescanThreshold = 64;
+        internal static readonly TimeSpan MaxScanSkipDuration = TimeSpan.FromSeconds(60);
+        /// <summary>
+        /// FEAT-075 fix: Tracks how many weld/grind candidates the last full scan produced.
+        /// When a type was discovered (count > 0) but has since been consumed (live count 0),
+        /// the scan must run to refresh it. When the type was never found (count == 0),
+        /// it genuinely doesn't exist and doesn't block the saturated skip.
+        /// </summary>
+        internal int _lastScanWeldCandidateCount;
+        internal int _lastScanGrindCandidateCount;
 
         /// <summary>
         /// Stagger slot (0..StaggerGroupCount-1) assigned at init. Only BaRs whose slot

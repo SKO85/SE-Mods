@@ -55,9 +55,12 @@ namespace SKONanobotBuildAndRepairSystem
                 changed = true;
             }
 
-            MethodProfiler.StopAndLog("SetSafeZoneAndShieldStates", profilerTs, () =>
-                string.Format("entityId={0};changed={1};zones={2}",
-                    _Welder != null ? _Welder.EntityId : 0, changed, SafeZoneHandler.Zones.Count));
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("SetSafeZoneAndShieldStates", profilerTs, () =>
+                    string.Format("entityId={0};changed={1};zones={2}",
+                        _Welder != null ? _Welder.EntityId : 0, changed, SafeZoneHandler.Zones.Count));
+            }
             return changed;
         }
 

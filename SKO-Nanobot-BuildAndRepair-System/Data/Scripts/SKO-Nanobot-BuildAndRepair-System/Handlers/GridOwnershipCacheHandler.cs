@@ -173,8 +173,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             var profilerTs = MethodProfiler.Start();
             RefreshExpiredEntries();
             Cache.CleanupExpired();
-            MethodProfiler.StopAndLog("GridOwnershipCacheHandler.Update", profilerTs, () =>
-                string.Format("cacheCount={0}", Cache.Count));
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("GridOwnershipCacheHandler.Update", profilerTs, () =>
+                    string.Format("cacheCount={0}", Cache.Count));
+            }
         }
 
         private static void RefreshExpiredEntries()

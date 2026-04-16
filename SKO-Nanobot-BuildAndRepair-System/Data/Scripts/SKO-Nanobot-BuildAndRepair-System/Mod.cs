@@ -478,8 +478,11 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 RecordTickCost(tickStart);
-                MethodProfiler.StopAndLog("Mod.UpdateBeforeSimulation", profilerTs, () =>
-                    string.Format("bars={0}", NanobotSystems.Count));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("Mod.UpdateBeforeSimulation", profilerTs, () =>
+                        string.Format("bars={0}", NanobotSystems.Count));
+                }
             }
         }
 
@@ -517,8 +520,11 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 finally
                 {
-                    MethodProfiler.StopAndLog("Mod.RebuildSourcesAndTargetsTimer", profilerTs, () =>
-                        string.Format("systemCount={0}", NanobotSystems.Count));
+                    if (profilerTs != 0L)
+                    {
+                        MethodProfiler.StopAndLog("Mod.RebuildSourcesAndTargetsTimer", profilerTs, () =>
+                            string.Format("systemCount={0}", NanobotSystems.Count));
+                    }
                 }
             }
         }
