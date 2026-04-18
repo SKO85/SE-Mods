@@ -1,4 +1,4 @@
-# FEAT-071: Idle scan backoff
+# FEAT-071: Idle scan backoff (updated: idle counter uses filtered targets)
 ## Status: In Progress
 ## Priority: High
 ## Version: v2.5.4

@@ -42,11 +42,28 @@ namespace SKONanobotBuildAndRepairSystem
                 return;
             }
 
+            // Projector cold-start detection: when idle and AllowBuild is enabled,
+            // check if any projector on our grid has buildable blocks. If so, reset
+            // the idle backoff so the next scan discovers them within 1 tick instead
+            // of waiting 20s+. Only the coordinator checks (once per 1s timer tick).
+            // BuildableBlocksCount is a cheap property read — no scan overhead.
+            var coordinator = cluster.Coordinator;
+            if (coordinator == this
+                && _consecutiveEmptyScans >= 1
+                && Settings.WorkMode != WorkModes.GrindOnly
+                && (Settings.Flags & SyncBlockSettings.Settings.AllowBuild) != 0)
+            {
+                if (HasBuildableProjectorOnGrid())
+                {
+                    _consecutiveEmptyScans = 0;
+                    _rescanForced = true;
+                }
+            }
+
             // FEAT-071: When the coordinator has seen consecutive empty scans,
             // use a longer interval to reduce wasted background work.
             // Members inherit the coordinator's idle state so they don't keep
             // enqueuing apply-result tasks when the coordinator hasn't rescanned.
-            var coordinator = cluster.Coordinator;
             var idleCount = coordinator != null ? coordinator._consecutiveEmptyScans : 0;
             var effectiveTargetInterval = idleCount >= IdleScansBeforeBackoff
                 ? IdleScanInterval
@@ -66,9 +83,18 @@ namespace SKONanobotBuildAndRepairSystem
                     var timeSinceFullScan = playTime.Subtract(_lastFullScanTime);
                     // Only honor forced rescan if enough time passed since the last scan,
                     // so multiple member signals within one interval coalesce into one rescan.
-                    var forceRescan = _rescanForced && timeSinceFullScan >= Mod.Settings.TargetsUpdateInterval;
+                    // Use half the scan interval (min 5s) as debounce — short enough for high
+                    // WorkSpeed responsiveness, long enough to prevent scan storms.
+                    var forceDebounce = TimeSpan.FromSeconds(Math.Max(5, Mod.Settings.TargetsUpdateInterval.TotalSeconds / 2));
+                    var forceRescan = _rescanForced && timeSinceFullScan >= forceDebounce;
+                    // If the coordinator's own work loops are both exhausted (nothing to
+                    // weld or grind despite having targets in the list), the target list
+                    // is stale — projected blocks that were built still look "alive" as
+                    // IMySlimBlock references. Bypass the saturated skip in this case.
+                    var coordExhausted = _weldLoopExhausted && _grindLoopExhausted;
                     if (_InitialScanCompleted
                         && !forceRescan
+                        && !coordExhausted
                         && timeSinceFullScan < MaxScanSkipDuration
                         && IsTargetListSaturated())
                     {
@@ -300,6 +326,93 @@ namespace SKONanobotBuildAndRepairSystem
                     return true;
             }
 
+            return false;
+        }
+
+        /// <summary>
+        /// Projector cold-start detection: checks if any projector on the BaR's
+        /// own grid, connected grids, or nearby grids (BoundingBox mode) has
+        /// BuildableBlocksCount > 0.
+        /// Called once per second on the main thread, only when idle.
+        /// </summary>
+        private bool HasBuildableProjectorOnGrid()
+        {
+            try
+            {
+                var visited = new HashSet<long>();
+
+                // Phase 1: Check own grid + connected grids (Grids search mode).
+                var toVisit = new Queue<IMyCubeGrid>();
+                toVisit.Enqueue(_Welder.CubeGrid);
+
+                while (toVisit.Count > 0)
+                {
+                    var cubeGrid = toVisit.Dequeue();
+                    if (cubeGrid == null || !visited.Add(cubeGrid.EntityId)) continue;
+
+                    var grid = cubeGrid as MyCubeGrid;
+                    if (grid == null) continue;
+
+                    foreach (var block in grid.GetFatBlocks())
+                    {
+                        var projector = block as Sandbox.ModAPI.IMyProjector;
+                        if (projector != null && projector.IsProjecting && projector.BuildableBlocksCount > 0)
+                            return true;
+
+                        var mechanical = block as Sandbox.ModAPI.IMyMechanicalConnectionBlock;
+                        if (mechanical != null && mechanical.TopGrid != null)
+                        {
+                            toVisit.Enqueue(mechanical.TopGrid);
+                            continue;
+                        }
+
+                        var attachable = block as Sandbox.ModAPI.IMyAttachableTopBlock;
+                        if (attachable != null && attachable.Base != null && attachable.Base.CubeGrid != null)
+                        {
+                            toVisit.Enqueue(attachable.Base.CubeGrid);
+                            continue;
+                        }
+
+                        var connector = block as Sandbox.ModAPI.IMyShipConnector;
+                        if (connector != null && connector.Status == Sandbox.ModAPI.Ingame.MyShipConnectorStatus.Connected && connector.OtherConnector != null)
+                        {
+                            toVisit.Enqueue(connector.OtherConnector.CubeGrid);
+                        }
+                    }
+                }
+
+                // Phase 2: BoundingBox mode — check unconnected grids in working area.
+                if (Settings.SearchMode == SearchModes.BoundingBox)
+                {
+                    var emitterMatrix = _Welder.WorldMatrix;
+                    emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
+                    var areaBox = new MyOrientedBoundingBoxD(Settings.CorrectedAreaBoundingBox, emitterMatrix);
+                    var aabb = areaBox.GetAABB();
+
+                    List<IMyEntity> entities;
+                    lock (MyAPIGateway.Entities)
+                    {
+                        entities = MyAPIGateway.Entities.GetTopMostEntitiesInBox(ref aabb);
+                    }
+                    if (entities != null)
+                    {
+                        foreach (var entity in entities)
+                        {
+                            var nearbyGrid = entity as MyCubeGrid;
+                            if (nearbyGrid == null || visited.Contains(nearbyGrid.EntityId)) continue;
+                            visited.Add(nearbyGrid.EntityId);
+
+                            foreach (var block in nearbyGrid.GetFatBlocks())
+                            {
+                                var projector = block as Sandbox.ModAPI.IMyProjector;
+                                if (projector != null && projector.IsProjecting && projector.BuildableBlocksCount > 0)
+                                    return true;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
             return false;
         }
 
@@ -1105,12 +1218,13 @@ namespace SKONanobotBuildAndRepairSystem
                 _InitialScanCompleted = true;
 
                 // FEAT-071: Track consecutive empty scans for idle backoff.
-                // When all candidate lists are empty, increment the counter so
-                // UpdateSourcesAndTargetsTimer can extend the scan interval.
-                // Reset immediately when any targets are found.
-                var hasTargets = result.WeldCandidates.Count > 0
-                    || result.GrindCandidates.Count > 0
-                    || result.FloatingCandidates.Count > 0;
+                // Use the coordinator's OWN filtered target counts (post-ApplyClusterResultToSelf)
+                // instead of the cluster-wide raw candidates. The cluster scan with skipRangeCheck
+                // may find blocks in the BoundingBox area that no member can actually reach —
+                // using those for the idle check prevents the backoff from ever kicking in.
+                var hasTargets = State.PossibleWeldTargets.CurrentCount > 0
+                    || State.PossibleGrindTargets.CurrentCount > 0
+                    || State.PossibleFloatingTargets.CurrentCount > 0;
                 if (hasTargets)
                     _consecutiveEmptyScans = 0;
                 else
