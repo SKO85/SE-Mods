@@ -429,7 +429,6 @@ namespace SKONanobotBuildAndRepairSystem
                                 try { InventoryHelper.Cleanup(); } catch { }
                                 try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
                                 try { BlockSystemAssigningHandler.Cleanup(); } catch { }
-                                try { DlcCheckHelper.CleanupOwnerCache(); } catch { }
                                 try { SharedGridBlockCache.Cleanup(); } catch { }
                                 try { SharedEntityCache.Cleanup(); } catch { }
                             });

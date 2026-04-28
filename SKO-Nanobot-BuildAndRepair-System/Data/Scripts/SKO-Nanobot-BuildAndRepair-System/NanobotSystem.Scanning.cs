@@ -438,7 +438,6 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (((Settings.Flags & SyncBlockSettings.Settings.AllowBuild) != 0) &&
                    (!useGrindColor || !IsColorNearlyEquals(grindColor, colorMask)) &&
-                   DlcCheckHelper.IsBlockDlcAvailableForOwner(block, _Welder.OwnerId) &&
                    BlockWeldPriority.GetEnabled(block) &&
                    IsRelationAllowed4Welding(projector.SlimBlock) &&
                    block.CanBuild(false))
@@ -782,7 +781,7 @@ namespace SKONanobotBuildAndRepairSystem
                                         break;
                                     }
 
-                                    if (DlcCheckHelper.IsBlockDlcAvailableForOwner(block, _Welder.OwnerId) && BlockWeldPriority.GetEnabled(block) && block.CanBuild(false))
+                                    if (BlockWeldPriority.GetEnabled(block) && block.CanBuild(false))
                                     {
                                         double distance;
                                         if (skipRangeCheck || block.IsInRange(ref areaBox, out distance))

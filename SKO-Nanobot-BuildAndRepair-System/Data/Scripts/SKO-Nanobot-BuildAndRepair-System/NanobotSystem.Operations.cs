@@ -122,54 +122,56 @@ namespace SKONanobotBuildAndRepairSystem
                         ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);
 
                     transportBlocked = transporting;
-                    if (!transporting)
+                    // BUG-103: Don't gate the work-mode dispatch on the cosmetic transport timer.
+                    // Items picked by ServerFindMissingComponents are already in the welder; the
+                    // 5-6s timer was only driving the visual particle. Welding and grinding now
+                    // proceed every work cycle; the inner ServerFindMissingComponents/IsTransportRunning
+                    // calls still prevent restarting an in-flight transport.
+                    State.MissingComponents.Clear();
+                    State.LimitsExceeded = false;
+
+                    diagTs = MethodProfiler.Start();
+                    if (!Mod.Settings.DisableLimitSystemsPerTargetGrid
+                        && (State.PossibleWeldTargets.CurrentCount > 0 || State.PossibleGrindTargets.CurrentCount > 0))
                     {
-                        State.MissingComponents.Clear();
-                        State.LimitsExceeded = false;
-
-                        diagTs = MethodProfiler.Start();
-                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid
-                            && (State.PossibleWeldTargets.CurrentCount > 0 || State.PossibleGrindTargets.CurrentCount > 0))
-                        {
-                            RebuildSaturatedGrids();
-                        }
-                        if (diagTs != 0L)
-                        {
-                            MethodProfiler.StopAndLog("RebuildSaturatedGrids", diagTs, () =>
-                                string.Format("entityId={0};saturated={1}", _Welder.EntityId, _saturatedGridIds.Count));
-                        }
-
-                        switch (Settings.WorkMode)
-                        {
-                            case WorkModes.WeldBeforeGrind:
-                            case WorkModes.GrindIfWeldGetStuck: // deprecated; treated as WeldBeforeGrind (defense; setter migrates on entry)
-                                ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
-                                if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
-                                {
-                                    primaryStuck = needWelding && !welding;
-                                    ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
-                                }
-                                break;
-
-                            case WorkModes.GrindBeforeWeld:
-                                ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
-                                if (!(grinding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
-                                {
-                                    primaryStuck = needGrinding && !grinding;
-                                    ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
-                                }
-                                break;
-
-                            case WorkModes.WeldOnly:
-                                ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
-                                break;
-
-                            case WorkModes.GrindOnly:
-                                ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
-                                break;
-                        }
-                        State.MissingComponents.RebuildHash();
+                        RebuildSaturatedGrids();
                     }
+                    if (diagTs != 0L)
+                    {
+                        MethodProfiler.StopAndLog("RebuildSaturatedGrids", diagTs, () =>
+                            string.Format("entityId={0};saturated={1}", _Welder.EntityId, _saturatedGridIds.Count));
+                    }
+
+                    switch (Settings.WorkMode)
+                    {
+                        case WorkModes.WeldBeforeGrind:
+                        case WorkModes.GrindIfWeldGetStuck: // deprecated; treated as WeldBeforeGrind (defense; setter migrates on entry)
+                            ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
+                            if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
+                            {
+                                primaryStuck = needWelding && !welding;
+                                ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
+                            }
+                            break;
+
+                        case WorkModes.GrindBeforeWeld:
+                            ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
+                            if (!(grinding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
+                            {
+                                primaryStuck = needGrinding && !grinding;
+                                ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
+                            }
+                            break;
+
+                        case WorkModes.WeldOnly:
+                            ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
+                            break;
+
+                        case WorkModes.GrindOnly:
+                            ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
+                            break;
+                    }
+                    State.MissingComponents.RebuildHash();
 
                     if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding)
                         ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);

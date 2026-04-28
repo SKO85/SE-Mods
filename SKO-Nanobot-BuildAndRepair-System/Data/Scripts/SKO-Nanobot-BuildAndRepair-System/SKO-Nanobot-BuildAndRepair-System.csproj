@@ -125,7 +125,6 @@
     <Compile Include="Handlers\HudHandler.cs" />
     <Compile Include="Handlers\SafeZoneHandler.cs" />
     <Compile Include="Mods\HudAPIv2.cs" />
-    <Compile Include="Helpers\DlcCheckHelper.cs" />
     <Compile Include="Helpers\InventoryHelper.cs" />
     <Compile Include="Localization\TextsPolish.cs" />
     <Compile Include="Localization\TextsRussian.cs" />

@@ -151,8 +151,11 @@ namespace SKONanobotBuildAndRepairSystem
             var profilerTs = MethodProfiler.Start();
             var target = targetData.Block;
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
+            // BUG-103: Move any in-flight items but don't gate the grind on the cosmetic timer.
+            // ServerEmptyTransportInventory inside IsTransportRunning already drains items each tick;
+            // grinding the next block proceeds without waiting for the timer to elapse. Visual
+            // particle still plays via State.Transporting being true while the timer runs.
             transporting = IsTransportRunning(playTime);
-            if (transporting) return false;
 
             var targetGrid = target.CubeGrid;
             if (targetGrid == null) return false;
