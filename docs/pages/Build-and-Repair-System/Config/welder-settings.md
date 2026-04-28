@@ -97,8 +97,8 @@ Work mode determines the order in which the system tackles welding and grinding.
 
 | Setting            | Default                                                                  | Description                                                                                                                                                         |
 | ------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AllowedWorkModes` | `WeldBeforeGrind GrindBeforeWeld GrindIfWeldGetStuck WeldOnly GrindOnly` | Space-separated list of work modes available to players. Remove a value to hide that mode from the terminal.                                                        |
-| `WorkModeDefault`  | `WeldBeforeGrind`                                                        | The work mode applied when a block is first placed or reset. Accepted values: `WeldBeforeGrind`, `GrindBeforeWeld`, `GrindIfWeldGetStuck`, `WeldOnly`, `GrindOnly`. |
+| `AllowedWorkModes` | `WeldBeforeGrind GrindBeforeWeld WeldOnly GrindOnly` | Space-separated list of work modes available to players. Remove a value to hide that mode from the terminal.                                  |
+| `WorkModeDefault`  | `WeldBeforeGrind`                                    | The work mode applied when a block is first placed or reset. Accepted values: `WeldBeforeGrind`, `GrindBeforeWeld`, `WeldOnly`, `GrindOnly`. |
 
 ---
 

@@ -64,11 +64,11 @@
 
         <!-- Space-separated list of work modes available to players in the terminal.
              Remove a value to hide that mode.
-             Values: WeldBeforeGrind, GrindBeforeWeld, GrindIfWeldGetStuck, WeldOnly, GrindOnly. -->
-        <AllowedWorkModes>WeldBeforeGrind GrindBeforeWeld GrindIfWeldGetStuck WeldOnly GrindOnly</AllowedWorkModes>
+             Values: WeldBeforeGrind, GrindBeforeWeld, WeldOnly, GrindOnly. -->
+        <AllowedWorkModes>WeldBeforeGrind GrindBeforeWeld WeldOnly GrindOnly</AllowedWorkModes>
 
         <!-- Default work mode applied when a block is first placed or reset.
-             Values: WeldBeforeGrind, GrindBeforeWeld, GrindIfWeldGetStuck, WeldOnly, GrindOnly. -->
+             Values: WeldBeforeGrind, GrindBeforeWeld, WeldOnly, GrindOnly. -->
         <WorkModeDefault>WeldBeforeGrind</WorkModeDefault>
 
         <!-- When true, the Use Ignore Color option is locked server-wide. -->

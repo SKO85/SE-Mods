@@ -11,6 +11,8 @@ Three independent issues found during a deep audit of the scan/sort/priority/wor
 
 ### A. [High] `WeldBeforeGrind` and `GrindIfWeldGetStuck` behave identically
 
+> **Update (v2.5.4 — see BUG-101):** the v2.5.3 narrowing described below introduced a deadlock — when there were no weld targets, `needWelding` stayed `false`, the `weldStuck` gate never opened, and the BaR sat permanently in `State: Idle`. After a player report, this section's resolution path was changed: `GrindIfWeldGetStuck` was **removed entirely** in v2.5.4. The mode was redundant with `WeldBeforeGrind` and the label was ambiguous. Sections B and C below remain as fixed in v2.5.3.
+
 `NanobotSystem.Operations.cs:130-156` dispatches work modes. The English UI label for `GrindIfWeldGetStuck` is *"Grind if weld get stuck"* — users reasonably expect grinding to kick in **only when welding is actively blocked** (targets exist but cannot proceed: missing components, safe zone, priority-starved). When there's simply nothing to weld, the BaR should stay idle instead of falling through to grind.
 
 The existing implementation used `!(welding || transporting)` as the fall-through condition for **both** `WeldBeforeGrind` and `GrindIfWeldGetStuck` — that fires whenever the welding pass didn't do anything, regardless of *why*. Selecting `GrindIfWeldGetStuck` therefore gave `WeldBeforeGrind` behavior. The `primaryStuck` variable that the `WeldBeforeGrind` branch sets is only used in the profiler log line, not for flow control — confirming nobody differentiates.
@@ -114,3 +116,4 @@ Same-grid swap (the common lock-on reference refresh path) now has zero counter 
 - BUG-094 / BUG-096 (v2.5.3) — recent fixes to the scan sort pipeline; none of those masked these three issues.
 - FEAT-070 (v2.5.3) — sort comparator consolidation; the new shared helpers inherit the benefit of fix (B) automatically (all sites go through `GetPriority`, now race-free).
 - `Welding.cs:98` — the lock-on refresh site that triggers fix (C).
+- **BUG-101** — section A's narrowing introduced a deadlock: when there were no weld targets (or the weld loop was exhausted), `needWelding` stayed `false`, the `weldStuck` gate never opened, and the BaR sat permanently in `State: Idle`. A player report confirmed the regression. Resolved in a follow-up release by **removing `GrindIfWeldGetStuck` entirely** — it was functionally redundant with `WeldBeforeGrind` and the label was ambiguous. Saved values migrate to `WeldBeforeGrind` on load. Sections B and C of this ticket remain as fixed in v2.5.3.

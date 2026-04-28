@@ -135,7 +135,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             AllowBuildFixed = false;
             AllowBuildDefault = true;
 
-            AllowedWorkModes = WorkModes.GrindBeforeWeld | WorkModes.GrindIfWeldGetStuck | WorkModes.WeldBeforeGrind | WorkModes.WeldOnly | WorkModes.GrindOnly;
+            AllowedWorkModes = WorkModes.GrindBeforeWeld | WorkModes.WeldBeforeGrind | WorkModes.WeldOnly | WorkModes.GrindOnly;
             WorkModeDefault = WorkModes.WeldBeforeGrind;
 
             UseIgnoreColorFixed = false;

@@ -104,6 +104,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
             set
             {
+                // Deprecated mode: silently migrate to WeldBeforeGrind (same eager-grind semantics).
+                if (value == WorkModes.GrindIfWeldGetStuck) value = WorkModes.WeldBeforeGrind;
                 if (_WorkMode != value)
                 {
                     _WorkMode = value;
@@ -640,7 +642,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
             _SoundVolume = newSettings.SoundVolume;
             _SearchMode = newSettings.SearchMode;
-            _WorkMode = newSettings.WorkMode;
+            // Deprecated mode: silently migrate on merge from network sync / XML load.
+            _WorkMode = newSettings.WorkMode == WorkModes.GrindIfWeldGetStuck ? WorkModes.WeldBeforeGrind : newSettings.WorkMode;
 
             RecalcAreaBoundigBox();
             _IgnoreColorPacked = _IgnoreColor.PackHSVToUint();
@@ -802,7 +805,6 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 {
                     if ((Mod.Settings.Welder.AllowedWorkModes & WorkModes.WeldBeforeGrind) != 0) WorkMode = WorkModes.WeldBeforeGrind;
                     else if ((Mod.Settings.Welder.AllowedWorkModes & WorkModes.GrindBeforeWeld) != 0) WorkMode = WorkModes.GrindBeforeWeld;
-                    else if ((Mod.Settings.Welder.AllowedWorkModes & WorkModes.GrindIfWeldGetStuck) != 0) WorkMode = WorkModes.GrindIfWeldGetStuck;
                 }
             }
         }

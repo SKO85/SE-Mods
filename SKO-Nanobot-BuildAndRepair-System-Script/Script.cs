@@ -1002,6 +1002,9 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         WeldBeforeGrind = 0x0001,
         GrindBeforeWeld = 0x0002,
+        // DEPRECATED: removed from the BaR UI in v2.5.4. Migrated to WeldBeforeGrind on the mod side.
+        // Value preserved so existing programmable-block scripts that reference it still compile.
+        // Do not reuse 0x0004.
         GrindIfWeldGetStuck = 0x0004,
         WeldOnly = 0x0008,
         GrindOnly = 0x0010

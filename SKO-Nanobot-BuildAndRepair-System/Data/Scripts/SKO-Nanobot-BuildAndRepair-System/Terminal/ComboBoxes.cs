@@ -134,8 +134,6 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                         list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WorkModes.WeldBeforeGrind, Value = Texts.WorkMode_WeldB4Grind });
                     if (Mod.Settings.Welder.AllowedWorkModes.HasFlag(WorkModes.GrindBeforeWeld))
                         list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WorkModes.GrindBeforeWeld, Value = Texts.WorkMode_GrindB4Weld });
-                    if (Mod.Settings.Welder.AllowedWorkModes.HasFlag(WorkModes.GrindIfWeldGetStuck))
-                        list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WorkModes.GrindIfWeldGetStuck, Value = Texts.WorkMode_GrindIfWeldStuck });
                     if (Mod.Settings.Welder.AllowedWorkModes.HasFlag(WorkModes.WeldOnly))
                         list.Add(new MyTerminalControlComboBoxItem() { Key = (long)WorkModes.WeldOnly, Value = Texts.WorkMode_WeldOnly });
                     if (Mod.Settings.Welder.AllowedWorkModes.HasFlag(WorkModes.GrindOnly))
