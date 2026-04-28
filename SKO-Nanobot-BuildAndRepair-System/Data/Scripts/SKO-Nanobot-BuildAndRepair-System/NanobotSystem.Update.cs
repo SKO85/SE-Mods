@@ -53,6 +53,8 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var profilerTs = MethodProfiler.Start();
             var throttleReason = "none";
+            var clusterSize = 1;
+            var effectiveGroups = 1;
             try
             {
                 if (_Welder == null) return;
@@ -88,14 +90,29 @@ namespace SKONanobotBuildAndRepairSystem
                     var workSpeed = Math.Max(1, Math.Min(10, Mod.Settings.Welder.WorkSpeed));
                     var cycleDivisor = 100 / workSpeed;
                     var cycle = MyAPIGateway.Session.GameplayFrameCounter / cycleDivisor;
-                    var clusterSize = AssignedCluster != null ? AssignedCluster.Members.Count : 1;
-                    var effectiveGroups = clusterSize < 6 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), clusterSize - 3);
+                    clusterSize = AssignedCluster != null ? AssignedCluster.Members.Count : 1;
+                    var modWideStagger = Mod.GetEffectiveStaggerGroupCount();
+                    if (clusterSize == 1)
+                    {
+                        // Isolated BaR (no cluster): no shared scan amortization. Use mod-wide stagger
+                        // directly so N isolated BaRs don't all fire on the same tick (BUG-102).
+                        effectiveGroups = modWideStagger;
+                    }
+                    else if (clusterSize < 6)
+                    {
+                        // Small cluster: shared scan amortizes the work. Collapse to 1 group.
+                        effectiveGroups = 1;
+                    }
+                    else
+                    {
+                        effectiveGroups = Math.Min(modWideStagger, clusterSize - 3);
+                    }
 
                     var simSpeed = Mod.GetEffectiveSimSpeed();
                     if (simSpeed < 0.9f)
                     {
-                        var simPenalty = (int)Math.Ceiling((1.0 - simSpeed) * Mod.GetEffectiveStaggerGroupCount());
-                        effectiveGroups = Math.Min(Mod.GetEffectiveStaggerGroupCount(), effectiveGroups + simPenalty);
+                        var simPenalty = (int)Math.Ceiling((1.0 - simSpeed) * modWideStagger);
+                        effectiveGroups = Math.Min(modWideStagger, effectiveGroups + simPenalty);
                     }
 
                     var isMyTurn = _staggerSlot < 0 || effectiveGroups <= 1 || (cycle % effectiveGroups) == (_staggerSlot % effectiveGroups);
@@ -191,12 +208,12 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     var workSpeed = Math.Max(1, Math.Min(10, Mod.Settings.Welder.WorkSpeed));
                     var _throttleReason = throttleReason;
+                    var _clusterSize = clusterSize;
+                    var _effectiveGroups = effectiveGroups;
                     MethodProfiler.StopAndLog("UpdateBeforeSimulation10_100", profilerTs, () =>
                         string.Format("entityId={0};workSpeed={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5};throttle={6}",
                             _Welder != null ? _Welder.EntityId : 0, workSpeed, _IsInit, _Delay,
-                            AssignedCluster != null ? AssignedCluster.Members.Count : 1,
-                            AssignedCluster != null ? (AssignedCluster.Members.Count < 5 ? 1 : Math.Min(Mod.GetEffectiveStaggerGroupCount(), AssignedCluster.Members.Count - 3)) : 1,
-                            _throttleReason));
+                            _clusterSize, _effectiveGroups, _throttleReason));
                 }
             }
         }

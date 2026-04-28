@@ -93,15 +93,13 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var configured = Settings.StaggerGroupCount;
             if (configured > 0) return configured;
-            // Auto: scale with active (enabled + working) BaR count, not total placed blocks.
-            var active = 0;
-            foreach (var sys in NanobotSystems.Values)
-            {
-                if (sys.Welder != null && sys.Welder.IsWorking)
-                    active++;
-            }
-            if (active <= 5) return 1;
-            if (active <= 10) return 2;
+            // Auto: scale with placed BaR count. Even disabled BaRs run the per-tick orchestration
+            // (CleanupFriendlyDamage, Settings.TrySave, TryTransmitState), so they generate per-tick
+            // CPU load and need to be staggered. Counting only IsWorking BaRs collapsed the stagger
+            // to 1 in worlds with many disabled BaRs, making BUG-102's isolated-BaR fix inert there.
+            var total = NanobotSystems.Count;
+            if (total <= 5) return 1;
+            if (total <= 10) return 2;
             return StaggerGroupCountDefault;
         }
 
