@@ -10,8 +10,15 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
     /// A block candidate that passed all position-INDEPENDENT checks
     /// (ownership, color, safe zone, shield, priority enabled, needs repair, etc.)
     /// but NOT IsInRange — each cluster member applies its own range filter.
+    ///
+    /// BUG-111: struct (was class). 100-1000 candidates are constructed per cluster
+    /// scan; as a class each `new ClusterTargetCandidate(...)` was a heap allocation
+    /// pressuring gen-1 GC. Struct stores items inline in the backing List, eliminating
+    /// per-candidate heap allocs. Audited for in-place mutation patterns
+    /// (`var x = list[i]; x.Field = ...`) — none found, so the conversion is safe.
+    /// Sort + QuickSelect work identically because they swap whole elements.
     /// </summary>
-    public class ClusterTargetCandidate
+    public struct ClusterTargetCandidate
     {
         public IMySlimBlock Block;
         public Models.TargetBlockData.AttributeFlags Attributes;
@@ -25,8 +32,9 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
 
     /// <summary>
     /// A floating object / character / inventory bag candidate for cluster sharing.
+    /// BUG-111: struct (was class) for the same reason as ClusterTargetCandidate.
     /// </summary>
-    public class ClusterFloatingCandidate
+    public struct ClusterFloatingCandidate
     {
         public IMyEntity Entity;
         public Vector3D WorldPosition;

@@ -9,6 +9,7 @@ using System.Diagnostics;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
+using VRage.ModAPI;
 using VRage.Utils;
 using VRageMath;
 using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
@@ -38,12 +39,12 @@ namespace SKONanobotBuildAndRepairSystem
         public const float WELDER_REQUIRED_ELECTRIC_POWER_WELDING_DEFAULT = 200.0f / 1000; // 200 kW
         public const float WELDER_REQUIRED_ELECTRIC_POWER_GRINDING_DEFAULT = 200.0f / 1000; // 200 kW
         public const float WELDER_REQUIRED_ELECTRIC_POWER_TRANSPORT_DEFAULT = 100.0f / 1000; // 100 kW
-        public const float WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT = 40f;
+        public const float WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT = 60f;
         public const float WELDER_TRANSPORTVOLUME_DIVISOR = 10f;
-        public const float WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER = 8f;
-        public const float WELDER_AMOUNT_PER_SECOND = 2f;
+        public const float WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER = 16f;
+        public const float WELDER_AMOUNT_PER_SECOND = 8f;
         public const float WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED = 0.2f;
-        public const float GRINDER_AMOUNT_PER_SECOND = 4f;
+        public const float GRINDER_AMOUNT_PER_SECOND = 8f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
         private const int MaxPossibleWeldTargets = 256;
@@ -111,6 +112,21 @@ namespace SKONanobotBuildAndRepairSystem
         // sorting — without this, farthest-first on a grid extending beyond the cluster's
         // reach deliberately kept the blocks nobody could weld/grind and starved the members.
         private List<MyOrientedBoundingBoxD> _ClusterMemberAreaBoxes;
+
+        // BUG-110: Reusable scan-thread pools to eliminate per-cluster-scan allocations.
+        // Each cluster scan (~5-7s on busy servers) was creating fresh List/Dictionary/HashSet
+        // instances; the cumulative allocation rate triggered gen-1 GC pauses on the main
+        // thread, producing the user-visible 21→70% CPU spike rhythm. Pooled fields are owned
+        // by the background scan thread (scan dispatch is serialized for a given BaR).
+        private List<IMyCubeGrid> _ScanGridsBuffer;
+        private List<IMyInventory> _ScanSourcesBuffer;
+        private Dictionary<IMySlimBlock, double> _ScanPreSortDistances;
+        // AsyncScanForSources reusable traversal state.
+        private HashSet<long> _ScanSourceVisitedGridIds;
+        private Queue<IMyCubeGrid> _ScanSourceGridQueue;
+        // AsyncAddBlocksOfBox reusable sort buffers (only used when GrindSmallestGridFirst flag is set).
+        private List<IMyEntity> _ScanSortedGrids;
+        private List<IMyEntity> _ScanNonGridEntities;
 
         // Reusable pools for TruncateGridAware — avoids 8 allocations per ApplyClusterResultToSelf call.
         private HashSet<long> _truncateGridIds = new HashSet<long>();

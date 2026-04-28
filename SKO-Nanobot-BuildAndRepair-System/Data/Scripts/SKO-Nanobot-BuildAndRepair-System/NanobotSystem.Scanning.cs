@@ -183,8 +183,13 @@ namespace SKONanobotBuildAndRepairSystem
         private void AsyncScanForSources(List<IMyInventory> possibleSources)
         {
             var profilerTs = MethodProfiler.Start();
-            var visited = new HashSet<long>();
-            var toVisit = new Queue<IMyCubeGrid>();
+            // BUG-110: reusable scan-thread traversal state.
+            if (_ScanSourceVisitedGridIds == null) _ScanSourceVisitedGridIds = new HashSet<long>();
+            else _ScanSourceVisitedGridIds.Clear();
+            if (_ScanSourceGridQueue == null) _ScanSourceGridQueue = new Queue<IMyCubeGrid>();
+            else _ScanSourceGridQueue.Clear();
+            var visited = _ScanSourceVisitedGridIds;
+            var toVisit = _ScanSourceGridQueue;
             toVisit.Enqueue(_Welder.CubeGrid);
 
             try
@@ -907,8 +912,13 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (clusterGrindTargets != null && (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0)
                 {
-                    var sortedGrids = new List<IMyEntity>(entityInRange.Count);
-                    var nonGridEntities = new List<IMyEntity>();
+                    // BUG-110: reusable scan-thread sort buffers.
+                    if (_ScanSortedGrids == null) _ScanSortedGrids = new List<IMyEntity>(entityInRange.Count);
+                    else _ScanSortedGrids.Clear();
+                    if (_ScanNonGridEntities == null) _ScanNonGridEntities = new List<IMyEntity>();
+                    else _ScanNonGridEntities.Clear();
+                    var sortedGrids = _ScanSortedGrids;
+                    var nonGridEntities = _ScanNonGridEntities;
                     foreach (var e in entityInRange)
                     {
                         if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, clusterFloatingTargets, maxWeld, maxGrind, maxFloat))
@@ -1085,7 +1095,10 @@ namespace SKONanobotBuildAndRepairSystem
 
                 try
                 {
-                    var grids = new List<IMyCubeGrid>();
+                    // BUG-110: reusable scan-thread buffer.
+                    if (_ScanGridsBuffer == null) _ScanGridsBuffer = new List<IMyCubeGrid>();
+                    else _ScanGridsBuffer.Clear();
+                    var grids = _ScanGridsBuffer;
 
                     var ignoreColor = Settings.IgnoreColorPacked;
                     var grindColor = Settings.GrindColorPacked;
@@ -1138,7 +1151,10 @@ namespace SKONanobotBuildAndRepairSystem
                     // Source scanning (once for the cluster)
                     if (updateSource)
                     {
-                        var tempSources = new List<IMyInventory>();
+                        // BUG-110: reusable scan-thread buffer.
+                        if (_ScanSourcesBuffer == null) _ScanSourcesBuffer = new List<IMyInventory>();
+                        else _ScanSourcesBuffer.Clear();
+                        var tempSources = _ScanSourcesBuffer;
                         AsyncScanForSources(tempSources);
 
                         Vector3D posWelder;
@@ -1273,10 +1289,21 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 // BUG-058: Reuse one distance dictionary for both grind and weld sorts
                 // to avoid two allocations per scan cycle.
+                // BUG-110: now also reuse the dictionary across scans via instance field.
                 var maxCap = Math.Max(
                     grindCandidates != null ? grindCandidates.Count : 0,
                     weldCandidates != null ? weldCandidates.Count : 0);
-                var distances = maxCap > 0 ? new Dictionary<IMySlimBlock, double>(maxCap) : null;
+                Dictionary<IMySlimBlock, double> distances;
+                if (maxCap > 0)
+                {
+                    if (_ScanPreSortDistances == null) _ScanPreSortDistances = new Dictionary<IMySlimBlock, double>(maxCap);
+                    else _ScanPreSortDistances.Clear();
+                    distances = _ScanPreSortDistances;
+                }
+                else
+                {
+                    distances = null;
+                }
 
                 if (grindCandidates != null && grindCandidates.Count > 1)
                 {

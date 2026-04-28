@@ -88,7 +88,7 @@ namespace SKONanobotBuildAndRepairSystem
                     //  10 = every 10 frames (same as old Update10, fastest)
                     // Stagger distributes BaRs within each cycle.
                     var workSpeed = Math.Max(1, Math.Min(10, Mod.Settings.Welder.WorkSpeed));
-                    var cycleDivisor = 100 / workSpeed;
+                    var cycleDivisor = 80 / workSpeed;
                     var cycle = MyAPIGateway.Session.GameplayFrameCounter / cycleDivisor;
                     clusterSize = AssignedCluster != null ? AssignedCluster.Members.Count : 1;
                     var modWideStagger = Mod.GetEffectiveStaggerGroupCount();

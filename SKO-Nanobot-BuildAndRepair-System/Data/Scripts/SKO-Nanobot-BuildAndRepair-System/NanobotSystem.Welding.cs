@@ -394,7 +394,8 @@ namespace SKONanobotBuildAndRepairSystem
         private bool ServerDoWeld(TargetBlockData targetData)
         {
             var profilerTs = MethodProfiler.Start();
-            long tsBuild = 0, tsStockpile = 0, tsMount = 0;
+            long tsBuild = 0, tsStockpile = 0, tsMount = 0, tsDeform = 0, tsResolve = 0;
+            long tsResolveCoord = 0, tsResolveLookup = 0; // BUG-108 sub-timers
             var welderInventory = _Welder.GetInventory(0);
             var welding = false;
             var created = false;
@@ -415,6 +416,26 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed))
                         {
+                            // BUG-107: gate proj.Build on the global per-tick budget. The 7-9ms
+                            // buildMs spikes on projected armor/conveyor blocks come from the SE
+                            // engine materialization + grid topology update. Spread across ticks.
+                            // Skip both build AND resolve when the slot is exhausted — resolving
+                            // a not-yet-built block would null out the target and ignore it.
+                            if (!Mod.TryClaimProjBuildSlot())
+                            {
+                                if (profilerTs != 0L)
+                                {
+                                    MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
+                                        string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};resolveMs={7:F3};stockpileMs={8:F3};mountMs={9:F3};deformMs={10:F3};weldAmount={11:F2};integrityRatio={12:F3};completed={13};distance={14:F1};earlyExit=projBuildSlot",
+                                            _Welder.EntityId,
+                                            targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
+                                            true, false, false, false,
+                                            0.0, 0.0, 0.0, 0.0, 0.0,
+                                            0f, 0f, false, targetData.Distance));
+                                }
+                                return false;
+                            }
+
                             tsBuild = Stopwatch.GetTimestamp();
                             var proj = cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector;
                             proj.Build(target, _Welder.OwnerId, _Welder.EntityId, Settings.WeldOptions == AutoWeldOptions.WeldFull, _Welder.SlimBlock.BuiltBy);
@@ -423,6 +444,11 @@ namespace SKONanobotBuildAndRepairSystem
 
                         // proj.Build() handles component consumption internally; manual RemoveItems is not needed.
 
+                        // BUG-105/108: instrument the projected→physical block resolution.
+                        // tsResolve aggregates everything; tsResolveCoord and tsResolveLookup
+                        // split out the coordinate transform vs the GetCubeBlock lookup so the
+                        // dominant cost can be identified for a follow-up cache strategy.
+                        tsResolve = Stopwatch.GetTimestamp();
                         //After creation we can't welding this projected block, we have to find the 'physical' block instead.
                         var projectorGrid = cubeGridProjected.Projector != null ? cubeGridProjected.Projector.CubeGrid : null;
                         if (projectorGrid == null || projectorGrid.Closed)
@@ -431,8 +457,13 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                         else
                         {
+                            var tsResolveMark = Stopwatch.GetTimestamp();
                             var blockPos = projectorGrid.WorldToGridInteger(cubeGridProjected.GridIntegerToWorld(target.Position));
+                            tsResolveCoord = Stopwatch.GetTimestamp() - tsResolveMark;
+
+                            tsResolveMark = Stopwatch.GetTimestamp();
                             target = projectorGrid.GetCubeBlock(blockPos);
+                            tsResolveLookup = Stopwatch.GetTimestamp() - tsResolveMark;
 
                             if (target != null)
                             {
@@ -453,6 +484,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 targetData.Ignore = true;
                             }
                         }
+                        tsResolve = Stopwatch.GetTimestamp() - tsResolve;
 
                     }
                     else
@@ -511,7 +543,11 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     //Deformation
                     welding = true;
+                    // BUG-105: instrument the deformation IncreaseMountLevel — previously
+                    // unprofiled and could be a hidden cost during full-integrity repairs.
+                    tsDeform = Stopwatch.GetTimestamp();
                     target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, false);
+                    tsDeform = Stopwatch.GetTimestamp() - tsDeform;
                 }
             }
 
@@ -519,21 +555,29 @@ namespace SKONanobotBuildAndRepairSystem
             if (profilerTs != 0L)
             {
                 var _tsBuild = tsBuild;
+                var _tsResolve = tsResolve;
+                var _tsResolveCoord = tsResolveCoord;
+                var _tsResolveLookup = tsResolveLookup;
                 var _tsStockpile = tsStockpile;
                 var _tsMount = tsMount;
+                var _tsDeform = tsDeform;
                 var _weldAmount = appliedWeldAmount;
                 var _integrityRatio = target != null && target.MaxIntegrity > 0f ? target.Integrity / target.MaxIntegrity : 0f;
                 var _completed = targetData.Ignore;
                 var _distance = targetData.Distance;
                 MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
-                    string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};stockpileMs={7:F3};mountMs={8:F3};weldAmount={9:F2};integrityRatio={10:F3};completed={11};distance={12:F1}",
+                    string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};resolveMs={7:F3};resolveCoordMs={8:F3};resolveLookupMs={9:F3};stockpileMs={10:F3};mountMs={11:F3};deformMs={12:F3};weldAmount={13:F2};integrityRatio={14:F3};completed={15};distance={16:F1}",
                         _Welder.EntityId,
                         targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
                         (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
                         created, welding, result,
                         _tsBuild * 1000.0 / Stopwatch.Frequency,
+                        _tsResolve * 1000.0 / Stopwatch.Frequency,
+                        _tsResolveCoord * 1000.0 / Stopwatch.Frequency,
+                        _tsResolveLookup * 1000.0 / Stopwatch.Frequency,
                         _tsStockpile * 1000.0 / Stopwatch.Frequency,
                         _tsMount * 1000.0 / Stopwatch.Frequency,
+                        _tsDeform * 1000.0 / Stopwatch.Frequency,
                         _weldAmount, _integrityRatio, _completed, _distance));
             }
             return result;

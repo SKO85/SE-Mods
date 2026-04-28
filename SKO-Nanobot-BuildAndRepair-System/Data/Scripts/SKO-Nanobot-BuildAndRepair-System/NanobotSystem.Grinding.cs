@@ -216,6 +216,9 @@ namespace SKONanobotBuildAndRepairSystem
             var tsDecrease = 0L;
             var tsRaze = 0L;
             var tsTransport = 0L;
+            var tsFriendly = 0L;
+            var tsMechCheck = 0L;
+            var friendlyIter = 0;
             long tsMark;
 
             tsMark = Stopwatch.GetTimestamp();
@@ -231,12 +234,38 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!emptying || isEmpty)
             {
+                // BUG-106: predict full dismount and gate on the global dismount budget BEFORE
+                // calling DecreaseMountLevel. The decreaseMs spike (5-12ms on armor blocks) is
+                // entirely in the SE engine cascade triggered when integrity hits 0. Spreading
+                // these across ticks avoids compounding when many BaRs grind simultaneously.
+                if (integrityRatio <= 0f && !Mod.TryClaimDismountSlot())
+                {
+                    if (profilerTs != 0L)
+                    {
+                        var _emptyMsR = tsEmpty * 1000.0 / tsFreq;
+                        MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
+                            string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};razeMs={10:F3};mechCheckMs={11:F3};transportMs={12:F3};damage={13:F2};distance={14:F1};transportTimeS={15:F3};earlyExit=dismountSlot",
+                                _Welder.EntityId,
+                                target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                                (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                                false, false, target != null ? target.Integrity / target.MaxIntegrity : 0f,
+                                _emptyMsR, 0.0, 0, 0.0, 0.0, 0.0, 0.0,
+                                damage, targetData.Distance, 0.0));
+                    }
+                    return false;
+                }
+
                 MyDamageInformation damageInfo = new MyDamageInformation(false, damage, MyDamageType.Grind, _Welder.EntityId);
 
                 if (target.UseDamageSystem)
                 {
+                    // BUG-105: instrument the friendly-damage loop. Iterates every BaR system in
+                    // the world and calls GetUserRelationToOwner per entry. Profile data showed
+                    // this is fast (~70 µs total for 58 BaRs) — kept instrumented for visibility.
+                    tsMark = Stopwatch.GetTimestamp();
                     foreach (var entry in Mod.NanobotSystems)
                     {
+                        friendlyIter++;
                         var relation = entry.Value.Welder.GetUserRelationToOwner(_Welder.OwnerId);
                         if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
                         {
@@ -245,7 +274,8 @@ namespace SKONanobotBuildAndRepairSystem
                             entry.Value.FriendlyDamage[target] = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
                         }
                     }
-                }
+                    tsFriendly = Stopwatch.GetTimestamp() - tsMark;
+                }                
 
                 tsMark = Stopwatch.GetTimestamp();
                 target.DecreaseMountLevel(damageInfo.Amount, _TransportInventory);
@@ -256,15 +286,38 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     // OPT 1: Mechanical blocks (pistons, rotors, hinges) cause 100-380ms spikes
                     // when destroyed because they detach subgrids. Cap to 1 destruction per tick globally.
+                    tsMark = Stopwatch.GetTimestamp();
                     if (target.FatBlock is Sandbox.ModAPI.IMyMechanicalConnectionBlock || target.FatBlock is Sandbox.ModAPI.IMyAttachableTopBlock)
                     {
                         if (!Mod.TryClaimMechanicalGrindSlot())
+                        {
+                            tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
+                            // Log even on early-return so the cost shows up in the profile.
+                            if (profilerTs != 0L)
+                            {
+                                var _emptyMsR = tsEmpty * 1000.0 / tsFreq;
+                                var _friendlyMsR = tsFriendly * 1000.0 / tsFreq;
+                                var _decreaseMsR = tsDecrease * 1000.0 / tsFreq;
+                                var _mechCheckMsR = tsMechCheck * 1000.0 / tsFreq;
+                                var _friendlyIterR = friendlyIter;
+                                MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
+                                    string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};razeMs={10:F3};mechCheckMs={11:F3};transportMs={12:F3};damage={13:F2};distance={14:F1};transportTimeS={15:F3};earlyExit=mechSlot",
+                                        _Welder.EntityId,
+                                        target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                                        (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                                        false, true, 0f,
+                                        _emptyMsR, _friendlyMsR, _friendlyIterR, _decreaseMsR, 0.0, _mechCheckMsR, 0.0,
+                                        damage, targetData.Distance, 0.0));
+                            }
                             return false;
+                        }
                     }
+                    tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
 
                     tsMark = Stopwatch.GetTimestamp();
-                    target.SpawnConstructionStockpile();
-                    target.CubeGrid.RazeBlock(target.Position);
+                    //target.SpawnConstructionStockpile();
+                    //target.CubeGrid.RazeBlock(target.Position);
+                    target.CubeGrid.RemoveBlock(target);
                     tsRaze = Stopwatch.GetTimestamp() - tsMark;
                 }
             }
@@ -288,21 +341,24 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 var _transporting = transporting;
                 var _emptyMs = tsEmpty * 1000.0 / tsFreq;
+                var _friendlyMs = tsFriendly * 1000.0 / tsFreq;
                 var _decreaseMs = tsDecrease * 1000.0 / tsFreq;
                 var _razeMs = tsRaze * 1000.0 / tsFreq;
+                var _mechCheckMs = tsMechCheck * 1000.0 / tsFreq;
                 var _transportMs = tsTransport * 1000.0 / tsFreq;
+                var _friendlyIter = friendlyIter;
                 var _damage = damage;
                 var _distance = targetData.Distance;
                 var _transportTimeS = transporting ? State.CurrentTransportTime.TotalSeconds : 0.0;
                 MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
-                    string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};decreaseMs={7:F3};razeMs={8:F3};transportMs={9:F3};damage={10:F2};distance={11:F1};transportTimeS={12:F3}",
+                    string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};razeMs={10:F3};mechCheckMs={11:F3};transportMs={12:F3};damage={13:F2};distance={14:F1};transportTimeS={15:F3}",
                         _Welder.EntityId,
                         target != null ? target.BlockDefinition.Id.SubtypeName : "null",
                         (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
                         _transporting,
                         target != null && target.IsFullyDismounted,
                         target != null ? target.Integrity / target.MaxIntegrity : 0f,
-                        _emptyMs, _decreaseMs, _razeMs, _transportMs,
+                        _emptyMs, _friendlyMs, _friendlyIter, _decreaseMs, _razeMs, _mechCheckMs, _transportMs,
                         _damage, _distance, _transportTimeS));
             }
             return true;

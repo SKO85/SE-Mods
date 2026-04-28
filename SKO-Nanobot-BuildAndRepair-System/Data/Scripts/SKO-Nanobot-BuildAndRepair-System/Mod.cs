@@ -82,6 +82,52 @@ namespace SKONanobotBuildAndRepairSystem
             return true;
         }
 
+        // --- BUG-106: Global dismount budget ---
+        // Caps the number of full-dismount grinds per tick globally. Profile (20260428202503)
+        // showed `decreaseMs` spikes of 5-12ms on full dismount of armor blocks (SE engine
+        // cascade for grid integrity recalc, conveyor refresh, block events). Spreading
+        // dismounts across ticks prevents these spikes from compounding when many BaRs
+        // dismount simultaneously. Mechanical-block cap (1/tick) is a stricter sub-budget
+        // applied first; this cap (3/tick) covers all dismounts that reach the raze path.
+        public const int MaxDismountsPerTickDefault = 3;
+        private static int _dismountsThisTick;
+        private static int _lastDismountTick = -1;
+
+        public static bool TryClaimDismountSlot()
+        {
+            var tick = MyAPIGateway.Session.GameplayFrameCounter;
+            if (tick != _lastDismountTick)
+            {
+                _lastDismountTick = tick;
+                _dismountsThisTick = 0;
+            }
+            if (_dismountsThisTick >= MaxDismountsPerTickDefault) return false;
+            _dismountsThisTick++;
+            return true;
+        }
+
+        // --- BUG-107: Global proj.Build budget ---
+        // Caps `proj.Build()` calls per tick. Profile (20260428202503) showed `buildMs`
+        // spikes of 7-9ms on projected armor/conveyor blocks (SE engine materialization +
+        // grid topology update). When many BaRs simultaneously materialize projected blocks
+        // these compound into multi-tick stalls. Cap=3/tick spreads the load.
+        public const int MaxProjBuildsPerTickDefault = 3;
+        private static int _projBuildsThisTick;
+        private static int _lastProjBuildTick = -1;
+
+        public static bool TryClaimProjBuildSlot()
+        {
+            var tick = MyAPIGateway.Session.GameplayFrameCounter;
+            if (tick != _lastProjBuildTick)
+            {
+                _lastProjBuildTick = tick;
+                _projBuildsThisTick = 0;
+            }
+            if (_projBuildsThisTick >= MaxProjBuildsPerTickDefault) return false;
+            _projBuildsThisTick++;
+            return true;
+        }
+
         // --- OPT 2: BaR update staggering ---
         // Distributes ServerTryWeldingGrindingCollecting() calls across StaggerGroupCount groups
         // so only ~N/StaggerGroupCount BaRs fire per tick instead of all N.
@@ -209,7 +255,7 @@ namespace SKONanobotBuildAndRepairSystem
         private bool _initialized = false;
         private bool _welcomeShown = false;
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
-        private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(1);
+        private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);
         private static TimeSpan _LastSyncModDataRequestSend;
         private static TimeSpan _LastGeneralPeriodicCheck;
         private static TimeSpan _LastTtlCacheCleanerCheck;
