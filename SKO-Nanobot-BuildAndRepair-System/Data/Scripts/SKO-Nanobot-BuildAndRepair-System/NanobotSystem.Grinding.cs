@@ -317,7 +317,7 @@ namespace SKONanobotBuildAndRepairSystem
                     tsMark = Stopwatch.GetTimestamp();
                     //target.SpawnConstructionStockpile();
                     //target.CubeGrid.RazeBlock(target.Position);
-                    target.CubeGrid.RemoveBlock(target);
+                    target.CubeGrid.RemoveBlock(target, true);
                     tsRaze = Stopwatch.GetTimestamp() - tsMark;
                 }
             }

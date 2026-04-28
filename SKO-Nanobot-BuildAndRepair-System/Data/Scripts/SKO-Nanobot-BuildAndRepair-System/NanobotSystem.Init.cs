@@ -76,6 +76,12 @@ namespace SKONanobotBuildAndRepairSystem
             _MaxGrindTransportVolume = ((float)_TransportInventory.MaxVolume * grindMult) / WELDER_TRANSPORTVOLUME_DIVISOR;
 
             UpdateCustomInfo(true);
+
+            // FEAT-080: terminal settings just changed (work mode, priority list, area, color
+            // filter, search mode, etc.). Force the next scan to fire immediately so new
+            // targets matching the updated settings surface right away instead of waiting
+            // up to 10 s for the next scan-timer tick. No-op on clients.
+            TriggerImmediateRescan("settingsChanged");
         }
 
         /// <summary>

@@ -396,6 +396,9 @@ namespace SKONanobotBuildAndRepairSystem
             var profilerTs = MethodProfiler.Start();
             long tsBuild = 0, tsStockpile = 0, tsMount = 0, tsDeform = 0, tsResolve = 0;
             long tsResolveCoord = 0, tsResolveLookup = 0; // BUG-108 sub-timers
+            // BUG-113: cover the previously-unprofiled engine/handler calls inside ServerDoWeld
+            // so welding spikes can be attributed beyond just proj.Build/IncreaseMountLevel.
+            long tsFindItem = 0, tsLimitsCheck = 0, tsCanContinue = 0, tsIntegrityCheck = 0, tsAssign = 0;
             var welderInventory = _Welder.GetInventory(0);
             var welding = false;
             var created = false;
@@ -408,11 +411,16 @@ namespace SKONanobotBuildAndRepairSystem
                 //New Block (Projected)
                 var cubeGridProjected = target.CubeGrid as MyCubeGrid;
                 var blockDefinition = target.BlockDefinition as MyCubeBlockDefinition;
+                tsFindItem = Stopwatch.GetTimestamp();
                 var item = _TransportInventory.FindItem(blockDefinition.Components[0].Definition.Id);
+                tsFindItem = Stopwatch.GetTimestamp() - tsFindItem;
 
                 if ((CreativeModeActive || (item != null && item.Amount >= 1)) && cubeGridProjected != null && cubeGridProjected.Projector != null)
                 {
-                    if (_Welder.IsWithinWorldLimits(cubeGridProjected.Projector, blockDefinition.BlockPairName, blockDefinition.PCU))
+                    tsLimitsCheck = Stopwatch.GetTimestamp();
+                    var withinLimits = _Welder.IsWithinWorldLimits(cubeGridProjected.Projector, blockDefinition.BlockPairName, blockDefinition.PCU);
+                    tsLimitsCheck = Stopwatch.GetTimestamp() - tsLimitsCheck;
+                    if (withinLimits)
                     {
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed))
                         {
@@ -425,12 +433,15 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 if (profilerTs != 0L)
                                 {
+                                    var _findItemMs = tsFindItem * 1000.0 / Stopwatch.Frequency;
+                                    var _limitsMs = tsLimitsCheck * 1000.0 / Stopwatch.Frequency;
                                     MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
-                                        string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};resolveMs={7:F3};stockpileMs={8:F3};mountMs={9:F3};deformMs={10:F3};weldAmount={11:F2};integrityRatio={12:F3};completed={13};distance={14:F1};earlyExit=projBuildSlot",
+                                        string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};resolveMs={7:F3};stockpileMs={8:F3};mountMs={9:F3};deformMs={10:F3};findItemMs={11:F3};limitsMs={12:F3};canContinueMs={13:F3};integrityCheckMs={14:F3};assignMs={15:F3};weldAmount={16:F2};integrityRatio={17:F3};completed={18};distance={19:F1};earlyExit=projBuildSlot",
                                             _Welder.EntityId,
                                             targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
                                             true, false, false, false,
                                             0.0, 0.0, 0.0, 0.0, 0.0,
+                                            _findItemMs, _limitsMs, 0.0, 0.0, 0.0,
                                             0f, 0f, false, targetData.Distance));
                                 }
                                 return false;
@@ -467,6 +478,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                             if (target != null)
                             {
+                                // BUG-113: instrument the assignment release+reassign pair (BlockSystemAssigningHandler
+                                // dictionary ops). Cheap individually but worth measuring under contention.
+                                var tsAssignMark = Stopwatch.GetTimestamp();
                                 // Release the projected block's assignment before switching to the physical block.
                                 if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
                                 targetData.Block = target;
@@ -478,6 +492,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 // immediately so no other BaR can steal it during our stagger wait.
                                 if (Mod.Settings.AssignToSystemEnabled)
                                     target.AssignToSystem(_Welder.EntityId);
+                                tsAssign = Stopwatch.GetTimestamp() - tsAssignMark;
                             }
                             else
                             {
@@ -500,16 +515,24 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!skipWelding && !hasIgnoreColor && target != null && (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) == 0)
             {
+                // BUG-113: instrument IsWeldIntegrityReached — cheap property comparison but worth
+                // measuring to confirm. Aggregates both call sites (entry check + completion check).
+                var tsIntMark = Stopwatch.GetTimestamp();
+                var integrityReached = IsWeldIntegrityReached(target);
+                tsIntegrityCheck = Stopwatch.GetTimestamp() - tsIntMark;
                 //No ignore color and allready created
-                if (!IsWeldIntegrityReached(target) || created)
+                if (!integrityReached || created)
                 {
                     //Move collected/needed items to stockpile.
                     tsStockpile = Stopwatch.GetTimestamp();
                     target.MoveItemsToConstructionStockpile(_TransportInventory);
                     tsStockpile = Stopwatch.GetTimestamp() - tsStockpile;
 
-                    //Incomplete
+                    // BUG-113: instrument target.CanContinueBuild — engine call, can be costly when
+                    // there are many components to check against the transport inventory.
+                    var tsCanMark = Stopwatch.GetTimestamp();
                     welding = target.CanContinueBuild(_TransportInventory) || CreativeModeActive;
+                    tsCanContinue = Stopwatch.GetTimestamp() - tsCanMark;
 
                     if (welding)
                     {
@@ -534,10 +557,12 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
 
+                    var tsIntMark2 = Stopwatch.GetTimestamp();
                     if (IsWeldIntegrityReached(target))
                     {
                         targetData.Ignore = true;
                     }
+                    tsIntegrityCheck += Stopwatch.GetTimestamp() - tsIntMark2;
                 }
                 else
                 {
@@ -561,12 +586,17 @@ namespace SKONanobotBuildAndRepairSystem
                 var _tsStockpile = tsStockpile;
                 var _tsMount = tsMount;
                 var _tsDeform = tsDeform;
+                var _tsFindItem = tsFindItem;
+                var _tsLimitsCheck = tsLimitsCheck;
+                var _tsCanContinue = tsCanContinue;
+                var _tsIntegrityCheck = tsIntegrityCheck;
+                var _tsAssign = tsAssign;
                 var _weldAmount = appliedWeldAmount;
                 var _integrityRatio = target != null && target.MaxIntegrity > 0f ? target.Integrity / target.MaxIntegrity : 0f;
                 var _completed = targetData.Ignore;
                 var _distance = targetData.Distance;
                 MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
-                    string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};resolveMs={7:F3};resolveCoordMs={8:F3};resolveLookupMs={9:F3};stockpileMs={10:F3};mountMs={11:F3};deformMs={12:F3};weldAmount={13:F2};integrityRatio={14:F3};completed={15};distance={16:F1}",
+                    string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};resolveMs={7:F3};resolveCoordMs={8:F3};resolveLookupMs={9:F3};stockpileMs={10:F3};mountMs={11:F3};deformMs={12:F3};findItemMs={13:F3};limitsMs={14:F3};canContinueMs={15:F3};integrityCheckMs={16:F3};assignMs={17:F3};weldAmount={18:F2};integrityRatio={19:F3};completed={20};distance={21:F1}",
                         _Welder.EntityId,
                         targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
                         (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
@@ -578,6 +608,11 @@ namespace SKONanobotBuildAndRepairSystem
                         _tsStockpile * 1000.0 / Stopwatch.Frequency,
                         _tsMount * 1000.0 / Stopwatch.Frequency,
                         _tsDeform * 1000.0 / Stopwatch.Frequency,
+                        _tsFindItem * 1000.0 / Stopwatch.Frequency,
+                        _tsLimitsCheck * 1000.0 / Stopwatch.Frequency,
+                        _tsCanContinue * 1000.0 / Stopwatch.Frequency,
+                        _tsIntegrityCheck * 1000.0 / Stopwatch.Frequency,
+                        _tsAssign * 1000.0 / Stopwatch.Frequency,
                         _weldAmount, _integrityRatio, _completed, _distance));
             }
             return result;

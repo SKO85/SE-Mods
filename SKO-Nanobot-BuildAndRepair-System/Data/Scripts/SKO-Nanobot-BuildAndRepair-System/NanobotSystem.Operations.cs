@@ -217,26 +217,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (!isFullInventoryAndPicking && ready)
                 {
-                    var immediateScanTs = MethodProfiler.Start();
-                    _LastTargetsUpdate = TimeSpan.Zero;
-                    // Also signal the coordinator to rescan on its next 1-second timer tick
-                    // instead of waiting up to 10 seconds. Without this, members re-apply the
-                    // stale cached result and idle until the coordinator's interval expires.
-                    // _rescanForced bypasses the FEAT-075 saturated check, which would otherwise
-                    // skip the scan because the coordinator's OWN targets are still full (it's
-                    // busy grinding and doesn't consume its weld targets).
-                    var cluster = AssignedCluster;
-                    if (cluster != null && cluster.Coordinator != null && cluster.Coordinator != this)
-                    {
-                        cluster.Coordinator._LastTargetsUpdate = TimeSpan.Zero;
-                        cluster.Coordinator._rescanForced = true;
-                    }
-                    UpdateSourcesAndTargetsTimer(); //Scan immediately once for new targets
-                    if (immediateScanTs != 0L)
-                    {
-                        MethodProfiler.StopAndLog("ImmediateRescanTrigger", immediateScanTs, () =>
-                            string.Format("entityId={0};wasWelding={1};wasGrinding={2}", _Welder.EntityId, State.Welding, State.Grinding));
-                    }
+                    TriggerImmediateRescan(State.Welding ? "weldComplete" : "grindComplete");
                 }
             }
 

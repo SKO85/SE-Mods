@@ -22,6 +22,40 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public partial class NanobotSystem
     {
+        /// <summary>
+        /// Force the next scan to fire immediately instead of waiting for the timer.
+        /// Used when work completes (so new targets surface without a scan-interval delay)
+        /// and when terminal settings change (FEAT-080) so the player sees the effect of
+        /// their setting change right away. No-op on clients (only the server runs scans).
+        /// </summary>
+        internal void TriggerImmediateRescan(string reason)
+        {
+            if (!MyAPIGateway.Session.IsServer) return;
+
+            var immediateScanTs = MethodProfiler.Start();
+            _LastTargetsUpdate = TimeSpan.Zero;
+
+            // Also signal the cluster coordinator to rescan on its next timer tick
+            // instead of waiting up to 10 seconds. Without this, members re-apply the
+            // stale cached result and idle until the coordinator's interval expires.
+            // _rescanForced bypasses the FEAT-075 saturated check, which would otherwise
+            // skip the scan because the coordinator's OWN targets are still full.
+            var cluster = AssignedCluster;
+            if (cluster != null && cluster.Coordinator != null && cluster.Coordinator != this)
+            {
+                cluster.Coordinator._LastTargetsUpdate = TimeSpan.Zero;
+                cluster.Coordinator._rescanForced = true;
+            }
+            UpdateSourcesAndTargetsTimer();
+
+            if (immediateScanTs != 0L)
+            {
+                var _reason = reason;
+                MethodProfiler.StopAndLog("ImmediateRescanTrigger", immediateScanTs, () =>
+                    string.Format("entityId={0};reason={1}", _Welder.EntityId, _reason));
+            }
+        }
+
         public void UpdateSourcesAndTargetsTimer()
         {
             // Block is off — skip scanning. Reset initial-scan flag so a scan
