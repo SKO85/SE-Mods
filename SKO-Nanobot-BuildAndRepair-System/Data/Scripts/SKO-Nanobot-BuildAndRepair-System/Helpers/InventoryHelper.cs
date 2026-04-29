@@ -10,13 +10,18 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
 {
     public static class InventoryHelper
     {
+        // BUG-119: TTL extended from 15s to 60s. Cluster/source scans fire every ~6s; with 15s
+        // TTL most entries expired mid-session and the cache miss path runs IsConnectedTo
+        // (engine conveyor walk, expensive). Stale entries are harmless — a disconnected
+        // inventory just fails its actual transfer later, and a newly connected one is picked
+        // up on the next refresh (welds run for minutes anyway).
         private static readonly TtlCache<MyTuple<long, long>, bool> ConnectionCache = new TtlCache<MyTuple<long, long>, bool>(
-            defaultTtl: TimeSpan.FromSeconds(15),
+            defaultTtl: TimeSpan.FromSeconds(60),
             comparer: new MyTupleComparer<long, long>(),
             concurrencyLevel: 4,
             capacity: 2048);
 
-        public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources)
+        public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources, HashSet<IMyInventory> possibleSourcesSet)
         {
             var profilerTs = MethodProfiler.Start();
             if (terminalBlock == null || welder == null || possibleSources == null) return false;
@@ -47,7 +52,13 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
                     for (var i = 0; i < maxInvCached; i++)
                     {
                         var inventory = terminalBlock.GetInventory(i);
-                        if (!possibleSources.Contains(inventory))
+                        // BUG-119: HashSet.Add returns false if already present (O(1)); replaces
+                        // the prior O(n) possibleSources.Contains scan that grew with source count.
+                        if (possibleSourcesSet == null)
+                        {
+                            if (!possibleSources.Contains(inventory)) possibleSources.Add(inventory);
+                        }
+                        else if (possibleSourcesSet.Add(inventory))
                         {
                             possibleSources.Add(inventory);
                         }
@@ -70,10 +81,27 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             {
                 var inventory = terminalBlock.GetInventory(i);
 
-                if (!possibleSources.Contains(inventory) && inventory.IsConnectedTo(welderInventory))
+                // BUG-119: dedup via HashSet first to avoid the O(n) Contains scan, then
+                // pay the engine IsConnectedTo cost only for inventories we'd actually keep.
+                bool alreadyPresent;
+                if (possibleSourcesSet == null)
+                {
+                    alreadyPresent = possibleSources.Contains(inventory);
+                }
+                else
+                {
+                    alreadyPresent = !possibleSourcesSet.Add(inventory);
+                }
+
+                if (!alreadyPresent && inventory.IsConnectedTo(welderInventory))
                 {
                     isConnected = true;
                     possibleSources.Add(inventory);
+                }
+                else if (!alreadyPresent && possibleSourcesSet != null)
+                {
+                    // Speculatively added to the set above; roll back since IsConnectedTo failed.
+                    possibleSourcesSet.Remove(inventory);
                 }
             }
 

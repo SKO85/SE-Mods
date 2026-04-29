@@ -1,5 +1,5 @@
 # FEAT-076: Grind loop exhaustion
-## Status: In Progress
+## Status: Done (shipped — fields at `NanobotSystem.cs:84-91`, skip/mark logic at `Grinding.cs:35,108`)
 ## Priority: Medium
 ## Version: v2.5.4
 ## Summary

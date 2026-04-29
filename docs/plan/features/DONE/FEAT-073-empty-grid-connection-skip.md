@@ -1,5 +1,5 @@
 # FEAT-073: Optimize empty grid connection traversal
-## Status: In Progress
+## Status: Done (shipped — `_fatBlockFilter` in `NanobotSystem.cs:184`, applied in `Scanning.cs:638`)
 ## Priority: Medium
 ## Version: v2.5.4
 ## Summary

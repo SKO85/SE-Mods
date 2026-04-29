@@ -149,7 +149,17 @@ namespace SKONanobotBuildAndRepairSystem
                     var welderInventory = _Welder.GetInventory(0);
                     if (welderInventory != null)
                     {
-                        if (push && !welderInventory.Empty() && !_PushTargetsFull)
+                        // BUG-114: gate the safety overflow push on the same Push* flags as
+                        // ServerTryPushInventory. When all three flags are off the player has
+                        // explicitly disabled automatic pushing — so the welder is allowed to
+                        // fill, State.InventoryFull will trip, and grinding will pause until
+                        // the player makes room. Without this gate, disabling all three flags
+                        // had no effect on this branch and items kept flowing to push targets.
+                        var pushFlagsActive = (Settings.Flags & (
+                            SyncBlockSettings.Settings.PushIngotOreImmediately |
+                            SyncBlockSettings.Settings.PushComponentImmediately |
+                            SyncBlockSettings.Settings.PushItemsImmediately)) != 0;
+                        if (push && pushFlagsActive && !welderInventory.Empty() && !_PushTargetsFull)
                         {
                             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryPushInventoryLast).TotalSeconds > 5 && welderInventory.MaxVolume - welderInventory.CurrentVolume < _TransportInventory.CurrentVolume * 1.5f)
                             {

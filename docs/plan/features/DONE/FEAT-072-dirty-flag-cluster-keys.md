@@ -1,5 +1,5 @@
 # FEAT-072: Dirty-flag cluster key optimization
-## Status: In Progress
+## Status: Done (shipped — `_clusterSettingsVersion` + version-compare fast path in `ScanClusterCoordinator.cs:48,144`)
 ## Priority: Medium
 ## Version: v2.5.4
 ## Summary

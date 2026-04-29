@@ -118,6 +118,14 @@ namespace SKONanobotBuildAndRepairSystem
 
             _onEnabledChanged += (block) =>
             {
+                // BUG-120: power-cycle reset of the broken-block caches. Whether the BaR
+                // is going off (no welds running anyway) or coming back on (player's
+                // self-service "retry after acquiring DLC" path), clearing both is safe
+                // and gives players a deterministic way to re-test previously-broken
+                // blocks without restarting the world.
+                _BrokenProjBuildKeys.Clear();
+                _ProjBuildSilentFailCount.Clear();
+                _BrokenCacheOwnerId = _Welder != null ? _Welder.OwnerId : long.MinValue;
                 UpdateCustomInfo(true);
             };
 

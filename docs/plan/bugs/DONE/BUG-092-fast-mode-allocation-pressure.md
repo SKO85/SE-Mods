@@ -1,9 +1,19 @@
 # BUG-092: Fast mode (WorkSpeed ≥ 5) triggers periodic main-thread pauses on large clusters
 
-## Status: Open
-## Severity: Medium
-## Version: v2.5.2 (discovered), not fixed
+## Status: Won't Fix (workaround documented; stale; superseded by intervening allocation work)
+## Severity: Medium (only at WorkSpeed ≥ 5 on large clusters — workaround is to use default WorkSpeed)
+## Version: v2.5.2 (discovered)
 ## Found In: Profiling sessions `20260410221346`, `20260410222824`, `20260410223437` — 58-BaR cluster, Testing world
+
+## Resolution: Won't Fix
+
+After review, this ticket is closed without a code-level fix. The original repro data is from v2.5.2; substantial allocation-pressure work has landed since (BUG-098 hot-path allocations, BUG-110 cluster-scan collection pooling, BUG-111 candidate class→struct, BUG-117 grid-relation cache fast path, BUG-119 HashSet dedup + connection cache), much of which directly targets the per-tick allocation patterns this ticket flagged as suspects. The original repro can no longer be reasonably attributed to the same root causes without re-profiling, and the GC hypothesis was always indirect (System.GC.* is sandbox-prohibited so it can't be confirmed in-mod anyway).
+
+The practical workaround — keep `WorkSpeed=1` on servers with 10+ BaRs — already exists and matches default settings. Players opting into `WorkSpeed ≥ 5` on large clusters are explicitly trading sim-stability for speed and accept the trade-off.
+
+If a fresh fast-mode profile in a future version reproduces the same signature, file a new ticket with current data rather than re-opening this one.
+
+## Original description (preserved for context)
 
 ## Description
 

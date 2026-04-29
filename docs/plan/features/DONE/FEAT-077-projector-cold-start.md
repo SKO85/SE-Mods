@@ -1,5 +1,5 @@
 # FEAT-077: Projector cold-start detection
-## Status: In Progress
+## Status: Done (shipped — `HasBuildableProjectorOnGrid()` at `Scanning.cs:384`, called from idle-detection path at `Scanning.cs:90`)
 ## Priority: Medium
 ## Version: v2.5.4
 ## Summary

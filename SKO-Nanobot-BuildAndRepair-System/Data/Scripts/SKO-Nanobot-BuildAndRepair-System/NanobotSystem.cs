@@ -124,6 +124,9 @@ namespace SKONanobotBuildAndRepairSystem
         // AsyncScanForSources reusable traversal state.
         private HashSet<long> _ScanSourceVisitedGridIds;
         private Queue<IMyCubeGrid> _ScanSourceGridQueue;
+        // BUG-119: O(1) dedup set for AddIfConnectedToInventory. Replaces the prior
+        // List.Contains linear scan that grew with possibleSources size during the scan.
+        private HashSet<IMyInventory> _ScanSourceDedupSet;
         // AsyncAddBlocksOfBox reusable sort buffers (only used when GrindSmallestGridFirst flag is set).
         private List<IMyEntity> _ScanSortedGrids;
         private List<IMyEntity> _ScanNonGridEntities;
@@ -162,6 +165,28 @@ namespace SKONanobotBuildAndRepairSystem
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
         // Rebuilt by RebuildSaturatedGrids(), used as fast-path in IsGridOverSystemLimit().
         private HashSet<long> _saturatedGridIds = new HashSet<long>();
+
+        // BUG-115: persistent set of projected-block keys ("gridId:position") for which proj.Build()
+        // has thrown a NullReferenceException (SE engine DLC-armor validation failure). The
+        // per-TargetBlockData Ignore flag is wiped each scan refresh, so without this set the BaR
+        // would re-lock the same broken block after every rescan and waste a tick logging the same
+        // NRE. Skipping by key persists the decision across scans for this BaR's lifetime.
+        private readonly HashSet<string> _BrokenProjBuildKeys = new HashSet<string>();
+
+        // BUG-120: counter for silent proj.Build failures (block stayed projected after Build
+        // returned without throwing — typical signature is online owner lacks the required DLC).
+        // Promoted to _BrokenProjBuildKeys after PROJ_BUILD_MAX_SILENT_FAILS consecutive failures
+        // so transient races (another BaR built it the same tick, projector briefly disabled,
+        // component shortage mid-build) don't immediately get marked broken.
+        private readonly Dictionary<string, int> _ProjBuildSilentFailCount = new Dictionary<string, int>();
+        private const int PROJ_BUILD_MAX_SILENT_FAILS = 3;
+
+        // BUG-120: identity (OwnerId) the broken-block caches above are scoped to. When
+        // _Welder.OwnerId differs from this snapshot, both caches are cleared at the next
+        // ServerTryWelding entry — the new owner may have different DLC entitlements, so
+        // previously-broken blocks may now build successfully. long.MinValue ensures the
+        // first comparison flips and seeds the snapshot from the live OwnerId.
+        private long _BrokenCacheOwnerId = long.MinValue;
 
         /// <summary>
         /// Tracks grids that were scanned and had no weld/grind targets.

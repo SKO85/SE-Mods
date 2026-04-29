@@ -1,5 +1,5 @@
 # FEAT-075: Saturated scan skip
-## Status: In Progress
+## Status: Done (shipped — `IsTargetListSaturated()` at `Scanning.cs:158`, all four fix layers in field declarations + `Scanning.cs:111,145,1295,1311`)
 ## Priority: High
 ## Version: v2.5.4
 ## Summary

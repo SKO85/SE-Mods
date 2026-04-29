@@ -1,9 +1,38 @@
 # BUG-109: Cluster scan allocation pressure causing recurring 5-7s GC spikes on main thread
 
-## Status: In Progress (data collection)
+## Status: Fixed (audit complete; pooling shipped as BUG-110, struct conversion as BUG-111)
 ## Severity: Medium (perf — recurring spikes felt as 21→70% CPU jumps every ~5s during grinding)
 ## Version: v2.5.4
 ## Found In: `NanobotSystem.Scanning.cs`
+
+## Resolution
+
+This ticket was the **audit deliverable** — a 2,403 LOC walk of `Scanning.cs` that catalogued 32 `new` call sites, ranked them by frequency × size, and identified the allocation hot-spots responsible for the user-visible CPU rhythm. The audit itself is the artifact; the implementation followed in two sibling tickets, both now Fixed:
+
+- **BUG-110** (Fixed) — collection pooling pass. Replaced per-scan `new List<>` / `new HashSet<>` / `new Dictionary<>` allocations at the seven critical sites with reusable instance fields (`_TempGrids`, `_TempSources`, `_ScanSourceVisitedGridIds`, `_ScanSourceGridQueue`, etc.) cleared at scan entry.
+- **BUG-111** (Fixed) — class→struct conversion. `ClusterTargetCandidate`, `ClusterFloatingCandidate`, and `TargetBlockData` converted from reference types to value types, eliminating ~100-1000 per-scan heap allocations.
+
+Both follow-ups have shipped and are in `docs/plan/bugs/DONE/`. state.md row 209 already reflected this — the only drift was this ticket file's Status header.
+
+### Related performance work since the audit
+
+Subsequent intervening fixes have further reduced the per-scan cost the audit was trying to address:
+
+- **BUG-117** — `OwnerId == 0` shortcut in `Utils.GetUserRelationToOwner` eliminated per-block engine call for blocks without individual ownership; AsyncClusterScan total **7,723 → 4,953 ms (-36%)** verified in `20260429145732-profiling`.
+- **BUG-118 / BUG-119** — `ConnectionCache` TTL extension + HashSet dedup in `AddIfConnectedToInventory`; AsyncScanForSources total **2,028 → 30 ms (-98.5%)**.
+
+The combined effect cut the very rhythm this audit was filed against. Sim-speed verification: 0.43-0.69 → 0.85-1.10 across the recent profile sessions.
+
+### What stays in the codebase
+
+- The audit's catalogue of allocation sites is a permanent reference for future scan-thread work (see "Allocation audit" section below).
+- All identified hot-spots have been pooled, struct-ified, or otherwise mitigated.
+
+### When to revisit
+
+If a future profile shows the 21→70% CPU spike rhythm returning during active grinding/welding on a comparable cluster size (50+ BaRs), file a new ticket with current data. The audit catalogue here can be re-walked against the then-current code to identify any new allocation sites that have crept in.
+
+---
 
 ## Description
 

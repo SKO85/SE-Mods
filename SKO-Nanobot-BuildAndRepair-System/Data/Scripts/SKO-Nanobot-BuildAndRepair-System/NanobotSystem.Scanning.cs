@@ -222,8 +222,15 @@ namespace SKONanobotBuildAndRepairSystem
             else _ScanSourceVisitedGridIds.Clear();
             if (_ScanSourceGridQueue == null) _ScanSourceGridQueue = new Queue<IMyCubeGrid>();
             else _ScanSourceGridQueue.Clear();
+            // BUG-119: dedup set for AddIfConnectedToInventory.
+            if (_ScanSourceDedupSet == null) _ScanSourceDedupSet = new HashSet<IMyInventory>();
+            else _ScanSourceDedupSet.Clear();
             var visited = _ScanSourceVisitedGridIds;
             var toVisit = _ScanSourceGridQueue;
+            var dedupSet = _ScanSourceDedupSet;
+            // Seed the dedup set with anything the caller already populated (defensive — current
+            // callers pass an empty buffer, but keeps the contract correct if that changes).
+            for (var i = 0; i < possibleSources.Count; i++) dedupSet.Add(possibleSources[i]);
             toVisit.Enqueue(_Welder.CubeGrid);
 
             try
@@ -274,7 +281,7 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 try
                                 {
-                                    terminalBlock.AddIfConnectedToInventory(_Welder, possibleSources);
+                                    terminalBlock.AddIfConnectedToInventory(_Welder, possibleSources, dedupSet);
                                 }
                                 catch (Exception ex)
                                 {

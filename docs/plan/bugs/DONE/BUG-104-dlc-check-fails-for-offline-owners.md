@@ -107,3 +107,5 @@ Alternatives considered and rejected:
 - `NanobotSystem.Scanning.cs:441,785` — the two scan-time call sites that filter.
 - `Mod.cs:432` — periodic `CleanupOwnerCache` invocation.
 - Discovered while diagnosing the `thenebula` welding issue (player report: BaRs targeting blocks but never welding). Bypassing this check did **not** fix the thenebula scenario, so the DLC issue and the thenebula issue are independent — but this remains a real bug worth fixing on its own.
+- BUG-115 — closes the engine-side NRE failure mode (`MyProjectorBase.BuildInternal` → `HasArmor` null-deref) that surfaced once this ticket removed our own DLC pre-check. Catches the **offline-owner** case during `proj.Build`.
+- BUG-120 — closes the **silent-fail** failure mode (online owner without DLC) that surfaced for the same reason. `proj.Build` returns cleanly without throwing; the post-build resolve detects `target == null` and tracks the failure. Both BUG-115 and BUG-120 together replace the former pre-check with reactive failure-tracking — without the offline-owner false-positives that made the pre-check unviable.

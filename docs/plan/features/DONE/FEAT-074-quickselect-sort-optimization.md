@@ -1,5 +1,5 @@
 # FEAT-074: Quickselect sort optimization for large grid scans
-## Status: In Progress
+## Status: Done (shipped — QuickSelect helper at `Scanning.cs:1745`, used in `SortAndCapGridCandidates` at `Scanning.cs:2027`)
 ## Priority: High
 ## Version: v2.5.4
 ## Summary

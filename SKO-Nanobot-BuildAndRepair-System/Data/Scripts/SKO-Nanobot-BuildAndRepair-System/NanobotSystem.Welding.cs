@@ -21,6 +21,9 @@ namespace SKONanobotBuildAndRepairSystem
         private void ServerTryWelding(out bool welding, out bool needWelding, out bool transporting, out IMySlimBlock currentWeldingBlock)
         {
             var profilerTs = MethodProfiler.Start();
+            // BUG-120: clear the broken-block caches if the BaR's owner has changed since
+            // last check — entitlement-keyed decisions don't carry across owners.
+            EnsureBrokenCacheOwnerScope();
             welding = false;
             needWelding = false;
             transporting = false;
@@ -109,6 +112,24 @@ namespace SKONanobotBuildAndRepairSystem
                     }
 
                     var isIgnored = targetData.Ignore;
+
+                    // BUG-116: Cheap pre-filter for starved priorities BEFORE Weldable(). Profile session
+                    // 20260429013527 showed 100+ Weldable() calls per spike tick (each ~0.1ms engine call)
+                    // when components are missing, with 70-100% of those getting starved-skipped right
+                    // afterwards. Moving the priority lookup (cheap dict read) ahead of the engine call
+                    // skips the expensive CanBuild check for already-known-starved blocks, dropping the
+                    // 30-45ms spikes to single-digit ms.
+                    if (!isIgnored && !isLockOnBlock && !lookingForNext && starvedPriorityBits != 0)
+                    {
+                        var earlyPriority = BlockWeldPriority.GetPriority(targetData.Block);
+                        if (earlyPriority > 0 && earlyPriority < 64 && (starvedPriorityBits & (1L << earlyPriority)) != 0)
+                        {
+                            needWelding = true;
+                            starvedSkipped++;
+                            continue;
+                        }
+                    }
+
                     var isWeldable = !isIgnored && Weldable(targetData);
                     if (!isIgnored) checkedByWeldable++;
                     else skippedByIgnore++;
@@ -122,8 +143,10 @@ namespace SKONanobotBuildAndRepairSystem
 
                         if (!isLockOnBlock)
                         {
-                            // Skip blocks at starved priority levels — zero-cost after initial failures.
-                            // lookingForNext is exempt: just picking next lock-on, no component check.
+                            // BUG-116: starved-priority skip kept here as a fallback for the case where
+                            // starvedPriorityBits gets set on the same tick AFTER this block was already
+                            // past the early pre-filter (race with the in-loop fail handler at the bottom).
+                            // First-time hit on a newly-starved priority still pays the Weldable cost once.
                             if (!lookingForNext && starvedPriorityBits != 0)
                             {
                                 var blockPriority = BlockWeldPriority.GetPriority(targetData.Block);
@@ -337,6 +360,16 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (isProjected)
                 {
+                    // BUG-115: skip projected blocks for which proj.Build() has previously thrown NRE.
+                    // The per-TargetBlockData Ignore flag is wiped each scan refresh, so without this
+                    // persistent check the BaR re-locks the same broken block tick-after-tick and the
+                    // NRE keeps appearing in the mod log every scan cycle.
+                    if (target != null && _BrokenProjBuildKeys.Count > 0 && _BrokenProjBuildKeys.Contains(GetBrokenBlockKey(target)))
+                    {
+                        targetData.Ignore = true;
+                        return false;
+                    }
+
                     // Keep this at false, otherwise it will not work with Multigrid Projections.
                     if (target.CanBuild(false))
                     {
@@ -366,6 +399,51 @@ namespace SKONanobotBuildAndRepairSystem
                             target != null ? target.BlockDefinition.Id.SubtypeName : "null",
                             isProjected, _result));
                 }
+            }
+        }
+
+        // BUG-115: stable key for a projected block, matching the convention used by
+        // BlockSystemAssigningHandler ("gridId:position"). Used by _BrokenProjBuildKeys
+        // to persist proj.Build NRE failures across scan refreshes.
+        private static string GetBrokenBlockKey(IMySlimBlock block)
+        {
+            if (block == null || block.CubeGrid == null) return null;
+            return block.CubeGrid.EntityId.ToString() + ":" + block.Position.ToString();
+        }
+
+        // BUG-120: owner-scope guard for the broken-block caches. The persisted skip
+        // decisions (NRE set + silent-fail counter) are valid only for the current
+        // _Welder.OwnerId — when ownership changes (admin grant, terminal "Take Ownership",
+        // faction transfer), the new owner may have different DLC entitlements, so
+        // previously-broken blocks may now build successfully. Polling-based: one long
+        // comparison per ServerTryWelding entry (codebase has no ownership-change events).
+        private void EnsureBrokenCacheOwnerScope()
+        {
+            var currentOwner = _Welder != null ? _Welder.OwnerId : 0L;
+            if (currentOwner != _BrokenCacheOwnerId)
+            {
+                _BrokenProjBuildKeys.Clear();
+                _ProjBuildSilentFailCount.Clear();
+                _BrokenCacheOwnerId = currentOwner;
+            }
+        }
+
+        // BUG-115 diagnostic: cheap "is this IdentityId currently a connected player?" check.
+        // Used only on the NRE warning path (cold) so the per-call list allocation is acceptable.
+        // SE's GetPlayers signature accepts a predicate filter, so the list is empty unless a match
+        // is found. Returns false for IdentityId 0 (no player), factions, or fully resolvable-but-offline players.
+        private static bool IsIdentityOnline(long identityId)
+        {
+            if (identityId == 0L) return false;
+            try
+            {
+                var probe = new System.Collections.Generic.List<VRage.Game.ModAPI.IMyPlayer>();
+                MyAPIGateway.Players.GetPlayers(probe, p => p != null && p.IdentityId == identityId);
+                return probe.Count > 0;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -449,7 +527,78 @@ namespace SKONanobotBuildAndRepairSystem
 
                             tsBuild = Stopwatch.GetTimestamp();
                             var proj = cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector;
-                            proj.Build(target, _Welder.OwnerId, _Welder.EntityId, Settings.WeldOptions == AutoWeldOptions.WeldFull, _Welder.SlimBlock.BuiltBy);
+                            // BUG-115: proj.Build() can throw NullReferenceException from inside SE's
+                            // MyProjectorBase.BuildInternal → MySessionComponentGameInventory.ValidateArmor/HasArmor
+                            // when the BuiltBy player's Steam ID can't be resolved (offline player, missing DLC
+                            // owner data on large worlds with imported grids). Without this guard the exception
+                            // bubbles up through ServerTryWelding → ServerTryWeldingGrindingCollecting and is
+                            // silently swallowed by UpdateBeforeSimulation10_100's catch — meaning the BaR's
+                            // entire weld tick aborts and the lock-on block is retried next tick, ad infinitum.
+                            // Mark the block as ignored so the loop moves on; profiler still logs the failure.
+                            try
+                            {
+                                proj.Build(target, _Welder.OwnerId, _Welder.EntityId, false, _Welder.OwnerId);
+                            }
+                            catch (NullReferenceException ex)
+                            {
+                                tsBuild = Stopwatch.GetTimestamp() - tsBuild;
+                                targetData.Ignore = true;
+                                // BUG-115: persist the skip across scan refreshes. Without this, the next
+                                // background scan rebuilds TargetBlockData with Ignore=false and the BaR
+                                // retries the same broken block, spamming the mod log every scan cycle.
+                                var brokenKey = GetBrokenBlockKey(target);
+                                var firstFailure = brokenKey != null && _BrokenProjBuildKeys.Add(brokenKey);
+                                if (firstFailure && Logging.Instance.ShouldLog(Logging.Level.Error))
+                                {
+                                    // BUG-115 diagnostic: the SE NRE is inside MySessionComponentGameInventory.HasArmor.
+                                    // Both args (MyStringHash armorId, ulong steamId) are value types, so the null
+                                    // deref must come from internal state keyed by one of those args. Capture every
+                                    // input we control so we can correlate which IDs/blocks/projectors trigger it
+                                    // and rule in/out: BuiltBy resolution, modded armor variant missing from the
+                                    // entitlement table, owner-online state, etc.
+                                    var passedBuiltBy = _Welder.OwnerId; // value passed as proj.Build's 5th arg
+                                    var slimBlockBuiltBy = _Welder.SlimBlock != null ? _Welder.SlimBlock.BuiltBy : 0L;
+                                    var typeIdName = blockDefinition != null ? blockDefinition.Id.TypeId.ToString() : "null";
+                                    var subtypeName = blockDefinition != null ? blockDefinition.Id.SubtypeName : "null";
+                                    var pairName = blockDefinition != null ? blockDefinition.BlockPairName : "null";
+                                    var pcu = blockDefinition != null ? blockDefinition.PCU : 0;
+                                    var fromMod = blockDefinition != null && blockDefinition.Context != null && !blockDefinition.Context.IsBaseGame;
+                                    var modName = fromMod ? blockDefinition.Context.ModName : "BaseGame";
+                                    var projectorApi = cubeGridProjected != null ? cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector : null;
+                                    var projectorEntityId = projectorApi != null ? projectorApi.EntityId : 0L;
+                                    var projectorGridName = projectorApi != null && projectorApi.CubeGrid != null ? projectorApi.CubeGrid.DisplayName : "null";
+                                    var ownerOnline = IsIdentityOnline(passedBuiltBy);
+                                    var slimOwnerOnline = IsIdentityOnline(slimBlockBuiltBy);
+                                    Logging.Instance.Write(Logging.Level.Error,
+                                        "BuildAndRepairSystemBlock {0}: proj.Build threw NRE; marking block permanently ignored for this BaR. " +
+                                        "block.subtype={1}; block.typeId={2}; block.pairName={3}; block.pcu={4}; block.fromMod={5}; block.modName={6}; " +
+                                        "passed.owner={7}; passed.builder={8}; passed.builtBy={9}; passed.builtBy.online={10}; " +
+                                        "barSlim.builtBy={11}; barSlim.builtBy.online={12}; " +
+                                        "projector.entityId={13}; projector.grid={14}; " +
+                                        "ex={15}",
+                                        Logging.BlockName(_Welder, Logging.BlockNameOptions.None),
+                                        subtypeName, typeIdName, pairName, pcu, fromMod, modName,
+                                        _Welder.OwnerId, _Welder.EntityId, passedBuiltBy, ownerOnline,
+                                        slimBlockBuiltBy, slimOwnerOnline,
+                                        projectorEntityId, projectorGridName,
+                                        ex.Message);
+                                }
+                                if (profilerTs != 0L)
+                                {
+                                    var _findItemMs = tsFindItem * 1000.0 / Stopwatch.Frequency;
+                                    var _limitsMs = tsLimitsCheck * 1000.0 / Stopwatch.Frequency;
+                                    var _buildMs = tsBuild * 1000.0 / Stopwatch.Frequency;
+                                    MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
+                                        string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};resolveMs={7:F3};stockpileMs={8:F3};mountMs={9:F3};deformMs={10:F3};findItemMs={11:F3};limitsMs={12:F3};canContinueMs={13:F3};integrityCheckMs={14:F3};assignMs={15:F3};weldAmount={16:F2};integrityRatio={17:F3};completed={18};distance={19:F1};earlyExit=projBuildNRE",
+                                            _Welder.EntityId,
+                                            targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
+                                            true, false, false, false,
+                                            _buildMs, 0.0, 0.0, 0.0, 0.0,
+                                            _findItemMs, _limitsMs, 0.0, 0.0, 0.0,
+                                            0f, 0f, true, targetData.Distance));
+                                }
+                                return false;
+                            }
                             tsBuild = Stopwatch.GetTimestamp() - tsBuild;
                         }
 
@@ -497,6 +646,36 @@ namespace SKONanobotBuildAndRepairSystem
                             else
                             {
                                 targetData.Ignore = true;
+                                // BUG-120: proj.Build returned cleanly but the physical block didn't
+                                // appear (typical signature: online owner lacks the required DLC).
+                                // Track per-block; after PROJ_BUILD_MAX_SILENT_FAILS consecutive ticks,
+                                // promote to the persistent skip set so background scan refreshes don't
+                                // keep re-feeding this block back to the weld loop. Threshold rules out
+                                // transient races (another BaR built it the same tick, momentary projector
+                                // disable, brief component shortage). Reset by EnsureBrokenCacheOwnerScope
+                                // (owner change) and by _onEnabledChanged (player power-cycle).
+                                var brokenKey = GetBrokenBlockKey(targetData.Block);
+                                if (brokenKey != null)
+                                {
+                                    int silentFailCount;
+                                    _ProjBuildSilentFailCount.TryGetValue(brokenKey, out silentFailCount);
+                                    silentFailCount++;
+                                    if (silentFailCount >= PROJ_BUILD_MAX_SILENT_FAILS)
+                                    {
+                                        _ProjBuildSilentFailCount.Remove(brokenKey);
+                                        if (_BrokenProjBuildKeys.Add(brokenKey) && Logging.Instance.ShouldLog(Logging.Level.Event))
+                                        {
+                                            Logging.Instance.Write(Logging.Level.Event,
+                                                "BuildAndRepairSystemBlock {0}: proj.Build silently failed {1} times for block at {2}; ignored permanently for owner {3} (likely DLC-missing). Power-cycle the BaR or reassign ownership to retry.",
+                                                Logging.BlockName(_Welder, Logging.BlockNameOptions.None),
+                                                PROJ_BUILD_MAX_SILENT_FAILS, brokenKey, _Welder.OwnerId);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        _ProjBuildSilentFailCount[brokenKey] = silentFailCount;
+                                    }
+                                }
                             }
                         }
                         tsResolve = Stopwatch.GetTimestamp() - tsResolve;
