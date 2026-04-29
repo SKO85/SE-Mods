@@ -4,6 +4,7 @@ using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Diagnostics;
 using VRage.Game;
 using VRageMath;
 
@@ -55,6 +56,14 @@ namespace SKONanobotBuildAndRepairSystem
             var throttleReason = "none";
             var clusterSize = 1;
             var effectiveGroups = 1;
+            // BUG-121: sub-timers for the unprofiled wrapper segments. Latest profile shows
+            // 59 ms / 49 ms spikes in this method outside ServerTryWeldingGrindingCollecting,
+            // including on throttle=workCycle samples where the work payload is skipped.
+            // Goal here is diagnosis only — pin down which segment dominates, then file the fix.
+            var tsPeriodic = 0L;
+            var tsResourceSink = 0L;
+            var tsSettingsSave = 0L;
+            var tsMsgSend = 0L;
             try
             {
                 if (_Welder == null) return;
@@ -149,6 +158,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PeriodicExtraChecksLast).TotalSeconds >= 2)
                     {
+                        var tsPeriodicMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                         _PeriodicExtraChecksLast = MyAPIGateway.Session.ElapsedPlayTime;
                         try
                         {
@@ -156,19 +166,24 @@ namespace SKONanobotBuildAndRepairSystem
                             UpdateCustomInfo(true);
                         }
                         catch { }
+                        if (tsPeriodicMark != 0L) tsPeriodic = Stopwatch.GetTimestamp() - tsPeriodicMark;
                     }
 
                     if (State.Ready && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdatePowerSinkLast).TotalSeconds >= 2)
                     {
+                        var tsResourceMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                         _UpdatePowerSinkLast = MyAPIGateway.Session.ElapsedPlayTime;
                         var resourceSink = _Welder.ResourceSink as Sandbox.Game.EntityComponents.MyResourceSinkComponent;
                         if (resourceSink != null)
                         {
                             resourceSink.Update();
                         }
+                        if (tsResourceMark != 0L) tsResourceSink = Stopwatch.GetTimestamp() - tsResourceMark;
                     }
 
+                    var tsSettingsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                     Settings.TrySave(Entity, Mod.ModGuid);
+                    if (tsSettingsMark != 0L) tsSettingsSave = Stopwatch.GetTimestamp() - tsSettingsMark;
 
                     TryTransmitState();
                 }
@@ -183,8 +198,10 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (Settings.IsTransmitNeeded() && MyAPIGateway.Session.ElapsedPlayTime.Subtract(_UpdateSettingsTransmitLast).TotalSeconds >= TransmitSettingsIntervalSeconds)
                 {
+                    var tsMsgMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                     _UpdateSettingsTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
                     NetworkMessagingHandler.MsgBlockSettingsSend(0, this);
+                    if (tsMsgMark != 0L) tsMsgSend = Stopwatch.GetTimestamp() - tsMsgMark;
                 }
 
                 if (_UpdateCustomInfoNeeded) UpdateCustomInfo(false);
@@ -210,10 +227,16 @@ namespace SKONanobotBuildAndRepairSystem
                     var _throttleReason = throttleReason;
                     var _clusterSize = clusterSize;
                     var _effectiveGroups = effectiveGroups;
+                    var tsFreq = Stopwatch.Frequency;
+                    var _periodicMs = tsPeriodic * 1000.0 / tsFreq;
+                    var _resourceSinkMs = tsResourceSink * 1000.0 / tsFreq;
+                    var _settingsSaveMs = tsSettingsSave * 1000.0 / tsFreq;
+                    var _msgSendMs = tsMsgSend * 1000.0 / tsFreq;
                     MethodProfiler.StopAndLog("UpdateBeforeSimulation10_100", profilerTs, () =>
-                        string.Format("entityId={0};workSpeed={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5};throttle={6}",
+                        string.Format("entityId={0};workSpeed={1};ready={2};delay={3};clusterSize={4};effectiveGroups={5};throttle={6};periodicMs={7:F3};resourceSinkMs={8:F3};settingsSaveMs={9:F3};msgSendMs={10:F3}",
                             _Welder != null ? _Welder.EntityId : 0, workSpeed, _IsInit, _Delay,
-                            _clusterSize, _effectiveGroups, _throttleReason));
+                            _clusterSize, _effectiveGroups, _throttleReason,
+                            _periodicMs, _resourceSinkMs, _settingsSaveMs, _msgSendMs));
                 }
             }
         }

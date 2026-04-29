@@ -259,26 +259,33 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (target.UseDamageSystem)
                 {
-                    // BUG-105: instrument the friendly-damage loop. Iterates every BaR system in
-                    // the world and calls GetUserRelationToOwner per entry. Profile data showed
-                    // this is fast (~70 µs total for 58 BaRs) — kept instrumented for visibility.
+                    // BUG-123: replaced the per-grind 58× GetUserRelationToOwner walk with a
+                    // 5-s-rebuilt cache lookup (Mod._FriendlyBaRsByOwner). Profile session
+                    // 20260429181044 showed `friendlyMs` outliers up to 4.81 ms despite the
+                    // ~70 µs nominal cost recorded by BUG-105 — engine call latency is variable
+                    // and re-walking 58 BaRs every grind is unnecessary. The cache key is the
+                    // grinding BaR's OwnerId; the value is the list of OTHER BaRs whose welders
+                    // currently consider that owner friendly. 5 s staleness sits well inside
+                    // the 30 s default FriendlyDamageTimeout envelope.
                     tsMark = Stopwatch.GetTimestamp();
-                    foreach (var entry in Mod.NanobotSystems)
+                    System.Collections.Generic.List<NanobotSystem> friendlies;
+                    if (Mod.TryGetFriendlyBaRsForOwner(_Welder.OwnerId, out friendlies) && friendlies != null)
                     {
-                        friendlyIter++;
-                        var relation = entry.Value.Welder.GetUserRelationToOwner(_Welder.OwnerId);
-                        if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
+                        var elapsedPlayTime = MyAPIGateway.Session.ElapsedPlayTime;
+                        var timeout = Mod.Settings.FriendlyDamageTimeout;
+                        for (var i = 0; i < friendlies.Count; i++)
                         {
+                            friendlyIter++;
                             //A 'friendly' damage from grinder -> do not repair (for a while)
                             //I don't check block relation here, because if it is enemy we won't repair it in any case and it just times out
-                            entry.Value.FriendlyDamage[target] = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                            friendlies[i].FriendlyDamage[target] = elapsedPlayTime + timeout;
                         }
                     }
                     tsFriendly = Stopwatch.GetTimestamp() - tsMark;
-                }                
+                }
 
                 tsMark = Stopwatch.GetTimestamp();
-                target.DecreaseMountLevel(damageInfo.Amount, _TransportInventory);
+                target.DecreaseMountLevel(damageInfo.Amount, _TransportInventory);                
                 target.MoveItemsFromConstructionStockpile(_TransportInventory);
                 tsDecrease = Stopwatch.GetTimestamp() - tsMark;
 
@@ -315,24 +322,51 @@ namespace SKONanobotBuildAndRepairSystem
                     tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
 
                     tsMark = Stopwatch.GetTimestamp();
-                    //target.SpawnConstructionStockpile();
-                    //target.CubeGrid.RazeBlock(target.Position);
-                    target.CubeGrid.RemoveBlock(target, true);
+                    // BUG-127: defer raze (SetToConstructionSite + RemoveBlock) to Mod's
+                    // per-tick processed queue. Eliminates the 5-8 ms SE-engine cleanup
+                    // spike from co-occurring with the grind tick. Block sits at
+                    // FatBlock.Closed=false / IsDestroyed=true until the queue drains;
+                    // ServerTryGrinding's existing IsDestroyed / Closed skips already filter
+                    // it from being re-targeted. tsRaze now reports just the enqueue cost
+                    // (sub-microsecond).
+                    Mod.EnqueueRaze(target);
                     tsRaze = Stopwatch.GetTimestamp() - tsMark;
                 }
             }
 
+            // BUG-124: split tsTransport into 4 sub-timers. Profile session 20260429184659 showed
+            // transportMs=19.134 ms on a fully-dismounted LargeBlockArmorBlock, but the existing
+            // ServerEmptyTransportInventory profiler caps at 0.189 ms across 2 489 calls — so the
+            // 19 ms is NOT in that call. Prime suspect: ComputePosition(target) → target.ComputeWorldCenter
+            // is being run on a block that was just removed from its grid 5 lines earlier (line 327).
+            // Diagnostic-only this ticket; fix follows once the dominant segment is confirmed.
             tsMark = Stopwatch.GetTimestamp();
-            if ((float)_TransportInventory.CurrentVolume >= _MaxGrindTransportVolume || target.IsFullyDismounted)
+            var tsTransportGate = 0L;
+            var tsTransportPos = 0L;
+            var tsTransportSet = 0L;
+            var tsTransportEmpty = 0L;
+            long tsTransportMark;
+            tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+            var transportGateOpen = (float)_TransportInventory.CurrentVolume >= _MaxGrindTransportVolume || target.IsFullyDismounted;
+            if (tsTransportMark != 0L) tsTransportGate = Stopwatch.GetTimestamp() - tsTransportMark;
+            if (transportGateOpen)
             {
                 //Transport started
+                tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                var transportPos = ComputePosition(target);
+                if (tsTransportMark != 0L) tsTransportPos = Stopwatch.GetTimestamp() - tsTransportMark;
+
+                tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 State.CurrentTransportIsPick = true;
                 State.CurrentTransportIsCollecting = false;
-                State.CurrentTransportTarget = ComputePosition(target);
+                State.CurrentTransportTarget = transportPos;
                 State.CurrentTransportStartTime = playTime;
                 State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.GrindTransportSpeed);
+                if (tsTransportMark != 0L) tsTransportSet = Stopwatch.GetTimestamp() - tsTransportMark;
 
+                tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 ServerEmptyTransportInventory(true);
+                if (tsTransportMark != 0L) tsTransportEmpty = Stopwatch.GetTimestamp() - tsTransportMark;
                 transporting = true;
             }
             tsTransport = Stopwatch.GetTimestamp() - tsMark;
@@ -346,12 +380,16 @@ namespace SKONanobotBuildAndRepairSystem
                 var _razeMs = tsRaze * 1000.0 / tsFreq;
                 var _mechCheckMs = tsMechCheck * 1000.0 / tsFreq;
                 var _transportMs = tsTransport * 1000.0 / tsFreq;
+                var _transportGateMs = tsTransportGate * 1000.0 / tsFreq;
+                var _transportPosMs = tsTransportPos * 1000.0 / tsFreq;
+                var _transportSetMs = tsTransportSet * 1000.0 / tsFreq;
+                var _transportEmptyMs = tsTransportEmpty * 1000.0 / tsFreq;
                 var _friendlyIter = friendlyIter;
                 var _damage = damage;
                 var _distance = targetData.Distance;
                 var _transportTimeS = transporting ? State.CurrentTransportTime.TotalSeconds : 0.0;
                 MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
-                    string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};razeMs={10:F3};mechCheckMs={11:F3};transportMs={12:F3};damage={13:F2};distance={14:F1};transportTimeS={15:F3}",
+                    string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};razeMs={10:F3};mechCheckMs={11:F3};transportMs={12:F3};transportGateMs={13:F3};transportPosMs={14:F3};transportSetMs={15:F3};transportEmptyMs={16:F3};damage={17:F2};distance={18:F1};transportTimeS={19:F3}",
                         _Welder.EntityId,
                         target != null ? target.BlockDefinition.Id.SubtypeName : "null",
                         (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
@@ -359,6 +397,7 @@ namespace SKONanobotBuildAndRepairSystem
                         target != null && target.IsFullyDismounted,
                         target != null ? target.Integrity / target.MaxIntegrity : 0f,
                         _emptyMs, _friendlyMs, _friendlyIter, _decreaseMs, _razeMs, _mechCheckMs, _transportMs,
+                        _transportGateMs, _transportPosMs, _transportSetMs, _transportEmptyMs,
                         _damage, _distance, _transportTimeS));
             }
             return true;

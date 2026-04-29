@@ -287,6 +287,10 @@ namespace SKONanobotBuildAndRepairSystem
             // BUG-057: Reuse pooled list across source iterations to avoid per-call allocation.
             _TempPullInventoryItems.Clear();
 
+            // BUG-129: cache key reused per source iteration. Capturing the subtype name once
+            // avoids re-allocating the MyTuple on every loop turn.
+            var componentSubtype = componentId.SubtypeName;
+
             lock (_PossibleSources)
             {
                 foreach (var srcInventory in _PossibleSources)
@@ -294,8 +298,26 @@ namespace SKONanobotBuildAndRepairSystem
                     var srcOwner = srcInventory.Owner as IMyEntity;
                     if (srcOwner == null || srcOwner.MarkedForClose) continue;
 
+                    // BUG-129: skip sources cached as "doesn't have this component". With 94
+                    // sources × N missing components per ServerFindMissingComponents call, the
+                    // pre-existing FindItem walk dominated pullPickMs (6.5 ms on LargeRefinery).
+                    // The cache short-circuits the engine call on sources known not to contain
+                    // the component. Stale "false" entries miss a freshly-stocked source for
+                    // up to 30 s (TTL); benign — BaR finds the component on another source or
+                    // next refresh.
+                    var cacheKey = new MyTuple<long, string>(srcOwner.EntityId, componentSubtype);
+                    bool cachedHas;
+                    if (Helpers.InventoryHelper.SourceHasComponentCache.TryGet(cacheKey, out cachedHas) && !cachedHas)
+                    {
+                        continue;
+                    }
+
+                    var hasItem = srcInventory.FindItem(componentId) != null;
+                    Helpers.InventoryHelper.SourceHasComponentCache.Set(cacheKey, hasItem);
+                    if (!hasItem) continue;
+
                     //Pre Test is 10 timers faster then get the whole list (as copy!) and iterate for nothing
-                    if (srcInventory.FindItem(componentId) != null && srcInventory.CanTransferItemTo(welderInventory, componentId))
+                    if (srcInventory.CanTransferItemTo(welderInventory, componentId))
                     {
                         _TempPullInventoryItems.Clear();
                         srcInventory.GetItems(_TempPullInventoryItems);

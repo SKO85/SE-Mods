@@ -43,14 +43,26 @@ namespace SKONanobotBuildAndRepairSystem
             var lookingForNextChecked = 0;
             var lockOnFound = false;
             var weldSkipped = false;
+            // BUG-122: measure lock acquisition + in-lock time. Profile session 20260429181044
+            // showed a 27 ms ServerTryWelding spike where Weldable (already profiled, max 0.344 ms)
+            // and ServerEmptyTransportInventory (max 0.136 ms) account for ~µs, ServerFindMissingComponents
+            // and ServerDoWeld for ~12 ms — leaving ~15 ms unaccounted. Background scan publishes
+            // into State.PossibleWeldTargets under the same lock (Scanning.cs ApplyClusterResultToSelf
+            // ~1472), so contention is the leading suspect. Two non-summing measurements: how long we
+            // wait to acquire, then how long we spend inside.
+            var tsLockAcquire = 0L;
+            var tsInLock = 0L;
             try
             {
 
             var hasRequiredPower = PowerHelper.HasRequiredElectricPower(this);
             if (!hasRequiredPower) return; //No power -> nothing to do
 
+            var tsBeforeLock = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
             lock (State.PossibleWeldTargets)
             {
+                var tsAfterAcquire = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                if (tsBeforeLock != 0L) tsLockAcquire = tsAfterAcquire - tsBeforeLock;
                 // OPT: When the previous iteration found nothing to weld (all targets grid-limited
                 // or assigned), skip the full iteration until the target list changes (new scan).
                 // Hash read is under lock so it can't race with background scan updates.
@@ -314,6 +326,7 @@ namespace SKONanobotBuildAndRepairSystem
                     _weldLoopExhausted = true;
                     _weldExhaustedAtHash = State.PossibleWeldTargets.CurrentHash;
                 }
+                if (tsBeforeLock != 0L) tsInLock = Stopwatch.GetTimestamp() - tsAfterAcquire;
             }
 
             }
@@ -339,13 +352,17 @@ namespace SKONanobotBuildAndRepairSystem
                     var _lookingForNextChecked = lookingForNextChecked;
                     var _weldSkipped = weldSkipped;
                     var _saturatedGridCount = _saturatedGridIds.Count;
+                    var tsFreq = Stopwatch.Frequency;
+                    var _lockAcquireMs = tsLockAcquire * 1000.0 / tsFreq;
+                    var _inLockMs = tsInLock * 1000.0 / tsFreq;
                     MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19}",
+                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3}",
                             _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
                             State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
                             _hadLockOn, _lockOnFound, _lockOnLost,
                             _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _componentFailures,
-                            _starvedSkipped, _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount));
+                            _starvedSkipped, _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount,
+                            _lockAcquireMs, _inLockMs));
                 }
             }
         }
@@ -803,6 +820,13 @@ namespace SKONanobotBuildAndRepairSystem
         private bool ServerFindMissingComponents(TargetBlockData targetData)
         {
             var profilerTs = MethodProfiler.Start();
+            // BUG-122: split internal cost. Profile session 20260429181044 showed 9-10 ms spikes
+            // on projected blocks (LargeBlockLargeContainer, SmallHydrogenThrust). tsGetMissing
+            // sums the SE engine `GetMissingComponents` walks (1 call non-projected, 1-2 projected);
+            // tsPullPick sums the inner overload that runs ServerPickFromWelder + PullComponents.
+            var tsGetMissing = 0L;
+            var tsPullPick = 0L;
+            long tsMark;
             try
             {
                 var playTime = MyAPIGateway.Session.ElapsedPlayTime;
@@ -824,21 +848,29 @@ namespace SKONanobotBuildAndRepairSystem
                     var useIgnoreColor = ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0) && IsColorNearlyEquals(Settings.IgnoreColorPacked, targetData.Block.GetColorMask());
                     if (Settings.WeldOptions == AutoWeldOptions.WeldSkeleton || useIgnoreColor)
                     {
+                        tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                         targetData.Block.GetMissingComponents(_TempMissingComponents, UtilsInventory.IntegrityLevel.Create);
+                        if (tsMark != 0L) tsGetMissing += Stopwatch.GetTimestamp() - tsMark;
 
                         if (_TempMissingComponents.Count > 0)
                         {
+                            tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                             picked = ServerFindMissingComponents(targetData, ref remainingVolume);
+                            if (tsMark != 0L) tsPullPick += Stopwatch.GetTimestamp() - tsMark;
                         }
                     }
                     else
                     {
                         // Pick creation component first to guarantee it's in transport
                         // before other components fill the volume.
+                        tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                         targetData.Block.GetMissingComponents(_TempMissingComponents, UtilsInventory.IntegrityLevel.Create);
+                        if (tsMark != 0L) tsGetMissing += Stopwatch.GetTimestamp() - tsMark;
                         if (_TempMissingComponents.Count > 0)
                         {
+                            tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                             picked = ServerFindMissingComponents(targetData, ref remainingVolume);
+                            if (tsMark != 0L) tsPullPick += Stopwatch.GetTimestamp() - tsMark;
                         }
 
                         // Then fetch remaining components (full/functional level minus creation)
@@ -850,7 +882,9 @@ namespace SKONanobotBuildAndRepairSystem
                             _TempMissingComponents.TryGetValue(createCompName, out createCount);
                             _TempMissingComponents.Clear();
 
+                            tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                             targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? UtilsInventory.IntegrityLevel.Functional : UtilsInventory.IntegrityLevel.Complete);
+                            if (tsMark != 0L) tsGetMissing += Stopwatch.GetTimestamp() - tsMark;
 
                             // Subtract the creation component (already picked)
                             if (createCount > 0 && _TempMissingComponents.ContainsKey(createCompName))
@@ -865,12 +899,16 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
+                    tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                     targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? UtilsInventory.IntegrityLevel.Functional : UtilsInventory.IntegrityLevel.Complete);
+                    if (tsMark != 0L) tsGetMissing += Stopwatch.GetTimestamp() - tsMark;
                 }
 
                 if (_TempMissingComponents.Count > 0)
                 {
+                    tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                     ServerFindMissingComponents(targetData, ref remainingVolume);
+                    if (tsMark != 0L) tsPullPick += Stopwatch.GetTimestamp() - tsMark;
                 }
 
                 if (remainingVolume < _MaxWeldTransportVolume || (CreativeModeActive && _TempMissingComponents.Count > 0))
@@ -895,12 +933,16 @@ namespace SKONanobotBuildAndRepairSystem
                     var _transportTimeS = State.CurrentTransportTime.TotalSeconds;
                     var _distance = targetData.Distance;
                     var _weldTransportSpeed = Settings.WeldTransportSpeed;
+                    var tsFreq = Stopwatch.Frequency;
+                    var _getMissingMs = tsGetMissing * 1000.0 / tsFreq;
+                    var _pullPickMs = tsPullPick * 1000.0 / tsFreq;
                     MethodProfiler.StopAndLog("ServerFindMissingComponents", profilerTs, () =>
-                        string.Format("entityId={0};block={1};projected={2};transportStarted={3};transportTimeS={4:F3};distance={5:F1};weldTransportSpeed={6:F1}",
+                        string.Format("entityId={0};block={1};projected={2};transportStarted={3};transportTimeS={4:F3};distance={5:F1};weldTransportSpeed={6:F1};getMissingMs={7:F3};pullPickMs={8:F3}",
                             _Welder.EntityId,
                             targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
                             (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
-                            _transportStarted, _transportTimeS, _distance, _weldTransportSpeed));
+                            _transportStarted, _transportTimeS, _distance, _weldTransportSpeed,
+                            _getMissingMs, _pullPickMs));
                 }
             }
         }

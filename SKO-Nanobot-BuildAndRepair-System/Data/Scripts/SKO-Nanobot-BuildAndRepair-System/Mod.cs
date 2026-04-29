@@ -15,6 +15,7 @@ namespace SKONanobotBuildAndRepairSystem
     using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Text;
+    using VRage.Game;
     using VRage.Game.Components;
     using VRage.Game.ModAPI;
 
@@ -126,6 +127,62 @@ namespace SKONanobotBuildAndRepairSystem
             if (_projBuildsThisTick >= MaxProjBuildsPerTickDefault) return false;
             _projBuildsThisTick++;
             return true;
+        }
+
+        // --- BUG-127: Deferred raze queue ---
+        // Decouples "block hit 0 integrity" (cheap, ~µs to enqueue) from "engine fully
+        // removes block" (5-8 ms on conveyor-connected blocks like batteries/containers).
+        // Without the queue, BUG-106's 3-per-tick dismount cap still let 3 razes pile on the
+        // same tick = 24 ms of engine cleanup over the 16.7 ms 60-Hz frame budget. With the
+        // queue, razes are processed at most MaxRazesPerTickDefault per tick — independent of
+        // which tick the underlying grind happened on, so the engine work is spread across
+        // multiple ticks. Block reference safety: Mod.UpdateBeforeSimulation runs on main
+        // thread, same as grid mutations — no cross-thread access to engine state.
+        public const int MaxRazesPerTickDefault = 1;
+        private static readonly Queue<VRage.Game.ModAPI.IMySlimBlock> _razeQueue = new Queue<VRage.Game.ModAPI.IMySlimBlock>();
+
+        public static void EnqueueRaze(VRage.Game.ModAPI.IMySlimBlock block)
+        {
+            if (block == null) return;
+            lock (_razeQueue) { _razeQueue.Enqueue(block); }
+        }
+
+        public static int GetRazeQueueDepth()
+        {
+            lock (_razeQueue) { return _razeQueue.Count; }
+        }
+
+        private void ProcessRazeQueue()
+        {
+            var processed = 0;
+            while (processed < MaxRazesPerTickDefault)
+            {
+                VRage.Game.ModAPI.IMySlimBlock target;
+                lock (_razeQueue)
+                {
+                    if (_razeQueue.Count == 0) break;
+                    target = _razeQueue.Dequeue();
+                }
+                if (target == null) continue;
+                try
+                {
+                    var grid = target.CubeGrid;
+                    if (grid == null) continue;
+                    // Block could have been welded back up or razed by another path before we
+                    // drained it; in either case skip and keep budget for the next entry.
+                    if (target.FatBlock != null && target.FatBlock.Closed) continue;
+                    // Mirrors the call sequence the grind site previously did inline. Both
+                    // operations are deferred together so the SE-engine cleanup work is paced
+                    // by MaxRazesPerTickDefault rather than co-occurring with the grind tick.
+                    target.SetToConstructionSite();
+                    grid.RemoveBlock(target, true);
+                    processed++;
+                }
+                catch (Exception ex)
+                {
+                    Logging.Instance.Error(ex);
+                }
+            }
         }
 
         // --- OPT 2: BaR update staggering ---
@@ -260,6 +317,15 @@ namespace SKONanobotBuildAndRepairSystem
         private static TimeSpan _LastGeneralPeriodicCheck;
         private static TimeSpan _LastTtlCacheCleanerCheck;
         private static TimeSpan _LastSafeZoneUpdateCheck;
+        // BUG-123: friendly-BaR-by-owner cache. Rebuilt every 5 s in UpdateBeforeSimulation
+        // to amortize the GetUserRelationToOwner cost across all grind ticks. The dictionary
+        // itself is replaced wholesale (atomic reference swap), so reads from grind paths
+        // always see a self-consistent snapshot. Initial value `TimeSpan.Zero` (NOT MinValue —
+        // that overflows `now.Subtract(...)` and aborts UpdateBeforeSimulation, breaking
+        // RebuildSourcesAndTargetsTimer and clustering): the first rebuild fires after ~5 s of
+        // session time, which matches pre-BUG-123 behavior (the loop ran per-grind anyway).
+        private static TimeSpan _LastFriendlyBaRsRebuild = TimeSpan.Zero;
+        private static volatile Dictionary<long, List<NanobotSystem>> _FriendlyBaRsByOwner = new Dictionary<long, List<NanobotSystem>>();
 
         public const int MaxBackgroundTasks_Default = 4;
         public const int MaxBackgroundTasks_Max = 10;
@@ -279,6 +345,56 @@ namespace SKONanobotBuildAndRepairSystem
         public static void ResetBackgroundTaskStats()
         {
             lock (AsynActions) { _bgTasksEnqueued = 0; _bgTasksCompleted = 0; _bgPeakRunning = ActualBackgroundTaskCount; }
+        }
+
+        // BUG-123: friendly-BaR cache accessor. Returns the snapshot list of BaRs whose
+        // welder considers `ownerId` friendly. Reads the volatile dict reference once and
+        // does a TryGetValue — both O(1). Returns false (and a null `friendlies`) if the
+        // cache hasn't yet been built for this owner; callers may treat that as "no
+        // friendlies for now" since the cache rebuilds every 5 s and friendly-damage
+        // tagging is a UX courtesy, not a safety gate.
+        public static bool TryGetFriendlyBaRsForOwner(long ownerId, out List<NanobotSystem> friendlies)
+        {
+            var snapshot = _FriendlyBaRsByOwner;
+            return snapshot.TryGetValue(ownerId, out friendlies);
+        }
+
+        // BUG-123: rebuild method. Walks NanobotSystems twice in a nested loop, but only
+        // for distinct source-owner IDs (`seenOwners`) so we never repeat work for two BaRs
+        // sharing an owner. Engine GetUserRelationToOwner is called inside the inner loop
+        // and is the dominant cost — but it now amortizes across 5 s of grind ticks instead
+        // of running per-grind. Background-thread invocation matches GridOwnershipCacheHandler.
+        // Builds a fresh dict and atomically swaps in via the volatile field — readers always
+        // see a consistent snapshot.
+        private static void RebuildFriendlyBaRsCache()
+        {
+            var newCache = new Dictionary<long, List<NanobotSystem>>();
+            var seenOwners = new HashSet<long>();
+            foreach (var sourceEntry in NanobotSystems)
+            {
+                var sourceWelder = sourceEntry.Value != null ? sourceEntry.Value.Welder : null;
+                if (sourceWelder == null) continue;
+                var sourceOwnerId = sourceWelder.OwnerId;
+                if (sourceOwnerId == 0) continue;
+                if (!seenOwners.Add(sourceOwnerId)) continue;
+
+                List<NanobotSystem> list = null;
+                foreach (var otherEntry in NanobotSystems)
+                {
+                    var otherSystem = otherEntry.Value;
+                    if (otherSystem == null) continue;
+                    var otherWelder = otherSystem.Welder;
+                    if (otherWelder == null) continue;
+                    var relation = otherWelder.GetUserRelationToOwner(sourceOwnerId);
+                    if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
+                    {
+                        if (list == null) list = new List<NanobotSystem>();
+                        list.Add(otherSystem);
+                    }
+                }
+                if (list != null) newCache[sourceOwnerId] = list;
+            }
+            _FriendlyBaRsByOwner = newCache;
         }
 
         public void Init()
@@ -480,7 +596,35 @@ namespace SKONanobotBuildAndRepairSystem
                             });
                         }
 
+                        // BUG-123: rebuild the friendly-BaR cache every 5 s. Walks NanobotSystems
+                        // and groups by source-owner → list of BaRs whose welder relation to that
+                        // owner is friendly. Replaces 58 GetUserRelationToOwner engine calls per
+                        // grind with a dict lookup + iterate. 5 s staleness is well inside the
+                        // 30 s default FriendlyDamageTimeout envelope.
+                        if (now.Subtract(_LastFriendlyBaRsRebuild) >= TimeSpan.FromSeconds(5))
+                        {
+                            _LastFriendlyBaRsRebuild = now;
+                            MyAPIGateway.Parallel.StartBackground(() =>
+                            {
+                                try { RebuildFriendlyBaRsCache(); } catch { }
+                            });
+                            // BUG-125: piggy-back a defensive periodic flush of profiler buffers
+                            // on the same 5 s cadence. Without per-line Flush in MethodProfiler.Write,
+                            // a long-running profile session that doesn't call StopSession could leave
+                            // data buffered indefinitely. This bounds loss to ~5 s on hard crash.
+                            MyAPIGateway.Parallel.StartBackground(() =>
+                            {
+                                try { MethodProfiler.FlushAll(); } catch { }
+                            });
+                        }
+
                         RebuildSourcesAndTargetsTimer();
+
+                        // BUG-127: drain at most MaxRazesPerTickDefault entries from the
+                        // deferred raze queue. Each RemoveBlock costs 5-8 ms of SE engine
+                        // cleanup on complex blocks; spreading across ticks keeps the per-tick
+                        // peak inside the 16.7 ms frame budget.
+                        ProcessRazeQueue();
                     }
 
                     // If the Settings is not yet valid, sync the settings between clients and server.

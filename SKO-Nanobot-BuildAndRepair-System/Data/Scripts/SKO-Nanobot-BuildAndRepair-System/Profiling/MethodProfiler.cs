@@ -713,12 +713,34 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 lock (_syncRoot)
                 {
                     writer.WriteLine(line.ToString());
-                    writer.Flush();
+                    // BUG-125: removed per-line `writer.Flush()`. Under 58-BaR contention the sync
+                    // file flush + global lock added ~8 ms wall time per profiler exit during heavy
+                    // ticks (measured via BUG-124's outer-vs-inner sub-timer gap on session
+                    // 20260429185841 — `transportEmptyMs=8.418` vs inner `ms=0.474` for the same
+                    // call). TextWriter buffering still persists data on buffer-fill / close /
+                    // session-end; periodic defensive flush is added separately so a long-running
+                    // profile that doesn't call StopSession still gets its data on disk.
                 }
             }
             catch (Exception ex)
             {
                 MyLog.Default.WriteLineAndConsole("MethodProfiler write failed: " + ex.Message);
+            }
+        }
+
+        // BUG-125: defensive periodic flush. Called from Mod.UpdateBeforeSimulation every 5 s.
+        // Without per-line Flush, data sits in TextWriter buffers until flushed; periodic flush
+        // bounds data loss to ~5 s on hard crash. Single lock + flush per writer — at ~30 method
+        // writers and 5 s cadence the cost is negligible.
+        public static void FlushAll()
+        {
+            if (!IsEnabled) return;
+            lock (_syncRoot)
+            {
+                foreach (var entry in _writers)
+                {
+                    try { if (entry.Value != null) entry.Value.Flush(); } catch { }
+                }
             }
         }
 
