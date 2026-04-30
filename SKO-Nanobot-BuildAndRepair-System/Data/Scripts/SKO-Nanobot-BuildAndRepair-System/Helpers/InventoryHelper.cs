@@ -30,7 +30,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
         public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources, HashSet<IMyInventory> possibleSourcesSet)
         {
             var profilerTs = MethodProfiler.Start();
-            if (terminalBlock == null || welder == null || possibleSources == null) return false;
+            if (terminalBlock == null || welder == null || possibleSources == null || possibleSourcesSet == null) return false;
             if (terminalBlock.EntityId == welder.EntityId) return false;
 
             // Only the following types for containers/inventories as valid external sources or push targets to reduce scanning of all types.
@@ -57,14 +57,10 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
                     var maxInvCached = terminalBlock.InventoryCount;
                     for (var i = 0; i < maxInvCached; i++)
                     {
+                        // BUG-119: HashSet.Add returns false if already present (O(1));
+                        // replaces the prior O(n) possibleSources.Contains scan.
                         var inventory = terminalBlock.GetInventory(i);
-                        // BUG-119: HashSet.Add returns false if already present (O(1)); replaces
-                        // the prior O(n) possibleSources.Contains scan that grew with source count.
-                        if (possibleSourcesSet == null)
-                        {
-                            if (!possibleSources.Contains(inventory)) possibleSources.Add(inventory);
-                        }
-                        else if (possibleSourcesSet.Add(inventory))
+                        if (possibleSourcesSet.Add(inventory))
                         {
                             possibleSources.Add(inventory);
                         }
@@ -79,35 +75,27 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
                 return cachedConnected;
             }
 
+            // Cache miss: probe connectivity once for the whole block. All inventories on
+            // a single block share the block's ConveyorEndpoint, so IsConnectedTo returns
+            // the same result for every inventory on the block — calling it per inventory
+            // (the prior loop) wasted N-1 conveyor walks for multi-inventory blocks
+            // (assemblers, refineries: 2 inventories each). The cache itself is already
+            // keyed per-block (not per-inventory) and stores a single bool, which only
+            // makes sense under the same assumption.
             var welderInventory = welder.GetInventory(0);
             var maxInvCross = terminalBlock.InventoryCount;
-            var isConnected = false;
+            var firstInventory = maxInvCross > 0 ? terminalBlock.GetInventory(0) : null;
+            var isConnected = firstInventory != null && firstInventory.IsConnectedTo(welderInventory);
 
-            for (var i = 0; i < maxInvCross; i++)
+            if (isConnected)
             {
-                var inventory = terminalBlock.GetInventory(i);
-
-                // BUG-119: dedup via HashSet first to avoid the O(n) Contains scan, then
-                // pay the engine IsConnectedTo cost only for inventories we'd actually keep.
-                bool alreadyPresent;
-                if (possibleSourcesSet == null)
+                for (var i = 0; i < maxInvCross; i++)
                 {
-                    alreadyPresent = possibleSources.Contains(inventory);
-                }
-                else
-                {
-                    alreadyPresent = !possibleSourcesSet.Add(inventory);
-                }
-
-                if (!alreadyPresent && inventory.IsConnectedTo(welderInventory))
-                {
-                    isConnected = true;
-                    possibleSources.Add(inventory);
-                }
-                else if (!alreadyPresent && possibleSourcesSet != null)
-                {
-                    // Speculatively added to the set above; roll back since IsConnectedTo failed.
-                    possibleSourcesSet.Remove(inventory);
+                    var inventory = terminalBlock.GetInventory(i);
+                    if (possibleSourcesSet.Add(inventory))
+                    {
+                        possibleSources.Add(inventory);
+                    }
                 }
             }
 
