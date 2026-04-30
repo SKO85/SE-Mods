@@ -1,5 +1,6 @@
 using Sandbox.Definitions;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Localization;
 using SKONanobotBuildAndRepairSystem.Models;

@@ -62,70 +62,28 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        // --- OPT 1: Mechanical block grind throttle ---
-        // Caps mechanical connection block destructions to 1 per tick globally,
-        // preventing 100-380ms spikes when multiple BaRs destroy pistons/rotors/hinges simultaneously.
-        private static int _mechanicalGrindsThisTick;
-        private static int _lastMechanicalTick = -1;
+        // OPT 1: Mechanical block grind throttle. Caps mechanical connection block
+        // destructions to 1 per tick globally, preventing 100-380ms spikes when multiple
+        // BaRs destroy pistons/rotors/hinges simultaneously.
+        private static readonly PerTickBudget _mechanicalGrindBudget = new PerTickBudget(1);
 
-        public static bool TryClaimMechanicalGrindSlot()
-        {
-            var tick = MyAPIGateway.Session.GameplayFrameCounter;
-            if (tick != _lastMechanicalTick)
-            {
-                _lastMechanicalTick = tick;
-                _mechanicalGrindsThisTick = 0;
-            }
-            if (_mechanicalGrindsThisTick >= 1) return false;
-            _mechanicalGrindsThisTick++;
-            return true;
-        }
-
-        // --- BUG-106: Global dismount budget ---
-        // Caps the number of full-dismount grinds per tick globally. Profile (20260428202503)
-        // showed `decreaseMs` spikes of 5-12ms on full dismount of armor blocks (SE engine
-        // cascade for grid integrity recalc, conveyor refresh, block events). Spreading
-        // dismounts across ticks prevents these spikes from compounding when many BaRs
+        // BUG-106: full-dismount throttle. SE engine cascade for grid integrity recalc,
+        // conveyor refresh, block events causes 5-12ms decreaseMs spikes per dismount;
+        // spreading these across ticks prevents the spikes from compounding when many BaRs
         // dismount simultaneously. Mechanical-block cap (1/tick) is a stricter sub-budget
         // applied first; this cap (3/tick) covers all dismounts that reach the raze path.
         public const int MaxDismountsPerTickDefault = 3;
-        private static int _dismountsThisTick;
-        private static int _lastDismountTick = -1;
+        private static readonly PerTickBudget _dismountBudget = new PerTickBudget(MaxDismountsPerTickDefault);
 
-        public static bool TryClaimDismountSlot()
-        {
-            var tick = MyAPIGateway.Session.GameplayFrameCounter;
-            if (tick != _lastDismountTick)
-            {
-                _lastDismountTick = tick;
-                _dismountsThisTick = 0;
-            }
-            if (_dismountsThisTick >= MaxDismountsPerTickDefault) return false;
-            _dismountsThisTick++;
-            return true;
-        }
-
-        // --- BUG-107: Global proj.Build budget ---
-        // Caps `proj.Build()` calls per tick. Profile (20260428202503) showed `buildMs`
-        // spikes of 7-9ms on projected armor/conveyor blocks (SE engine materialization +
-        // grid topology update). When many BaRs simultaneously materialize projected blocks
-        // these compound into multi-tick stalls. Cap=3/tick spreads the load.
+        // BUG-107: proj.Build throttle. SE engine materialization + grid topology update
+        // produces 7-9ms buildMs spikes on projected armor/conveyor blocks; cap=3/tick
+        // spreads the load when many BaRs materialize simultaneously.
         public const int MaxProjBuildsPerTickDefault = 3;
-        private static int _projBuildsThisTick;
-        private static int _lastProjBuildTick = -1;
+        private static readonly PerTickBudget _projBuildBudget = new PerTickBudget(MaxProjBuildsPerTickDefault);
 
-        public static bool TryClaimProjBuildSlot()
-        {
-            var tick = MyAPIGateway.Session.GameplayFrameCounter;
-            if (tick != _lastProjBuildTick)
-            {
-                _lastProjBuildTick = tick;
-                _projBuildsThisTick = 0;
-            }
-            if (_projBuildsThisTick >= MaxProjBuildsPerTickDefault) return false;
-            _projBuildsThisTick++;
-            return true;
-        }
+        public static bool TryClaimMechanicalGrindSlot() { return _mechanicalGrindBudget.TryClaim(); }
+        public static bool TryClaimDismountSlot() { return _dismountBudget.TryClaim(); }
+        public static bool TryClaimProjBuildSlot() { return _projBuildBudget.TryClaim(); }
 
         // --- OPT 2: BaR update staggering ---
         // Distributes ServerTryWeldingGrindingCollecting() calls across StaggerGroupCount groups
@@ -256,34 +214,6 @@ namespace SKONanobotBuildAndRepairSystem
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
         private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);
         private static TimeSpan _LastSyncModDataRequestSend;
-        private static TimeSpan _LastGeneralPeriodicCheck;
-        private static TimeSpan _LastTtlCacheCleanerCheck;
-        private static TimeSpan _LastSafeZoneUpdateCheck;
-        // BUG-123: friendly-BaR-by-owner cache. Rebuilt every 5 s in UpdateBeforeSimulation
-        // to amortize the GetUserRelationToOwner cost across all grind ticks. The dictionary
-        // itself is replaced wholesale (atomic reference swap), so reads from grind paths
-        // always see a self-consistent snapshot. Initial value `TimeSpan.Zero` (NOT MinValue —
-        // that overflows `now.Subtract(...)` and aborts UpdateBeforeSimulation, breaking
-        // RebuildSourcesAndTargetsTimer and clustering): the first rebuild fires after ~5 s of
-        // session time, which matches pre-BUG-123 behavior (the loop ran per-grind anyway).
-        private static TimeSpan _LastFriendlyBaRsRebuild = TimeSpan.Zero;
-        private static volatile Dictionary<long, List<NanobotSystem>> _FriendlyBaRsByOwner = new Dictionary<long, List<NanobotSystem>>();
-        // BUG-130: distinct welder-owner IDs that consider `key` friendly. Built alongside
-        // _FriendlyBaRsByOwner. Lets the grind path write a single shared FriendlyDamage
-        // entry per friendly OWNER instead of N per-BaR entries (174 → ~1 in single-faction
-        // worlds, eliminating the 21 ms friendlyMs spikes from per-tick CDict writes).
-        private static volatile Dictionary<long, List<long>> _FriendlyOwnersByOwner = new Dictionary<long, List<long>>();
-
-        // BUG-130: shared friendly-damage map. Per-BaR FriendlyDamage CDicts replaced by one
-        // map keyed on welder-owner id. All BaRs sharing an owner share the same view, which
-        // matches the actual semantics (the friendly relation is between OWNERS, not BaRs).
-        // All access is from main thread (Grinding writes, Welding reads, DamageHandler writes,
-        // Mod-level cleanup). The lock is a defensive guard for the rare DamageHandler path,
-        // which is uncontended on the main thread anyway.
-        private static readonly object _FriendlyDamageLock = new object();
-        private static readonly Dictionary<long, Dictionary<IMySlimBlock, TimeSpan>> _FriendlyDamageByOwner =
-            new Dictionary<long, Dictionary<IMySlimBlock, TimeSpan>>();
-        private static TimeSpan _LastFriendlyDamageCleanup = TimeSpan.Zero;
 
         // Background task queue forwarders — implementation lives in
         // Managers/BackgroundTaskQueue.cs. Kept on Mod for source compatibility
@@ -301,132 +231,32 @@ namespace SKONanobotBuildAndRepairSystem
             BackgroundTaskQueue.ResetStats();
         }
 
-        // BUG-123: friendly-BaR cache accessor. Returns the snapshot list of BaRs whose
-        // welder considers `ownerId` friendly. Reads the volatile dict reference once and
-        // does a TryGetValue — both O(1). Returns false (and a null `friendlies`) if the
-        // cache hasn't yet been built for this owner; callers may treat that as "no
-        // friendlies for now" since the cache rebuilds every 5 s and friendly-damage
-        // tagging is a UX courtesy, not a safety gate.
+        // FriendlyRelationsHandler forwarders — implementation lives in
+        // Handlers/FriendlyRelationsHandler.cs. Kept on Mod for source compatibility
+        // with existing call sites (Grinding, Welding, DamageHandler, State).
         public static bool TryGetFriendlyBaRsForOwner(long ownerId, out List<NanobotSystem> friendlies)
         {
-            var snapshot = _FriendlyBaRsByOwner;
-            return snapshot.TryGetValue(ownerId, out friendlies);
+            return FriendlyRelationsHandler.TryGetBaRsForOwner(ownerId, out friendlies);
         }
 
-        // BUG-130: distinct welder-owner IDs that consider `ownerId` friendly. Returned list
-        // is the snapshot owned by the cache and must not be mutated by callers.
         public static bool TryGetFriendlyOwnersForOwner(long ownerId, out List<long> owners)
         {
-            var snapshot = _FriendlyOwnersByOwner;
-            return snapshot.TryGetValue(ownerId, out owners);
+            return FriendlyRelationsHandler.TryGetOwnersForOwner(ownerId, out owners);
         }
 
-        // BUG-130: mark `block` as friendly-damaged for any BaR whose welder is owned by
-        // `welderOwnerId`. Cheap dict insert. Replaces the per-friendly-BaR CDict write loop.
         public static void MarkFriendlyDamage(long welderOwnerId, IMySlimBlock block, TimeSpan deadline)
         {
-            if (welderOwnerId == 0 || block == null) return;
-            lock (_FriendlyDamageLock)
-            {
-                Dictionary<IMySlimBlock, TimeSpan> map;
-                if (!_FriendlyDamageByOwner.TryGetValue(welderOwnerId, out map))
-                {
-                    map = new Dictionary<IMySlimBlock, TimeSpan>();
-                    _FriendlyDamageByOwner[welderOwnerId] = map;
-                }
-                map[block] = deadline;
-            }
+            FriendlyRelationsHandler.MarkDamage(welderOwnerId, block, deadline);
         }
 
-        // BUG-130: read path used by Welding to avoid welding a block that was just ground
-        // by a friendly. Existence-only check matches the prior State.IsFriendlyDamage
-        // semantics (the timestamp is only consulted by cleanup).
         public static bool IsFriendlyDamage(long welderOwnerId, IMySlimBlock block)
         {
-            if (welderOwnerId == 0 || block == null) return false;
-            lock (_FriendlyDamageLock)
-            {
-                Dictionary<IMySlimBlock, TimeSpan> map;
-                if (!_FriendlyDamageByOwner.TryGetValue(welderOwnerId, out map)) return false;
-                return map.ContainsKey(block);
-            }
+            return FriendlyRelationsHandler.IsDamage(welderOwnerId, block);
         }
 
-        // BUG-130: periodic reaper. Runs every Settings.FriendlyDamageCleanup. Two-pass
-        // collect-then-remove to avoid mutating the dict during enumeration.
-        private static List<IMySlimBlock> _FriendlyDamageReapBuffer = new List<IMySlimBlock>(64);
         public static void CleanupFriendlyDamage()
         {
-            var now = MyAPIGateway.Session.ElapsedPlayTime;
-            if (now.Subtract(_LastFriendlyDamageCleanup) < Settings.FriendlyDamageCleanup) return;
-            _LastFriendlyDamageCleanup = now;
-            lock (_FriendlyDamageLock)
-            {
-                foreach (var ownerEntry in _FriendlyDamageByOwner)
-                {
-                    var map = ownerEntry.Value;
-                    _FriendlyDamageReapBuffer.Clear();
-                    foreach (var kvp in map)
-                    {
-                        if (kvp.Value < now) _FriendlyDamageReapBuffer.Add(kvp.Key);
-                    }
-                    for (var i = 0; i < _FriendlyDamageReapBuffer.Count; i++)
-                    {
-                        map.Remove(_FriendlyDamageReapBuffer[i]);
-                    }
-                    _FriendlyDamageReapBuffer.Clear();
-                }
-            }
-        }
-
-        // BUG-123: rebuild method. Walks NanobotSystems twice in a nested loop, but only
-        // for distinct source-owner IDs (`seenOwners`) so we never repeat work for two BaRs
-        // sharing an owner. Engine GetUserRelationToOwner is called inside the inner loop
-        // and is the dominant cost — but it now amortizes across 5 s of grind ticks instead
-        // of running per-grind. Background-thread invocation matches GridOwnershipCacheHandler.
-        // Builds a fresh dict and atomically swaps in via the volatile field — readers always
-        // see a consistent snapshot.
-        private static void RebuildFriendlyBaRsCache()
-        {
-            var newCache = new Dictionary<long, List<NanobotSystem>>();
-            var newOwnerCache = new Dictionary<long, List<long>>();
-            var seenOwners = new HashSet<long>();
-            var seenOwnerIds = new HashSet<long>();
-            foreach (var sourceEntry in NanobotSystems)
-            {
-                var sourceWelder = sourceEntry.Value != null ? sourceEntry.Value.Welder : null;
-                if (sourceWelder == null) continue;
-                var sourceOwnerId = sourceWelder.OwnerId;
-                if (sourceOwnerId == 0) continue;
-                if (!seenOwners.Add(sourceOwnerId)) continue;
-
-                List<NanobotSystem> list = null;
-                List<long> ownerIds = null;
-                seenOwnerIds.Clear();
-                foreach (var otherEntry in NanobotSystems)
-                {
-                    var otherSystem = otherEntry.Value;
-                    if (otherSystem == null) continue;
-                    var otherWelder = otherSystem.Welder;
-                    if (otherWelder == null) continue;
-                    var relation = otherWelder.GetUserRelationToOwner(sourceOwnerId);
-                    if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
-                    {
-                        if (list == null) list = new List<NanobotSystem>();
-                        list.Add(otherSystem);
-                        var otherOwnerId = otherWelder.OwnerId;
-                        if (otherOwnerId != 0 && seenOwnerIds.Add(otherOwnerId))
-                        {
-                            if (ownerIds == null) ownerIds = new List<long>();
-                            ownerIds.Add(otherOwnerId);
-                        }
-                    }
-                }
-                if (list != null) newCache[sourceOwnerId] = list;
-                if (ownerIds != null) newOwnerCache[sourceOwnerId] = ownerIds;
-            }
-            _FriendlyBaRsByOwner = newCache;
-            _FriendlyOwnersByOwner = newOwnerCache;
+            FriendlyRelationsHandler.CleanupDamage();
         }
 
         public void Init()
@@ -599,59 +429,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 MyAPIGateway.Utilities.ShowMessage("Nanobars", autoStopMsg);
                         }
 
-                        // Periodic ownership cache refresh
-                        if (now.Subtract(_LastGeneralPeriodicCheck) >= TimeSpan.FromSeconds(10))
-                        {
-                            _LastGeneralPeriodicCheck = now;
-                            MyAPIGateway.Parallel.StartBackground(() =>
-                            {
-                                try { GridOwnershipCacheHandler.Update(); } catch { }
-                            });
-                        }
-
-                        if (now.Subtract(_LastSafeZoneUpdateCheck) >= TimeSpan.FromSeconds(6))
-                        {
-                            _LastSafeZoneUpdateCheck = now;
-                            MyAPIGateway.Parallel.StartBackground(() =>
-                            {
-                                try { SafeZoneHandler.GetSafeZones(); } catch { }
-                            });
-                        }
-
-                        if (now.Subtract(_LastTtlCacheCleanerCheck) >= TimeSpan.FromMinutes(2))
-                        {
-                            _LastTtlCacheCleanerCheck = now;
-                            MyAPIGateway.Parallel.StartBackground(() =>
-                            {
-                                try { InventoryHelper.Cleanup(); } catch { }
-                                try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
-                                try { BlockSystemAssigningHandler.Cleanup(); } catch { }
-                                try { SharedGridBlockCache.Cleanup(); } catch { }
-                                try { SharedEntityCache.Cleanup(); } catch { }
-                            });
-                        }
-
-                        // BUG-123: rebuild the friendly-BaR cache every 5 s. Walks NanobotSystems
-                        // and groups by source-owner → list of BaRs whose welder relation to that
-                        // owner is friendly. Replaces 58 GetUserRelationToOwner engine calls per
-                        // grind with a dict lookup + iterate. 5 s staleness is well inside the
-                        // 30 s default FriendlyDamageTimeout envelope.
-                        if (now.Subtract(_LastFriendlyBaRsRebuild) >= TimeSpan.FromSeconds(5))
-                        {
-                            _LastFriendlyBaRsRebuild = now;
-                            MyAPIGateway.Parallel.StartBackground(() =>
-                            {
-                                try { RebuildFriendlyBaRsCache(); } catch { }
-                            });
-                            // BUG-125: piggy-back a defensive periodic flush of profiler buffers
-                            // on the same 5 s cadence. Without per-line Flush in MethodProfiler.Write,
-                            // a long-running profile session that doesn't call StopSession could leave
-                            // data buffered indefinitely. This bounds loss to ~5 s on hard crash.
-                            MyAPIGateway.Parallel.StartBackground(() =>
-                            {
-                                try { MethodProfiler.FlushAll(); } catch { }
-                            });
-                        }
+                        PeriodicMaintenanceScheduler.Tick(now);
 
                         RebuildSourcesAndTargetsTimer();
 

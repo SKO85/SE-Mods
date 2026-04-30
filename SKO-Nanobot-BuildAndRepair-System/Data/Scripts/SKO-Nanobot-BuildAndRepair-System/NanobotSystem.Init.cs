@@ -1,5 +1,6 @@
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Utils;

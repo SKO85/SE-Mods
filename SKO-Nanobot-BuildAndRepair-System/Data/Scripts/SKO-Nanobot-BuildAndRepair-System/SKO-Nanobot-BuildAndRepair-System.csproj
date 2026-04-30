@@ -144,11 +144,12 @@
     <Compile Include="Chat\Commands\VersionCommand.cs" />
     <Compile Include="Handlers\ComponentPriorityHandling.cs" />
     <Compile Include="Handlers\DamageHandler.cs" />
+    <Compile Include="Handlers\FriendlyRelationsHandler.cs" />
     <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />
     <Compile Include="Handlers\NetworkMessagingHandler.cs" />
     <Compile Include="Handlers\RazeQueueHandler.cs" />
     <Compile Include="Helpers\PowerHelper.cs" />
-    <Compile Include="Helpers\SlimBlockHelper.cs" />
+    <Compile Include="Extensions\SlimBlockExtensions.cs" />
     <Compile Include="Localization\LocalizationHelper.cs" />
     <Compile Include="Collections\DefinitionIdHashDictionary.cs" />
     <Compile Include="Collections\TargetBlockDataHashList.cs" />
@@ -212,6 +213,8 @@
     <Compile Include="Caches\SharedGridBlockCache.cs" />
     <Compile Include="Caches\SharedEntityCache.cs" />
     <Compile Include="Managers\BackgroundTaskQueue.cs" />
+    <Compile Include="Managers\PerTickBudget.cs" />
+    <Compile Include="Managers\PeriodicMaintenanceScheduler.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

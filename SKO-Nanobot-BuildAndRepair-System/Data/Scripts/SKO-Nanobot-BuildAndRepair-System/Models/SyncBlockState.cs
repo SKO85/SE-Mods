@@ -1,6 +1,7 @@
 ﻿using ProtoBuf;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Collections;
+using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;

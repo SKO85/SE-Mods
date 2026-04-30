@@ -1,5 +1,7 @@
 using Sandbox.Definitions;
+using Sandbox.Game;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,6 +16,14 @@ namespace SKONanobotBuildAndRepairSystem.Utils
     public static class UtilsInventory
     {
         public delegate bool ExcludeInventory(IMyInventory destInventory, IMyInventory srcInventory, ref MyInventoryItem srcItem);
+
+        /// <summary>
+        /// Inventory fill ratio as a value in [0,1] — the higher of volume- and mass-based ratios.
+        /// </summary>
+        public static float IsFilledToPercent(this IMyInventory inventory)
+        {
+            return Math.Max((float)inventory.CurrentVolume / (float)inventory.MaxVolume, (float)inventory.CurrentMass / (float)((MyInventory)inventory).MaxMass);
+        }
 
         /// <summary>
         /// Check if all inventories are empty
