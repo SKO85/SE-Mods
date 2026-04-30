@@ -114,19 +114,14 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
             int maxPossible = 0;
             int currentStep = Math.Max((int)maxNeeded / 2, 1);
-            int currentTry = 0;
             while (currentStep > 0)
             {
-                currentTry = maxPossible + currentStep;
+                int currentTry = maxPossible + currentStep;
                 if (destInventory.CanItemsBeAdded(currentTry, itemType))
                 {
                     maxPossible = currentTry;
                 }
-                else
-                {
-                    if (currentStep <= 1) break;
-                }
-                if (currentStep > 1) currentStep = currentStep / 2;
+                currentStep = currentStep / 2;
             }
             return maxPossible;
         }
@@ -189,7 +184,6 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                     if (amount > 0)
                     {
                         moved = srcInventory.TransferItemTo(destInventory, srcItemIndex, null, true, amount, true) || moved;
-                        if (srcItem.Amount <= 0) break;
                     }
                 }
             }
@@ -198,7 +192,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
         /// <summary>
         /// Add maxNeeded amount of items into inventory.
-        /// -If not maxNeeded could be added as amany as possible is added and the added amout is returned
+        /// -If maxNeeded cannot be added, as many as possible are added and the added amount is returned
         /// -If maxNeeded is less than MyFixedPoint can handle 0 is returned
         /// </summary>
         public static float AddMaxItems(this IMyInventory destInventory, float maxNeeded, MyObjectBuilder_PhysicalObject objectBuilder)
@@ -212,7 +206,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var contentId = objectBuilder.GetObjectId();
             if (maxNeededFP <= 0)
             {
-                return 0; //Amount to small
+                return 0; //Amount too small
             }
 
             var maxPossible = destInventory.MaxFractionItemsAddable(maxNeededFP, contentId);
@@ -232,7 +226,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var contentId = objectBuilder.GetObjectId();
             if (maxNeededFP <= 0)
             {
-                return 0; //Amount to small
+                return 0; //Amount too small
             }
 
             var maxPossible = destInventory.MaxFractionItemsAddable(maxNeededFP, contentId);

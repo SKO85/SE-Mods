@@ -135,29 +135,24 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             return (LogLevel & level) != 0;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
+        // Indent ops share the _Cache lock with Write() so a writer never observes
+        // a half-updated _Indent value when called concurrently with these.
         public void IncreaseIndent(Level level)
         {
-            if ((LogLevel & level) != 0) _Indent++;
+            if ((LogLevel & level) == 0) return;
+            lock (_Cache) { _Indent++; }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void DecreaseIndent(Level level)
         {
-            if ((LogLevel & level) != 0)
-                if (_Indent > 0) _Indent--;
+            if ((LogLevel & level) == 0) return;
+            lock (_Cache) { if (_Indent > 0) _Indent--; }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void ResetIndent(Level level)
         {
-            if ((LogLevel & level) != 0) _Indent = 0;
+            if ((LogLevel & level) == 0) return;
+            lock (_Cache) { _Indent = 0; }
         }
 
         /// <summary>

@@ -40,7 +40,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         }
 
         /// <summary>
-        /// Ensure that the requested amout of material is available inside production block.
+        /// Ensure that the requested amount of material is available inside production block.
         /// Available means already in inventory or in production queue.
         /// </summary>
         /// <param name="entityId"></param>

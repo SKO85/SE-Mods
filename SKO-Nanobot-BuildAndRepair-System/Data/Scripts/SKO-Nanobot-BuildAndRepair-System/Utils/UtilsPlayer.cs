@@ -1,6 +1,5 @@
 using Sandbox.ModAPI;
 using System.Collections.Generic;
-using System.Linq;
 using VRage.Game.ModAPI;
 
 namespace SKONanobotBuildAndRepairSystem.Utils
@@ -9,16 +8,13 @@ namespace SKONanobotBuildAndRepairSystem.Utils
     {
         public static IMyPlayer GetPlayer(long identityId)
         {
-            var players = GetAllPlayers();
-            var player = players.FirstOrDefault(c => c.IdentityId == identityId);
-            return player;
-        }
-
-        public static List<IMyPlayer> GetAllPlayers()
-        {
-            var list = new List<IMyPlayer>();
-            MyAPIGateway.Players.GetPlayers(list);
-            return list;
+            var players = new List<IMyPlayer>();
+            MyAPIGateway.Players.GetPlayers(players);
+            for (var i = 0; i < players.Count; i++)
+            {
+                if (players[i].IdentityId == identityId) return players[i];
+            }
+            return null;
         }
 
         public static long GetOwner(IMyCubeGrid grid)
