@@ -413,7 +413,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             propertyNC4B.SupportsMultipleBlocks = false;
             propertyNC4B.Getter = (block) =>
             {
-                return UtilsInventory.NeededComponents4Blueprint;
+                return UtilsProductionBlock.NeededComponentsForBlueprint;
             };
             MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyNC4B);
         }

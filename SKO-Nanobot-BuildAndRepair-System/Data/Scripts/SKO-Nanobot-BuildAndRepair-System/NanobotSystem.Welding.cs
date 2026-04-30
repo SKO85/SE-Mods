@@ -945,7 +945,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (Settings.WeldOptions == AutoWeldOptions.WeldSkeleton || useIgnoreColor)
                     {
                         tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                        targetData.Block.GetMissingComponents(_TempMissingComponents, UtilsInventory.IntegrityLevel.Create);
+                        targetData.Block.GetMissingComponents(_TempMissingComponents, IntegrityLevel.Create);
                         if (tsMark != 0L) tsGetMissing += Stopwatch.GetTimestamp() - tsMark;
 
                         if (_TempMissingComponents.Count > 0)
@@ -960,7 +960,7 @@ namespace SKONanobotBuildAndRepairSystem
                         // Pick creation component first to guarantee it's in transport
                         // before other components fill the volume.
                         tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                        targetData.Block.GetMissingComponents(_TempMissingComponents, UtilsInventory.IntegrityLevel.Create);
+                        targetData.Block.GetMissingComponents(_TempMissingComponents, IntegrityLevel.Create);
                         if (tsMark != 0L) tsGetMissing += Stopwatch.GetTimestamp() - tsMark;
                         if (_TempMissingComponents.Count > 0)
                         {
@@ -979,7 +979,7 @@ namespace SKONanobotBuildAndRepairSystem
                             _TempMissingComponents.Clear();
 
                             tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                            targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? UtilsInventory.IntegrityLevel.Functional : UtilsInventory.IntegrityLevel.Complete);
+                            targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? IntegrityLevel.Functional : IntegrityLevel.Complete);
                             if (tsMark != 0L) tsGetMissing += Stopwatch.GetTimestamp() - tsMark;
 
                             // Subtract the creation component (already picked)
@@ -996,7 +996,7 @@ namespace SKONanobotBuildAndRepairSystem
                 else
                 {
                     tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                    targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? UtilsInventory.IntegrityLevel.Functional : UtilsInventory.IntegrityLevel.Complete);
+                    targetData.Block.GetMissingComponents(_TempMissingComponents, Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? IntegrityLevel.Functional : IntegrityLevel.Complete);
                     if (tsMark != 0L) tsGetMissing += Stopwatch.GetTimestamp() - tsMark;
                 }
 

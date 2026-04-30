@@ -6,7 +6,8 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 {
     public static class UtilsFaction
     {
-        public static int DamageAmount = 5;
+        public const int DamageAmount = 5;
+        private const int MinFactionReputation = -1500;
 
         public static void DamageReputationWithPlayerFaction(long sourcePlayerId, long targetPlayerId)
         {
@@ -21,14 +22,14 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                     return;
 
                 var myFaction = GetPlayerFaction(player.IdentityId);
-                if (myFaction == null || (myFaction != null && myFaction.FactionId != targetFaction.FactionId))
+                if (myFaction == null || myFaction.FactionId != targetFaction.FactionId)
                 {
                     var currentReputation = MyVisualScriptLogicProvider.GetRelationBetweenPlayerAndFaction(sourcePlayerId, targetFaction.Tag);
-                    if (currentReputation > -1500)
+                    if (currentReputation > MinFactionReputation)
                     {
                         var newReputation = currentReputation - DamageAmount;
-                        if (newReputation < -1500)
-                            newReputation = -1500;
+                        if (newReputation < MinFactionReputation)
+                            newReputation = MinFactionReputation;
 
                         MyVisualScriptLogicProvider.SetRelationBetweenPlayerAndFaction(sourcePlayerId, targetFaction.Tag, newReputation);
                     }
@@ -36,7 +37,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             }
         }
 
-        public static IMyFaction GetPlayerFaction(long playerId)
+        private static IMyFaction GetPlayerFaction(long playerId)
         {
             return MyAPIGateway.Session.Factions.TryGetPlayerFaction(playerId);
         }

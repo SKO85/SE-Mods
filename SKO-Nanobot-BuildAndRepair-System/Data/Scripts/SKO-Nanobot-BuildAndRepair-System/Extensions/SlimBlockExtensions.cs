@@ -2,6 +2,8 @@ using Sandbox.Definitions;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
+using System.Collections.Generic;
+using VRage.Game;
 using VRage.Game.ModAPI;
 using VRageMath;
 
@@ -12,6 +14,13 @@ namespace SKONanobotBuildAndRepairSystem.Extensions
     /// damage / integrity decisions, projector-build queries, range checks, and
     /// display-name formatting. Pure functions — no caches, no per-instance state.
     /// </summary>
+    public enum IntegrityLevel
+    {
+        Create,
+        Functional,
+        Complete
+    }
+
     public static class SlimBlockExtensions
     {
         public const float MinDeformation = 0.01f;
@@ -186,6 +195,72 @@ namespace SKONanobotBuildAndRepairSystem.Extensions
             {
                 var relation = GridOwnershipCacheHandler.GetRelationBetweenGridAndPlayer(slimBlock.CubeGrid, userId);
                 return relation;
+            }
+        }
+
+        /// <summary>
+        /// Sum the components needed to bring `block` from its current state to the requested
+        /// `level`. For projected blocks, walks blockDefinition.Components up to either
+        /// CriticalGroup+1 (Functional) or all (Complete). For non-projected blocks, defers to
+        /// the engine's GetMissingComponents and (when Functional) subtracts non-critical
+        /// components that already meet their target counts.
+        /// </summary>
+        public static void GetMissingComponents(this IMySlimBlock block, Dictionary<string, int> componentList, IntegrityLevel level)
+        {
+            var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
+
+            if (blockDefinition.Components == null || blockDefinition.Components.Length == 0) return;
+
+            if (level == IntegrityLevel.Create)
+            {
+                var component = blockDefinition.Components[0];
+                componentList.Add(component.Definition.Id.SubtypeName, 1);
+            }
+            else
+            {
+                if (block.IsProjected())
+                {
+                    int maxIdx = level == IntegrityLevel.Functional ? blockDefinition.CriticalGroup + 1 : blockDefinition.Components.Length;
+
+                    for (var idx = 0; idx < maxIdx; idx++)
+                    {
+                        var component = blockDefinition.Components[idx];
+
+                        if (componentList.ContainsKey(component.Definition.Id.SubtypeName))
+                        {
+                            componentList[component.Definition.Id.SubtypeName] += component.Count;
+                        }
+                        else
+                        {
+                            componentList.Add(component.Definition.Id.SubtypeName, component.Count);
+                        }
+                    }
+                }
+                else
+                {
+                    block.GetMissingComponents(componentList);
+
+                    if (level == IntegrityLevel.Functional)
+                    {
+                        for (var idx = blockDefinition.CriticalGroup + 1; idx < blockDefinition.Components.Length; idx++)
+                        {
+                            var component = blockDefinition.Components[idx];
+                            if (componentList.ContainsKey(component.Definition.Id.SubtypeName))
+                            {
+                                var amount = componentList[component.Definition.Id.SubtypeName];
+
+                                if (amount <= component.Count)
+                                {
+                                    componentList.Remove(component.Definition.Id.SubtypeName);
+                                }
+                                else
+                                {
+                                    componentList[component.Definition.Id.SubtypeName] -= component.Count;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

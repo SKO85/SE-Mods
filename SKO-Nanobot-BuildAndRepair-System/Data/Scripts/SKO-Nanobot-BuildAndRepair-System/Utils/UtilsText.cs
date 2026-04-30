@@ -3,7 +3,7 @@ using System.Text;
 
 namespace SKONanobotBuildAndRepairSystem.Utils
 {
-    internal static class UtilsText
+    public static class UtilsText
     {
         /// <summary>
         /// Wraps a long text into multiple lines, inserting newlines

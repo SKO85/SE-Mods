@@ -34,13 +34,5 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
             return gridOwner;
         }
-
-        /// <summary>
-        /// True when the character is a live, in-scene player (not an NPC, not closed, not dead).
-        /// </summary>
-        public static bool IsCharacterPlayerAndActive(IMyCharacter character)
-        {
-            return character != null && character.IsPlayer && !character.Closed && character.InScene && !character.IsDead;
-        }
     }
 }

@@ -2140,7 +2140,7 @@ namespace SKONanobotBuildAndRepairSystem
                             var cmp = CompareWeldPriority(a.Block, b.Block);
                             if (cmp != 0) return cmp;
 
-                            var distCmp = Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                            var distCmp = UtilsMath.CompareDistance(a.Distance, b.Distance);
                             if (distCmp != 0) return distCmp;
 
                             return CompareBlockStableTiebreak(a.Block, b.Block);
@@ -2169,7 +2169,7 @@ namespace SKONanobotBuildAndRepairSystem
                             var cmp = CompareWeldPriority(a.Block, b.Block);
                             if (cmp != 0) return cmp;
 
-                            var distCmp = Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                            var distCmp = UtilsMath.CompareDistance(a.Distance, b.Distance);
                             if (distCmp != 0) return distCmp;
 
                             return CompareBlockStableTiebreak(a.Block, b.Block);
@@ -2226,8 +2226,8 @@ namespace SKONanobotBuildAndRepairSystem
                             // coordinator pre-sort already honored grindNearFirst here; now the
                             // member sort matches. CompareDistance preserves the existing epsilon.
                             return grindNearFirst
-                                ? Utils.Utils.CompareDistance(a.Distance, b.Distance)
-                                : Utils.Utils.CompareDistance(b.Distance, a.Distance);
+                                ? UtilsMath.CompareDistance(a.Distance, b.Distance)
+                                : UtilsMath.CompareDistance(b.Distance, a.Distance);
                         });
                     }
                     catch (Exception ex)
@@ -2280,8 +2280,8 @@ namespace SKONanobotBuildAndRepairSystem
                             if (cmp != 0) return cmp;
 
                             return grindNearFirst
-                                ? Utils.Utils.CompareDistance(a.Distance, b.Distance)
-                                : Utils.Utils.CompareDistance(b.Distance, a.Distance);
+                                ? UtilsMath.CompareDistance(a.Distance, b.Distance)
+                                : UtilsMath.CompareDistance(b.Distance, a.Distance);
                         });
                     }
                     catch (Exception ex)
@@ -2345,13 +2345,13 @@ namespace SKONanobotBuildAndRepairSystem
                             var priorityB = ComponentCollectPriority.GetPriority(itemBFloating.Item.Content.GetObjectId());
                             if (priorityA == priorityB)
                             {
-                                return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                                return UtilsMath.CompareDistance(a.Distance, b.Distance);
                             }
                             else return priorityA - priorityB;
                         }
                         else if (itemAFloating == null) return -1;
                         else if (itemBFloating == null) return 1;
-                        return Utils.Utils.CompareDistance(a.Distance, b.Distance);
+                        return UtilsMath.CompareDistance(a.Distance, b.Distance);
                     });
                 }
                 catch (Exception ex)

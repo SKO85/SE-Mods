@@ -1,6 +1,9 @@
 namespace SKONanobotBuildAndRepairSystem.Utils
 {
-    public static class UtilsSynchronization
+    /// <summary>
+    /// Bit primitives used for hash mixing in collection list-hash computations.
+    /// </summary>
+    public static class UtilsHash
     {
         public static uint RotateLeft(uint x, int n)
         {
