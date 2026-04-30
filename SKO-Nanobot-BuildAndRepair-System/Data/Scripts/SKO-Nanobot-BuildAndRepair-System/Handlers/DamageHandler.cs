@@ -105,14 +105,26 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                         if (attackerId != 0)
                         {
+                            // BUG-130: write to the shared owner-keyed map. Distinct welder-owner
+                            // ids only — N BaRs sharing one owner now produce 1 write, not N.
+                            // The attacker may be an arbitrary player without a BaR, so the
+                            // _FriendlyOwnersByOwner cache (built from BaR welder owners only) is
+                            // not always populated for `attackerId`; iterate NanobotSystems here.
+                            // Damage events are rare so the N-walk is acceptable.
+                            var deadline = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                            var seenOwners = new System.Collections.Generic.HashSet<long>();
                             foreach (var entry in Mod.NanobotSystems)
                             {
-                                var relation = entry.Value.Welder.GetUserRelationToOwner(attackerId);
-
+                                var welder = entry.Value != null ? entry.Value.Welder : null;
+                                if (welder == null) continue;
+                                var welderOwner = welder.OwnerId;
+                                if (welderOwner == 0) continue;
+                                if (!seenOwners.Add(welderOwner)) continue;
+                                var relation = welder.GetUserRelationToOwner(attackerId);
                                 if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
                                 {
                                     // A 'friendly' damage from grinder -> do not repair (for a while)
-                                    entry.Value.FriendlyDamage[targetBlock] = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                                    Mod.MarkFriendlyDamage(welderOwner, targetBlock, deadline);
                                 }
                             }
                         }

@@ -11,7 +11,9 @@ using System.Diagnostics;
 using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
+using VRage.ModAPI;
 using VRage.ObjectBuilders;
+using VRageMath;
 using static SKONanobotBuildAndRepairSystem.Utils.UtilsInventory;
 
 namespace SKONanobotBuildAndRepairSystem
@@ -52,6 +54,19 @@ namespace SKONanobotBuildAndRepairSystem
             // wait to acquire, then how long we spend inside.
             var tsLockAcquire = 0L;
             var tsInLock = 0L;
+            // BUG-131: in-lock sub-timers. Profile session 20260430160958 showed 14-20 ms
+            // unaccounted inside the welding lock vs Weldable / ServerFindMissingComponents /
+            // ServerDoWeld already profiled. Three suspects on the per-iteration hot path:
+            // (1) BlockSystemAssigningHandler TtlCache ops (IsAssignedToOtherSystem,
+            // AssignToSystem, ReleaseFromSystem) which call MyAPIGateway.Session.ElapsedPlayTime
+            // on every read and allocate a new CacheItem on every write,
+            // (2) IsGridOverSystemLimit (153 calls in one observed spike),
+            // (3) BlockWeldPriority.GetPriority (called per non-ignored iteration).
+            // Sub-timers accumulate across the loop; per-iteration measurement is too noisy.
+            var tsAssignOps = 0L;
+            var tsGridLimit = 0L;
+            var tsPriority = 0L;
+            long _opTs;
             try
             {
 
@@ -81,11 +96,32 @@ namespace SKONanobotBuildAndRepairSystem
                 // When lock-on is lost (block vanished from list after scan rebuild),
                 // we re-iterate without lock-on so the BaR doesn't waste the tick.
                 var lockOnRetry = false;
+                // BUG-131: cache the lock-on block's identity once per call. The original
+                // IsSameBlock did 4 IMySlimBlock engine accessors per iteration (a.CubeGrid,
+                // b.CubeGrid, a.CubeGrid.EntityId, b.CubeGrid.EntityId). The lock-on side
+                // (a) is constant across the whole loop, so caching its grid id + position
+                // here saves 2 accessors per iteration on the skip-until-lock-on path —
+                // which dominates the spike samples (skipLock=70-200). State.CurrentWeldingBlock
+                // is reassigned at line 113 on lock-on found but always to a block with the
+                // SAME grid id + position, so the cache stays valid. Clears (line 199, 244,
+                // 258, 309) set it to null, which the runtime check below short-circuits.
+                long lockOnGridId = 0;
+                Vector3I lockOnPos = default(Vector3I);
+                if (State.CurrentWeldingBlock != null && State.CurrentWeldingBlock.CubeGrid != null)
+                {
+                    lockOnGridId = State.CurrentWeldingBlock.CubeGrid.EntityId;
+                    lockOnPos = State.CurrentWeldingBlock.Position;
+                }
                 LockOnRetry:
                 foreach (var targetData in State.PossibleWeldTargets)
                 {
+                    // BUG-131: inlined IsSameBlock against cached lock-on identity to halve
+                    // the engine-accessor cost on the per-iteration skip path.
                     var isLockOnBlock = State.CurrentWeldingBlock != null
-                        && IsSameBlock(State.CurrentWeldingBlock, targetData.Block);
+                        && targetData.Block != null
+                        && targetData.Block.CubeGrid != null
+                        && targetData.Block.CubeGrid.EntityId == lockOnGridId
+                        && targetData.Block.Position == lockOnPos;
 
                     if (!lookingForNext && State.CurrentWeldingBlock != null && !isLockOnBlock)
                     {
@@ -116,11 +152,16 @@ namespace SKONanobotBuildAndRepairSystem
                     if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && targetData.Block != Settings.CurrentPickedWeldingBlock) continue;
 
                     if (Mod.Settings.AssignToSystemEnabled
-                        && Settings.CurrentPickedWeldingBlock == null
-                        && targetData.Block.IsAssignedToOtherSystem(_Welder.EntityId))
+                        && Settings.CurrentPickedWeldingBlock == null)
                     {
-                        skippedByAssign++;
-                        continue;
+                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                        var assignedToOther = targetData.Block.IsAssignedToOtherSystem(_Welder.EntityId);
+                        if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
+                        if (assignedToOther)
+                        {
+                            skippedByAssign++;
+                            continue;
+                        }
                     }
 
                     var isIgnored = targetData.Ignore;
@@ -133,7 +174,9 @@ namespace SKONanobotBuildAndRepairSystem
                     // 30-45ms spikes to single-digit ms.
                     if (!isIgnored && !isLockOnBlock && !lookingForNext && starvedPriorityBits != 0)
                     {
+                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                         var earlyPriority = BlockWeldPriority.GetPriority(targetData.Block);
+                        if (_opTs != 0L) tsPriority += Stopwatch.GetTimestamp() - _opTs;
                         if (earlyPriority > 0 && earlyPriority < 64 && (starvedPriorityBits & (1L << earlyPriority)) != 0)
                         {
                             needWelding = true;
@@ -161,7 +204,9 @@ namespace SKONanobotBuildAndRepairSystem
                             // First-time hit on a newly-starved priority still pays the Weldable cost once.
                             if (!lookingForNext && starvedPriorityBits != 0)
                             {
+                                _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                                 var blockPriority = BlockWeldPriority.GetPriority(targetData.Block);
+                                if (_opTs != 0L) tsPriority += Stopwatch.GetTimestamp() - _opTs;
                                 if (blockPriority > 0 && blockPriority < 64 && (starvedPriorityBits & (1L << blockPriority)) != 0)
                                 {
                                     needWelding = true;
@@ -173,17 +218,26 @@ namespace SKONanobotBuildAndRepairSystem
                             if (Settings.CurrentPickedWeldingBlock == null)
                             {
                                 var gridId = targetData.Block.CubeGrid.EntityId;
-                                if (IsGridOverSystemLimit(gridId, ref lastRejectedGridId))
+                                _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                                var overLimit = IsGridOverSystemLimit(gridId, ref lastRejectedGridId);
+                                if (_opTs != 0L) tsGridLimit += Stopwatch.GetTimestamp() - _opTs;
+                                if (overLimit)
                                 {
                                     skippedByGridLimit++;
                                     continue;
                                 }
                             }
 
-                            if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && Settings.CurrentPickedWeldingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
+                            if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && Settings.CurrentPickedWeldingBlock == null)
                             {
-                                skippedByAssign++;
-                                continue;
+                                _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                                var assignOk = targetData.Block.AssignToSystem(_Welder.EntityId);
+                                if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
+                                if (!assignOk)
+                                {
+                                    skippedByAssign++;
+                                    continue;
+                                }
                             }
                         }
                         else
@@ -193,9 +247,17 @@ namespace SKONanobotBuildAndRepairSystem
                             if (Settings.CurrentPickedWeldingBlock == null && targetData.Block.CubeGrid != null)
                             {
                                 var gridId = targetData.Block.CubeGrid.EntityId;
-                                if (IsGridOverSystemLimit(gridId, ref lastRejectedGridId))
+                                _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                                var overLimit = IsGridOverSystemLimit(gridId, ref lastRejectedGridId);
+                                if (_opTs != 0L) tsGridLimit += Stopwatch.GetTimestamp() - _opTs;
+                                if (overLimit)
                                 {
-                                    if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
+                                    if (Mod.Settings.AssignToSystemEnabled)
+                                    {
+                                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                                        targetData.Block.ReleaseFromSystem();
+                                        if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
+                                    }
                                     State.CurrentWeldingBlock = null;
                                     lookingForNext = true;
                                     skippedByGridLimit++;
@@ -205,7 +267,9 @@ namespace SKONanobotBuildAndRepairSystem
                             // Refresh assignment for the lock-on block.
                             if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled)
                             {
+                                _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                                 targetData.Block.AssignToSystem(_Welder.EntityId);
+                                if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
                             }
                         }
 
@@ -236,7 +300,11 @@ namespace SKONanobotBuildAndRepairSystem
                             // keep the assignment so other BaRs in the same tick don't cascade
                             // through the same block. The TTL will release it naturally.
                             if (Mod.Settings.AssignToSystemEnabled && welding)
+                            {
+                                _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                                 targetData.Block.ReleaseFromSystem();
+                                if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
+                            }
                             State.PossibleWeldTargets.ChangeHash();
                             // Block completed this tick. Clear lock-on and search for the
                             // next target in the same iteration. welding stays true so
@@ -258,10 +326,17 @@ namespace SKONanobotBuildAndRepairSystem
                                 State.CurrentWeldingBlock = null;
                             }
 
-                            if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
+                            if (Mod.Settings.AssignToSystemEnabled)
+                            {
+                                _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                                targetData.Block.ReleaseFromSystem();
+                                if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
+                            }
 
                             // Track consecutive failures at the same priority level.
+                            _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                             var failPriority = BlockWeldPriority.GetPriority(targetData.Block);
+                            if (_opTs != 0L) tsPriority += Stopwatch.GetTimestamp() - _opTs;
                             if (failPriority == lastFailPriority)
                             {
                                 consecutiveAtPriority++;
@@ -287,7 +362,12 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                     else
                     {
-                        if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
+                        if (Mod.Settings.AssignToSystemEnabled)
+                        {
+                            _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                            targetData.Block.ReleaseFromSystem();
+                            if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
+                        }
                         if (targetData.Ignore)
                         {
                             State.PossibleWeldTargets.ChangeHash();
@@ -305,9 +385,21 @@ namespace SKONanobotBuildAndRepairSystem
                 // after projector update). Clear lock-on and re-iterate so this tick isn't wasted.
                 if (!lockOnRetry && State.CurrentWeldingBlock != null && !lockOnFound)
                 {
-                    if (Mod.Settings.AssignToSystemEnabled) State.CurrentWeldingBlock.ReleaseFromSystem();
+                    if (Mod.Settings.AssignToSystemEnabled)
+                    {
+                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                        State.CurrentWeldingBlock.ReleaseFromSystem();
+                        if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
+                    }
                     State.CurrentWeldingBlock = null;
+                    // Reset all in-loop counters so the BUG-122 lock-acquire / in-lock
+                    // instrumentation reports first-pass-only values; otherwise a retry
+                    // double-counts skip / check tallies for the same target list.
                     skippedByLockOn = 0;
+                    skippedByGridLimit = 0;
+                    skippedByIgnore = 0;
+                    skippedByAssign = 0;
+                    checkedByWeldable = 0;
                     componentFailures = 0;
                     starvedPriorityBits = 0L;
                     lastFailPriority = -1;
@@ -351,18 +443,21 @@ namespace SKONanobotBuildAndRepairSystem
                     var _totalComponentChecks = totalComponentChecks;
                     var _lookingForNextChecked = lookingForNextChecked;
                     var _weldSkipped = weldSkipped;
-                    var _saturatedGridCount = _saturatedGridIds.Count;
+                    var _saturatedGridCount = _gridSaturation.Count;
                     var tsFreq = Stopwatch.Frequency;
                     var _lockAcquireMs = tsLockAcquire * 1000.0 / tsFreq;
                     var _inLockMs = tsInLock * 1000.0 / tsFreq;
+                    var _assignOpsMs = tsAssignOps * 1000.0 / tsFreq;
+                    var _gridLimitMs = tsGridLimit * 1000.0 / tsFreq;
+                    var _priorityMs = tsPriority * 1000.0 / tsFreq;
                     MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3}",
+                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3};assignOpsMs={22:F3};gridLimitMs={23:F3};priorityMs={24:F3}",
                             _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
                             State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
                             _hadLockOn, _lockOnFound, _lockOnLost,
                             _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _componentFailures,
                             _starvedSkipped, _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount,
-                            _lockAcquireMs, _inLockMs));
+                            _lockAcquireMs, _inLockMs, _assignOpsMs, _gridLimitMs, _priorityMs));
                 }
             }
         }
@@ -949,7 +1044,18 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool ServerFindMissingComponents(TargetBlockData targetData, ref float remainingVolume)
         {
+            // BUG-133: replaced per-component-foreach-over-sources with source-outer iteration.
+            // Old path was 18.9 ms on cold cache for projected blocks (10 components × 78
+            // sources × FindItem engine call). New path walks each source's items ONCE per
+            // call and matches against the remaining-needs dict — O(sources + items) instead
+            // of O(components × sources × items). Phase 1 still tries the welder's own
+            // inventory per-component (cheap, small inventory).
             var picked = false;
+            _TempPullRemaining.Clear();
+            _TempPullDefs.Clear();
+
+            // Phase 1: try to satisfy from welder's own inventory before walking sources.
+            // ServerPickFromWelder is cheap (single inventory) and may zero out some needs.
             foreach (var keyValue in _TempMissingComponents)
             {
                 var componentId = new MyDefinitionId(typeof(MyObjectBuilder_Component), keyValue.Key);
@@ -958,23 +1064,144 @@ namespace SKONanobotBuildAndRepairSystem
 
                 picked = ServerPickFromWelder(componentId, definition.Volume, ref neededAmount, ref remainingVolume) || picked;
 
-                if (neededAmount > 0 && remainingVolume > 0)
+                if (neededAmount > 0)
                 {
-                    picked = PullComponents(componentId, definition.Volume, ref neededAmount, ref remainingVolume) || picked;
+                    _TempPullRemaining[keyValue.Key] = neededAmount;
+                    _TempPullDefs[keyValue.Key] = definition;
+                }
+                if (remainingVolume <= 0) break;
+            }
+
+            // Phase 2: single source walk for everything still missing.
+            if (_TempPullRemaining.Count > 0 && remainingVolume > 0)
+            {
+                picked = PullFromSourcesOnePass(ref remainingVolume) || picked;
+            }
+
+            // Phase 3: report whatever we still could not get.
+            foreach (var keyValue in _TempPullRemaining)
+            {
+                if (keyValue.Value > 0)
+                {
+                    var componentId = new MyDefinitionId(typeof(MyObjectBuilder_Component), keyValue.Key);
+                    AddToMissingComponents(componentId, keyValue.Value);
+                }
+            }
+
+            _TempPullRemaining.Clear();
+            _TempPullDefs.Clear();
+            return picked;
+        }
+
+        /// <summary>
+        /// BUG-133: walks each source inventory exactly once, matching items against any
+        /// component still in <see cref="_TempPullRemaining"/>. Pulls into the welder, then
+        /// stages into the transport inventory via ServerPickFromWelder so remainingVolume
+        /// reflects what's actually queued for transport. Updates _TempPullRemaining in place.
+        /// BUG-134: empty sources are skipped without paying the GetItems engine call, and
+        /// the source that succeeded on the previous call is tried first to exploit temporal
+        /// locality (back-to-back welds usually need the same components from the same place).
+        /// </summary>
+        private bool PullFromSourcesOnePass(ref float remainingVolume)
+        {
+            var picked = false;
+            var welderInventory = _Welder.GetInventory(0);
+            if (welderInventory == null) return false;
+
+            lock (_PossibleSources)
+            {
+                // BUG-134: locate the last successful source in the current list. Linear scan
+                // (~µs for ~80 entries). Reference invalidates after a scan rebuilds the list,
+                // in which case we just fall through to the normal walk.
+                var lastSuccessful = _LastSuccessfulSource;
+                int lastSuccessfulIdx = -1;
+                if (lastSuccessful != null)
+                {
+                    for (int i = 0; i < _PossibleSources.Count; i++)
+                    {
+                        if (ReferenceEquals(_PossibleSources[i], lastSuccessful))
+                        {
+                            lastSuccessfulIdx = i;
+                            break;
+                        }
+                    }
                 }
 
-                if (neededAmount > 0 && remainingVolume > 0)
+                bool abort = false;
+                if (lastSuccessfulIdx >= 0)
                 {
-                    AddToMissingComponents(componentId, neededAmount);
+                    abort = TryPullFromSource(_PossibleSources[lastSuccessfulIdx], welderInventory, ref remainingVolume, ref picked);
+                    if (abort || remainingVolume <= 0 || _TempPullRemaining.Count == 0) return picked;
                 }
 
-                if (remainingVolume <= 0)
+                for (var srcIdx = 0; srcIdx < _PossibleSources.Count; srcIdx++)
                 {
-                    break;
+                    if (srcIdx == lastSuccessfulIdx) continue;
+                    if (remainingVolume <= 0 || _TempPullRemaining.Count == 0) break;
+                    if (TryPullFromSource(_PossibleSources[srcIdx], welderInventory, ref remainingVolume, ref picked)) break;
                 }
             }
 
             return picked;
+        }
+
+        /// <summary>
+        /// BUG-134: per-source pull body. Returns true if the welder is full and the caller
+        /// should abort the entire walk (no further source can yield anything that fits).
+        /// Returning false means "ok, continue with next source".
+        /// </summary>
+        private bool TryPullFromSource(IMyInventory srcInventory, IMyInventory welderInventory, ref float remainingVolume, ref bool picked)
+        {
+            if (srcInventory == null) return false;
+            var srcOwner = srcInventory.Owner as IMyEntity;
+            if (srcOwner == null || srcOwner.MarkedForClose) return false;
+            // BUG-134: skip empty sources without paying the GetItems engine call.
+            if (srcInventory.ItemCount == 0) return false;
+
+            _TempPullInventoryItems.Clear();
+            srcInventory.GetItems(_TempPullInventoryItems);
+
+            for (int i = _TempPullInventoryItems.Count - 1; i >= 0; i--)
+            {
+                if (remainingVolume <= 0) break;
+                var srcItem = _TempPullInventoryItems[i];
+                if (srcItem == null || srcItem.Amount <= 0) continue;
+
+                var subtypeName = srcItem.Type.SubtypeId;
+                int neededAmount;
+                if (!_TempPullRemaining.TryGetValue(subtypeName, out neededAmount) || neededAmount <= 0) continue;
+
+                Sandbox.Definitions.MyPhysicalItemDefinition definition;
+                if (!_TempPullDefs.TryGetValue(subtypeName, out definition)) continue;
+                var volume = definition.Volume;
+                var componentId = new MyDefinitionId(typeof(MyObjectBuilder_Component), subtypeName);
+
+                if (!srcInventory.CanTransferItemTo(welderInventory, componentId)) continue;
+
+                var maxByVolume = (int)Math.Floor(remainingVolume / volume);
+                if (maxByVolume <= 0) continue;
+                var amountPossible = Math.Min(Math.Min(neededAmount, (int)srcItem.Amount), maxByVolume);
+                if (amountPossible <= 0) continue;
+
+                var amountMoveable = (int)welderInventory.MaxItemsAddable(amountPossible, componentId);
+                if (amountMoveable <= 0)
+                {
+                    _TempPullInventoryItems.Clear();
+                    return true; // welder full → stop the whole walk
+                }
+
+                if (welderInventory.TransferItemFrom(srcInventory, i, null, true, amountMoveable))
+                {
+                    int needed = neededAmount;
+                    picked = ServerPickFromWelder(componentId, volume, ref needed, ref remainingVolume) || picked;
+                    if (needed > 0) _TempPullRemaining[subtypeName] = needed;
+                    else _TempPullRemaining.Remove(subtypeName);
+                    // BUG-134: remember this source as the first to try next call.
+                    _LastSuccessfulSource = srcInventory;
+                }
+            }
+            _TempPullInventoryItems.Clear();
+            return false;
         }
 
         /// <summary>

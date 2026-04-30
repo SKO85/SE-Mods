@@ -84,20 +84,17 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     CreativeModeActive = MyAPIGateway.Session.CreativeMode;
 
-                    var friendlyDmgTs = MethodProfiler.Start();
-                    CleanupFriendlyDamage();
-                    if (friendlyDmgTs != 0L)
-                    {
-                        MethodProfiler.StopAndLog("CleanupFriendlyDamage", friendlyDmgTs, () =>
-                            string.Format("entityId={0};entries={1}", _Welder.EntityId, FriendlyDamage.Count));
-                    }
+                    // BUG-130: per-BaR CleanupFriendlyDamage retired. Shared owner-keyed map
+                    // is reaped at Mod-level once per Settings.FriendlyDamageCleanup interval
+                    // (see Mod.CleanupFriendlyDamage()), eliminating the 174× per-tick walk
+                    // over per-BaR FriendlyDamage CDicts that drove the 6.95 ms outliers.
 
                     // WorkSpeed controls operation frequency:
                     //   1 = every 100 frames (same as old Update100, default)
                     //  10 = every 10 frames (same as old Update10, fastest)
                     // Stagger distributes BaRs within each cycle.
                     var workSpeed = Math.Max(1, Math.Min(10, Mod.Settings.Welder.WorkSpeed));
-                    var cycleDivisor = 80 / workSpeed;
+                    var cycleDivisor = 100 / workSpeed;
                     var cycle = MyAPIGateway.Session.GameplayFrameCounter / cycleDivisor;
                     clusterSize = AssignedCluster != null ? AssignedCluster.Members.Count : 1;
                     var modWideStagger = Mod.GetEffectiveStaggerGroupCount();

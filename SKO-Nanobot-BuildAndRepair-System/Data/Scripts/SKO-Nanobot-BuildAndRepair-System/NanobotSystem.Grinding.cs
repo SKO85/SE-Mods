@@ -38,7 +38,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // set changes (a BaR on the target grid left, freeing a slot).
                 if (_grindLoopExhausted
                     && State.PossibleGrindTargets.CurrentHash == _grindExhaustedAtHash
-                    && _saturatedGridIds.Count == _grindExhaustedSaturatedCount)
+                    && _gridSaturation.Count == _grindExhaustedSaturatedCount)
                 {
                     return;
                 }
@@ -112,7 +112,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _grindLoopExhausted = true;
                     _grindExhaustedAtHash = State.PossibleGrindTargets.CurrentHash;
-                    _grindExhaustedSaturatedCount = _saturatedGridIds.Count;
+                    _grindExhaustedSaturatedCount = _gridSaturation.Count;
                 }
             }
 
@@ -259,26 +259,21 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (target.UseDamageSystem)
                 {
-                    // BUG-123: replaced the per-grind 58× GetUserRelationToOwner walk with a
-                    // 5-s-rebuilt cache lookup (Mod._FriendlyBaRsByOwner). Profile session
-                    // 20260429181044 showed `friendlyMs` outliers up to 4.81 ms despite the
-                    // ~70 µs nominal cost recorded by BUG-105 — engine call latency is variable
-                    // and re-walking 58 BaRs every grind is unnecessary. The cache key is the
-                    // grinding BaR's OwnerId; the value is the list of OTHER BaRs whose welders
-                    // currently consider that owner friendly. 5 s staleness sits well inside
-                    // the 30 s default FriendlyDamageTimeout envelope.
+                    // BUG-130: write once per distinct friendly OWNER instead of once per friendly
+                    // BaR. The shared Mod._FriendlyDamageByOwner is owner-keyed, so all BaRs sharing
+                    // a welder owner share the same entry. In single-faction worlds this collapses
+                    // 174 CDict writes into ~1 dict write, eliminating the 21 ms friendlyMs spikes.
+                    // Behavior preserved: read-side IsFriendlyDamage still returns true for the
+                    // same set of (block, welder) pairs.
                     tsMark = Stopwatch.GetTimestamp();
-                    System.Collections.Generic.List<NanobotSystem> friendlies;
-                    if (Mod.TryGetFriendlyBaRsForOwner(_Welder.OwnerId, out friendlies) && friendlies != null)
+                    System.Collections.Generic.List<long> friendlyOwners;
+                    if (Mod.TryGetFriendlyOwnersForOwner(_Welder.OwnerId, out friendlyOwners) && friendlyOwners != null)
                     {
-                        var elapsedPlayTime = MyAPIGateway.Session.ElapsedPlayTime;
-                        var timeout = Mod.Settings.FriendlyDamageTimeout;
-                        for (var i = 0; i < friendlies.Count; i++)
+                        var deadline = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                        for (var i = 0; i < friendlyOwners.Count; i++)
                         {
                             friendlyIter++;
-                            //A 'friendly' damage from grinder -> do not repair (for a while)
-                            //I don't check block relation here, because if it is enemy we won't repair it in any case and it just times out
-                            friendlies[i].FriendlyDamage[target] = elapsedPlayTime + timeout;
+                            Mod.MarkFriendlyDamage(friendlyOwners[i], target, deadline);
                         }
                     }
                     tsFriendly = Stopwatch.GetTimestamp() - tsMark;
@@ -322,14 +317,16 @@ namespace SKONanobotBuildAndRepairSystem
                     tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
 
                     tsMark = Stopwatch.GetTimestamp();
-                    // BUG-127: defer raze (SetToConstructionSite + RemoveBlock) to Mod's
-                    // per-tick processed queue. Eliminates the 5-8 ms SE-engine cleanup
-                    // spike from co-occurring with the grind tick. Block sits at
+                    // BUG-127: defer raze to Mod's batched queue. Drains every
+                    // RazeProcessIntervalTicks ticks via IMyCubeGrid.RazeBlocks(positions),
+                    // collapsing N physics+integrity recalcs into 1 per grid and shifting
+                    // the SE-engine cleanup off the grind tick. SetToConstructionSite call
+                    // dropped — no longer needed for batch raze. Block sits at
                     // FatBlock.Closed=false / IsDestroyed=true until the queue drains;
                     // ServerTryGrinding's existing IsDestroyed / Closed skips already filter
                     // it from being re-targeted. tsRaze now reports just the enqueue cost
                     // (sub-microsecond).
-                    Mod.EnqueueRaze(target);
+                    RazeQueueHandler.Enqueue(target);
                     tsRaze = Stopwatch.GetTimestamp() - tsMark;
                 }
             }

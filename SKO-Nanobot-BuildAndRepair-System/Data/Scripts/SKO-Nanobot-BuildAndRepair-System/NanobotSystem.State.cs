@@ -132,34 +132,13 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Check if block currently has been damaged by friendly(grinder)
+        /// Check if block currently has been damaged by friendly(grinder).
+        /// BUG-130: redirects to the shared owner-keyed map in Mod. Existence-only check
+        /// matches prior semantics (the timestamp is consulted only by cleanup).
         /// </summary>
         public bool IsFriendlyDamage(IMySlimBlock slimBlock)
         {
-            return FriendlyDamage.ContainsKey(slimBlock);
-        }
-
-        /// <summary>
-        /// Clear timedout friendly damaged blocks
-        /// </summary>
-        private void CleanupFriendlyDamage()
-        {
-            var playTime = MyAPIGateway.Session.ElapsedPlayTime;
-            if (playTime.Subtract(_LastFriendlyDamageCleanup) > Mod.Settings.FriendlyDamageCleanup)
-            {
-                //Cleanup
-                var timedout = new List<IMySlimBlock>();
-                foreach (var entry in FriendlyDamage)
-                {
-                    if (entry.Value < playTime) timedout.Add(entry.Key);
-                }
-                for (var idx = timedout.Count - 1; idx >= 0; idx--)
-                {
-                    TimeSpan removed;
-                    FriendlyDamage.TryRemove(timedout[idx], out removed);
-                }
-                _LastFriendlyDamageCleanup = playTime;
-            }
+            return Mod.IsFriendlyDamage(_Welder != null ? _Welder.OwnerId : 0, slimBlock);
         }
 
         public WorkingState GetWorkingState()

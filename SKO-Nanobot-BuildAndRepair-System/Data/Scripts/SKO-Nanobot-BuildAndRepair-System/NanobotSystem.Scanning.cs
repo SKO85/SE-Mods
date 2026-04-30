@@ -381,55 +381,52 @@ namespace SKONanobotBuildAndRepairSystem
         /// BuildableBlocksCount > 0.
         /// Called once per second on the main thread, only when idle.
         /// </summary>
+        private static readonly List<Sandbox.ModAPI.IMyProjector> _projectorScratch = new List<Sandbox.ModAPI.IMyProjector>();
+        private static readonly Func<Sandbox.ModAPI.IMyProjector, bool> _buildableProjectorFilter =
+            p => p != null && p.IsProjecting && p.BuildableBlocksCount > 0;
+
         private bool HasBuildableProjectorOnGrid()
         {
             try
             {
-                var visited = new HashSet<long>();
-
-                // Phase 1: Check own grid + connected grids (Grids search mode).
-                var toVisit = new Queue<IMyCubeGrid>();
-                toVisit.Enqueue(_Welder.CubeGrid);
-
-                while (toVisit.Count > 0)
+                // BUG-132: replaced manual BFS through Mechanical/Attachable/Connector edges
+                // + per-fatblock cast with the engine's logical grid-group terminal system,
+                // which maintains a type-indexed projector list. On a 5000-block grid with
+                // 1 projector this drops from ~5000 casts to a single typed lookup.
+                var helper = MyAPIGateway.TerminalActionsHelper;
+                if (helper != null && _Welder.CubeGrid != null)
                 {
-                    var cubeGrid = toVisit.Dequeue();
-                    if (cubeGrid == null || !visited.Add(cubeGrid.EntityId)) continue;
-
-                    var grid = cubeGrid as MyCubeGrid;
-                    if (grid == null) continue;
-
-                    foreach (var block in grid.GetFatBlocks())
+                    var terminalSystem = helper.GetTerminalSystemForGrid(_Welder.CubeGrid);
+                    if (terminalSystem != null)
                     {
-                        var projector = block as Sandbox.ModAPI.IMyProjector;
-                        if (projector != null && projector.IsProjecting && projector.BuildableBlocksCount > 0)
-                            return true;
-
-                        var mechanical = block as Sandbox.ModAPI.IMyMechanicalConnectionBlock;
-                        if (mechanical != null && mechanical.TopGrid != null)
-                        {
-                            toVisit.Enqueue(mechanical.TopGrid);
-                            continue;
-                        }
-
-                        var attachable = block as Sandbox.ModAPI.IMyAttachableTopBlock;
-                        if (attachable != null && attachable.Base != null && attachable.Base.CubeGrid != null)
-                        {
-                            toVisit.Enqueue(attachable.Base.CubeGrid);
-                            continue;
-                        }
-
-                        var connector = block as Sandbox.ModAPI.IMyShipConnector;
-                        if (connector != null && connector.Status == Sandbox.ModAPI.Ingame.MyShipConnectorStatus.Connected && connector.OtherConnector != null)
-                        {
-                            toVisit.Enqueue(connector.OtherConnector.CubeGrid);
-                        }
+                        _projectorScratch.Clear();
+                        terminalSystem.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, _buildableProjectorFilter);
+                        var found = _projectorScratch.Count > 0;
+                        _projectorScratch.Clear();
+                        if (found) return true;
                     }
                 }
 
-                // Phase 2: BoundingBox mode — check unconnected grids in working area.
+                // Phase 2: BoundingBox mode — also check unconnected grids in working area.
+                // The terminal-system path above only covers Logically-linked grids; nearby
+                // free-floating grids share no terminal system, so we still need an entity walk.
                 if (Settings.SearchMode == SearchModes.BoundingBox)
                 {
+                    var ownGroupGridIds = new HashSet<long>();
+                    if (helper != null && _Welder.CubeGrid != null)
+                    {
+                        var ownGroup = _Welder.CubeGrid.GetGridGroup(GridLinkTypeEnum.Logical);
+                        if (ownGroup != null)
+                        {
+                            var groupGrids = new List<IMyCubeGrid>();
+                            ownGroup.GetGrids(groupGrids);
+                            for (var i = 0; i < groupGrids.Count; i++)
+                            {
+                                if (groupGrids[i] != null) ownGroupGridIds.Add(groupGrids[i].EntityId);
+                            }
+                        }
+                    }
+
                     var emitterMatrix = _Welder.WorldMatrix;
                     emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
                     var areaBox = new MyOrientedBoundingBoxD(Settings.CorrectedAreaBoundingBox, emitterMatrix);
@@ -444,15 +441,20 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         foreach (var entity in entities)
                         {
-                            var nearbyGrid = entity as MyCubeGrid;
-                            if (nearbyGrid == null || visited.Contains(nearbyGrid.EntityId)) continue;
-                            visited.Add(nearbyGrid.EntityId);
+                            var nearbyGrid = entity as IMyCubeGrid;
+                            if (nearbyGrid == null || ownGroupGridIds.Contains(nearbyGrid.EntityId)) continue;
 
-                            foreach (var block in nearbyGrid.GetFatBlocks())
+                            if (helper != null)
                             {
-                                var projector = block as Sandbox.ModAPI.IMyProjector;
-                                if (projector != null && projector.IsProjecting && projector.BuildableBlocksCount > 0)
-                                    return true;
+                                var nearbyTerminal = helper.GetTerminalSystemForGrid(nearbyGrid);
+                                if (nearbyTerminal != null)
+                                {
+                                    _projectorScratch.Clear();
+                                    nearbyTerminal.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, _buildableProjectorFilter);
+                                    var found = _projectorScratch.Count > 0;
+                                    _projectorScratch.Clear();
+                                    if (found) return true;
+                                }
                             }
                         }
                     }

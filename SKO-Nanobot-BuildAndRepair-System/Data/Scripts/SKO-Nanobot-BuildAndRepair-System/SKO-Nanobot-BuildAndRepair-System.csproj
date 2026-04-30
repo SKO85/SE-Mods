@@ -122,6 +122,7 @@
     <Compile Include="Cluster\ScanClusterCoordinator.cs" />
     <Compile Include="Cluster\ScanClusterResult.cs" />
     <Compile Include="Handlers\BlockSystemAssigningHandler.cs" />
+    <Compile Include="Handlers\GridSaturationHandler.cs" />
     <Compile Include="Handlers\HudHandler.cs" />
     <Compile Include="Handlers\SafeZoneHandler.cs" />
     <Compile Include="Mods\HudAPIv2.cs" />
@@ -145,6 +146,7 @@
     <Compile Include="Handlers\DamageHandler.cs" />
     <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />
     <Compile Include="Handlers\NetworkMessagingHandler.cs" />
+    <Compile Include="Handlers\RazeQueueHandler.cs" />
     <Compile Include="Helpers\PowerHelper.cs" />
     <Compile Include="Helpers\SlimBlockHelper.cs" />
     <Compile Include="Localization\LocalizationHelper.cs" />
@@ -209,9 +211,7 @@
     <Compile Include="Utils\UtilsText.cs" />
     <Compile Include="Caches\SharedGridBlockCache.cs" />
     <Compile Include="Caches\SharedEntityCache.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Managers\" />
+    <Compile Include="Managers\BackgroundTaskQueue.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

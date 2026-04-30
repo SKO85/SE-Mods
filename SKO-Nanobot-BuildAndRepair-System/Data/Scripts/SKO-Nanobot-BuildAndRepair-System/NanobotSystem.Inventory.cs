@@ -269,104 +269,13 @@ namespace SKONanobotBuildAndRepairSystem
             return running;
         }
 
-        /// <summary>
-        /// Pull components into welder
-        /// </summary>
-        private bool PullComponents(MyDefinitionId componentId, float volume, ref int neededAmount, ref float remainingVolume)
-        {
-            var profilerTs = MethodProfiler.Start();
-            var startNeeded = neededAmount;
-            int availAmount = 0;
-            var welderInventory = _Welder.GetInventory(0);
-            var maxpossibleAmount = Math.Min(neededAmount, (int)Math.Ceiling(remainingVolume / volume));
-
-            if (maxpossibleAmount <= 0) return false;
-
-            var picked = false;
-
-            // BUG-057: Reuse pooled list across source iterations to avoid per-call allocation.
-            _TempPullInventoryItems.Clear();
-
-            // BUG-129: cache key reused per source iteration. Capturing the subtype name once
-            // avoids re-allocating the MyTuple on every loop turn.
-            var componentSubtype = componentId.SubtypeName;
-
-            lock (_PossibleSources)
-            {
-                foreach (var srcInventory in _PossibleSources)
-                {
-                    var srcOwner = srcInventory.Owner as IMyEntity;
-                    if (srcOwner == null || srcOwner.MarkedForClose) continue;
-
-                    // BUG-129: skip sources cached as "doesn't have this component". With 94
-                    // sources × N missing components per ServerFindMissingComponents call, the
-                    // pre-existing FindItem walk dominated pullPickMs (6.5 ms on LargeRefinery).
-                    // The cache short-circuits the engine call on sources known not to contain
-                    // the component. Stale "false" entries miss a freshly-stocked source for
-                    // up to 30 s (TTL); benign — BaR finds the component on another source or
-                    // next refresh.
-                    var cacheKey = new MyTuple<long, string>(srcOwner.EntityId, componentSubtype);
-                    bool cachedHas;
-                    if (Helpers.InventoryHelper.SourceHasComponentCache.TryGet(cacheKey, out cachedHas) && !cachedHas)
-                    {
-                        continue;
-                    }
-
-                    var hasItem = srcInventory.FindItem(componentId) != null;
-                    Helpers.InventoryHelper.SourceHasComponentCache.Set(cacheKey, hasItem);
-                    if (!hasItem) continue;
-
-                    //Pre Test is 10 timers faster then get the whole list (as copy!) and iterate for nothing
-                    if (srcInventory.CanTransferItemTo(welderInventory, componentId))
-                    {
-                        _TempPullInventoryItems.Clear();
-                        srcInventory.GetItems(_TempPullInventoryItems);
-                        for (int srcItemIndex = _TempPullInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
-                        {
-                            var srcItem = _TempPullInventoryItems[srcItemIndex];
-                            if (srcItem != null && (MyDefinitionId)srcItem.Type == componentId && srcItem.Amount > 0)
-                            {
-                                var moved = false;
-                                var amountMoveable = 0;
-                                var amountPossible = Math.Min(maxpossibleAmount, (int)srcItem.Amount);
-
-                                if (amountPossible > 0)
-                                {
-                                    amountMoveable = (int)welderInventory.MaxItemsAddable(amountPossible, componentId);
-                                    if (amountMoveable > 0)
-                                    {
-                                        moved = welderInventory.TransferItemFrom(srcInventory, srcItemIndex, null, true, amountMoveable);
-                                        if (moved)
-                                        {
-                                            maxpossibleAmount -= amountMoveable;
-                                            availAmount += amountMoveable;
-                                            picked = ServerPickFromWelder(componentId, volume, ref neededAmount, ref remainingVolume) || picked;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        //No (more) space in welder
-                                        neededAmount -= availAmount;
-                                        remainingVolume -= availAmount * volume;
-                                        return picked;
-                                    }
-                                }
-                            }
-                            if (maxpossibleAmount <= 0) return picked;
-                        }
-                    }
-                    if (maxpossibleAmount <= 0) return picked;
-                }
-            }
-
-            if (profilerTs != 0L)
-            {
-                MethodProfiler.StopAndLog("PullComponents", profilerTs, () =>
-                    string.Format("entityId={0};component={1};startNeeded={2};picked={3};sources={4}",
-                        _Welder.EntityId, componentId.SubtypeName, startNeeded, picked, _PossibleSources.Count));
-            }
-            return picked;
-        }
+        // BUG-133: PullComponents (per-component source walk) retired in favor of
+        // PullFromSourcesOnePass in NanobotSystem.Welding.cs, which iterates sources once
+        // and matches against ALL remaining missing components. The old structure ran
+        // FindItem N components × M sources times on cold-cache projected blocks (18.9 ms
+        // observed). The replacement is O(sources + items) per call.
+        // SourceHasComponentCache and the per-source FindItem are no longer needed; the
+        // cache field in InventoryHelper has been removed alongside this method.
 
         private bool IsTransportRunning(TimeSpan playTime)
         {

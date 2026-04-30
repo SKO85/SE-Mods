@@ -47,8 +47,8 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 8f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
-        private const int MaxPossibleWeldTargets = 256;
-        private const int MaxPossibleGrindTargets = 256;
+        private const int MaxPossibleWeldTargets = 128;
+        private const int MaxPossibleGrindTargets = 128;
         private const int MaxPossibleFloatingTargets = 16;
 
         private const int TransmitStateMinIntervalSeconds = 1;
@@ -163,8 +163,8 @@ namespace SKONanobotBuildAndRepairSystem
         private Dictionary<IMySlimBlock, int> _sortCandidatePriorities = new Dictionary<IMySlimBlock, int>();
 
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
-        // Rebuilt by RebuildSaturatedGrids(), used as fast-path in IsGridOverSystemLimit().
-        private HashSet<long> _saturatedGridIds = new HashSet<long>();
+        // Rebuilt by _gridSaturation.Rebuild(), used as fast-path in IsGridOverSystemLimit().
+        private readonly GridSaturationTracker _gridSaturation = new GridSaturationTracker();
 
         // BUG-115: persistent set of projected-block keys ("gridId:position") for which proj.Build()
         // has thrown a NullReferenceException (SE engine DLC-armor validation failure). The
@@ -212,6 +212,20 @@ namespace SKONanobotBuildAndRepairSystem
         private Dictionary<string, int> _TempMissingComponents = new Dictionary<string, int>();
         private List<MyInventoryItem> _TempInventoryItems = new List<MyInventoryItem>();
         private List<MyInventoryItem> _TempPullInventoryItems = new List<MyInventoryItem>();
+        // BUG-133: source-walk inversion buffers. Replaces the per-component foreach over
+        // sources (which hit FindItem N components × M sources times) with one pass over
+        // sources, per-source GetItems once, dictionary lookup against remaining missing.
+        private Dictionary<string, int> _TempPullRemaining = new Dictionary<string, int>();
+        private Dictionary<string, Sandbox.Definitions.MyPhysicalItemDefinition> _TempPullDefs =
+            new Dictionary<string, Sandbox.Definitions.MyPhysicalItemDefinition>();
+        // BUG-134: source that last provided components in a successful PullFromSourcesOnePass.
+        // Tried first on the next call so a BaR welding back-to-back blocks doesn't keep walking
+        // empty/irrelevant sources at the front of the distance-sorted list before reaching the
+        // one storage container that actually holds what it needs. Reference invalidates naturally
+        // on rescan (the scan replaces _PossibleSources contents); a stale reference simply fails
+        // the in-list check at the start of PullFromSourcesOnePass and we fall through to the
+        // normal walk.
+        private VRage.Game.ModAPI.IMyInventory _LastSuccessfulSource;
 
         private int _UpdateEffectsInterval;
         private bool _UpdateCustomInfoNeeded;
@@ -221,7 +235,6 @@ namespace SKONanobotBuildAndRepairSystem
         private float _MaxGrindTransportVolume;
 
 
-        private TimeSpan _LastFriendlyDamageCleanup;
         private TimeSpan _LastSourceUpdate = -Mod.Settings.SourcesUpdateInterval;
         private TimeSpan _LastTargetsUpdate;
         public TimeSpan LastTargetsUpdate { get { return _LastTargetsUpdate; } }
@@ -306,11 +319,6 @@ namespace SKONanobotBuildAndRepairSystem
 
         public SyncBlockState State
         { get { return _State; } }
-
-        /// <summary>
-        /// Currently friendly damaged blocks
-        /// </summary>
-        public readonly ConcurrentDictionary<IMySlimBlock, TimeSpan> FriendlyDamage = new ConcurrentDictionary<IMySlimBlock, TimeSpan>();
 
         /// <summary>
         /// Cluster assignment for shared scanning. Null means solo (legacy path).

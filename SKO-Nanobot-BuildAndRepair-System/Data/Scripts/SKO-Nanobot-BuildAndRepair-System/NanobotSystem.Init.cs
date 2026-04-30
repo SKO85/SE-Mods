@@ -4,6 +4,7 @@ using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Diagnostics;
 using VRage.Game;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
@@ -188,13 +189,22 @@ namespace SKONanobotBuildAndRepairSystem
                 // The background task sets _AsyncUpdateSourcesAndTargetsRunning = false
                 // inside lock(_Welder) in its finally block. Check under the same lock
                 // to ensure we observe the write, not a stale cached value.
-                var deadline = DateTime.UtcNow.AddSeconds(5);
+                // Stopwatch-based ~1 ms spin between checks: System.Threading.Sleep is
+                // prohibited by the SE sandbox, but the previous lock+poll loop ran with
+                // no delay and pegged a main-thread core for up to 5 s × N closing BaRs
+                // during world unload. 1 s ceiling is a safety net — a scan in flight
+                // normally completes in tens of ms.
+                var deadline = DateTime.UtcNow.AddSeconds(1);
+                var pollSpacingTicks = Stopwatch.Frequency / 1000;
+                var spin = new Stopwatch();
                 while (DateTime.UtcNow < deadline)
                 {
                     lock (_Welder)
                     {
                         if (!_AsyncUpdateSourcesAndTargetsRunning) break;
                     }
+                    spin.Restart();
+                    while (spin.ElapsedTicks < pollSpacingTicks) { }
                 }
 
                 if (_Welder != null)
@@ -217,7 +227,9 @@ namespace SKONanobotBuildAndRepairSystem
                 lock (State.PossibleGrindTargets) State.PossibleGrindTargets?.Clear();
                 lock (State.PossibleFloatingTargets) State.PossibleFloatingTargets?.Clear();
                 lock (State.MissingComponents) State.MissingComponents?.Clear();
-                FriendlyDamage?.Clear();
+                // BUG-130: per-BaR FriendlyDamage retired. Shared map in Mod is owner-keyed
+                // and survives individual BaR Close() — other BaRs of the same owner still
+                // need it. Stale entries reap naturally via Mod.CleanupFriendlyDamage().
 
                 _TempPossibleWeldTargets?.Clear();
                 _TempPossibleGrindTargets?.Clear();

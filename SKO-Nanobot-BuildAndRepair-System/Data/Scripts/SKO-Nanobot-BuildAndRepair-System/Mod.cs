@@ -7,6 +7,7 @@ namespace SKONanobotBuildAndRepairSystem
     using SKONanobotBuildAndRepairSystem.Chat;
     using SKONanobotBuildAndRepairSystem.Handlers;
     using SKONanobotBuildAndRepairSystem.Helpers;
+    using SKONanobotBuildAndRepairSystem.Managers;
     using SKONanobotBuildAndRepairSystem.Caches;
     using SKONanobotBuildAndRepairSystem.Models;
     using SKONanobotBuildAndRepairSystem.Profiling;
@@ -14,7 +15,6 @@ namespace SKONanobotBuildAndRepairSystem
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
-    using System.Text;
     using VRage.Game;
     using VRage.Game.Components;
     using VRage.Game.ModAPI;
@@ -43,24 +43,22 @@ namespace SKONanobotBuildAndRepairSystem
 
         public static void DecrementGridCount(long gridId)
         {
-            // CAS loop: retry if the value changed between read and update.
+            // Both Inc and Dec are only called from SyncBlockState property setters,
+            // which fire from server-side weld/grind logic and from network-state-received
+            // handlers — both run on the main thread. The dictionary stays concurrent so
+            // background readers (RebuildSaturatedGrids / IsGridOverSystemLimit are main
+            // thread today, but the type leaves the door open) are safe, but writers don't
+            // need a CAS retry loop.
             int current;
-            while (GridSystemCount.TryGetValue(gridId, out current))
+            if (!GridSystemCount.TryGetValue(gridId, out current)) return;
+            if (current <= 1)
             {
-                var newVal = current - 1;
-                if (newVal <= 0)
-                {
-                    // Try to remove; if it fails (value changed), loop retries.
-                    int removed;
-                    if (GridSystemCount.TryRemove(gridId, out removed))
-                        break;
-                }
-                else
-                {
-                    if (GridSystemCount.TryUpdate(gridId, newVal, current))
-                        break;
-                }
-                // TryUpdate/TryRemove failed — value was modified concurrently; retry.
+                int removed;
+                GridSystemCount.TryRemove(gridId, out removed);
+            }
+            else
+            {
+                GridSystemCount[gridId] = current - 1;
             }
         }
 
@@ -127,62 +125,6 @@ namespace SKONanobotBuildAndRepairSystem
             if (_projBuildsThisTick >= MaxProjBuildsPerTickDefault) return false;
             _projBuildsThisTick++;
             return true;
-        }
-
-        // --- BUG-127: Deferred raze queue ---
-        // Decouples "block hit 0 integrity" (cheap, ~µs to enqueue) from "engine fully
-        // removes block" (5-8 ms on conveyor-connected blocks like batteries/containers).
-        // Without the queue, BUG-106's 3-per-tick dismount cap still let 3 razes pile on the
-        // same tick = 24 ms of engine cleanup over the 16.7 ms 60-Hz frame budget. With the
-        // queue, razes are processed at most MaxRazesPerTickDefault per tick — independent of
-        // which tick the underlying grind happened on, so the engine work is spread across
-        // multiple ticks. Block reference safety: Mod.UpdateBeforeSimulation runs on main
-        // thread, same as grid mutations — no cross-thread access to engine state.
-        public const int MaxRazesPerTickDefault = 1;
-        private static readonly Queue<VRage.Game.ModAPI.IMySlimBlock> _razeQueue = new Queue<VRage.Game.ModAPI.IMySlimBlock>();
-
-        public static void EnqueueRaze(VRage.Game.ModAPI.IMySlimBlock block)
-        {
-            if (block == null) return;
-            lock (_razeQueue) { _razeQueue.Enqueue(block); }
-        }
-
-        public static int GetRazeQueueDepth()
-        {
-            lock (_razeQueue) { return _razeQueue.Count; }
-        }
-
-        private void ProcessRazeQueue()
-        {
-            var processed = 0;
-            while (processed < MaxRazesPerTickDefault)
-            {
-                VRage.Game.ModAPI.IMySlimBlock target;
-                lock (_razeQueue)
-                {
-                    if (_razeQueue.Count == 0) break;
-                    target = _razeQueue.Dequeue();
-                }
-                if (target == null) continue;
-                try
-                {
-                    var grid = target.CubeGrid;
-                    if (grid == null) continue;
-                    // Block could have been welded back up or razed by another path before we
-                    // drained it; in either case skip and keep budget for the next entry.
-                    if (target.FatBlock != null && target.FatBlock.Closed) continue;
-                    // Mirrors the call sequence the grind site previously did inline. Both
-                    // operations are deferred together so the SE-engine cleanup work is paced
-                    // by MaxRazesPerTickDefault rather than co-occurring with the grind tick.
-                    target.SetToConstructionSite();
-                    grid.RemoveBlock(target, true);
-                    processed++;
-                }
-                catch (Exception ex)
-                {
-                    Logging.Instance.Error(ex);
-                }
-            }
         }
 
         // --- OPT 2: BaR update staggering ---
@@ -326,25 +268,37 @@ namespace SKONanobotBuildAndRepairSystem
         // session time, which matches pre-BUG-123 behavior (the loop ran per-grind anyway).
         private static TimeSpan _LastFriendlyBaRsRebuild = TimeSpan.Zero;
         private static volatile Dictionary<long, List<NanobotSystem>> _FriendlyBaRsByOwner = new Dictionary<long, List<NanobotSystem>>();
+        // BUG-130: distinct welder-owner IDs that consider `key` friendly. Built alongside
+        // _FriendlyBaRsByOwner. Lets the grind path write a single shared FriendlyDamage
+        // entry per friendly OWNER instead of N per-BaR entries (174 → ~1 in single-faction
+        // worlds, eliminating the 21 ms friendlyMs spikes from per-tick CDict writes).
+        private static volatile Dictionary<long, List<long>> _FriendlyOwnersByOwner = new Dictionary<long, List<long>>();
 
-        public const int MaxBackgroundTasks_Default = 4;
-        public const int MaxBackgroundTasks_Max = 10;
-        public const int MaxBackgroundTasks_Min = 1;
-        public static Queue<Action> AsynActions = new Queue<Action>();
-        private static int ActualBackgroundTaskCount = 0;
+        // BUG-130: shared friendly-damage map. Per-BaR FriendlyDamage CDicts replaced by one
+        // map keyed on welder-owner id. All BaRs sharing an owner share the same view, which
+        // matches the actual semantics (the friendly relation is between OWNERS, not BaRs).
+        // All access is from main thread (Grinding writes, Welding reads, DamageHandler writes,
+        // Mod-level cleanup). The lock is a defensive guard for the rare DamageHandler path,
+        // which is uncontended on the main thread anyway.
+        private static readonly object _FriendlyDamageLock = new object();
+        private static readonly Dictionary<long, Dictionary<IMySlimBlock, TimeSpan>> _FriendlyDamageByOwner =
+            new Dictionary<long, Dictionary<IMySlimBlock, TimeSpan>>();
+        private static TimeSpan _LastFriendlyDamageCleanup = TimeSpan.Zero;
 
-        // Cumulative stats for HUD — reset by ResetBackgroundTaskStats()
-        private static int _bgTasksEnqueued;
-        private static int _bgTasksCompleted;
-        private static int _bgPeakRunning;
+        // Background task queue forwarders — implementation lives in
+        // Managers/BackgroundTaskQueue.cs. Kept on Mod for source compatibility
+        // with existing call sites (HudHandler, NanobotSystem.Scanning, SyncModSettings).
+        public const int MaxBackgroundTasks_Default = BackgroundTaskQueue.MaxBackgroundTasks_Default;
+        public const int MaxBackgroundTasks_Max = BackgroundTaskQueue.MaxBackgroundTasks_Max;
+        public const int MaxBackgroundTasks_Min = BackgroundTaskQueue.MaxBackgroundTasks_Min;
 
-        public static int BackgroundTasksEnqueued { get { lock (AsynActions) { return _bgTasksEnqueued; } } }
-        public static int BackgroundTasksCompleted { get { lock (AsynActions) { return _bgTasksCompleted; } } }
-        public static int BackgroundPeakRunning { get { lock (AsynActions) { return _bgPeakRunning; } } }
+        public static int BackgroundTasksEnqueued { get { return BackgroundTaskQueue.Enqueued; } }
+        public static int BackgroundTasksCompleted { get { return BackgroundTaskQueue.Completed; } }
+        public static int BackgroundPeakRunning { get { return BackgroundTaskQueue.PeakRunning; } }
 
         public static void ResetBackgroundTaskStats()
         {
-            lock (AsynActions) { _bgTasksEnqueued = 0; _bgTasksCompleted = 0; _bgPeakRunning = ActualBackgroundTaskCount; }
+            BackgroundTaskQueue.ResetStats();
         }
 
         // BUG-123: friendly-BaR cache accessor. Returns the snapshot list of BaRs whose
@@ -359,6 +313,72 @@ namespace SKONanobotBuildAndRepairSystem
             return snapshot.TryGetValue(ownerId, out friendlies);
         }
 
+        // BUG-130: distinct welder-owner IDs that consider `ownerId` friendly. Returned list
+        // is the snapshot owned by the cache and must not be mutated by callers.
+        public static bool TryGetFriendlyOwnersForOwner(long ownerId, out List<long> owners)
+        {
+            var snapshot = _FriendlyOwnersByOwner;
+            return snapshot.TryGetValue(ownerId, out owners);
+        }
+
+        // BUG-130: mark `block` as friendly-damaged for any BaR whose welder is owned by
+        // `welderOwnerId`. Cheap dict insert. Replaces the per-friendly-BaR CDict write loop.
+        public static void MarkFriendlyDamage(long welderOwnerId, IMySlimBlock block, TimeSpan deadline)
+        {
+            if (welderOwnerId == 0 || block == null) return;
+            lock (_FriendlyDamageLock)
+            {
+                Dictionary<IMySlimBlock, TimeSpan> map;
+                if (!_FriendlyDamageByOwner.TryGetValue(welderOwnerId, out map))
+                {
+                    map = new Dictionary<IMySlimBlock, TimeSpan>();
+                    _FriendlyDamageByOwner[welderOwnerId] = map;
+                }
+                map[block] = deadline;
+            }
+        }
+
+        // BUG-130: read path used by Welding to avoid welding a block that was just ground
+        // by a friendly. Existence-only check matches the prior State.IsFriendlyDamage
+        // semantics (the timestamp is only consulted by cleanup).
+        public static bool IsFriendlyDamage(long welderOwnerId, IMySlimBlock block)
+        {
+            if (welderOwnerId == 0 || block == null) return false;
+            lock (_FriendlyDamageLock)
+            {
+                Dictionary<IMySlimBlock, TimeSpan> map;
+                if (!_FriendlyDamageByOwner.TryGetValue(welderOwnerId, out map)) return false;
+                return map.ContainsKey(block);
+            }
+        }
+
+        // BUG-130: periodic reaper. Runs every Settings.FriendlyDamageCleanup. Two-pass
+        // collect-then-remove to avoid mutating the dict during enumeration.
+        private static List<IMySlimBlock> _FriendlyDamageReapBuffer = new List<IMySlimBlock>(64);
+        public static void CleanupFriendlyDamage()
+        {
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            if (now.Subtract(_LastFriendlyDamageCleanup) < Settings.FriendlyDamageCleanup) return;
+            _LastFriendlyDamageCleanup = now;
+            lock (_FriendlyDamageLock)
+            {
+                foreach (var ownerEntry in _FriendlyDamageByOwner)
+                {
+                    var map = ownerEntry.Value;
+                    _FriendlyDamageReapBuffer.Clear();
+                    foreach (var kvp in map)
+                    {
+                        if (kvp.Value < now) _FriendlyDamageReapBuffer.Add(kvp.Key);
+                    }
+                    for (var i = 0; i < _FriendlyDamageReapBuffer.Count; i++)
+                    {
+                        map.Remove(_FriendlyDamageReapBuffer[i]);
+                    }
+                    _FriendlyDamageReapBuffer.Clear();
+                }
+            }
+        }
+
         // BUG-123: rebuild method. Walks NanobotSystems twice in a nested loop, but only
         // for distinct source-owner IDs (`seenOwners`) so we never repeat work for two BaRs
         // sharing an owner. Engine GetUserRelationToOwner is called inside the inner loop
@@ -369,7 +389,9 @@ namespace SKONanobotBuildAndRepairSystem
         private static void RebuildFriendlyBaRsCache()
         {
             var newCache = new Dictionary<long, List<NanobotSystem>>();
+            var newOwnerCache = new Dictionary<long, List<long>>();
             var seenOwners = new HashSet<long>();
+            var seenOwnerIds = new HashSet<long>();
             foreach (var sourceEntry in NanobotSystems)
             {
                 var sourceWelder = sourceEntry.Value != null ? sourceEntry.Value.Welder : null;
@@ -379,6 +401,8 @@ namespace SKONanobotBuildAndRepairSystem
                 if (!seenOwners.Add(sourceOwnerId)) continue;
 
                 List<NanobotSystem> list = null;
+                List<long> ownerIds = null;
+                seenOwnerIds.Clear();
                 foreach (var otherEntry in NanobotSystems)
                 {
                     var otherSystem = otherEntry.Value;
@@ -390,11 +414,19 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if (list == null) list = new List<NanobotSystem>();
                         list.Add(otherSystem);
+                        var otherOwnerId = otherWelder.OwnerId;
+                        if (otherOwnerId != 0 && seenOwnerIds.Add(otherOwnerId))
+                        {
+                            if (ownerIds == null) ownerIds = new List<long>();
+                            ownerIds.Add(otherOwnerId);
+                        }
                     }
                 }
                 if (list != null) newCache[sourceOwnerId] = list;
+                if (ownerIds != null) newOwnerCache[sourceOwnerId] = ownerIds;
             }
             _FriendlyBaRsByOwner = newCache;
+            _FriendlyOwnersByOwner = newOwnerCache;
         }
 
         public void Init()
@@ -464,15 +496,18 @@ namespace SKONanobotBuildAndRepairSystem
         protected override void UnloadData()
         {
             // Wait until background tasks finish (with timeout to prevent game freeze).
-            var deadline = DateTime.UtcNow.AddSeconds(5);
+            // Stopwatch-based ~1 ms spin between checks: System.Threading.Sleep is
+            // prohibited by the SE sandbox, but the previous lock+poll loop ran with no
+            // delay and pegged a main-thread core during the wait. The 1 s ceiling is
+            // a safety net — scan workers normally drain in well under 100 ms.
+            var deadline = DateTime.UtcNow.AddSeconds(1);
+            var pollSpacingTicks = System.Diagnostics.Stopwatch.Frequency / 1000;
+            var spin = new System.Diagnostics.Stopwatch();
             while (DateTime.UtcNow < deadline)
             {
-                int actualBackgroundTaskCount;
-                lock (AsynActions)
-                {
-                    actualBackgroundTaskCount = ActualBackgroundTaskCount;
-                }
-                if (actualBackgroundTaskCount <= 0) break;
+                if (BackgroundTaskQueue.RunningWorkers <= 0) break;
+                spin.Restart();
+                while (spin.ElapsedTicks < pollSpacingTicks) { }
             }
 
             // Unregister terminal controls.
@@ -620,11 +655,16 @@ namespace SKONanobotBuildAndRepairSystem
 
                         RebuildSourcesAndTargetsTimer();
 
-                        // BUG-127: drain at most MaxRazesPerTickDefault entries from the
-                        // deferred raze queue. Each RemoveBlock costs 5-8 ms of SE engine
-                        // cleanup on complex blocks; spreading across ticks keeps the per-tick
-                        // peak inside the 16.7 ms frame budget.
-                        ProcessRazeQueue();
+                        // BUG-127: tick the deferred raze handler. Internally throttles to
+                        // one drain every RazeQueueHandler.ProcessIntervalTicks ticks and
+                        // batches per-grid via IMyCubeGrid.RazeBlocks, collapsing N physics
+                        // + integrity recalcs into 1 per grid.
+                        RazeQueueHandler.Process();
+
+                        // BUG-130: shared friendly-damage map cleanup. Internally throttles to
+                        // Settings.FriendlyDamageCleanup (default 10 s). Replaces the per-BaR
+                        // CleanupFriendlyDamage that previously ran on every BaR's Update10.
+                        CleanupFriendlyDamage();
                     }
 
                     // If the Settings is not yet valid, sync the settings between clients and server.
@@ -716,81 +756,9 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        private void BlockDebugInfo()
-        {
-            try
-            {
-                var tool = MyAPIGateway.Session.Player.Character.EquippedTool;
-                if (tool != null)
-                {
-                    var target = tool.Components.Get<MyCasterComponent>()?.HitBlock as IMySlimBlock;
-                    if (target != null)
-                    {
-                        var sb = new StringBuilder();
-                        sb.AppendLine($"Target: {target.BlockName()}");
-                        sb.AppendLine($"Integrity: {target.Integrity}/{target.MaxIntegrity}");
-                        sb.AppendLine($"MaxDeformation: {target.MaxDeformation}");
-                        sb.AppendLine($"HasDeformation: {target.HasDeformation}");
-                        sb.AppendLine($"MinDeformation: {Utils.Utils.MinDeformation}");
-                        MyAPIGateway.Utilities.ShowNotification(sb.ToString(), 5000);
-                    }
-                }
-            }
-            catch
-            {
-            }
-        }
-
         public static void AddAsyncAction(Action newAction)
         {
-            lock (AsynActions)
-            {
-                AsynActions.Enqueue(newAction);
-                _bgTasksEnqueued++;
-                if (ActualBackgroundTaskCount < Settings.MaxBackgroundTasks)
-                {
-                    ActualBackgroundTaskCount++;
-                    if (ActualBackgroundTaskCount > _bgPeakRunning) _bgPeakRunning = ActualBackgroundTaskCount;
-                    MyAPIGateway.Parallel.StartBackground(() =>
-                    {
-                        try
-                        {
-                            while (true)
-                            {
-                                Action pendingAction = null;
-                                lock (AsynActions)
-                                {
-                                    if (AsynActions.Count > 0)
-                                    {
-                                        pendingAction = AsynActions.Dequeue();
-                                    }
-                                    if (pendingAction == null)
-                                    {
-                                        ActualBackgroundTaskCount--;
-                                        break;
-                                    }
-                                }
-                                if (pendingAction != null)
-                                {
-                                    try
-                                    {
-                                        pendingAction();
-                                    }
-                                    catch { }
-                                    lock (AsynActions) { _bgTasksCompleted++; }
-                                }
-                            }
-                        }
-                        catch
-                        {
-                            lock (AsynActions)
-                            {
-                                ActualBackgroundTaskCount--;
-                            }
-                        }
-                    });
-                }
-            }
+            BackgroundTaskQueue.Enqueue(newAction);
         }
     }
 }

@@ -21,18 +21,11 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             concurrencyLevel: 4,
             capacity: 2048);
 
-        // BUG-129: source-has-component cache. Skips sources known not to contain a given
-        // component during PullComponents' source walk. Profile session 20260429214111 showed
-        // pullPickMs=6.5 ms on LargeRefinery projected — dominated by 94 sources × FindItem
-        // engine calls per missing component. Cache key: (sourceOwnerEntityId, componentSubtypeName).
-        // Stale "true" entries → existing FindItem still runs, wasted cycle but correct outcome.
-        // Stale "false" entries → BaR may miss a freshly-stocked source for up to 30 s; benign,
-        // self-corrects on TTL expiry. Mirrors BUG-119 ConnectionCache pattern.
-        public static readonly TtlCache<MyTuple<long, string>, bool> SourceHasComponentCache = new TtlCache<MyTuple<long, string>, bool>(
-            defaultTtl: TimeSpan.FromSeconds(30),
-            comparer: new MyTupleComparer<long, string>(),
-            concurrencyLevel: 4,
-            capacity: 4096);
+        // BUG-133: SourceHasComponentCache retired. The cache existed to skip the per-source
+        // FindItem call when we'd already learned the source didn't hold a given component.
+        // After PullComponents was replaced with the source-outer walk in
+        // NanobotSystem.Welding.cs:PullFromSourcesOnePass, FindItem is no longer called at
+        // all — items are matched via Dictionary lookup against the per-source GetItems copy.
 
         public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources, HashSet<IMyInventory> possibleSourcesSet)
         {
@@ -131,8 +124,6 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
         public static void Cleanup()
         {
             ConnectionCache.CleanupExpired();
-            // BUG-129: sweep stale source-has-component entries.
-            SourceHasComponentCache.CleanupExpired();
         }
     }
 }
