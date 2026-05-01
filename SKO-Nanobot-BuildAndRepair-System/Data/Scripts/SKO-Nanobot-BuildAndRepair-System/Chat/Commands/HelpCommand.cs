@@ -8,7 +8,7 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
         {
             var sb = new StringBuilder();
 
-            sb.AppendLine(string.Format("Version: {0}", Constants.ModVersion));
+            sb.AppendLine(string.Format("Version: {0} (build {1})", Constants.ModVersion, Constants.BuildId));
             sb.AppendLine();
 
             sb.AppendLine("--- Player Commands ---");

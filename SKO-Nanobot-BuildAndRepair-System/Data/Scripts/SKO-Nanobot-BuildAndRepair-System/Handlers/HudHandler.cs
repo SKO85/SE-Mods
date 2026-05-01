@@ -701,7 +701,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             var scanAgeColor = s.OldestScanAgeSec > 15 ? "<color=255,180,100>" : "<color=200,255,200>";
 
             // --- Systems ---
-            AddRow("<color=130,180,230>--- BAR SYSTEMS ---", string.Format("<color=130,180,230>---  <color=160,160,160>v{0}  |  {1} players online", Constants.ModVersion, s.PlayerCount));
+            AddRow("<color=130,180,230>--- BAR SYSTEMS ---", string.Format("<color=130,180,230>---  <color=160,160,160>v{0} ({1})  |  {2} players online", Constants.ModVersion, Constants.BuildId, s.PlayerCount));
             AddRow("<color=white>Systems", string.Format("<color=200,255,200>{0}<color=white> / {1}  (<color=200,255,200>{2}%<color=white>  working)", s.Active, s.TotalSystems, workPct));
             AddRow("<color=white>Activity",
                 string.Format("<color=100,220,100>{0}<color=white> weld  <color=255,160,80>{1}<color=white> grind  <color=100,180,255>{2}<color=white> collect  <color=160,160,160>{3}<color=white> idle  <color=255,80,80>{4}<color=white> off",
