@@ -5,36 +5,15 @@ using System.Collections.Generic;
 namespace SKONanobotBuildAndRepairSystem.Cluster
 {
     /// <summary>
-    /// BUG-166: Per-grid scan-result cache to deduplicate work when multiple cluster
-    /// coordinators scan the same target grid in the same scan window. The user's profile
-    /// showed two clusters of 58 BaRs each scanning the same 8K-block grid in parallel
-    /// (~89 ms each = ~178 ms total wasted bg-thread time per scan cycle).
-    ///
-    /// The cluster key in ScanClusterCoordinator includes the BaR's HOME grid EntityId, so
-    /// BaRs on different home grids form different clusters even when they target the same
-    /// grid. For multi-member clusters skipRangeCheck=true, so the per-grid scan output is
-    /// purely a function of (target gridId, scan parameters) — independent of the cluster.
-    /// Cache it.
-    ///
-    /// The cache stores the weld + grind candidates contributed by ONE grid's scan.
-    /// On hit, the second cluster appends them (respecting its own per-cluster caps) and
-    /// runs only the cheap fat-block iteration for connection traversal.
-    ///
-    /// TTL is short (3 s) so block-state changes (raze, projector update, integrity rise)
-    /// self-correct within one scan cycle. The cache is keyed on (gridId, paramsHash);
-    /// any setting change that would alter the scan output produces a different hash and
-    /// misses, so settings tweaks don't see stale results.
+    /// BUG-166: per-grid scan-result cache (3s TTL) so two clusters scanning the same
+    /// grid don't redo the work. Keyed on (gridId, paramsHash); only valid when
+    /// skipRangeCheck=true (multi-member clusters).
     /// </summary>
     internal static class GridScanCache
     {
-        // ~3 second TTL. Short enough that block changes show up in the next scan; long
-        // enough that two cluster scans launched in the same scan-trigger second hit each
-        // other's freshly-written entry.
         private const long TtlTicks = 3 * TimeSpan.TicksPerSecond;
 
-        // Stale-cleanup floor: only walk the dictionary when it has accumulated enough
-        // entries to be worth scanning. With per-grid keys and a 3 s TTL, real workload
-        // sizes stay small (10-50 entries). The cleanup walk is O(n).
+        // Cleanup floor — only walk when the dict accumulated enough entries.
         private const int CleanupMinEntries = 32;
         private static long _lastCleanupTicks;
         private const long CleanupIntervalTicks = 5 * TimeSpan.TicksPerSecond;

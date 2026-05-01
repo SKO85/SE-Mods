@@ -25,17 +25,9 @@ namespace SKONanobotBuildAndRepairSystem
     public partial class NanobotSystem
     {
         /// <summary>
-        /// Force the next scan to fire immediately instead of waiting for the timer.
-        /// Used when work completes (so new targets surface without a scan-interval delay)
-        /// and when terminal settings change (FEAT-080) so the player sees the effect of
-        /// their setting change right away. No-op on clients (only the server runs scans).
-        ///
-        /// <paramref name="bypassDebounce"/> drops the FEAT-075 forceDebounce on the next
-        /// rescan check by zeroing the coordinator's last-full-scan timestamp. Use it for
-        /// user-driven triggers (settings change) where waiting up to 5s for debounce makes
-        /// the toggle feel broken — the BaR keeps processing the *old* sorted list during
-        /// the debounce window. For automatic triggers (work-complete) the default debounce
-        /// still applies as a coalescing guard against scan storms.
+        /// Force the next scan to fire immediately. No-op on clients.
+        /// <paramref name="bypassDebounce"/> drops the FEAT-075 forceDebounce — use it for
+        /// user-driven triggers (settings change) where the debounce window feels broken.
         /// </summary>
         internal void TriggerImmediateRescan(string reason, bool bypassDebounce = false)
         {
@@ -44,30 +36,15 @@ namespace SKONanobotBuildAndRepairSystem
             var immediateScanTs = MethodProfiler.Start();
             _LastTargetsUpdate = TimeSpan.Zero;
 
-            // BUG-139: also set _rescanForced on THIS BaR, not just on the current
-            // coordinator. WorkMode (and other ClusterRelevantFlags) is part of the
-            // cluster-key hash, so a settings-change call here may be followed within
-            // 2s by ScanClusterCoordinator.RebuildClusters reshuffling this BaR into
-            // a different cluster (often as solo coordinator). The OLD coordinator
-            // had _rescanForced set by the loop below; the NEW coordinator (which may
-            // be this BaR) didn't — so the FEAT-075 saturated-skip gate could
-            // suppress the rescan and the BaR appeared to "stagger" for several
-            // scans before noticing the new settings. Setting it here on `this`
-            // survives any reshuffle: whichever cluster this BaR ends up in, if it
-            // becomes coordinator the flag triggers an immediate scan.
+            // BUG-139: set _rescanForced on THIS BaR too — settings changes can reshuffle
+            // it into a different cluster before the new coordinator sees the trigger.
             _rescanForced = true;
             if (bypassDebounce)
             {
                 _lastFullScanTime = TimeSpan.Zero;
             }
 
-            // Always poke the coordinator's forced-rescan flag — including when this BaR
-            // *is* the coordinator (solo cluster, or a member that happens to be the
-            // coordinator). The previous version skipped the self case, so the FEAT-075
-            // saturated-skip gate kept suppressing rescans for solo BaRs after a settings
-            // change until the saturated targets drained or MaxScanSkipDuration (60s)
-            // elapsed — leaving the BaR processing the previously-sorted target list with
-            // the old GrindNearFirst/SmallestGridFirst order.
+            // Always poke the coordinator's flag, including the self case.
             var cluster = AssignedCluster;
             var coordinator = cluster != null ? cluster.Coordinator : null;
             if (coordinator != null)
@@ -94,15 +71,8 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// BUG-260501.1: called from ScanClusterCoordinator.RebuildClusters when a
-        /// cluster reshuffle moves a BaR carrying a pending _rescanForced flag into
-        /// a cluster whose coordinator never received TriggerImmediateRescan. Without
-        /// this surfacing step, the new coordinator's saturated-skip gate suppresses
-        /// the rescan until the target list drops below saturation or
-        /// MaxScanSkipDuration (60s) elapses — leaving the cluster grinding the
-        /// pre-toggle sort order. Always treats the inherited trigger as bypassDebounce
-        /// (zeroes _lastFullScanTime) since the only loss of bypass-info would have
-        /// been on the *old* coordinator, which is no longer relevant.
+        /// BUG-260501.1: surfaces a pending _rescanForced flag onto the new coordinator
+        /// after a cluster reshuffle so the saturated-skip gate doesn't suppress it.
         /// </summary>
         internal void InheritForcedRescan()
         {
@@ -149,10 +119,8 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            // FEAT-071: When the coordinator has seen consecutive empty scans,
-            // use a longer interval to reduce wasted background work.
-            // Members inherit the coordinator's idle state so they don't keep
-            // enqueuing apply-result tasks when the coordinator hasn't rescanned.
+            // FEAT-071: longer scan interval after consecutive empty scans; members
+            // inherit the coordinator's idle state.
             var idleCount = coordinator != null ? coordinator._consecutiveEmptyScans : 0;
             var effectiveTargetInterval = idleCount >= IdleScansBeforeBackoff
                 ? IdleScanInterval
@@ -163,23 +131,14 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (cluster.IsCoordinator(this))
                 {
-                    // FEAT-075: Skip the expensive full-grid scan when the coordinator
-                    // still has plenty of valid (non-destroyed) targets. A quick count
-                    // of live targets (~12µs for 256 entries) avoids the 50ms+ scan that
-                    // would produce a nearly identical result.
-                    // Safety: force a rescan every MaxScanSkipDuration (60s) to catch
-                    // new blocks, external changes, or edge cases.
+                    // FEAT-075: skip full scan when the target list is still saturated.
+                    // Safety: force rescan every MaxScanSkipDuration regardless.
                     var timeSinceFullScan = playTime.Subtract(_lastFullScanTime);
-                    // Only honor forced rescan if enough time passed since the last scan,
-                    // so multiple member signals within one interval coalesce into one rescan.
-                    // Use half the scan interval (min 5s) as debounce — short enough for high
-                    // WorkSpeed responsiveness, long enough to prevent scan storms.
+                    // Half-interval debounce (min 5s) coalesces multiple member signals.
                     var forceDebounce = TimeSpan.FromSeconds(Math.Max(5, Mod.Settings.TargetsUpdateInterval.TotalSeconds / 2));
                     var forceRescan = _rescanForced && timeSinceFullScan >= forceDebounce;
-                    // If the coordinator's own work loops are both exhausted (nothing to
-                    // weld or grind despite having targets in the list), the target list
-                    // is stale — projected blocks that were built still look "alive" as
-                    // IMySlimBlock references. Bypass the saturated skip in this case.
+                    // Both loops exhausted = stale list (projected blocks built but still
+                    // looking alive); bypass saturated skip.
                     var coordExhausted = _weldLoopExhausted && _grindLoopExhausted;
                     if (_InitialScanCompleted
                         && !forceRescan
@@ -197,8 +156,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
-                    // FEAT-075: When the coordinator skipped due to saturation,
-                    // members also skip — applying the same cached result is wasteful.
+                    // FEAT-075: members skip when the coordinator skipped (saturated).
                     if (coordinator != null && coordinator._scanSkippedSaturated)
                     {
                         _LastTargetsUpdate = playTime;
@@ -210,13 +168,7 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// FEAT-075: Quickly checks whether the coordinator's target lists still have
-        /// enough live (non-destroyed) targets to skip a full rescan.
-        /// Checks each active work type independently — if grind is saturated but
-        /// weld targets have been consumed, the scan must run to discover new weld
-        /// targets for grid-limited BaRs that fall through to welding.
-        /// If a type was never found by the last scan (count == 0), it genuinely
-        /// doesn't exist and doesn't block the skip.
+        /// FEAT-075: per-work-type live-target check; rescan if any active type fell below threshold.
         /// </summary>
         private bool IsTargetListSaturated()
         {
@@ -288,9 +240,7 @@ namespace SKONanobotBuildAndRepairSystem
             for (var i = 0; i < possibleSources.Count; i++) dedupSet.Add(possibleSources[i]);
             toVisit.Enqueue(_Welder.CubeGrid);
 
-            // BUG-141: source-scan diagnostics. Helps identify whether large-cargo source
-            // scans spike from sheer block count (blocksExamined), per-block AddIfConnectedToInventory
-            // cost (addIfConnTotalMs), or grid traversal overhead.
+            // BUG-141: source-scan diagnostics.
             var blocksExamined = 0;
             var terminalBlocksChecked = 0;
             var addIfConnCalls = 0;
@@ -428,12 +378,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false)
             {
-                // BUG-095: Defer cleanup if a scan enqueued on a prior tick is still
-                // running. Force-clearing the flag here would let the next tick enqueue
-                // a second concurrent scan on a disable→enable bounce, producing
-                // interleaved target-list swaps. The background finally at line 961
-                // clears the flag under the same lock; the next tick's early-exit
-                // will do the cleanup then if we're still disabled.
+                // BUG-095: defer cleanup while a prior scan is still running.
                 lock (_Welder)
                 {
                     if (_AsyncUpdateSourcesAndTargetsRunning) return;
@@ -477,14 +422,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                 updateSource &= _Welder.UseConveyorSystem;
 
-                // Collection budget: gather enough candidates so that SortAndCapGridCandidates
-                // can select the BEST 256 per grid (nearest/farthest by user setting), rather
-                // than keeping the first 256 in arbitrary grid iteration order.
-                // Minimum 4x ensures solo BaRs scanning a grid with >256 qualifying blocks
-                // still collect enough to find the truly nearest/farthest targets.
-                // Multi-member clusters scale linearly with member count (capped at 16x) so
-                // that members placed far from the coordinator still get candidates in their
-                // own working area after the member-aware sort+truncate.
+                // Collection budget: 4x-16x cap so SortAndCapGridCandidates can pick
+                // the best 256 per grid; multiplier scales with cluster member count.
                 var memberCount = cluster.Members.Count;
                 var capMultiplier = Math.Max(4, Math.Min(memberCount * 4, 16));
                 var maxWeld = MaxPossibleWeldTargets * capMultiplier;
@@ -513,11 +452,8 @@ namespace SKONanobotBuildAndRepairSystem
                     // Multi-member coordinators skip range checks — members apply their own filtering.
                     var skipRangeCheck = cluster.Members.Count > 1;
 
-                    // Snapshot each cluster member's working-area center so collect/sort
-                    // comparators can score candidates by proximity to ANY member instead
-                    // of just the coordinator. Without this, BaRs placed far from the
-                    // coordinator on the same grid are starved of targets because the
-                    // per-grid cap keeps only blocks near the coordinator.
+                    // Snapshot each member's working-area so sort can score by min-distance
+                    // to ANY member, preventing starvation of far-from-coordinator BaRs.
                     if (memberCount > 1)
                     {
                         if (_ClusterMemberAreaCenters == null)
@@ -635,11 +571,8 @@ namespace SKONanobotBuildAndRepairSystem
                 MissedResultCycles = 0;
                 _InitialScanCompleted = true;
 
-                // FEAT-071: Track consecutive empty scans for idle backoff.
-                // Use the coordinator's OWN filtered target counts (post-ApplyClusterResultToSelf)
-                // instead of the cluster-wide raw candidates. The cluster scan with skipRangeCheck
-                // may find blocks in the BoundingBox area that no member can actually reach —
-                // using those for the idle check prevents the backoff from ever kicking in.
+                // FEAT-071: track empty scans using the coordinator's OWN filtered counts
+                // (raw cluster candidates may include blocks no member can reach).
                 var hasTargets = State.PossibleWeldTargets.CurrentCount > 0
                     || State.PossibleGrindTargets.CurrentCount > 0
                     || State.PossibleFloatingTargets.CurrentCount > 0;
@@ -648,8 +581,8 @@ namespace SKONanobotBuildAndRepairSystem
                 else
                     _consecutiveEmptyScans++;
 
-                // FEAT-075 fix: record per-type candidate counts so IsTargetListSaturated
-                // can distinguish "type depleted" from "type never existed".
+                // FEAT-075: record per-type counts so IsTargetListSaturated can tell
+                // "type depleted" from "type never existed".
                 _lastScanWeldCandidateCount = result.WeldCandidates.Count;
                 _lastScanGrindCandidateCount = result.GrindCandidates.Count;
 
@@ -664,7 +597,7 @@ namespace SKONanobotBuildAndRepairSystem
                     _ClusterMemberAreaBoxes.Clear();
 
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
-                _lastFullScanTime = _LastTargetsUpdate; // FEAT-075: track when a real scan ran
+                _lastFullScanTime = _LastTargetsUpdate;
                 if (updateSource) _LastSourceUpdate = _LastTargetsUpdate;
                 lock (_Welder)
                 {
@@ -690,9 +623,7 @@ namespace SKONanobotBuildAndRepairSystem
             var profilerTs = MethodProfiler.Start();
             try
             {
-                // BUG-058: Reuse one distance dictionary for both grind and weld sorts
-                // to avoid two allocations per scan cycle.
-                // BUG-110: now also reuse the dictionary across scans via instance field.
+                // BUG-058/110: reuse one instance-field distance dict across scans.
                 var maxCap = Math.Max(
                     grindCandidates != null ? grindCandidates.Count : 0,
                     weldCandidates != null ? weldCandidates.Count : 0);
@@ -721,10 +652,8 @@ namespace SKONanobotBuildAndRepairSystem
                         distances[c.Block] = MinSquaredDistanceToClusterMembers(ref blockPos, ref coordCenter);
                     }
 
-                    // BUG-091: Build per-grid minimum-distance lookup so GrindSmallestGridFirst
-                    // orders same-size grids by proximity of their nearest block instead of by
-                    // arbitrary EntityId. Skip when not needed to keep the pre-pass cost zero
-                    // for the common path.
+                    // BUG-091: per-grid min-distance lookup so GrindSmallestGridFirst breaks
+                    // ties by nearest-block proximity instead of arbitrary EntityId.
                     if (grindSmallestGridFirst)
                     {
                         _gridMinDistLookup.Clear();
@@ -815,12 +744,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!_Welder.Enabled || !_Welder.IsFunctional || State.Ready == false)
             {
-                // BUG-095: Defer cleanup if a scan enqueued on a prior tick is still
-                // running. Force-clearing the flag here would let the next tick enqueue
-                // a second concurrent scan on a disable→enable bounce, producing
-                // interleaved target-list swaps. The background finally at line 1184
-                // clears the flag under the same lock; the next tick's early-exit
-                // will do the cleanup then if we're still disabled.
+                // BUG-095: defer cleanup while a prior scan is still running.
                 lock (_Welder)
                 {
                     if (_AsyncUpdateSourcesAndTargetsRunning) return;
@@ -1052,10 +976,7 @@ namespace SKONanobotBuildAndRepairSystem
                 preTruncateWeld = _TempPossibleWeldTargets.Count;
                 TruncateGridAware(_TempPossibleWeldTargets, MaxPossibleWeldTargets);
 
-                // BUG-086: Re-sort after truncation. TruncateGridAware enforces per-grid
-                // minimum quotas by moving excess items to an overflow list appended at the
-                // end, which disrupts the sort order. Also needed for pre-sorted results
-                // to apply this member's own distances instead of the coordinator's.
+                // BUG-086: re-sort after truncation; TruncateGridAware disrupts order via overflow list.
                 if (preTruncateWeld > MaxPossibleWeldTargets || result.PreSorted)
                 {
                     try
@@ -1086,10 +1007,7 @@ namespace SKONanobotBuildAndRepairSystem
                         var grindSmallestGridFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
                         var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
 
-                        // BUG-091: Build per-grid minimum-distance lookup from this member's
-                        // own per-block distances so GrindSmallestGridFirst orders same-size
-                        // grids by proximity of their nearest block instead of by arbitrary
-                        // EntityId. Skip the pre-pass when the feature isn't enabled.
+                        // BUG-091: per-grid min-distance lookup for GrindSmallestGridFirst tiebreak.
                         if (grindSmallestGridFirst)
                         {
                             _gridMinDistLookup.Clear();
@@ -1116,11 +1034,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 grindSmallestGridFirst ? _gridMinDistLookup : null);
                             if (cmp != 0) return cmp;
 
-                            // FEAT-070 behavior fix: previously this site unconditionally used
-                            // nearest-first distance after GrindSmallestGridFirst's tiebreakers,
-                            // even when the user had GrindNearFirst off (farthest-first). The
-                            // coordinator pre-sort already honored grindNearFirst here; now the
-                            // member sort matches. CompareDistance preserves the existing epsilon.
+                            // FEAT-070: honor grindNearFirst (was always nearest-first prior).
                             return grindNearFirst
                                 ? UtilsMath.CompareDistance(a.Distance, b.Distance)
                                 : UtilsMath.CompareDistance(b.Distance, a.Distance);
@@ -1145,10 +1059,7 @@ namespace SKONanobotBuildAndRepairSystem
                         var grindSmallestGridFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindSmallestGridFirst) != 0;
                         var grindNearFirst = (Settings.Flags & SyncBlockSettings.Settings.GrindNearFirst) != 0;
 
-                        // BUG-091: Rebuild per-grid min-distance lookup from the (possibly
-                        // truncated) list so equal-size grids are ordered by proximity.
-                        // TruncateGridAware may have removed blocks, so the pre-sort dict
-                        // can't be reused — rebuild fresh from what remains.
+                        // BUG-091: rebuild per-grid min-distance after truncation.
                         if (grindSmallestGridFirst)
                         {
                             _gridMinDistLookup.Clear();

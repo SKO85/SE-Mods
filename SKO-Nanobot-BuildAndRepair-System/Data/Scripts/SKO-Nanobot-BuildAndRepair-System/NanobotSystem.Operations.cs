@@ -50,9 +50,8 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (ready)
             {
-                // BUG-014: On first ready tick (or after re-enable), trigger an immediate
-                // scan WITH sources so the BaR doesn't operate with empty source/push lists.
-                // Skip operations this tick — they'll start once the scan completes.
+                // BUG-014: trigger immediate scan on first ready tick so we don't operate
+                // with empty source/push lists. Skip operations until the scan completes.
                 if (!_InitialScanCompleted)
                 {
                     _LastSourceUpdate = -Mod.Settings.SourcesUpdateInterval;
@@ -61,10 +60,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
-                    // FEAT-039: Skip all sub-method dispatch for idle BaRs.
-                    // When there are no targets, no transport, and inventory isn't full,
-                    // calling ServerTryWelding/Grinding/Collecting would each just exit
-                    // immediately but incur profiler + method-call overhead (~0.15ms per BaR).
+                    // FEAT-039: skip sub-method dispatch for idle BaRs.
                     var isIdleNoWork = State.PossibleWeldTargets.CurrentCount == 0
                         && State.PossibleGrindTargets.CurrentCount == 0
                         && State.PossibleFloatingTargets.CurrentCount == 0
@@ -72,11 +68,7 @@ namespace SKONanobotBuildAndRepairSystem
                         && _TransportInventory.CurrentVolume == 0
                         && !State.InventoryFull;
 
-                    // BUG-089: Don't take the idle fast-path when auto-push is enabled and
-                    // the welder still has leftover items — otherwise ServerTryPushInventory
-                    // never runs and items from the last grind cycle pile up indefinitely.
-                    // GetInventory is only called in the idle corner case with push enabled,
-                    // so the hot path pays nothing extra.
+                    // BUG-089: don't take idle fast-path when auto-push is on and welder has items.
                     if (isIdleNoWork
                         && (Settings.Flags & (SyncBlockSettings.Settings.PushIngotOreImmediately | SyncBlockSettings.Settings.PushComponentImmediately | SyncBlockSettings.Settings.PushItemsImmediately)) != 0)
                     {
@@ -89,9 +81,7 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                     ServerTryPushInventory();
 
-                    // BUG-015: Proactively detect full welder inventory after push attempt.
-                    // If welder is full and we couldn't push, mark inventory full early
-                    // so grinding/collecting are blocked before wasting a cycle.
+                    // BUG-015: detect full welder inventory after push so grind/collect skip early.
                     var diagTs = MethodProfiler.Start();
                     CheckAndUpdateInventoryFull();
                     if (diagTs != 0L)
@@ -122,11 +112,7 @@ namespace SKONanobotBuildAndRepairSystem
                         ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);
 
                     transportBlocked = transporting;
-                    // BUG-103: Don't gate the work-mode dispatch on the cosmetic transport timer.
-                    // Items picked by ServerFindMissingComponents are already in the welder; the
-                    // 5-6s timer was only driving the visual particle. Welding and grinding now
-                    // proceed every work cycle; the inner ServerFindMissingComponents/IsTransportRunning
-                    // calls still prevent restarting an in-flight transport.
+                    // BUG-103: don't gate work dispatch on the cosmetic transport timer.
                     State.MissingComponents.Clear();
                     State.LimitsExceeded = false;
 
@@ -317,11 +303,7 @@ namespace SKONanobotBuildAndRepairSystem
             if (!Mod.GridSystemCount.TryGetValue(gridEntityId, out count))
                 return 0;
 
-            // BUG-160: setters now contribute +1 per (BaR, grid) regardless of weld+grind on the
-            // same grid. Subtract at most 1 here to match. Previously the && check guarded against
-            // double-subtracting when both locks pinned the same grid — that was correct under the
-            // pre-fix +2 semantics, but the +2 itself was the bug. Under +1 semantics, this BaR
-            // owes exactly 1 if either lock is on this grid, 0 otherwise.
+            // BUG-160: each BaR contributes +1 per grid; subtract at most 1 here.
             var myWeldBlock = State.CurrentWeldingBlock;
             var myWeldGridId = (myWeldBlock != null && myWeldBlock.CubeGrid != null) ? myWeldBlock.CubeGrid.EntityId : 0L;
             if (myWeldGridId == gridEntityId)
@@ -373,14 +355,8 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// BUG-164: returns the grid that the BaR's contribution will land on after this block
-        /// is welded. For projected blocks, ServerDoWeld swaps targetData.Block from the
-        /// projection grid (virtual) to the projector's parent grid (physical) once proj.Build
-        /// materializes. The lock-on Inc therefore lands on the parent grid, not the projection.
-        /// The pre-fix limit check used block.CubeGrid (projection), letting all 72 BaRs pass
-        /// because count[projectionGrid] stayed near 0, while count[parentGrid] inflated
-        /// without ever being checked. Resolve to the parent grid here so the limit is enforced
-        /// against the same grid the increment actually fires on.
+        /// BUG-164: resolve to the projector's parent grid for projected blocks so the
+        /// limit check uses the same grid the post-materialization Inc fires on.
         /// </summary>
         private static long GetEffectiveGridId(IMySlimBlock block)
         {
@@ -392,15 +368,8 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// FEAT-038: Transmit state with progressive backoff for unchanged state.
-        /// Compares a lightweight fingerprint of key state fields against last transmit.
-        /// When unchanged, progressively extends the interval (1-2s → 2-4s → 4-8s).
-        /// Resets to base interval on any visible state change.
-        /// BUG-150: when the fingerprint hasn't changed since last sent, SKIP the transmit
-        /// entirely (not just stretch the next interval). The pre-fix code still sent the
-        /// payload — and the engine still paid the async serialize / network-queue cost
-        /// (which was the hidden lag source identified during the server profile session).
-        /// Now: fingerprint match = skip + ResetChanged + extend backoff.
+        /// FEAT-038/BUG-150: fingerprint-gated state transmit with progressive backoff
+        /// (skip the send entirely when nothing visible changed).
         /// </summary>
         private void TryTransmitState()
         {
@@ -430,9 +399,7 @@ namespace SKONanobotBuildAndRepairSystem
             var fingerprint = ComputeStateFingerprint();
             var fingerprintChanged = fingerprint != _lastTransmittedFingerprint;
 
-            // BUG-150: nothing visibly changed since last transmit — skip the send,
-            // reset Changed so we don't re-evaluate every tick, and extend backoff so
-            // the next interval check is longer too. Saves the engine async network cost.
+            // BUG-150: skip the send when fingerprint matches; extend backoff.
             if (!fingerprintChanged)
             {
                 State.ResetChanged();
@@ -472,15 +439,8 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Lightweight hash of key visible state fields for transmit backoff comparison.
-        /// Captures working state + target list contents — enough to detect any meaningful
-        /// change without comparing full serialized payloads.
-        /// BUG-150: now uses list CurrentHash instead of CurrentCount. The hash captures
-        /// content changes (e.g. same count of weld targets but different blocks), so
-        /// fingerprint match is a reliable "nothing visible changed" signal that can
-        /// safely skip the transmit. Pre-fix this used Count, which would miss content
-        /// changes — same fingerprint could mean different list members, so skipping
-        /// would have been unsafe.
+        /// BUG-150: fingerprint of working state + target list CurrentHash; content-aware
+        /// so a fingerprint match safely indicates "nothing visible changed".
         /// </summary>
         private long ComputeStateFingerprint()
         {
@@ -499,10 +459,8 @@ namespace SKONanobotBuildAndRepairSystem
             hash = hash * 31 + State.PossibleGrindTargets.CurrentHash;
             hash = hash * 31 + State.PossibleFloatingTargets.CurrentHash;
             hash = hash * 31 + State.MissingComponents.CurrentHash;
-            // BUG-155: include CurrentTransportTarget so block-to-block transitions during
-            // continuous welding/grinding trigger a transmit. Quantized to integer metres so
-            // sub-block jitter doesn't churn the hash. Without this, the beam/particle
-            // endpoint on clients sticks on the previous block until some other field flips.
+            // BUG-155: include transport target (quantized to int metres) so block-to-block
+            // transitions trigger a transmit; otherwise client beam endpoint sticks.
             if (State.CurrentTransportTarget.HasValue)
             {
                 var t = State.CurrentTransportTarget.Value;

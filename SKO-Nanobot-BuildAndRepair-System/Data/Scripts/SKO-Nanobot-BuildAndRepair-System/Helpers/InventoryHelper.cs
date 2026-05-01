@@ -12,23 +12,14 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
 {
     public static class InventoryHelper
     {
-        // BUG-119: TTL extended from 15s to 60s. Cluster/source scans fire every ~6s; with 15s
-        // TTL most entries expired mid-session and the cache miss path runs IsConnectedTo
-        // (engine conveyor walk, expensive). Stale entries are harmless — a disconnected
-        // inventory just fails its actual transfer later, and a newly connected one is picked
-        // up on the next refresh (welds run for minutes anyway).
+        // BUG-119: 60s TTL — stale entries are harmless (transfer fails later, refresh picks up new).
         private static readonly TtlCache<MyTuple<long, long>, bool> ConnectionCache = new TtlCache<MyTuple<long, long>, bool>(
             defaultTtl: TimeSpan.FromSeconds(60),
             comparer: new MyTupleComparer<long, long>(),
             concurrencyLevel: 4,
             capacity: 2048);
 
-        // BUG-142: cache for srcInventory.CanTransferItemTo(dstInventory, componentId).
-        // Profile session 20260430230215 showed 18.7 ms canTransferMs spikes on a single call
-        // — the engine walks the conveyor topology (worse than IsConnectedTo because it also
-        // checks per-component sorter filters). Same TTL/strategy as ConnectionCache.
-        // Key includes componentSubtype because conveyor sorters can block specific items;
-        // most paths are unfiltered and cache-hit immediately.
+        // BUG-142: cache for CanTransferItemTo (key includes component for sorter filters).
         public struct TransferKey : IEquatable<TransferKey>
         {
             public readonly long SrcEntityId;
@@ -76,13 +67,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
 
         public static int TransferCacheCount { get { return TransferCache.Count; } }
 
-        /// <summary>
-        /// BUG-142: cached wrapper around IMyInventory.CanTransferItemTo. The engine call walks
-        /// the conveyor topology and (with sorters present) re-checks per-component filters —
-        /// observed 18.7 ms spikes per call on a busy grid. Cached result returns sub-µs after
-        /// the first probe. Falls back to direct engine call if owner entity ids can't be
-        /// resolved (defensive — never happens for normal block inventories).
-        /// </summary>
+        /// <summary>BUG-142: cached wrapper around IMyInventory.CanTransferItemTo.</summary>
         public static bool CanTransferItemToCached(this IMyInventory srcInventory, IMyInventory dstInventory, MyDefinitionId componentId)
         {
             if (srcInventory == null || dstInventory == null) return false;
@@ -101,11 +86,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             return result;
         }
 
-        // BUG-133: SourceHasComponentCache retired. The cache existed to skip the per-source
-        // FindItem call when we'd already learned the source didn't hold a given component.
-        // After PullComponents was replaced with the source-outer walk in
-        // NanobotSystem.Welding.cs:PullFromSourcesOnePass, FindItem is no longer called at
-        // all — items are matched via Dictionary lookup against the per-source GetItems copy.
+        // BUG-133: SourceHasComponentCache retired (PullFromSourcesOnePass made FindItem unused).
 
         public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources, HashSet<IMyInventory> possibleSourcesSet)
         {
@@ -137,8 +118,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
                     var maxInvCached = terminalBlock.InventoryCount;
                     for (var i = 0; i < maxInvCached; i++)
                     {
-                        // BUG-119: HashSet.Add returns false if already present (O(1));
-                        // replaces the prior O(n) possibleSources.Contains scan.
+                        // BUG-119: HashSet.Add for O(1) dedup (was O(n) Contains scan).
                         var inventory = terminalBlock.GetInventory(i);
                         if (possibleSourcesSet.Add(inventory))
                         {
@@ -155,13 +135,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
                 return cachedConnected;
             }
 
-            // Cache miss: probe connectivity once for the whole block. All inventories on
-            // a single block share the block's ConveyorEndpoint, so IsConnectedTo returns
-            // the same result for every inventory on the block — calling it per inventory
-            // (the prior loop) wasted N-1 conveyor walks for multi-inventory blocks
-            // (assemblers, refineries: 2 inventories each). The cache itself is already
-            // keyed per-block (not per-inventory) and stores a single bool, which only
-            // makes sense under the same assumption.
+            // Cache miss: probe connectivity once per block (all inventories share endpoint).
             var welderInventory = welder.GetInventory(0);
             var maxInvCross = terminalBlock.InventoryCount;
             var firstInventory = maxInvCross > 0 ? terminalBlock.GetInventory(0) : null;

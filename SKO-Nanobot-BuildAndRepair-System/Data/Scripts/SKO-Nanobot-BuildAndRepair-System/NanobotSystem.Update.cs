@@ -96,10 +96,7 @@ namespace SKONanobotBuildAndRepairSystem
             var throttleReason = "none";
             var clusterSize = 1;
             var effectiveGroups = 1;
-            // BUG-121: sub-timers for the unprofiled wrapper segments. Latest profile shows
-            // 59 ms / 49 ms spikes in this method outside ServerTryWeldingGrindingCollecting,
-            // including on throttle=workCycle samples where the work payload is skipped.
-            // Goal here is diagnosis only — pin down which segment dominates, then file the fix.
+            // BUG-121: sub-timers for unprofiled wrapper segments.
             var tsPeriodic = 0L;
             var tsResourceSink = 0L;
             var tsSettingsSave = 0L;
@@ -122,20 +119,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (MyAPIGateway.Session.IsServer)
                 {
-                    // BUG-138: disabled / non-functional BaR fast path. The engine fires
-                    // UpdateBeforeSimulation10 for every game-logic component (every BaR
-                    // placed in the world), regardless of state. Without this gate every
-                    // disabled BaR still paid for the stagger calculation, Settings.TrySave,
-                    // and TryTransmitState every 10 frames — 60 BaRs (1 enabled, 59 disabled)
-                    // observed at 360 calls/sec to TryTransmitState alone, all skip-path.
-                    // BUG-151: also reset all work-state flags on the disable-transition tick.
-                    // Pre-fix only Ready was reset, so State.Welding / State.Grinding /
-                    // State.Transporting kept their last "true" values — clients received
-                    // Ready=false but the work flags stayed true, so welding/grinding
-                    // animations and sounds kept playing on clients after the BaR was disabled.
-                    // Each setter is no-op if value is already false; only changed setters
-                    // mark Changed=true. The TryTransmitState below will then propagate the
-                    // reset values (BUG-150 fingerprint will differ → real send).
+                    // BUG-138: disabled-BaR fast path skips stagger/save/transmit.
+                    // BUG-151: reset all work-state flags on the disable transition so
+                    // client-side animations/sounds stop (BUG-150 fingerprint forces real send).
                     if (!_Welder.Enabled || !_Welder.IsFunctional)
                     {
                         if (State.Ready)
@@ -152,15 +138,7 @@ namespace SKONanobotBuildAndRepairSystem
                             State.CurrentTransportTarget = null;
                             State.CurrentTransportStartTime = TimeSpan.Zero;
                             State.CurrentTransportTime = TimeSpan.Zero;
-                            // BUG-152: bypass ALL transmit gates for the disable transition.
-                            // The interval gate (4-6s), fingerprint check, and BUG-153
-                            // per-cluster budget would each potentially silently skip the
-                            // send, leaving clients believing the BaR is still welding —
-                            // animations/sounds keep playing. After this transition tick
-                            // the BaR enters the disabled fast path next tick (State.Ready
-                            // is now false, so the if-block above is skipped) and never
-                            // retries the send. Send directly; this is a safety-critical
-                            // transition, not subject to throttling.
+                            // BUG-152: bypass all transmit gates for the disable transition.
                             State.ForceFullTransmit();
                             NetworkMessagingHandler.MsgBlockStateSend(0, this);
                             _UpdateStateTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
@@ -172,10 +150,7 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                     CreativeModeActive = MyAPIGateway.Session.CreativeMode;
 
-                    // BUG-130: per-BaR CleanupFriendlyDamage retired. Shared owner-keyed map
-                    // is reaped at Mod-level once per Settings.FriendlyDamageCleanup interval
-                    // (see Mod.CleanupFriendlyDamage()), eliminating the 174× per-tick walk
-                    // over per-BaR FriendlyDamage CDicts that drove the 6.95 ms outliers.
+                    // BUG-130: per-BaR CleanupFriendlyDamage retired (handled at Mod level).
 
                     // WorkSpeed controls operation frequency:
                     //   1 = every 100 frames (same as old Update100, default)
@@ -188,8 +163,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var modWideStagger = Mod.GetEffectiveStaggerGroupCount();
                     if (clusterSize == 1)
                     {
-                        // Isolated BaR (no cluster): no shared scan amortization. Use mod-wide stagger
-                        // directly so N isolated BaRs don't all fire on the same tick (BUG-102).
+                        // BUG-102: isolated BaRs use mod-wide stagger directly.
                         effectiveGroups = modWideStagger;
                     }
                     else if (clusterSize < 6)
@@ -209,12 +183,7 @@ namespace SKONanobotBuildAndRepairSystem
                         effectiveGroups = Math.Min(modWideStagger, effectiveGroups + simPenalty);
                     }
 
-                    // FEAT-AI: when the cluster is in idle backoff and this BaR has no
-                    // active state (no targets, no transport, empty inventory), stretch
-                    // the cadence so the wrapper itself fires less often. Reactive — the
-                    // moment the next scan finds targets, _consecutiveEmptyScans resets
-                    // and the multiplier drops on the very next tick. Worst-case latency
-                    // when targets reappear: one stretched cycle (≤ ~7s at default WorkSpeed=1).
+                    // Idle cadence stretch: less frequent wrapper firing during cluster idle backoff.
                     var idleStretched = false;
                     if (effectiveGroups > 0 && IsIdleForCadenceStretch())
                     {
@@ -225,8 +194,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var isMyTurn = _staggerSlot < 0 || effectiveGroups <= 1 || (cycle % effectiveGroups) == (_staggerSlot % effectiveGroups);
                     throttleReason = isMyTurn ? "fired" : (idleStretched ? "idleStretch" : "stagger");
 
-                    // When sim-speed override is active, simulate the reduced tick rate.
-                    // Real low sim-speed naturally halves ticks; the override must replicate that.
+                    // Sim-speed override: simulate the reduced tick rate.
                     if (isMyTurn && Mod.SimSpeedOverride.HasValue && Mod.SimSpeedOverride.Value < 1.0f)
                     {
                         var skipInterval = (int)Math.Round(1.0 / Mod.SimSpeedOverride.Value);
@@ -240,9 +208,7 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
 
-                    // Ensure we only execute once per cycle (WorkSpeed throttle).
-                    // Each cycle spans (cycleDivisor / 10) Update10 ticks; without this guard
-                    // the BaR would fire on every tick within the cycle instead of just one.
+                    // WorkSpeed throttle: execute at most once per cycle.
                     if (isMyTurn && cycle == _lastWorkCycle)
                     {
                         isMyTurn = false;
@@ -284,7 +250,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (tsSettingsMark != 0L) tsSettingsSave = Stopwatch.GetTimestamp() - tsSettingsMark;
 
                     TryTransmitState();
-                    } // BUG-138: close the disabled-fast-path else
+                    }
                 }
                 else
                 {

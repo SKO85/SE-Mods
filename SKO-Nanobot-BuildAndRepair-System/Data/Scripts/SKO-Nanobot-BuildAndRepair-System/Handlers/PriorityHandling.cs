@@ -39,22 +39,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
     public abstract class PriorityHandling<C, I> : List<PrioItemState<C>> where C : PrioItem //where C : struct
     {
-        // BUG-097: _HashDirty is read on both the main (weld/grind loops) and background
-        // (cluster scan sort comparators) threads, written on main when the user reorders
-        // priorities via the terminal. `volatile` keeps the dirty flag from being cached in
-        // a register so both threads observe the flip promptly.
+        // BUG-097: cross-thread dirty flag (main writes, scan/weld/grind read).
         protected volatile bool _HashDirty = true;
 
-        // BUG-097: _PrioHash is read lock-free from sort comparators and the weld/grind
-        // loops for speed. The prior implementation mutated _PrioHash in place via Clear()
-        // + Add() inside UpdateHash(), which races with concurrent TryGetValue readers —
-        // a user priority reorder during a scan could produce a torn read, a wrong
-        // priority, or (rarely) an InvalidOperationException from Dictionary. Fix: build
-        // a fresh dictionary inside the lock and publish it via an atomic reference swap.
-        // Readers snapshot the field into a local and access the snapshot so they always
-        // see a fully-built dictionary. The dedicated _hashLock replaces the prior
-        // lock(_ClassList) pattern so the lock object itself isn't being reassigned
-        // under other waiters.
+        // BUG-097: lock-free reads via fresh-dict-then-atomic-swap (Clear+Add raced).
         private readonly object _hashLock = new object();
         private MemorySafeList<string> _ClassList = new MemorySafeList<string>();
         private Dictionary<int, int> _PrioHash = new Dictionary<int, int>();
@@ -86,8 +74,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             var itemKey = GetItemKey(a, false);
             if (_HashDirty) UpdateHash();
-            // BUG-097: snapshot the dict reference so a concurrent UpdateHash swap on
-            // another thread can't race with our TryGetValue.
+            // BUG-097: snapshot the dict ref to race-free TryGetValue.
             var hash = _PrioHash;
             int prio;
             if (hash.TryGetValue(itemKey, out prio))
@@ -297,11 +284,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             {
                 if (!_HashDirty) return;
 
-                // BUG-097: build fresh collections inside the lock, then publish via
-                // reference assignment. Readers snapshot the old reference and see its
-                // fully-built contents; new readers after the swap see the new reference.
-                // Dictionary<T>.Clear() + Add() cannot be done in-place safely because
-                // lock-free readers can be running TryGetValue concurrently.
+                // BUG-097: build fresh, swap reference (in-place mutation races readers).
                 var newClassList = new MemorySafeList<string>();
                 foreach (var item in this)
                 {

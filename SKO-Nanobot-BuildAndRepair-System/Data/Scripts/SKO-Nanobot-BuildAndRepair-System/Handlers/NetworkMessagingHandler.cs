@@ -192,9 +192,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             {
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModSettings>(data);
                 SyncModSettings.AdjustSettings(msgRcv.Settings);
-                // Clamp + BUG-093 janitor defense. Must run on the broadcast path too —
-                // a server that mutated runtime settings (chat command, script, etc.)
-                // can otherwise hand clients values that bypassed Load()'s clamps.
+                // BUG-093: clamp on the broadcast path too (server-mutated settings may bypass Load).
                 SyncModSettings.ValidateAndClamp(msgRcv.Settings);
 
                 Mod.Settings = msgRcv.Settings;

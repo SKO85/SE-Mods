@@ -396,12 +396,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 adjusted = true;
             }
 
-            // BUG-093: An empty AllowedGrindJanitorRelations silently breaks grinding
-            // on every BaR in the world — SyncBlockSettings masks each block's
-            // UseGrindJanitorOn against this value, so 0 here clobbers the per-block
-            // janitor setting. Apply the default unconditionally whenever the value
-            // is empty — there's no legitimate "all janitor relations disabled" state;
-            // users should disable the feature via UseGrindJanitorFixed instead.
+            // BUG-093: empty AllowedGrindJanitorRelations breaks grinding world-wide;
+            // there's no valid "all disabled" state — restore default.
             if (settings.Welder.AllowedGrindJanitorRelations == 0)
             {
                 settings.Welder.AllowedGrindJanitorRelations = AutoGrindRelation.NoOwnership | AutoGrindRelation.Enemies | AutoGrindRelation.Neutral;

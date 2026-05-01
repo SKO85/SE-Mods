@@ -108,13 +108,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         }
 
         /// <summary>
-        /// BUG-143: lightweight periodic alternative to GetSafeZones. Skips the full entity walk
-        /// (MyAPIGateway.Entities.GetEntities filtered for MySafeZone) since OnEntityAdd /
-        /// OnEntityRemove already maintain the Zones dictionary in real time. The full walk
-        /// in GetSafeZones was responsible for 1-3 ms per periodic tick (every 6 s on background)
-        /// — pure waste with the events registered. CleanupStaleZones still runs as a guard
-        /// against missed events, plus the three TtlCache cleanups that GetSafeZones used to do.
-        /// GetSafeZones() is still used at Register() time as the initial seed.
+        /// BUG-143: lightweight periodic cleanup; OnEntityAdd/OnEntityRemove keep
+        /// Zones live, so we skip the full GetSafeZones entity walk.
         /// </summary>
         public static void CleanupSafeZones()
         {

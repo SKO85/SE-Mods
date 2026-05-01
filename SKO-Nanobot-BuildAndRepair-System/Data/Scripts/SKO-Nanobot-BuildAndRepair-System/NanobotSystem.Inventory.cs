@@ -43,13 +43,12 @@ namespace SKONanobotBuildAndRepairSystem
             if ((Settings.Flags & (SyncBlockSettings.Settings.PushIngotOreImmediately | SyncBlockSettings.Settings.PushComponentImmediately | SyncBlockSettings.Settings.PushItemsImmediately)) == 0)
                 return;
 
-            // FEAT-037: Compute time since last push once for adaptive interval check.
+            // FEAT-037: time since last push for the adaptive interval check.
             var secondsSinceLastPush = MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryAutoPushInventoryLast).TotalSeconds;
             if (secondsSinceLastPush <= 5)
                 return;
 
-            // BUG-016: Skip push if all push targets are known to be full.
-            // The flag is reset when push targets are rescanned.
+            // BUG-016: skip push when all targets are known full (cleared on rescan).
             if (_PushTargetsFull)
                 return;
 
@@ -58,10 +57,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (welderInventory.Empty()) return;
 
-                // FEAT-037: Extended push interval when welder has space.
-                // During grinding, items accumulate slowly. Batch transfers by waiting
-                // 10s instead of 5s when inventory is < 75% full. Cuts push frequency
-                // ~50% without risking overflow (CheckAndUpdateInventoryFull catches it).
+                // FEAT-037: 10s interval when welder is < 75% full (5s otherwise).
                 if (secondsSinceLastPush < 10
                     && (float)welderInventory.CurrentVolume < (float)welderInventory.MaxVolume * 0.75f)
                     return;
@@ -73,13 +69,7 @@ namespace SKONanobotBuildAndRepairSystem
                 welderInventory.GetItems(_TempInventoryItems);
                 var itemCount = _TempInventoryItems.Count;
 
-                // BUG-162: chunk push work to bound the per-tick cost. The original loop
-                // walked every welder item × up to 93 push destinations per item; with a
-                // full inventory this produced 40+ ms main-thread stalls. Cap each call by
-                // wall-clock (~5 ms) and item count (4). Cursor walks backward from a saved
-                // position; on reaching 0 it wraps to itemCount-1 for the NEXT call (never
-                // wraps within a single call, because backward-only iteration is index-safe
-                // when items get removed by full-stack transfer).
+                // BUG-162: chunked push (max 4 items / ~5 ms per call); cursor wraps between calls.
                 const int MaxPushItemsPerCall = 4;
                 var budgetTicks = Stopwatch.Frequency / 200; // 5 ms in Stopwatch ticks.
                 var startTs = Stopwatch.GetTimestamp();
@@ -128,14 +118,8 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 _TempInventoryItems.Clear();
 
-                // BUG-016: If we attempted to push but nothing moved, mark push targets as full.
-                // This prevents constant iteration over full containers every tick.
-                // The flag is reset when push targets change or after a safety backoff.
-                // BUG-162: chunked iteration is OK to feed this flag — destination fullness is
-                // a property of the push-target list, not of which welder items we sampled in
-                // this call. If our 4-item chunk attempted at least one push and nothing moved,
-                // it's a strong signal the destinations are full. The flag is cleared on any
-                // successful push or when ComputePushTargetsSignature changes (containers swap).
+                // BUG-016: mark targets full when an attempt moved nothing
+                // (cleared on successful push or push-target signature change).
                 if (anyAttempted && !anyPushed)
                 {
                     _PushTargetsFull = true;
@@ -178,12 +162,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var welderInventory = _Welder.GetInventory(0);
                     if (welderInventory != null)
                     {
-                        // BUG-114: gate the safety overflow push on the same Push* flags as
-                        // ServerTryPushInventory. When all three flags are off the player has
-                        // explicitly disabled automatic pushing — so the welder is allowed to
-                        // fill, State.InventoryFull will trip, and grinding will pause until
-                        // the player makes room. Without this gate, disabling all three flags
-                        // had no effect on this branch and items kept flowing to push targets.
+                        // BUG-114: gate overflow push on the same Push* flags as ServerTryPushInventory.
                         var pushFlagsActive = (Settings.Flags & (
                             SyncBlockSettings.Settings.PushIngotOreImmediately |
                             SyncBlockSettings.Settings.PushComponentImmediately |
@@ -250,10 +229,7 @@ namespace SKONanobotBuildAndRepairSystem
             return empty;
         }
 
-        // BUG-146: per-call profiling for EmptyBlockInventories. Engine-heavy on cargo
-        // containers / refineries when grinding them down: srcInventory.GetItems +
-        // GetItemByID per item + TransferItemFrom per item. Sub-timers identify whether
-        // the spike is in enumeration, item lookup, or the actual transfer.
+        // BUG-146: per-call profiling with sub-timers (GetItems / GetItemByID / TransferItemFrom).
         private bool EmptyBlockInventories(IMyEntity entity, IMyInventory dstInventory, out bool isEmpty)
         {
             var profilerTs = MethodProfiler.Start();
@@ -283,10 +259,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (remainingVolume <= 0) return true; //No more transport volume
 
                     _TempInventoryItems.Clear();
-                    // BUG-146 fix: gate Stopwatch.GetTimestamp on profilerTs so the calls
-                    // are zero-cost when profiling is off (matches BUG-122 / BUG-141 pattern
-                    // used in welding). Without the gate, this loop pays ~50ns × 3-per-item
-                    // even in production where profiling never runs.
+                    // BUG-146: gate Stopwatch on profilerTs so it's zero-cost when off.
                     tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                     srcInventory.GetItems(_TempInventoryItems);
                     if (tsMark != 0L) tsGetItems += Stopwatch.GetTimestamp() - tsMark;
@@ -356,13 +329,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        // BUG-133: PullComponents (per-component source walk) retired in favor of
-        // PullFromSourcesOnePass in NanobotSystem.Welding.cs, which iterates sources once
-        // and matches against ALL remaining missing components. The old structure ran
-        // FindItem N components × M sources times on cold-cache projected blocks (18.9 ms
-        // observed). The replacement is O(sources + items) per call.
-        // SourceHasComponentCache and the per-source FindItem are no longer needed; the
-        // cache field in InventoryHelper has been removed alongside this method.
+        // BUG-133: PullComponents retired; see PullFromSourcesOnePass in Welding.cs.
 
         private bool IsTransportRunning(TimeSpan playTime)
         {

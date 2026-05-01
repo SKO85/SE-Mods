@@ -9,20 +9,9 @@ using VRageMath;
 namespace SKONanobotBuildAndRepairSystem.Handlers
 {
     /// <summary>
-    /// BUG-127: Deferred + batched block-removal queue.
-    ///
-    /// Decouples "block hit 0 integrity" (cheap, ~µs to enqueue) from "engine fully
-    /// removes block" (5-8 ms on conveyor-connected blocks: physics + integrity +
-    /// conveyor topology recalc). Two compounding mitigations:
-    ///   1. Process() drains only when (tickCounter % ProcessIntervalTicks) == 0,
-    ///      i.e. every ~10 server ticks rather than every tick.
-    ///   2. Drained entries are grouped by CubeGrid and a single
-    ///      IMyCubeGrid.RazeBlocks(positions) call is issued per grid → SE engine
-    ///      collapses N recalcs into 1.
-    ///
-    /// Block reference safety: Enqueue (called from grinding) and Process (called
-    /// from Mod.UpdateBeforeSimulation) both run on the main thread, same thread as
-    /// grid mutations. No locks are needed on the queue.
+    /// BUG-127: deferred + batched block-removal queue. Process() drains every
+    /// ProcessIntervalTicks ticks; entries are grouped by CubeGrid and razed in
+    /// a single RazeBlocks call per grid. Main-thread only — no locks needed.
     /// </summary>
     public static class RazeQueueHandler
     {
@@ -49,13 +38,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         }
 
         /// <summary>
-        /// Tick-gated batched drain. Call once per server tick from the main thread;
-        /// internally throttles to one drain per ProcessIntervalTicks ticks.
-        /// BUG-145: per-call profiling. The actual block-removal cost (engine RazeBlocks
-        /// → physics + integrity + conveyor topology recalc per grid) lives here, not in
-        /// ServerDoGrind anymore (BUG-127 deferred it). Without this entry the cost was
-        /// invisible. Logs drained/skipped counts, grids touched, sub-times for the
-        /// drain loop vs the engine RazeBlocks calls, and per-grid raze ms breakdown.
+        /// Tick-gated batched drain (call once per main-thread tick).
+        /// BUG-145: per-call profiling for the engine RazeBlocks cost.
         /// </summary>
         public static void Process()
         {
@@ -83,13 +67,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     if (target == null) { skippedNullTarget++; continue; }
                     var grid = target.CubeGrid;
                     if (grid == null) { skippedNullGrid++; continue; }
-                    // Block could have been welded back up or razed by another path before
-                    // we drained it; in either case skip and keep budget for the next entry.
+                    // Skip blocks that have been welded back up or razed elsewhere.
                     if (target.FatBlock != null && target.FatBlock.Closed) { skippedClosedFat++; continue; }
-                    // Slim armor blocks have FatBlock == null, so the Closed check above
-                    // never fires for them. IsDestroyed flips back to false the moment any
-                    // BaR (or player hand-welder) welds the dismounted block above zero
-                    // integrity, so razing here would silently undo legitimate weld work.
+                    // Slim armor: IsDestroyed flips false on re-weld; don't undo it.
                     if (!target.IsDestroyed) { skippedNotDestroyed++; continue; }
 
                     List<Vector3I> positions;

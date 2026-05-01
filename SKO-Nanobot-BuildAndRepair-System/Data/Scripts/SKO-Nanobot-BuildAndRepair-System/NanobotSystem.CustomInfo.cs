@@ -149,9 +149,7 @@ namespace SKONanobotBuildAndRepairSystem
                 lock (_PossiblePushTargets) { pushTargetCount = _PossiblePushTargets.Count; }
                 customInfo.Append(string.Format("Sources: {0} | Push Targets: {1}{2}", sourceCount, pushTargetCount, Environment.NewLine));
 
-                // BUG-160 diagnostics: live BaR-on-grid counts for the BaR's current weld/grind grids.
-                // Lets the user observe directly whether MaxSystemsPerTargetGrid is being respected,
-                // and which grid is saturated. Format: "OnGrid W={count}/{limit} G={count}/{limit}".
+                // BUG-160 diagnostics: live BaR-on-grid counts for the current weld/grind grids.
                 var weldGridId = (State.CurrentWeldingBlock != null && State.CurrentWeldingBlock.CubeGrid != null)
                     ? State.CurrentWeldingBlock.CubeGrid.EntityId : 0L;
                 var grindGridId = (State.CurrentGrindingBlock != null && State.CurrentGrindingBlock.CubeGrid != null)

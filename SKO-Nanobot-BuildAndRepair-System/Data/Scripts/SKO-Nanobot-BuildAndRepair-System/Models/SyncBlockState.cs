@@ -172,14 +172,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 if (value != _CurrentWeldingBlock)
                 {
-                    // BUG-097: When the welding loop refreshes the lock-on reference for
-                    // the SAME physical block (background scan produces new IMySlimBlock
-                    // instances every cycle — IsSameBlock matches on grid+position), the
-                    // old and new references share a CubeGrid EntityId. Skip the Dec/Inc
-                    // pair in that case — otherwise GridSystemCount briefly dips by 1
-                    // between the two AddOrUpdate calls and a concurrent
-                    // GetCachedSystemCountOnGrid call from another BaR could pass the
-                    // MaxSystemsPerTargetGrid check during the dip.
+                    // BUG-097: detect same-physical-block lock-on refresh (new IMySlimBlock
+                    // ref but same grid+position) so we skip Dec/Inc and avoid the count dip.
                     var oldGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
                         ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
                     var newGridId = (value != null && value.CubeGrid != null)
@@ -188,14 +182,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     var newPos = value != null ? value.Position : default(Vector3I);
                     var samePhysicalBlock = oldGridId != 0L && oldGridId == newGridId && oldPos == newPos;
 
-                    // BUG-160: count-once-per-grid semantics. MaxSystemsPerTargetGrid means
-                    // "max BaR SYSTEMS targeting a grid", not "max lock-on slots". A BaR doing
-                    // both weld+grind on the same grid must contribute +1, not +2. Pre-fix:
-                    // weld setter Inc'd, grind setter Inc'd → 5 BaRs welding+grinding the same
-                    // grid drove count to 10 with limit=10, blocking new BaRs while the actual
-                    // BaR count was 5. New BaRs whose lock landed on a partial grid where this
-                    // BaR contributes once also see inflated counts. Fix: skip Inc/Dec when the
-                    // OTHER lock (grind here, weld in the other setter) already pins the same grid.
+                    // BUG-160: count-once-per-grid (skip Inc/Dec when the other lock already
+                    // pins this grid so weld+grind on the same grid contributes +1, not +2).
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
                         if (oldGridId != newGridId)
@@ -234,9 +222,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 if (value != _CurrentGrindingBlock)
                 {
-                    // BUG-097: see CurrentWeldingBlock comment above — same-grid
-                    // reference swap must skip the Dec/Inc pair to avoid the count-dip
-                    // race against concurrent GetCachedSystemCountOnGrid callers.
+                    // BUG-097: see CurrentWeldingBlock above (same-grid lock-on refresh).
                     var oldGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
                         ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
                     var newGridId = (value != null && value.CubeGrid != null)
@@ -245,9 +231,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     var newPos = value != null ? value.Position : default(Vector3I);
                     var samePhysicalBlock = oldGridId != 0L && oldGridId == newGridId && oldPos == newPos;
 
-                    // BUG-160: see CurrentWeldingBlock — count-once-per-grid. Skip Inc/Dec when
-                    // the welding lock already pins the same grid, so a BaR welding+grinding the
-                    // same grid contributes exactly +1 to MaxSystemsPerTargetGrid.
+                    // BUG-160: count-once-per-grid (see CurrentWeldingBlock above).
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
                         if (oldGridId != newGridId)

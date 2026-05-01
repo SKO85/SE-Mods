@@ -169,12 +169,7 @@ namespace SKONanobotBuildAndRepairSystem.Extensions
             var fatBlock = slimBlock.FatBlock;
             if (fatBlock != null)
             {
-                // BUG-117: When the block has no individual owner (OwnerId == 0), the engine's
-                // GetUserRelationToOwner returns NoOwnership and the slow path falls back to the
-                // grid relation anyway. Skip the engine call and go straight to the cached grid
-                // relation. Saves the per-block engine call on the dominant case (most fat blocks
-                // inherit grid ownership rather than being individually claimed) — the scan loop
-                // walks ~7 000 blocks per huge grid so this matters.
+                // BUG-117: skip engine call when OwnerId == 0; use cached grid relation directly.
                 if (fatBlock.OwnerId == 0)
                 {
                     return GridOwnershipCacheHandler.GetRelationBetweenGridAndPlayer(slimBlock.CubeGrid, userId);

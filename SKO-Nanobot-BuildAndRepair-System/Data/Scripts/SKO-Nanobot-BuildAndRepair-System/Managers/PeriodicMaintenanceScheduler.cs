@@ -31,10 +31,7 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             Work = () => GridOwnershipCacheHandler.Update()
         };
 
-        // Safe-zone cache cleanup (6 s). BUG-143: was GetSafeZones() which did a full
-        // MyAPIGateway.Entities.GetEntities walk (1-3 ms per tick). The walk was redundant
-        // because OnEntityAdd/OnEntityRemove already maintain the Zones dict in real time.
-        // CleanupSafeZones does just the cache cleanups (~µs) and the stale-entry guard.
+        // BUG-143: safe-zone cache cleanup (6 s); skips the redundant GetSafeZones walk.
         private static PeriodicTask _safeZone = new PeriodicTask
         {
             Interval = TimeSpan.FromSeconds(6),
@@ -58,9 +55,7 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             }
         };
 
-        // BUG-123: friendly-BaR cache rebuild + BUG-125: defensive profiler flush
-        // piggy-backed on the same 5 s cadence. Bounds profiler-buffer loss to ~5 s on
-        // hard crash even when a profile session never calls StopSession.
+        // BUG-123/125: friendly-BaR cache rebuild + profiler flush (5 s cadence).
         private static PeriodicTask _friendlyAndProfiler = new PeriodicTask
         {
             Interval = TimeSpan.FromSeconds(5),

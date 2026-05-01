@@ -74,17 +74,11 @@ namespace SKONanobotBuildAndRepairSystem
         // BaRs destroy pistons/rotors/hinges simultaneously.
         private static readonly PerTickBudget _mechanicalGrindBudget = new PerTickBudget(1);
 
-        // BUG-106: full-dismount throttle. SE engine cascade for grid integrity recalc,
-        // conveyor refresh, block events causes 5-12ms decreaseMs spikes per dismount;
-        // spreading these across ticks prevents the spikes from compounding when many BaRs
-        // dismount simultaneously. Mechanical-block cap (1/tick) is a stricter sub-budget
-        // applied first; this cap (3/tick) covers all dismounts that reach the raze path.
+        // BUG-106: full-dismount throttle (3/tick); mech-block cap (1/tick) applies first.
         public const int MaxDismountsPerTickDefault = 3;
         private static readonly PerTickBudget _dismountBudget = new PerTickBudget(MaxDismountsPerTickDefault);
 
-        // BUG-107: proj.Build throttle. SE engine materialization + grid topology update
-        // produces 7-9ms buildMs spikes on projected armor/conveyor blocks; cap=3/tick
-        // spreads the load when many BaRs materialize simultaneously.
+        // BUG-107: proj.Build throttle for projected-block materialization spikes.
         public const int MaxProjBuildsPerTickDefault = 3;
         private static readonly PerTickBudget _projBuildBudget = new PerTickBudget(MaxProjBuildsPerTickDefault);
 
@@ -103,10 +97,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var configured = Settings.StaggerGroupCount;
             if (configured > 0) return configured;
-            // Auto: scale with placed BaR count. Even disabled BaRs run the per-tick orchestration
-            // (CleanupFriendlyDamage, Settings.TrySave, TryTransmitState), so they generate per-tick
-            // CPU load and need to be staggered. Counting only IsWorking BaRs collapsed the stagger
-            // to 1 in worlds with many disabled BaRs, making BUG-102's isolated-BaR fix inert there.
+            // BUG-102: scale by placed-BaR count (disabled BaRs still run orchestration).
             var total = NanobotSystems.Count;
             if (total <= 5) return 1;
             if (total <= 10) return 2;
@@ -132,18 +123,7 @@ namespace SKONanobotBuildAndRepairSystem
             return MyAPIGateway.Physics != null ? MyAPIGateway.Physics.ServerSimulationRatio : 1.0f;
         }
 
-        // --- OPT 3 / BUG-154: Global weld + grind budgets per tick ---
-        // CON-2: previously each side carried four static fields, three accessor methods
-        // and a TryClaim implementation. Both share the count+time+peak-tracking shape,
-        // so they're now backed by a single `PerTickBudget` class with a max-resolver
-        // delegate (so the cap can scale with BaR count) and an ms accumulator.
-        //
-        // Reason for the time budget: profiling on a 60-BaR server (transmit disabled
-        // to isolate) showed Mod.UpdateBeforeSimulation peaking at 36 ms with
-        // ServerDoWeld up to 11 ms per call (engine welder.Weld() cost is opaque). When
-        // 3+ BaRs land on ServerDoWeld in the same tick the costs stack into a visible
-        // server spike. The time cap prevents single-call spikes from breaching the
-        // frame budget.
+        // OPT 3 / BUG-154: global weld + grind budgets per tick (count + ms cap).
         public const int MaxGrindsPerTickDefault = 10;
         public const double MaxGrindMsPerTickDefault = 8.0;
         public const int MaxWeldsPerTickDefault = 10;
@@ -451,15 +431,10 @@ namespace SKONanobotBuildAndRepairSystem
 
                         RebuildSourcesAndTargetsTimer();
 
-                        // BUG-127: tick the deferred raze handler. Internally throttles to
-                        // one drain every RazeQueueHandler.ProcessIntervalTicks ticks and
-                        // batches per-grid via IMyCubeGrid.RazeBlocks, collapsing N physics
-                        // + integrity recalcs into 1 per grid.
+                        // BUG-127: tick the deferred raze handler (internally throttled).
                         RazeQueueHandler.Process();
 
-                        // BUG-130: shared friendly-damage map cleanup. Internally throttles to
-                        // Settings.FriendlyDamageCleanup (default 10 s). Replaces the per-BaR
-                        // CleanupFriendlyDamage that previously ran on every BaR's Update10.
+                        // BUG-130: shared friendly-damage map cleanup (internally throttled).
                         CleanupFriendlyDamage();
                     }
 
@@ -523,10 +498,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var profilerTs = MethodProfiler.Start();
                 try
                 {
-                    // BUG-053: Refresh safe zone state for all BaRs before cluster rebuild
-                    // so cluster keys always reflect current safe zone permissions.
-                    // This eliminates the timing gap where per-BaR timers (2s, unsynchronized)
-                    // could leave stale state when RebuildClusters computes keys.
+                    // BUG-053: refresh safe zone state before cluster rebuild so keys are current.
                     if (SafeZoneHandler.Zones.Count > 0)
                     {
                         foreach (var system in NanobotSystems.Values)

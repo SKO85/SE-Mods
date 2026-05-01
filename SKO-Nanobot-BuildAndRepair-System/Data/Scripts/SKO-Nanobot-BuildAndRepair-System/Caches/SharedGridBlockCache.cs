@@ -12,16 +12,9 @@ namespace SKONanobotBuildAndRepairSystem.Caches
     public static class SharedGridBlockCache
     {
         /// <summary>
-        /// Gets the raw (unsorted) block list for a grid.
-        /// Returns a NEW list that the caller can safely modify (filter, sort, etc).
-        /// BUG-149: catches the InvalidOperationException raised when the main thread
-        /// mutates the grid's internal block HashSet during our background enumeration.
-        /// The engine's IMyCubeGrid.GetBlocks(List, Func) enumerates an internal HashSet;
-        /// if a block is added/removed mid-enumeration the HashSet enumerator throws
-        /// "Collection was modified". Pre-fix this aborted the entire AsyncClusterScan
-        /// (server log: 2026-05-01 02:29:08Z). Now we return whatever blocks we collected
-        /// before the throw — the caller proceeds with a partial result, and the next
-        /// scan cycle (~6 s) will likely succeed with the now-stable grid.
+        /// Gets the raw block list for a grid (caller may freely modify the returned list).
+        /// BUG-149: catches mid-enumeration mutations from the main thread; returns whatever
+        /// was collected before the throw rather than aborting the entire scan.
         /// </summary>
         public static List<IMySlimBlock> GetBlocks(IMyCubeGrid grid)
         {
@@ -36,10 +29,7 @@ namespace SKONanobotBuildAndRepairSystem.Caches
                 }
                 catch (InvalidOperationException)
                 {
-                    // BUG-149: see method-level comment. Collection was mutated mid-enumeration.
-                    // freshList may contain blocks collected before the throw — return them.
-                    // No re-throw: an aborted scan loses ALL blocks for this cluster cycle,
-                    // a partial scan only loses the few mutated late entries.
+                    // BUG-149: collection mutated mid-enumeration; return the partial list.
                     partial = true;
                 }
                 return freshList;

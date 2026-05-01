@@ -22,19 +22,9 @@ namespace SKONanobotBuildAndRepairSystem
             needGrinding = false;
             transporting = false;
             currentGrindingBlock = null;
-            // BUG-137: ServerDoGrind invokes engine block-damage / block-removal calls that can
-            // spike to 28 ms (profile session 20260430211845: ms=28.299, decreaseMs=28.237 on a
-            // LargeEnergyModule going to integrity=0). Pre-fix it ran inside lock(State.PossibleGrindTargets),
-            // so the spike blocked async scan publish, IsTargetListSaturated, RebuildHash and
-            // every other consumer of the same lock. Capture the chosen target inside the lock,
-            // run TryClaimGrindSlot and ServerDoGrind outside. Mirrors the welding-side fix
-            // (BUG-135) and accepts the same trade-off: only one grind attempt per call (if the
-            // first eligible block fails ServerDoGrind, the next tick tries the next one).
+            // BUG-137: capture target under lock; expensive grind work runs outside.
             TargetBlockData chosenGrindTarget = null;
-            // BUG-144: lock timing + iteration counters. Mirrors welding's instrumentation
-            // (BUG-122 / BUG-131). Verifies Fix A pattern (BUG-137) keeps lock duration
-            // tiny under load, and surfaces iteration-cost spikes (e.g. many already-destroyed
-            // entries to skip on a heavily-ground grid).
+            // BUG-144: lock timing + iteration counters (mirrors BUG-122/131 in welding).
             var skippedByNullBlock = 0;
             var skippedByClosedFatBlock = 0;
             var skippedByGridLimit = 0;
@@ -58,10 +48,8 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 var tsAfterAcquire = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 if (tsBeforeLock != 0L) tsLockAcquire = tsAfterAcquire - tsBeforeLock;
-                // FEAT-076: Skip the full 256-entry iteration when the previous run found
-                // nothing grindable (all targets grid-limited, assigned, or destroyed).
-                // Resets when: target list hash changes (new scan), or the saturated grid
-                // set changes (a BaR on the target grid left, freeing a slot).
+                // FEAT-076: skip iteration when previous run found nothing grindable;
+                // resets on target-list hash change or saturated-grid set change.
                 if (_grindLoopExhausted
                     && State.PossibleGrindTargets.CurrentHash == _grindExhaustedAtHash
                     && _gridSaturation.Count == _grindExhaustedSaturatedCount)
@@ -105,9 +93,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (!targetData.Block.IsDestroyed)
                     {
                         needGrinding = true;
-                        // BUG-137: capture target, exit lock. TryClaimGrindSlot and ServerDoGrind
-                        // run outside so the engine damage call (decreaseMs spike) doesn't hold
-                        // the target-list lock.
+                        // BUG-137: capture target; ServerDoGrind runs outside the lock.
                         chosenGrindTarget = targetData;
                         break;
                     }
@@ -117,11 +103,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                // FEAT-076: Mark exhausted when the full iteration found nothing grindable.
-                // The loop will be skipped on subsequent ticks until the target list changes
-                // (scan swap updates hash) or the saturated grid set changes (a slot frees up).
-                // Note: needGrinding is still inside the lock, so this check correctly stays
-                // false ("not exhausted") whenever we found a chosenGrindTarget.
+                // FEAT-076: mark exhausted when the full iteration found nothing grindable.
                 if (!grinding && !needGrinding)
                 {
                     _grindLoopExhausted = true;
@@ -131,10 +113,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (tsBeforeLock != 0L) tsInLock = Stopwatch.GetTimestamp() - tsAfterAcquire;
             }
 
-            // BUG-137: deferred grind work. Runs OUTSIDE lock(State.PossibleGrindTargets) so
-            // the engine damage / block-removal cost (up to ~28 ms on heavy blocks like
-            // LargeEnergyModule) no longer blocks scan publish, IsTargetListSaturated,
-            // RebuildHash or any other consumer of the same lock.
+            // BUG-137: deferred grind work runs outside the target-list lock.
             if (chosenGrindTarget != null)
             {
                 // OPT 3: Global grind budget — cap ServerDoGrind calls per tick (count + time).
@@ -158,14 +137,7 @@ namespace SKONanobotBuildAndRepairSystem
                             _HasLastGrindPosition = true;
                         }
 
-                        // BUG-165: drop razed blocks from the target list immediately so future
-                        // grind ticks don't iterate them. Pre-fix the list lingered with destroyed
-                        // entries until the next async scan rebuild (~2–5 s); profile showed
-                        // outliers with iterations=38, skipClosed=37 — pure waste stepping past
-                        // razed blocks. After RazeQueueHandler.Enqueue inside ServerDoGrind,
-                        // block.IsDestroyed is set immediately even though the engine raze runs
-                        // batched later. Remove the entry under lock so the iteration count drops
-                        // to actually-grindable targets.
+                        // BUG-165: drop razed blocks immediately so future ticks skip them.
                         var grindBlock = chosenGrindTarget.Block;
                         if (grindBlock != null && grindBlock.IsDestroyed)
                         {
@@ -233,10 +205,7 @@ namespace SKONanobotBuildAndRepairSystem
             var profilerTs = MethodProfiler.Start();
             var target = targetData.Block;
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
-            // BUG-103: Move any in-flight items but don't gate the grind on the cosmetic timer.
-            // ServerEmptyTransportInventory inside IsTransportRunning already drains items each tick;
-            // grinding the next block proceeds without waiting for the timer to elapse. Visual
-            // particle still plays via State.Transporting being true while the timer runs.
+            // BUG-103: don't gate grind on the cosmetic transport timer.
             transporting = IsTransportRunning(playTime);
 
             var targetGrid = target.CubeGrid;
@@ -292,12 +261,7 @@ namespace SKONanobotBuildAndRepairSystem
             var emptying = false;
             bool isEmpty = false;
 
-            // Sub-timing: measure each phase to identify spike source.
-            // BUG-140: split the old tsDecrease into two engine-call timers so we can
-            // see which one dominates the grind spike on large blocks:
-            //   tsMountLevel — target.DecreaseMountLevel (damage + integrity update + grid topology)
-            //   tsMoveItems  — target.MoveItemsFromConstructionStockpile (drain components into transport inv)
-            // Combined decreaseMs in the log = mountLevelMs + moveItemsMs for back-compat reading.
+            // BUG-140: split tsDecrease into MountLevel vs MoveItems sub-timers.
             var tsFreq = Stopwatch.Frequency;
             var tsEmpty = 0L;
             var tsMountLevel = 0L;
@@ -323,10 +287,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!emptying || isEmpty)
             {
-                // BUG-106: predict full dismount and gate on the global dismount budget BEFORE
-                // calling DecreaseMountLevel. The decreaseMs spike (5-12ms on armor blocks) is
-                // entirely in the SE engine cascade triggered when integrity hits 0. Spreading
-                // these across ticks avoids compounding when many BaRs grind simultaneously.
+                // BUG-106: gate full dismount on the global budget before DecreaseMountLevel.
                 if (integrityRatio <= 0f && !Mod.TryClaimDismountSlot())
                 {
                     EmitServerDoGrindProfile(profilerTs,
@@ -347,12 +308,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (target.UseDamageSystem)
                 {
-                    // BUG-130: write once per distinct friendly OWNER instead of once per friendly
-                    // BaR. The shared Mod._FriendlyDamageByOwner is owner-keyed, so all BaRs sharing
-                    // a welder owner share the same entry. In single-faction worlds this collapses
-                    // 174 CDict writes into ~1 dict write, eliminating the 21 ms friendlyMs spikes.
-                    // Behavior preserved: read-side IsFriendlyDamage still returns true for the
-                    // same set of (block, welder) pairs.
+                    // BUG-130: owner-keyed friendly-damage map (one write per distinct owner).
                     tsMark = Stopwatch.GetTimestamp();
                     System.Collections.Generic.List<long> friendlyOwners;
                     if (Mod.TryGetFriendlyOwnersForOwner(_Welder.OwnerId, out friendlyOwners) && friendlyOwners != null)
@@ -367,13 +323,7 @@ namespace SKONanobotBuildAndRepairSystem
                     tsFriendly = Stopwatch.GetTimestamp() - tsMark;
                 }
 
-                // BUG-140: separate timers for the two engine calls. DecreaseMountLevel does
-                // the actual damage application + integrity update + (on hitting 0) grid topology
-                // mutation. MoveItemsFromConstructionStockpile drains the consumed components into
-                // our transport inventory. Cost split varies by block: heavy mechanical / multi-part
-                // blocks make DecreaseMountLevel expensive; component-heavy blocks (refineries,
-                // assemblers) push more cost into MoveItemsFromConstructionStockpile.
-                // Stopwatch calls gated on profilerTs so they're zero-cost in production.
+                // BUG-140: timers for DecreaseMountLevel and MoveItemsFromConstructionStockpile.
                 tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 target.DecreaseMountLevel(damageInfo.Amount, _TransportInventory);
                 if (tsMark != 0L) tsMountLevel = Stopwatch.GetTimestamp() - tsMark;
@@ -382,8 +332,7 @@ namespace SKONanobotBuildAndRepairSystem
                 target.MoveItemsFromConstructionStockpile(_TransportInventory);
                 if (tsMark != 0L) tsMoveItems = Stopwatch.GetTimestamp() - tsMark;
 
-                // BUG-140: instrument IsFullyDismounted — engine field/method that can re-check
-                // multi-part block state. Cheap on simple blocks, worth measuring on large/complex.
+                // BUG-140: instrument IsFullyDismounted.
                 tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 var fullyDismounted = target.IsFullyDismounted;
                 if (tsMark != 0L) tsDismountCheck = Stopwatch.GetTimestamp() - tsMark;
@@ -421,26 +370,13 @@ namespace SKONanobotBuildAndRepairSystem
                     tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
 
                     tsMark = Stopwatch.GetTimestamp();
-                    // BUG-127: defer raze to Mod's batched queue. Drains every
-                    // RazeProcessIntervalTicks ticks via IMyCubeGrid.RazeBlocks(positions),
-                    // collapsing N physics+integrity recalcs into 1 per grid and shifting
-                    // the SE-engine cleanup off the grind tick. SetToConstructionSite call
-                    // dropped — no longer needed for batch raze. Block sits at
-                    // FatBlock.Closed=false / IsDestroyed=true until the queue drains;
-                    // ServerTryGrinding's existing IsDestroyed / Closed skips already filter
-                    // it from being re-targeted. tsRaze now reports just the enqueue cost
-                    // (sub-microsecond).
+                    // BUG-127: defer raze to the batched RazeQueueHandler.
                     RazeQueueHandler.Enqueue(target);
                     tsRaze = Stopwatch.GetTimestamp() - tsMark;
                 }
             }
 
-            // BUG-124: split tsTransport into 4 sub-timers. Profile session 20260429184659 showed
-            // transportMs=19.134 ms on a fully-dismounted LargeBlockArmorBlock, but the existing
-            // ServerEmptyTransportInventory profiler caps at 0.189 ms across 2 489 calls — so the
-            // 19 ms is NOT in that call. Prime suspect: ComputePosition(target) → target.ComputeWorldCenter
-            // is being run on a block that was just removed from its grid 5 lines earlier (line 327).
-            // Diagnostic-only this ticket; fix follows once the dominant segment is confirmed.
+            // BUG-124: split tsTransport into Gate/Pos/Set/Empty sub-timers.
             tsMark = Stopwatch.GetTimestamp();
             var tsTransportGate = 0L;
             var tsTransportPos = 0L;
@@ -498,15 +434,8 @@ namespace SKONanobotBuildAndRepairSystem
             return true;
         }
 
-        // REF-5: single source of truth for the ServerDoGrind profile emit format.
-        // Pre-fix the format string was duplicated at three call sites (dismountSlot
-        // early exit, mechSlot early exit, regular exit) and had drifted — the regular
-        // exit gained transportGate/Pos/Set/Empty sub-timers while the two early exits
-        // stayed on the older shape. Canonical format here covers all sub-timers plus
-        // a trailing earlyExit field. Early-exit callers pass `0.0` for unmeasured
-        // timers and a non-empty reason ("dismountSlot", "mechSlot"); regular exit
-        // passes empty string. `decreaseMs` kept as the back-compat sum of mountLevel +
-        // moveItems and is computed here so callers don't need to remember.
+        // Single source of truth for the ServerDoGrind profile format.
+        // Early-exit callers pass 0.0 for unmeasured timers and a non-empty earlyExit reason.
         private const string ServerDoGrindProfileFormat =
             "entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};" +
             "emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};" +

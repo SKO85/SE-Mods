@@ -79,13 +79,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             UpdateCustomInfo(true);
 
-            // FEAT-080: terminal settings just changed (work mode, priority list, area, color
-            // filter, search mode, etc.). Force the next scan to fire immediately so new
-            // targets matching the updated settings surface right away instead of waiting
-            // up to 10 s for the next scan-timer tick. bypassDebounce=true skips the
-            // FEAT-075 forceDebounce so a near/far toggle takes effect on the very next
-            // scan tick instead of up to 5 s later — otherwise the BaR keeps processing
-            // the *old* sorted target list during the debounce window. No-op on clients.
+            // FEAT-080: settings changed — force immediate rescan, bypassing FEAT-075 debounce.
             TriggerImmediateRescan("settingsChanged", true);
         }
 
@@ -115,10 +109,7 @@ namespace SKONanobotBuildAndRepairSystem
             // Force HelpOthers off — the mod does not use this option.
             _Welder.HelpOthers = false;
 
-            // PERF-10: per-instance Random seeded from the welder's EntityId. EntityId is
-            // a 64-bit handle from the engine; folding the high half into the low half
-            // avoids two Random instances drawing identical sequences when EntityIds
-            // differ only in the upper bits.
+            // PERF-10: per-instance Random seeded from EntityId (XOR-fold high+low halves).
             var seed = (int)(_Welder.EntityId ^ (_Welder.EntityId >> 32));
             _RandomDelay = new Random(seed);
 
@@ -130,11 +121,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             _onEnabledChanged += (block) =>
             {
-                // BUG-120: power-cycle reset of the broken-block caches. Whether the BaR
-                // is going off (no welds running anyway) or coming back on (player's
-                // self-service "retry after acquiring DLC" path), clearing both is safe
-                // and gives players a deterministic way to re-test previously-broken
-                // blocks without restarting the world.
+                // BUG-120: power-cycle resets the broken-block caches (player's retry path).
                 _BrokenProjBuildKeys.Clear();
                 _ProjBuildSilentFailCount.Clear();
                 _BrokenCacheOwnerId = _Welder != null ? _Welder.OwnerId : long.MinValue;
@@ -154,11 +141,7 @@ namespace SKONanobotBuildAndRepairSystem
             if (welderInventory == null) return;
             _TransportInventory = new Sandbox.Game.MyInventory((float)welderInventory.MaxVolume / MyAPIGateway.Session.BlocksInventorySizeMultiplier, Vector3.MaxValue, MyInventoryFlags.CanSend);
 
-            // BUG-018: Initialize inventory state from current welder inventory.
-            // On world reload, State.InventoryFull defaults to false even when the welder
-            // is full from the previous session. This allows one round of collecting/grinding
-            // before the proactive check in ServerTryWeldingGrindingCollecting catches it,
-            // consuming floating items from the world that can't actually be stored.
+            // BUG-018: seed InventoryFull from current welder volume on world reload.
             if ((float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
             {
                 State.InventoryFull = true;
@@ -196,15 +179,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (_IsInit)
             {
-                // Wait for any in-flight async scan to finish before clearing shared state.
-                // The background task sets _AsyncUpdateSourcesAndTargetsRunning = false
-                // inside lock(_Welder) in its finally block. Check under the same lock
-                // to ensure we observe the write, not a stale cached value.
-                // Stopwatch-based ~1 ms spin between checks: System.Threading.Sleep is
-                // prohibited by the SE sandbox, but the previous lock+poll loop ran with
-                // no delay and pegged a main-thread core for up to 5 s × N closing BaRs
-                // during world unload. 1 s ceiling is a safety net — a scan in flight
-                // normally completes in tens of ms.
+                // Wait for any in-flight async scan to finish (1 s ceiling, ~1 ms spin).
                 var deadline = DateTime.UtcNow.AddSeconds(1);
                 var pollSpacingTicks = Stopwatch.Frequency / 1000;
                 var spin = new Stopwatch();
@@ -231,12 +206,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _InitialScanCompleted = false;
                 _PushTargetsFull = false;
 
-                // BUG-160: release any grid-count contribution before tear-down. Without this,
-                // a destroyed/disabled BaR still holding CurrentWeldingBlock or CurrentGrindingBlock
-                // leaks +1 to Mod.GridSystemCount[grid] forever. Over a long session this drift
-                // pushes counts past MaxSystemsPerTargetGrid even when the live BaR count is well
-                // under the limit, blocking new BaRs unnecessarily. Setting to null fires the
-                // setter which Dec's the grid count on the server.
+                // BUG-160: release grid-count contribution before tear-down (setter Dec's count).
                 State.CurrentWeldingBlock = null;
                 State.CurrentGrindingBlock = null;
 
@@ -247,9 +217,7 @@ namespace SKONanobotBuildAndRepairSystem
                 lock (State.PossibleGrindTargets) State.PossibleGrindTargets?.Clear();
                 lock (State.PossibleFloatingTargets) State.PossibleFloatingTargets?.Clear();
                 lock (State.MissingComponents) State.MissingComponents?.Clear();
-                // BUG-130: per-BaR FriendlyDamage retired. Shared map in Mod is owner-keyed
-                // and survives individual BaR Close() — other BaRs of the same owner still
-                // need it. Stale entries reap naturally via Mod.CleanupFriendlyDamage().
+                // BUG-130: per-BaR FriendlyDamage retired; Mod's shared owner-keyed map persists.
 
                 _TempPossibleWeldTargets?.Clear();
                 _TempPossibleGrindTargets?.Clear();

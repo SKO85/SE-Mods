@@ -112,12 +112,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                         if (attackerId != 0)
                         {
-                            // BUG-130: write to the shared owner-keyed map. Distinct welder-owner
-                            // ids only — N BaRs sharing one owner now produce 1 write, not N.
-                            // The attacker may be an arbitrary player without a BaR, so the
-                            // _FriendlyOwnersByOwner cache (built from BaR welder owners only) is
-                            // not always populated for `attackerId`; iterate NanobotSystems here.
-                            // Damage events are rare so the N-walk is acceptable.
+                            // BUG-130: write to the shared owner-keyed map (one write per distinct owner).
                             var deadline = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
                             _seenOwnersBuffer.Clear();
                             foreach (var entry in Mod.NanobotSystems)

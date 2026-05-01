@@ -20,12 +20,7 @@ using static SKONanobotBuildAndRepairSystem.Utils.UtilsInventory;
 
 namespace SKONanobotBuildAndRepairSystem
 {
-    // STR-1: split out of NanobotSystem.Scanning.cs (which became 2.7 KLOC after
-    // BUG-094/BUG-096/CON-1+PERF-1 layering). This partial holds the block-level
-    // scanning primitives — per-block target tests, the recursive grid walk, and
-    // the per-grid sort/cap utilities. The orchestration (timer, dispatch,
-    // AsyncClusterScan, ApplyClusterResultToSelf) stays in NanobotSystem.Scanning.cs
-    // alongside the source/push-target scan and the result-publishing path.
+    // Block-level scanning primitives split out of NanobotSystem.Scanning.cs.
     public partial class NanobotSystem
     {
         private List<IMySlimBlock> GetBlocksFromCache(IMyCubeGrid grid)
@@ -73,9 +68,8 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// BUG-053: SE applies safe zone building restrictions at the grid level.
-        /// If the projector's physical grid intersects a safe zone that blocks building,
-        /// proj.Build() will fail for ALL projected blocks on that grid.
+        /// BUG-053: returns true when the projector's grid intersects a safe zone
+        /// that blocks building (proj.Build fails for every projected block on it).
         /// </summary>
         private bool IsProjectorGridBuildBlocked(IMyProjector projector)
         {
@@ -112,10 +106,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             try
             {
-                // BUG-132: replaced manual BFS through Mechanical/Attachable/Connector edges
-                // + per-fatblock cast with the engine's logical grid-group terminal system,
-                // which maintains a type-indexed projector list. On a 5000-block grid with
-                // 1 projector this drops from ~5000 casts to a single typed lookup.
+                // BUG-132: use logical grid-group's typed projector lookup instead of per-block BFS.
                 var helper = MyAPIGateway.TerminalActionsHelper;
                 if (helper != null && _Welder.CubeGrid != null)
                 {
@@ -201,9 +192,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (!State.SafeZoneAllowsBuildingProjections)
                     return false;
 
-                // BUG-053: SE applies safe zone building restrictions at the grid level.
-                // If the projector's physical grid intersects a safe zone that blocks
-                // building, proj.Build() fails for ALL projected blocks on that grid.
+                // BUG-053: skip if the projector's grid is in a building-blocked safe zone.
                 if (IsProjectorGridBuildBlocked(projector))
                     return false;
 
@@ -229,12 +218,8 @@ namespace SKONanobotBuildAndRepairSystem
                 if (!State.SafeZoneAllowsWelding)
                     return false;
 
-                // BUG-112: NeedRepair moved to first in the && chain. For a stable base where
-                // most blocks are at full integrity (the common case on 11k-block bases),
-                // NeedRepair returns false in ~50-200 ns. The remaining checks include
-                // IsRelationAllowed4Welding which calls block.GetUserRelationToOwner — an SE
-                // engine call costing 1-10 µs per block. Per-block reorder saves ~3 µs × N
-                // (~30 ms on an 11k-block grid scan when most blocks are full integrity).
+                // BUG-112: NeedRepair first short-circuits for full-integrity blocks
+                // before the more expensive IsRelationAllowed4Welding engine call.
                 if (block.NeedRepair(Settings.WeldOptions) &&
                    (!useIgnoreColor || !IsColorNearlyEquals(ignoreColor, colorMask)) && (!useGrindColor || !IsColorNearlyEquals(grindColor, colorMask)) &&
                    BlockWeldPriority.GetEnabled(block) &&
@@ -337,13 +322,8 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// BUG-166: hash of all scan parameters that affect per-grid output, used as the
-        /// GridScanCache key alongside gridId. The cluster key in ScanClusterCoordinator
-        /// includes the BaR's home grid EntityId; this hash deliberately excludes it so two
-        /// clusters on different home grids with the same scan settings hit the same cache
-        /// entry. For multi-member clusters skipRangeCheck=true and the per-grid output is
-        /// position-independent, so this hash fully captures everything that determines the
-        /// candidate list.
+        /// BUG-166: GridScanCache key hash; excludes home-grid EntityId so clusters
+        /// with identical scan settings on different home grids share cache entries.
         /// </summary>
         private int ComputeScanParamsHash(bool useIgnoreColor, uint ignoreColor, bool useGrindColor, uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions)
         {
@@ -514,20 +494,10 @@ namespace SKONanobotBuildAndRepairSystem
             var weldBefore = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
             var grindBefore = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
 
-            // BUG-096 (Codex follow-up to BUG-094): enforce per-type cluster caps at grid entry.
-            // BUG-094 disabled the per-block cap gate on AsyncAddBlockIfTarget (int.MaxValue) so
-            // the per-grid sort sees every qualifying block on a grid — correct for sort quality,
-            // but ShouldStopScan only fires when BOTH lists are full, so when one type never
-            // fills (e.g. grind-only workload with weld still enabled, or vice versa), the other
-            // type grew unbounded across scanned grids (each grid contributed up to 256 via the
-            // per-grid sort, times N grids). PreSortClusterCandidates and ApplyClusterResultToSelf
-            // then paid O(n log n) on that unbounded list.
-            //
-            // Fix: at grid entry, null the per-type target list if that type's cluster cap is
-            // already hit. The per-block path for this grid becomes a no-op for the capped type,
-            // but the other type still gets full-grid input so its per-grid sort stays accurate.
-            // Cap-skipped flags suppress the empty-grid-cache update below so we don't evict a
-            // grid that we literally didn't look at.
+            // BUG-096: enforce per-type cluster caps at grid entry. When one type's cluster
+            // cap is hit, null its list so the per-block path no-ops for that type while the
+            // other type's per-grid sort still sees full input. Cap-skipped flags suppress
+            // the empty-grid-cache update below.
             var weldCapSkipped = false;
             var weldTargetsForGrid = clusterWeldTargets;
             if (weldTargetsForGrid != null && weldTargetsForGrid.Count >= maxWeld)
@@ -563,10 +533,8 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            // FEAT-040: Grid-level containment pre-check.
-            // If the grid's world AABB fits entirely inside the working area OBB,
-            // all blocks are guaranteed in range — skip expensive per-block OBB checks.
-            // Connected/projected grids still use the original skipRangeCheck (they get their own check).
+            // FEAT-040: grid-level containment fast-path skips per-block OBB checks
+            // when the grid's world AABB fits inside the working area.
             var blockSkipRange = skipRangeCheck;
             if (!blockSkipRange)
             {
@@ -577,13 +545,8 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            // BUG-161: when both target types are nulled (cluster caps already saturated, or
-            // grind disabled and weld cap hit), the slim-block loop has no targets to add but
-            // still walks every block on the grid for connection/projector traversal. On a
-            // 7,600-block grid this costs 50–55 ms per cluster scan with weldAdded=0,
-            // grindAdded=0. Iterate only fat blocks (which is what connection traversal needs)
-            // — same shape as the empty-grid-cache fast path above. Projector traversal is
-            // already gated on weldTargetsForGrid != null, so it's a no-op here anyway.
+            // BUG-161: when both target lists are nulled, iterate only fat blocks
+            // for connection traversal (skip the full slim-block walk).
             if (weldTargetsForGrid == null && grindTargetsForGrid == null)
             {
                 // PERF-1 + CON-1: rent pooled buffer; traversal extracted into helper.
@@ -616,11 +579,8 @@ namespace SKONanobotBuildAndRepairSystem
                 return;
             }
 
-            // BUG-166: per-grid scan cache. When two cluster coordinators target the same
-            // grid in the same scan window, the second one hits the cache and skips the
-            // 8K-block iteration. Only enabled for skipRangeCheck=true (multi-member
-            // clusters) — for solo BaRs the per-block IsInRange check makes the output
-            // position-dependent and the cache is invalid.
+            // BUG-166: per-grid scan cache; only enabled for skipRangeCheck=true
+            // (solo BaRs have position-dependent output that can't be cached).
             var paramsHash = 0;
             var cacheEligible = skipRangeCheck;
             if (cacheEligible)
@@ -663,10 +623,7 @@ namespace SKONanobotBuildAndRepairSystem
                         _EmptyGridCache.TryRemove(gridEntityId, out dummy);
                     }
 
-                    // Connection traversal still needs to happen — cache only covers slim-block
-                    // target collection for THIS grid, not recursion into mechanical/connector
-                    // children (those have their own cache entries keyed on their own gridId).
-                    // PERF-1 + CON-1: rent pooled buffer; traversal extracted into helper.
+                    // Cache only covers this grid's targets; still traverse connections.
                     var fatBlocksHit = RentFatBlocksList();
                     try
                     {
@@ -702,16 +659,8 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
 
-                // BUG-094: Pass int.MaxValue for the per-block count gates so EVERY qualifying
-                // block on this grid enters the candidate list. The global cap (maxWeld/maxGrind)
-                // must not short-circuit the per-block add here, because on grids larger than
-                // the cap the iteration would keep whatever blocks happened to be first in the
-                // grid-cache order — not the true top-N by priority/distance.
-                // The per-grid budget (MaxPossibleWeldTargets / MaxPossibleGrindTargets) is
-                // enforced after the loop via SortAndCapGridCandidates (below), which sorts
-                // the qualifying candidates and keeps the user's preferred top-N (nearest,
-                // farthest, smallest-grid-first, etc.). Regression introduced in v2.5.0 when
-                // the full-grid pre-sort was removed but the cap-gate short-circuit was kept.
+                // BUG-094: int.MaxValue lets every qualifying block enter the list;
+                // the per-grid budget is applied later by SortAndCapGridCandidates.
                 AsyncAddBlockIfTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, slimBlock, weldTargetsForGrid, grindTargetsForGrid, int.MaxValue, int.MaxValue, blockSkipRange);
 
                 // CON-1: shared connection traversal. Returns true when the slim block
@@ -735,9 +684,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 continue;
                             }
 
-                            // BUG-053: SE applies safe zone building restrictions at the grid level.
-                            // If the projector's physical grid intersects a build-blocked safe zone,
-                            // proj.Build() fails for ALL projected blocks — skip this projector entirely.
+                            // BUG-053: skip if the projector's grid is in a building-blocked safe zone.
                             if (IsProjectorGridBuildBlocked(projector))
                             {
                                 continue;
@@ -761,8 +708,6 @@ namespace SKONanobotBuildAndRepairSystem
                                         double distance;
                                         if (skipRangeCheck || block.IsInRange(ref areaBox, out distance))
                                         {
-                                            // Cluster weld cap respected via weldTargetsForGrid.Count (not clusterWeldTargets.Count);
-                                            // once this grid's per-block loop pushes it past maxWeld the guard stops further adds.
                                             if (weldTargetsForGrid.Count < maxWeld)
                                             {
                                                 weldTargetsForGrid.Add(new ClusterTargetCandidate(block, TargetBlockData.AttributeFlags.Projected));
@@ -777,9 +722,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
-            // Per-grid budget: if this grid contributed more candidates than the per-grid max,
-            // sort the excess by priority+distance and keep only the best. This replaces the old
-            // pre-sort on ALL grid blocks — sorting only qualifying candidates is much cheaper.
+            // Per-grid budget: sort + keep top-N when this grid contributed more than max.
             var grindAdded = (clusterGrindTargets != null ? clusterGrindTargets.Count : 0) - grindBefore;
             if (grindAdded > MaxPossibleGrindTargets)
             {
@@ -791,10 +734,7 @@ namespace SKONanobotBuildAndRepairSystem
                 SortAndCapGridCandidates(clusterWeldTargets, weldBefore, weldAdded, MaxPossibleWeldTargets, false, ref areaBox);
             }
 
-            // Update empty grid cache: remember grids that contributed no targets.
-            // BUG-096: skip this update if we cap-skipped either type at grid entry — the grid
-            // may still have valid targets we literally didn't evaluate, and marking it empty
-            // would suppress it for EmptyGridRescanDelaySeconds even after the cluster cap frees.
+            // BUG-096: don't mark cap-skipped grids empty — we didn't evaluate them.
             var weldAfter = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
             var grindAfter = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
             if (weldAfter == weldBefore && grindAfter == grindBefore && !weldCapSkipped && !grindCapSkipped)
@@ -807,12 +747,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _EmptyGridCache.TryRemove(gridEntityId, out dummy);
             }
 
-            // BUG-166: populate the per-grid scan cache so a second cluster scanning the
-            // same grid in the next ~3 s hits the fast path instead of re-iterating slim
-            // blocks. Slice the per-grid contribution out of the cluster lists. Only cache
-            // when both target types were active at this grid (no cap-skip) so the cached
-            // entry represents a complete contribution; otherwise the second cluster might
-            // be missing one type's data.
+            // BUG-166: cache this grid's contribution; skip if cap-skipped (incomplete).
             if (cacheEligible && !weldCapSkipped && !grindCapSkipped)
             {
                 List<ClusterTargetCandidate> weldSlice = null;
@@ -839,8 +774,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var endTs = System.Diagnostics.Stopwatch.GetTimestamp();
 
                 var _clusterMembers = _ClusterMemberAreaCenters != null ? _ClusterMemberAreaCenters.Count : 0;
-                // BUG-096 diagnostics: cap-skip flags + per-grid added counts so a scan that
-                // contributed nothing can be attributed (cap at entry vs truly empty vs scenario/immune).
+                // BUG-096 diagnostics: cap-skip flags + per-grid added counts.
                 var _weldCapSkipped = weldCapSkipped;
                 var _grindCapSkipped = grindCapSkipped;
                 var _weldAddedHere = weldAfter - weldBefore;
@@ -972,49 +906,12 @@ namespace SKONanobotBuildAndRepairSystem
                         clusterFloatingTargets != null ? clusterFloatingTargets.Count : -1));
             }
         }
-        /// <summary>
-        /// Sorts a subrange of the candidate list and removes excess.
-        /// Called after per-grid collection to enforce the per-grid budget while keeping
-        /// the best candidates based on the user's sort settings.
-        /// BUG-086: Must respect GrindIgnorePriorityOrder — when priority is disabled,
-        /// the cap must select by distance/grid-size so it keeps the blocks the user
-        /// actually wants (e.g., farthest), not the highest-priority ones.
-        /// </summary>
-        // ----------------------------------------------------------------------------------
-        // Shared sort key helpers (FEAT-070 consolidation).
-        //
-        // The scan pipeline does weld/grind sorts in several places:
-        //   1. SortAndCapGridCandidates         — per-grid sort on ClusterTargetCandidate.
-        //   2. PreSortClusterCandidates         — cluster-wide pre-sort on ClusterTargetCandidate.
-        //   3. ApplyClusterResultToSelf (pre)   — per-BaR pre-sort on TargetBlockData.
-        //   4. ApplyClusterResultToSelf (post)  — post-truncate re-sort on TargetBlockData.
-        //
-        // Before consolidation each site open-coded the autogrind-first bucket, priority
-        // check, GrindSmallestGridFirst + BUG-091 spatial tiebreaker, and (for weld) the
-        // grid/position stable tiebreakers. BUG-086/BUG-091 fixes had to touch every copy;
-        // one copy in ApplyClusterResultToSelf also had a subtle bug where farthest-first
-        // + smallest-grid-first combined would fall back to nearest-first within same-sized
-        // grids (see CompareGrindNonDistance below).
-        //
-        // These helpers centralize the non-distance key so each call site only owns:
-        //   - distance metric (squared / non-squared / member-aware)
-        //   - grindNearFirst direction
-        //   - its own tiebreakers (if any)
-        // Each helper is an instance method because the priority lookups (BlockWeldPriority /
-        // BlockGrindPriority) are per-NanobotSystem fields. All are pure — no side effects.
-        // ----------------------------------------------------------------------------------
+        // FEAT-070: shared sort key helpers used by per-grid, cluster-wide, and per-BaR sorts.
+        // Each call site adds its own distance metric and direction.
 
         /// <summary>
-        /// Grind sort key — everything except the final distance compare. Handles:
-        ///   1. Autogrind-first bucket (autogrind blocks precede non-autogrind).
-        ///   2. Per-type priority (skipped when user sets GrindIgnorePriorityOrder).
-        ///   3. GrindSmallestGridFirst: smaller grid wins; equal-size grids use BUG-091's
-        ///      per-grid nearest-block min-distance tiebreaker; equal-size-and-min-distance
-        ///      fall back to a deterministic EntityId tiebreaker.
-        /// Returns 0 when the caller should fall through to its distance compare (which
-        /// MUST honor GrindNearFirst). <paramref name="perGridMinDist"/> may be null when
-        /// smallestGridFirst is off or when BUG-091 tiebreaker data isn't applicable
-        /// (per-grid sort over a single grid, for example).
+        /// Grind sort key (autogrind, priority, smallest-grid-first + BUG-091 spatial tiebreak).
+        /// Returns 0 when the caller should fall through to its distance compare.
         /// </summary>
         private int CompareGrindNonDistance(
             IMySlimBlock blockA, TargetBlockData.AttributeFlags attrsA,
@@ -1054,10 +951,7 @@ namespace SKONanobotBuildAndRepairSystem
             return 0;
         }
 
-        /// <summary>
-        /// Weld sort key — priority only. Weld has no smallest-grid-first / autogrind bucket.
-        /// Caller follows with a distance compare and optional stable tiebreakers.
-        /// </summary>
+        /// <summary>Weld sort key — priority only.</summary>
         private int CompareWeldPriority(IMySlimBlock blockA, IMySlimBlock blockB)
         {
             var priorityA = BlockWeldPriority.GetPriority(blockA);
@@ -1065,11 +959,7 @@ namespace SKONanobotBuildAndRepairSystem
             return priorityA - priorityB;
         }
 
-        /// <summary>
-        /// Stable deterministic tiebreaker used after priority+distance to keep sort order
-        /// reproducible across identical-key ties (avoids output churn between scan cycles).
-        /// Static because it touches no instance state.
-        /// </summary>
+        /// <summary>Stable tiebreaker (gridId, position) to keep sort output reproducible.</summary>
         private static int CompareBlockStableTiebreak(IMySlimBlock blockA, IMySlimBlock blockB)
         {
             var gridCmp = blockA.CubeGrid.EntityId.CompareTo(blockB.CubeGrid.EntityId);
@@ -1082,10 +972,8 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Returns the minimum squared distance from <paramref name="blockPos"/> to any
-        /// snapshotted cluster member area center. Falls back to <paramref name="fallbackCenter"/>
-        /// when the snapshot is empty (solo cluster). Keeps multi-member clusters member-aware
-        /// so distant members aren't starved of targets by a coordinator-centric sort.
+        /// Min squared distance from blockPos to any cluster member area center;
+        /// falls back to fallbackCenter for solo clusters.
         /// </summary>
         private double MinSquaredDistanceToClusterMembers(ref Vector3D blockPos, ref Vector3D fallbackCenter)
         {
@@ -1105,20 +993,9 @@ namespace SKONanobotBuildAndRepairSystem
             return best;
         }
 
-        // ----------------------------------------------------------------------------------
-        // FEAT-074: Quickselect (Hoare's selection algorithm).
-        //
-        // Partially reorders list[left..right] so that list[left..left+k-1] contains
-        // the k smallest elements according to the comparator (unordered among
-        // themselves). Average O(n), vs O(n log n) for a full sort.
-        //
-        // Used by SortAndCapGridCandidates when the candidate count far exceeds
-        // maxKeep, to avoid sorting thousands of items only to discard most of them.
-        // After quickselect, only the top-k are sorted with list.Sort().
-        //
-        // Uses median-of-three pivot selection for robustness against sorted/reverse
-        // inputs. Falls back to insertion sort for small partitions (<=16 elements).
-        // ----------------------------------------------------------------------------------
+        // FEAT-074: Quickselect (Hoare). Partially reorders list[left..right] so the
+        // k smallest by comparator land in [left..left+k-1]. O(n) avg vs O(n log n) sort.
+        // Median-of-three pivot; insertion sort for partitions <= 16.
         private static void QuickSelect(List<ClusterTargetCandidate> list, int left, int right, int k, IComparer<ClusterTargetCandidate> comparer)
         {
             var targetPos = left + k - 1;
@@ -1201,15 +1078,8 @@ namespace SKONanobotBuildAndRepairSystem
             var memberCenters = _ClusterMemberAreaCenters;
             var useMemberAware = memberCenters != null && memberCenters.Count > 0;
 
-            // BUG-096: Multi-member cluster scans run with skipRangeCheck=true so the collection
-            // loop doesn't filter out-of-range blocks per-member. If we sort that raw set with
-            // farthest-first (largest min-distance wins), the kept top-N is *deliberately* the
-            // blocks nobody can reach, and every member's own IsInRange filter in
-            // ApplyClusterResultToSelf then throws them away — members go idle while the grid
-            // still has plenty of in-range targets. Partition in-range-to-any-member candidates
-            // to the front of the subrange before sorting so farthest-first picks the farthest
-            // reachable block. Solo scans (useMemberAware=false) already filtered per-block
-            // during collection and skip this step.
+            // BUG-096: partition in-range-to-any-member candidates to the front so
+            // farthest-first picks the farthest *reachable* block (multi-member clusters).
             var memberBoxes = _ClusterMemberAreaBoxes;
             var effectiveCount = count;
             var partitionRan = false;
@@ -1218,17 +1088,8 @@ namespace SKONanobotBuildAndRepairSystem
                 partitionRan = true;
                 tsMark = System.Diagnostics.Stopwatch.GetTimestamp();
 
-                // BUG-099: populate the sort distance cache while we already have each
-                // block's world position and are iterating every candidate for the OBB
-                // partition check. The sort comparator can then do a dict lookup per
-                // compare instead of recomputing 2 * memberCount squared distances per
-                // compare — profiling on a 58-member cluster showed the inline recompute
-                // cost 70-125 ms per sort on 11k candidates; this drops it to ~6-10 ms.
-                //
-                // BUG-100: also populate the priority cache so the comparator can skip the
-                // per-compare GetPriority lookups (previously ~34 ms / sort for 9.9k-cand
-                // grind sort after BUG-099). Pre-fetched once per block (~130 ns) then read
-                // from the cache per compare (~40 ns) for a ~2-3x speedup on the sort.
+                // BUG-099/100: populate distance + priority caches during the partition pass
+                // so the comparator can lookup per compare instead of recomputing.
                 _sortCandidateDistances.Clear();
                 _sortCandidatePriorities.Clear();
 
@@ -1258,8 +1119,6 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (inRange)
                     {
-                        // Compute min-squared-distance to any member center while the
-                        // block position is in L1. Used by the sort comparator below.
                         var blockPos = blockMatrix.Translation;
                         var minDist = double.MaxValue;
                         for (int ci = 0; ci < memberCenters.Count; ci++)
@@ -1269,9 +1128,7 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                         _sortCandidateDistances[candidate.Block] = minDist;
 
-                        // BUG-100: pre-fetch priority for the sort comparator. One GetPriority
-                        // call per block here replaces 2 calls per comparison × ~132k
-                        // comparisons in the sort.
+                        // BUG-100: pre-fetch priority for the sort comparator.
                         var priority = isGrinding
                             ? BlockGrindPriority.GetPriority(candidate.Block)
                             : BlockWeldPriority.GetPriority(candidate.Block);
@@ -1290,9 +1147,7 @@ namespace SKONanobotBuildAndRepairSystem
                 partitionTicks = System.Diagnostics.Stopwatch.GetTimestamp() - tsMark;
             }
 
-            // Nothing reachable — drop everything this grid contributed. Member-level
-            // IsInRange would have filtered them anyway; dropping here frees cluster slots
-            // for other grids that may still have reachable blocks on subsequent iterations.
+            // Nothing reachable — drop everything this grid contributed.
             if (effectiveCount == 0)
             {
                 list.RemoveRange(startIndex, count);
@@ -1311,14 +1166,8 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             tsMark = System.Diagnostics.Stopwatch.GetTimestamp();
-            // Snapshot cache references for the closure — fields are never reassigned during
-            // a sort so local-capture keeps the comparator body branch-free. The per-grid sort
-            // doesn't need the smallest-grid BlocksCount tiebreaker (all candidates are on the
-            // same CubeGrid so the compare is always 0) so we inline a minimal autogrind +
-            // priority + distance compare that reads both caches directly instead of going
-            // through CompareGrindNonDistance / CompareWeldPriority + their internal GetPriority
-            // lookups. That saves ~130 ns per GetPriority × 2 per compare × ~132k compares =
-            // ~34 ms per 9.9k-candidate sort on a 58-member cluster (BUG-100).
+            // BUG-100: per-grid sort uses inline cached priority lookup; no smallest-grid
+            // tiebreak needed (all candidates share the same CubeGrid).
             var distCache = useMemberAware ? _sortCandidateDistances : null;
             var priCache = useMemberAware ? _sortCandidatePriorities : null;
             var comparator = Comparer<ClusterTargetCandidate>.Create((a, b) =>
@@ -1388,12 +1237,7 @@ namespace SKONanobotBuildAndRepairSystem
                 return (isGrinding && !grindNearFirst) ? distB.CompareTo(distA) : distA.CompareTo(distB);
             });
 
-            // FEAT-074: For large candidate sets, use quickselect O(n) to find
-            // the top-k candidates, then sort only those k items O(k log k).
-            // This replaces the full O(n log n) sort which on an 11,732-candidate
-            // grid costs 20-33ms just to keep 256 items. Threshold: only use
-            // quickselect when candidates exceed 4× maxKeep (below that the
-            // full sort is fast enough and quickselect overhead isn't worth it).
+            // FEAT-074: quickselect top-k then sort the k; full sort below the 4× threshold.
             var keep = effectiveCount < maxKeep ? effectiveCount : maxKeep;
             if (effectiveCount > maxKeep * 4 && keep < effectiveCount)
             {

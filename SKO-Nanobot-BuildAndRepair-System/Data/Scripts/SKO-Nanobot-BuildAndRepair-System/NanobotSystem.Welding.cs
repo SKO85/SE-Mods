@@ -24,8 +24,7 @@ namespace SKONanobotBuildAndRepairSystem
         private void ServerTryWelding(out bool welding, out bool needWelding, out bool transporting, out IMySlimBlock currentWeldingBlock)
         {
             var profilerTs = MethodProfiler.Start();
-            // BUG-120: clear the broken-block caches if the BaR's owner has changed since
-            // last check — entitlement-keyed decisions don't carry across owners.
+            // BUG-120: entitlement-keyed decisions don't carry across owners.
             EnsureBrokenCacheOwnerScope();
             welding = false;
             needWelding = false;
@@ -43,35 +42,15 @@ namespace SKONanobotBuildAndRepairSystem
             var lookingForNextChecked = 0;
             var lockOnFound = false;
             var weldSkipped = false;
-            // BUG-122: measure lock acquisition + in-lock time. Profile session 20260429181044
-            // showed a 27 ms ServerTryWelding spike where Weldable (already profiled, max 0.344 ms)
-            // and ServerEmptyTransportInventory (max 0.136 ms) account for ~µs, ServerFindMissingComponents
-            // and ServerDoWeld for ~12 ms — leaving ~15 ms unaccounted. Background scan publishes
-            // into State.PossibleWeldTargets under the same lock (Scanning.cs ApplyClusterResultToSelf
-            // ~1472), so contention is the leading suspect. Two non-summing measurements: how long we
-            // wait to acquire, then how long we spend inside.
+            // BUG-122: lock-acquire vs in-lock timers (background scan contention).
             var tsLockAcquire = 0L;
             var tsInLock = 0L;
-            // BUG-131: in-lock sub-timers. Profile session 20260430160958 showed 14-20 ms
-            // unaccounted inside the welding lock vs Weldable / ServerFindMissingComponents /
-            // ServerDoWeld already profiled. Three suspects on the per-iteration hot path:
-            // (1) BlockSystemAssigningHandler TtlCache ops (IsAssignedToOtherSystem,
-            // AssignToSystem, ReleaseFromSystem) which call MyAPIGateway.Session.ElapsedPlayTime
-            // on every read and allocate a new CacheItem on every write,
-            // (2) IsGridOverSystemLimit (153 calls in one observed spike),
-            // (3) BlockWeldPriority.GetPriority (called per non-ignored iteration).
-            // Sub-timers accumulate across the loop; per-iteration measurement is too noisy.
+            // BUG-131: in-lock sub-timers (assign-ops, grid-limit, priority).
             var tsAssignOps = 0L;
             var tsGridLimit = 0L;
             var tsPriority = 0L;
             long _opTs;
-            // BUG-135: weld work (ServerFindMissingComponents → PullFromSourcesOnePass walks ~80
-            // source inventories; ServerDoWeld; ServerEmptyTransportInventory) used to run inside
-            // lock(State.PossibleWeldTargets). Profile session welding1 showed that single block
-            // holding the lock for 20-23 ms while the inner inventory pull ran, blocking async
-            // scan publish, IsTargetListSaturated and RebuildHash on the same lock. Capture the
-            // chosen target under the lock and run the expensive work outside it. Lock duration
-            // drops to iteration cost (< 1 ms) even when the inventory pull spikes.
+            // BUG-135: capture the target under lock; expensive weld work runs outside.
             TargetBlockData chosenTarget = null;
             bool chosenIsLockOnBlock = false;
             try
@@ -103,15 +82,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // When lock-on is lost (block vanished from list after scan rebuild),
                 // we re-iterate without lock-on so the BaR doesn't waste the tick.
                 var lockOnRetry = false;
-                // BUG-131: cache the lock-on block's identity once per call. The original
-                // IsSameBlock did 4 IMySlimBlock engine accessors per iteration (a.CubeGrid,
-                // b.CubeGrid, a.CubeGrid.EntityId, b.CubeGrid.EntityId). The lock-on side
-                // (a) is constant across the whole loop, so caching its grid id + position
-                // here saves 2 accessors per iteration on the skip-until-lock-on path —
-                // which dominates the spike samples (skipLock=70-200). State.CurrentWeldingBlock
-                // is reassigned at line 113 on lock-on found but always to a block with the
-                // SAME grid id + position, so the cache stays valid. Clears (line 199, 244,
-                // 258, 309) set it to null, which the runtime check below short-circuits.
+                // BUG-131: cache lock-on identity once; saves engine-accessor cost per iteration.
                 long lockOnGridId = 0;
                 Vector3I lockOnPos = default(Vector3I);
                 if (State.CurrentWeldingBlock != null && State.CurrentWeldingBlock.CubeGrid != null)
@@ -122,8 +93,7 @@ namespace SKONanobotBuildAndRepairSystem
                 LockOnRetry:
                 foreach (var targetData in State.PossibleWeldTargets)
                 {
-                    // BUG-131: inlined IsSameBlock against cached lock-on identity to halve
-                    // the engine-accessor cost on the per-iteration skip path.
+                    // BUG-131: inlined IsSameBlock against cached lock-on identity.
                     var isLockOnBlock = State.CurrentWeldingBlock != null
                         && targetData.Block != null
                         && targetData.Block.CubeGrid != null
@@ -171,11 +141,8 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
 
-                    // FEAT-AI: skip blocks that recently failed for any BaR. Lock-on and
-                    // lookingForNext are exempt — lock-on is the BaR's committed target
-                    // (we want it to resume the moment components arrive), and the
-                    // looking-for-next path is already capped at 20 iterations and only
-                    // runs once per tick after the previous block finished.
+                    // Skip blocks that recently failed for any BaR. Lock-on and
+                    // lookingForNext are exempt.
                     if (!isLockOnBlock && !lookingForNext
                         && BlockFailureCooldownHandler.IsOnCooldown(targetData.Block))
                     {
@@ -186,12 +153,6 @@ namespace SKONanobotBuildAndRepairSystem
 
                     var isIgnored = targetData.Ignore;
 
-                    // BUG-116 (CLN-2): the BUG-116 starved-priority pre-filter relied on a
-                    // bitset (`starvedPriorityBits`) that the in-loop fail handler used to
-                    // populate. After BUG-135 moved the welding work outside the lock, the
-                    // bitset was never written to within a single call, so this gate (and its
-                    // post-Weldable counterpart) ran on a permanently-zero mask and was
-                    // unreachable. Removed both gates and the bookkeeping fields.
                     var isWeldable = !isIgnored && Weldable(targetData);
                     if (!isIgnored) checkedByWeldable++;
                     else skippedByIgnore++;
@@ -207,8 +168,7 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             if (Settings.CurrentPickedWeldingBlock == null)
                             {
-                                // BUG-164: use the effective (post-materialization) grid for the
-                                // limit check on projected blocks — that's the grid the Inc lands on.
+                                // BUG-164: use the effective (post-materialization) grid for projected blocks.
                                 var gridId = GetEffectiveGridId(targetData.Block);
                                 _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                                 var overLimit = IsGridOverSystemLimit(gridId, ref lastRejectedGridId);
@@ -238,7 +198,7 @@ namespace SKONanobotBuildAndRepairSystem
                             // If over limit, release and find a target on another grid.
                             if (Settings.CurrentPickedWeldingBlock == null && targetData.Block.CubeGrid != null)
                             {
-                                // BUG-164: same effective-grid resolution for projected blocks.
+                                // BUG-164: effective-grid resolution for projected blocks.
                                 var gridId = GetEffectiveGridId(targetData.Block);
                                 _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                                 var overLimit = IsGridOverSystemLimit(gridId, ref lastRejectedGridId);
@@ -271,8 +231,7 @@ namespace SKONanobotBuildAndRepairSystem
                             break;
                         }
 
-                        // BUG-135: capture the target and exit the lock. Expensive welding work
-                        // (component pull, ServerDoWeld, transport inventory empty) runs outside.
+                        // BUG-135: capture target; expensive weld work runs outside the lock.
                         chosenTarget = targetData;
                         chosenIsLockOnBlock = isLockOnBlock;
                         break;
@@ -299,9 +258,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     ReleaseAssignmentIfEnabled(State.CurrentWeldingBlock, profilerTs != 0L, ref tsAssignOps);
                     State.CurrentWeldingBlock = null;
-                    // Reset all in-loop counters so the BUG-122 lock-acquire / in-lock
-                    // instrumentation reports first-pass-only values; otherwise a retry
-                    // double-counts skip / check tallies for the same target list.
+                    // Reset counters so retry doesn't double-count tallies.
                     skippedByLockOn = 0;
                     skippedByGridLimit = 0;
                     skippedByIgnore = 0;
@@ -325,19 +282,12 @@ namespace SKONanobotBuildAndRepairSystem
                 if (tsBeforeLock != 0L) tsInLock = Stopwatch.GetTimestamp() - tsAfterAcquire;
             }
 
-            // BUG-135: deferred weld work. Runs OUTSIDE lock(State.PossibleWeldTargets) so the
-            // 20+ ms PullFromSourcesOnePass spike no longer blocks the async scan publish, the
-            // saturation check, the welding-loop iteration of other ticks, or RebuildHash.
-            // The chosenTarget reference and its Block survive after we exit the lock — even if
-            // the background scan publishes a new list, the IMySlimBlock referenced by chosenTarget
-            // remains valid (the engine retains it; only the list-membership changes).
+            // BUG-135: deferred weld work runs outside the lock so the inventory pull
+            // spike doesn't block scan publish, saturation check, or RebuildHash.
             if (chosenTarget != null)
             {
-                // BUG-154: Global weld budget — cap ServerDoWeld calls per tick (count + time).
-                // When the budget is exhausted, defer this BaR's weld work to the next tick.
-                // Lock-on (CurrentWeldingBlock) is preserved so the same BaR resumes the
-                // same block; assignment stays so other BaRs don't steal it. Same shape as
-                // the grind budget (BUG-137).
+                // BUG-154: global weld budget. Defer to next tick when exhausted; lock-on
+                // and assignment are preserved so the same BaR resumes the same block.
                 if (!Mod.TryClaimWeldSlot())
                 {
                     // Treat as "needs welding but couldn't this tick" so the caller's
@@ -362,32 +312,18 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (chosenTarget.Ignore)
                 {
-                    // BUG-053: Only release assignment when the block was successfully
-                    // processed (welding=true). Failed projected builds (safe zone blocked)
-                    // keep the assignment so other BaRs in the same tick don't cascade
-                    // through the same block. The TTL will release it naturally.
+                    // BUG-053: only release assignment when the block was successfully welded.
+                    // Failed projected builds keep the assignment; the TTL releases it naturally.
                     if (welding) ReleaseAssignmentIfEnabled(chosenTarget.Block, profilerTs != 0L, ref tsAssignOps);
                     State.PossibleWeldTargets.ChangeHash();
-                    // BUG-163: when this BaR actually welded the block this tick (welding=true),
-                    // surface its grid contribution to GridSystemCount so MaxSystemsPerTargetGrid
-                    // gets enforced for one-shot welds. Without this, projected blocks finalized
-                    // in a single tick set chosenTarget.Ignore=true → the original code nulled
-                    // State.CurrentWeldingBlock without ever setting currentWeldingBlock, so the
-                    // setter never fired Inc(grid). Result: 72+ BaRs all welding the same grid
-                    // saw count=0 (because nobody was "locked on") and IsGridOverSystemLimit
-                    // always passed. Grinding doesn't have this path, which is why the user
-                    // observed grinding respecting the limit but welding ignoring it. Setting
-                    // currentWeldingBlock keeps the grid contribution alive for one tick;
-                    // next tick the welding loop sees Ignore=true and clears the lock-on
-                    // through the existing else-branch (around line 334), Dec'ing the count.
+                    // BUG-163: surface one-shot weld grid contribution to GridSystemCount so
+                    // MaxSystemsPerTargetGrid is enforced for projected blocks finalized in one tick.
                     if (welding)
                     {
                         currentWeldingBlock = chosenTarget.Block;
                     }
                     else
                     {
-                        // Block ignored without welding work (e.g., safe zone blocked, broken proj).
-                        // No grid contribution to surface; clear lock-on as before.
                         State.CurrentWeldingBlock = null;
                     }
                 }
@@ -405,15 +341,12 @@ namespace SKONanobotBuildAndRepairSystem
 
                     ReleaseAssignmentIfEnabled(chosenTarget.Block, profilerTs != 0L, ref tsAssignOps);
 
-                    // FEAT-AI: parking the failed block in the global cooldown so other
-                    // BaRs (and this BaR's next tick) skip it instead of re-claiming and
-                    // re-failing. TTL is short (a few seconds); components arriving
-                    // mid-cooldown only delay welding by that window.
+                    // Park the failed block in the global cooldown so other BaRs skip it.
                     BlockFailureCooldownHandler.MarkFailed(chosenTarget.Block);
 
                     componentFailures++;
                 }
-                } // end of TryClaimWeldSlot else-branch (BUG-154)
+                }
             }
 
             }
@@ -467,10 +400,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (isProjected)
                 {
-                    // BUG-115: skip projected blocks for which proj.Build() has previously thrown NRE.
-                    // The per-TargetBlockData Ignore flag is wiped each scan refresh, so without this
-                    // persistent check the BaR re-locks the same broken block tick-after-tick and the
-                    // NRE keeps appearing in the mod log every scan cycle.
+                    // BUG-115: persistently skip projected blocks where proj.Build threw NRE.
                     if (target != null && _BrokenProjBuildKeys.Contains(GetBrokenBlockKey(target)))
                     {
                         targetData.Ignore = true;
@@ -509,21 +439,14 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        // BUG-115: stable key for a projected block, matching the convention used by
-        // BlockSystemAssigningHandler ("gridId:position"). Used by _BrokenProjBuildKeys
-        // to persist proj.Build NRE failures across scan refreshes.
+        // BUG-115: stable "gridId:position" key for persisting proj.Build NRE failures.
         private static string GetBrokenBlockKey(IMySlimBlock block)
         {
             if (block == null || block.CubeGrid == null) return null;
             return block.CubeGrid.EntityId.ToString() + ":" + block.Position.ToString();
         }
 
-        // BUG-120: owner-scope guard for the broken-block caches. The persisted skip
-        // decisions (NRE set + silent-fail counter) are valid only for the current
-        // _Welder.OwnerId — when ownership changes (admin grant, terminal "Take Ownership",
-        // faction transfer), the new owner may have different DLC entitlements, so
-        // previously-broken blocks may now build successfully. Polling-based: one long
-        // comparison per ServerTryWelding entry (codebase has no ownership-change events).
+        // BUG-120: clears broken-block caches on ownership change (DLC entitlements may differ).
         private void EnsureBrokenCacheOwnerScope()
         {
             var currentOwner = _Welder != null ? _Welder.OwnerId : 0L;
@@ -535,10 +458,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        // BUG-115 diagnostic: cheap "is this IdentityId currently a connected player?" check.
-        // Used only on the NRE warning path (cold) so the per-call list allocation is acceptable.
-        // SE's GetPlayers signature accepts a predicate filter, so the list is empty unless a match
-        // is found. Returns false for IdentityId 0 (no player), factions, or fully resolvable-but-offline players.
+        // BUG-115 diagnostic: connected-player check (used only on the NRE warning path).
         private static bool IsIdentityOnline(long identityId)
         {
             if (identityId == 0L) return false;
@@ -580,9 +500,8 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var profilerTs = MethodProfiler.Start();
             long tsBuild = 0, tsStockpile = 0, tsMount = 0, tsDeform = 0, tsResolve = 0;
-            long tsResolveCoord = 0, tsResolveLookup = 0; // BUG-108 sub-timers
-            // BUG-113: cover the previously-unprofiled engine/handler calls inside ServerDoWeld
-            // so welding spikes can be attributed beyond just proj.Build/IncreaseMountLevel.
+            long tsResolveCoord = 0, tsResolveLookup = 0; // BUG-108
+            // BUG-113: per-engine-call sub-timers for ServerDoWeld attribution.
             long tsFindItem = 0, tsLimitsCheck = 0, tsCanContinue = 0, tsIntegrityCheck = 0, tsAssign = 0;
             var welderInventory = _Welder.GetInventory(0);
             var welding = false;
@@ -609,11 +528,8 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed))
                         {
-                            // BUG-107: gate proj.Build on the global per-tick budget. The 7-9ms
-                            // buildMs spikes on projected armor/conveyor blocks come from the SE
-                            // engine materialization + grid topology update. Spread across ticks.
-                            // Skip both build AND resolve when the slot is exhausted — resolving
-                            // a not-yet-built block would null out the target and ignore it.
+                            // BUG-107: gate proj.Build on the global per-tick budget; skip resolve
+                            // when exhausted (resolving a not-yet-built block would null the target).
                             if (!Mod.TryClaimProjBuildSlot())
                             {
                                 EmitServerDoWeldProfile(profilerTs,
@@ -629,14 +545,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                             tsBuild = Stopwatch.GetTimestamp();
                             var proj = cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector;
-                            // BUG-115: proj.Build() can throw NullReferenceException from inside SE's
-                            // MyProjectorBase.BuildInternal → MySessionComponentGameInventory.ValidateArmor/HasArmor
-                            // when the BuiltBy player's Steam ID can't be resolved (offline player, missing DLC
-                            // owner data on large worlds with imported grids). Without this guard the exception
-                            // bubbles up through ServerTryWelding → ServerTryWeldingGrindingCollecting and is
-                            // silently swallowed by UpdateBeforeSimulation10_100's catch — meaning the BaR's
-                            // entire weld tick aborts and the lock-on block is retried next tick, ad infinitum.
-                            // Mark the block as ignored so the loop moves on; profiler still logs the failure.
+                            // BUG-115: proj.Build() can throw NRE from inside SE's
+                            // MySessionComponentGameInventory.HasArmor when BuiltBy can't be resolved
+                            // (offline player, missing DLC entitlement). Mark ignored so the loop moves on.
                             try
                             {
                                 proj.Build(target, _Welder.OwnerId, _Welder.EntityId, true, _Welder.OwnerId);
@@ -645,19 +556,13 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 tsBuild = Stopwatch.GetTimestamp() - tsBuild;
                                 targetData.Ignore = true;
-                                // BUG-115: persist the skip across scan refreshes. Without this, the next
-                                // background scan rebuilds TargetBlockData with Ignore=false and the BaR
-                                // retries the same broken block, spamming the mod log every scan cycle.
+                                // BUG-115: persist the skip so background scans don't unset Ignore.
                                 var brokenKey = GetBrokenBlockKey(target);
                                 var firstFailure = brokenKey != null && _BrokenProjBuildKeys.Add(brokenKey);
                                 if (firstFailure && Logging.Instance.ShouldLog(Logging.Level.Error))
                                 {
-                                    // BUG-115 diagnostic: the SE NRE is inside MySessionComponentGameInventory.HasArmor.
-                                    // Both args (MyStringHash armorId, ulong steamId) are value types, so the null
-                                    // deref must come from internal state keyed by one of those args. Capture every
-                                    // input we control so we can correlate which IDs/blocks/projectors trigger it
-                                    // and rule in/out: BuiltBy resolution, modded armor variant missing from the
-                                    // entitlement table, owner-online state, etc.
+                                    // BUG-115 diagnostic: capture all proj.Build inputs to correlate
+                                    // which IDs/blocks/projectors trigger the SE NRE in HasArmor.
                                     var passedBuiltBy = _Welder.OwnerId; // value passed as proj.Build's 5th arg
                                     var slimBlockBuiltBy = _Welder.SlimBlock != null ? _Welder.SlimBlock.BuiltBy : 0L;
                                     var typeIdName = blockDefinition != null ? blockDefinition.Id.TypeId.ToString() : "null";
@@ -700,10 +605,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                         // proj.Build() handles component consumption internally; manual RemoveItems is not needed.
 
-                        // BUG-105/108: instrument the projected→physical block resolution.
-                        // tsResolve aggregates everything; tsResolveCoord and tsResolveLookup
-                        // split out the coordinate transform vs the GetCubeBlock lookup so the
-                        // dominant cost can be identified for a follow-up cache strategy.
+                        // BUG-105/108: instrument projected→physical block resolution.
                         tsResolve = Stopwatch.GetTimestamp();
                         //After creation we can't welding this projected block, we have to find the 'physical' block instead.
                         var projectorGrid = cubeGridProjected.Projector != null ? cubeGridProjected.Projector.CubeGrid : null;
@@ -723,8 +625,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                             if (target != null)
                             {
-                                // BUG-113: instrument the assignment release+reassign pair (BlockSystemAssigningHandler
-                                // dictionary ops). Cheap individually but worth measuring under contention.
+                                // BUG-113: instrument the assignment release+reassign pair.
                                 var tsAssignMark = Stopwatch.GetTimestamp();
                                 // Release the projected block's assignment before switching to the physical block.
                                 ReleaseAssignmentIfEnabled(targetData.Block);
@@ -742,14 +643,8 @@ namespace SKONanobotBuildAndRepairSystem
                             else
                             {
                                 targetData.Ignore = true;
-                                // BUG-120: proj.Build returned cleanly but the physical block didn't
-                                // appear (typical signature: online owner lacks the required DLC).
-                                // Track per-block; after PROJ_BUILD_MAX_SILENT_FAILS consecutive ticks,
-                                // promote to the persistent skip set so background scan refreshes don't
-                                // keep re-feeding this block back to the weld loop. Threshold rules out
-                                // transient races (another BaR built it the same tick, momentary projector
-                                // disable, brief component shortage). Reset by EnsureBrokenCacheOwnerScope
-                                // (owner change) and by _onEnabledChanged (player power-cycle).
+                                // BUG-120: proj.Build silent fail (likely DLC missing). Track per-block;
+                                // promote to persistent skip after PROJ_BUILD_MAX_SILENT_FAILS ticks.
                                 var brokenKey = GetBrokenBlockKey(targetData.Block);
                                 if (brokenKey != null)
                                 {
@@ -790,8 +685,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!skipWelding && !hasIgnoreColor && target != null && (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) == 0)
             {
-                // BUG-113: instrument IsWeldIntegrityReached — cheap property comparison but worth
-                // measuring to confirm. Aggregates both call sites (entry check + completion check).
+                // BUG-113: instrument IsWeldIntegrityReached (aggregates both call sites).
                 var tsIntMark = Stopwatch.GetTimestamp();
                 var integrityReached = IsWeldIntegrityReached(target);
                 tsIntegrityCheck = Stopwatch.GetTimestamp() - tsIntMark;
@@ -803,8 +697,7 @@ namespace SKONanobotBuildAndRepairSystem
                     target.MoveItemsToConstructionStockpile(_TransportInventory);
                     tsStockpile = Stopwatch.GetTimestamp() - tsStockpile;
 
-                    // BUG-113: instrument target.CanContinueBuild — engine call, can be costly when
-                    // there are many components to check against the transport inventory.
+                    // BUG-113: instrument target.CanContinueBuild engine call.
                     var tsCanMark = Stopwatch.GetTimestamp();
                     welding = target.CanContinueBuild(_TransportInventory) || CreativeModeActive;
                     tsCanContinue = Stopwatch.GetTimestamp() - tsCanMark;
@@ -843,8 +736,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     //Deformation
                     welding = true;
-                    // BUG-105: instrument the deformation IncreaseMountLevel — previously
-                    // unprofiled and could be a hidden cost during full-integrity repairs.
+                    // BUG-105: instrument deformation IncreaseMountLevel.
                     tsDeform = Stopwatch.GetTimestamp();
                     target.IncreaseMountLevel(MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_AMOUNT_PER_SECOND, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, false);
                     tsDeform = Stopwatch.GetTimestamp() - tsDeform;
@@ -882,10 +774,7 @@ namespace SKONanobotBuildAndRepairSystem
         private bool ServerFindMissingComponents(TargetBlockData targetData)
         {
             var profilerTs = MethodProfiler.Start();
-            // BUG-122: split internal cost. Profile session 20260429181044 showed 9-10 ms spikes
-            // on projected blocks (LargeBlockLargeContainer, SmallHydrogenThrust). tsGetMissing
-            // sums the SE engine `GetMissingComponents` walks (1 call non-projected, 1-2 projected);
-            // tsPullPick sums the inner overload that runs ServerPickFromWelder + PullComponents.
+            // BUG-122: split GetMissingComponents vs ServerPickFromWelder/PullComponents costs.
             var tsGetMissing = 0L;
             var tsPullPick = 0L;
             long tsMark;
@@ -1011,12 +900,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool ServerFindMissingComponents(TargetBlockData targetData, ref float remainingVolume)
         {
-            // BUG-133: replaced per-component-foreach-over-sources with source-outer iteration.
-            // Old path was 18.9 ms on cold cache for projected blocks (10 components × 78
-            // sources × FindItem engine call). New path walks each source's items ONCE per
-            // call and matches against the remaining-needs dict — O(sources + items) instead
-            // of O(components × sources × items). Phase 1 still tries the welder's own
-            // inventory per-component (cheap, small inventory).
+            // BUG-133: source-outer iteration (O(sources+items) vs O(components × sources × items)).
             var picked = false;
             _TempPullRemaining.Clear();
             _TempPullDefs.Clear();
@@ -1061,32 +945,13 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// BUG-133: walks each source inventory exactly once, matching items against any
-        /// component still in <see cref="_TempPullRemaining"/>. Pulls into the welder, then
-        /// stages into the transport inventory via ServerPickFromWelder so remainingVolume
-        /// reflects what's actually queued for transport. Updates _TempPullRemaining in place.
-        /// BUG-134: empty sources are skipped without paying the GetItems engine call, and
-        /// the source that succeeded on the previous call is tried first to exploit temporal
-        /// locality (back-to-back welds usually need the same components from the same place).
-        /// BUG-136: walk is capped at MaxSourcesPerPullWalk sources per call and resumes from
-        /// _NextPullSourceIdx next call (round-robin). On grids with many cargo containers
-        /// (~80) the uncapped walk caused 20 ms spikes per weld cycle while every BaR-related
-        /// lock was held — see ServerTryWelding's deferred-work block. The cap accepts partial
-        /// component pulls (transport starts with whatever was found; the weld cycle re-runs
-        /// against the same block on the next tick) in exchange for bounded per-call cost.
-        /// BUG-141: per-call detailed instrumentation. Identifies whether spikes come from
-        /// the engine GetItems walk (large/many cargos = many items to enumerate),
-        /// CanTransferItemTo (conveyor topology re-walk), MaxItemsAddable (volume math),
-        /// or TransferItemFrom (the actual item move). Each sub-time is a sum across
-        /// the sources visited in this call.
+        /// BUG-133/134/136: single-pass source walk; tries last-successful source first,
+        /// caps at MaxSourcesPerPullWalk per call, resumes round-robin from _NextPullSourceIdx.
+        /// BUG-141: per-call instrumentation (stats accumulate across TryPullFromSource calls).
         /// </summary>
         private const int MaxSourcesPerPullWalk = 16;
 
-        // BUG-141: aggregate stats accumulated across all TryPullFromSource calls in one
-        // PullFromSourcesOnePass invocation. Pass-by-ref so each TryPullFromSource adds
-        // its own contribution without per-call profiler overhead.
-        // ProfilerEnabled gate so Stopwatch.GetTimestamp calls are zero-cost when
-        // profiling is off (mirrors the profilerTs!=0L pattern used elsewhere).
+        // BUG-141: aggregate stats accumulated across TryPullFromSource calls.
         private struct PullSourceStats
         {
             public bool ProfilerEnabled;   // gate sub-timers when profiling is off
@@ -1103,9 +968,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool PullFromSourcesOnePass(ref float remainingVolume)
         {
-            // BUG-141: per-call profile entry separate from outer ServerFindMissingComponents
-            // pullPickMs. Lets us see source-walk patterns directly: how many sources visited,
-            // empty-skip rate, time split across engine calls, max single-source cost.
+            // BUG-141: separate profile entry from outer ServerFindMissingComponents pullPickMs.
             var profilerTs = MethodProfiler.Start();
             var picked = false;
             var welderInventory = _Welder.GetInventory(0);
@@ -1120,7 +983,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             var stats = new PullSourceStats();
-            stats.ProfilerEnabled = profilerTs != 0L;  // BUG-141 fix: gate sub-timers
+            stats.ProfilerEnabled = profilerTs != 0L;
             var sourcesAvailable = 0;
             var sourcesVisited = 0;
             var lastSuccessfulHit = false;
@@ -1142,9 +1005,8 @@ namespace SKONanobotBuildAndRepairSystem
                     return false;
                 }
 
-                // BUG-134: locate the last successful source in the current list. Linear scan
-                // (~µs for ~80 entries). Reference invalidates after a scan rebuilds the list,
-                // in which case we just fall through to the normal walk.
+                // BUG-134: locate the last successful source. Reference invalidates after
+                // scan rebuild — we fall through to the normal walk in that case.
                 var lastSuccessful = _LastSuccessfulSource;
                 int lastSuccessfulIdx = -1;
                 if (lastSuccessful != null)
@@ -1181,9 +1043,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                // BUG-136: capped, round-robin walk. Start where the last call left off so
-                // calls that miss _LastSuccessfulSource still eventually visit every source
-                // instead of always re-walking the same low-index entries.
+                // BUG-136: capped, round-robin walk; resume from last cursor.
                 if (_NextPullSourceIdx < 0 || _NextPullSourceIdx >= sourcesAvailable)
                     _NextPullSourceIdx = 0;
                 var startIdx = _NextPullSourceIdx;
@@ -1252,13 +1112,8 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// BUG-134: per-source pull body. Returns true if the welder is full and the caller
-        /// should abort the entire walk (no further source can yield anything that fits).
-        /// Returning false means "ok, continue with next source".
-        /// BUG-141: stats ref accumulates engine-call timings + counters across all calls
-        /// in one PullFromSourcesOnePass invocation. Whether the spike is in GetItems
-        /// (engine inventory enumeration on large cargos), CanTransferItemTo (conveyor
-        /// network walk), or TransferItemFrom (the actual move) becomes visible.
+        /// BUG-134: per-source pull body. Returns true when the welder is full so the
+        /// caller aborts the walk; false means continue to next source.
         /// </summary>
         private bool TryPullFromSource(IMyInventory srcInventory, IMyInventory welderInventory, ref float remainingVolume, ref bool picked, ref PullSourceStats stats)
         {
@@ -1273,8 +1128,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             _TempPullInventoryItems.Clear();
-            // BUG-141 fix: gate Stopwatch.GetTimestamp on stats.ProfilerEnabled so the
-            // calls are zero-cost when profiling is off (matches BUG-122 pattern).
+            // BUG-141: gate Stopwatch on ProfilerEnabled so it's zero-cost when off.
             var tsMark = stats.ProfilerEnabled ? Stopwatch.GetTimestamp() : 0L;
             srcInventory.GetItems(_TempPullInventoryItems);
             if (tsMark != 0L) stats.TsGetItems += Stopwatch.GetTimestamp() - tsMark;
@@ -1295,19 +1149,9 @@ namespace SKONanobotBuildAndRepairSystem
                 var volume = definition.Volume;
                 var componentId = new MyDefinitionId(typeof(MyObjectBuilder_Component), subtypeName);
 
-                // BUG-148: skip the pre-flight CanTransferItemTo check. The source is in
-                // _PossibleSources, which means AddIfConnectedToInventory already proved
-                // conveyor reachability via IsConnectedTo (cached in InventoryHelper).
-                // The remaining purpose of CanTransferItemTo was to detect per-component
-                // sorter filters — but on servers without per-component sorters (the
-                // common case) it's pure cost. Profile session 20260430234507 (Torch)
-                // showed canTransferMs=4-5ms recurring at the spike rate (~every 5s)
-                // because each weld probes 5-7 unique (src,welder,component) combinations
-                // for the FIRST time — TTL bumps don't help, only avoiding the call does.
-                // Trade-off: if a sorter blocks the component, MaxItemsAddable +
-                // TransferItemFrom will both fire and TransferItemFrom returns false →
-                // we lose two cheap engine calls per blocked component. Massive net win
-                // when sorters are absent or rare.
+                // BUG-148: skip the pre-flight CanTransferItemTo check; conveyor reachability
+                // already proven by AddIfConnectedToInventory. Sorter-blocked components fall
+                // through to TransferItemFrom returning false (cheap engine calls).
 
                 var maxByVolume = (int)Math.Floor(remainingVolume / volume);
                 if (maxByVolume <= 0) continue;
@@ -1411,14 +1255,8 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        // REF-5: single source of truth for the ServerDoWeld profile emit format. Pre-fix
-        // the format string was duplicated at three call sites (two early exits + the
-        // regular exit) and had already drifted — the regular exit grew resolveCoordMs /
-        // resolveLookupMs sub-timers (BUG-108) while the two early exits stayed on the
-        // older shape. Canonical format here covers all sub-timers plus a trailing
-        // earlyExit field. Early-exit callers pass `0.0` for unmeasured timers and a
-        // non-empty reason ("projBuildSlot", "projBuildNRE"); the regular exit passes
-        // empty string.
+        // Single source of truth for the ServerDoWeld profile format.
+        // Early-exit callers pass 0.0 for unmeasured timers and a non-empty `earlyExit` reason.
         private const string ServerDoWeldProfileFormat =
             "entityId={0};block={1};projected={2};created={3};welding={4};result={5};" +
             "buildMs={6:F3};resolveMs={7:F3};resolveCoordMs={8:F3};resolveLookupMs={9:F3};" +

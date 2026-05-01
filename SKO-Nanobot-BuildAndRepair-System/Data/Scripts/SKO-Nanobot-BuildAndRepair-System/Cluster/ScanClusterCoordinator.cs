@@ -45,9 +45,7 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                 var systemCount = Mod.NanobotSystems.Count;
                 if (systemCount == _lastSystemCount && _clusters.Count > 0)
                 {
-                    // FEAT-072: Use cheap numeric hash comparison instead of recomputing
-                    // the full cluster key string for every BaR every second.
-                    // ComputeClusterKeyHash uses only integer/bool fields — no string allocation.
+                    // FEAT-072: numeric hash comparison (no string allocation per BaR per second).
                     var anyChanged = false;
                     foreach (var system in Mod.NanobotSystems.Values)
                     {
@@ -118,13 +116,8 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                     clusterCount++;
                     clusteredSystems += cluster.Members.Count;
 
-                    // BUG-260501.1: propagate any pending _rescanForced from non-coordinator
-                    // members to the (possibly new) coordinator. A ClusterRelevantFlags toggle
-                    // (e.g. GrindNearFirst) reshuffles the toggling BaR into a different cluster
-                    // whose coordinator never received TriggerImmediateRescan — without this
-                    // hop, the saturated-skip gate suppresses the scan for up to 60s and the
-                    // cluster keeps serving the pre-toggle sort order. Clear the member flag
-                    // on consumption so we don't re-trigger on subsequent rebuilds.
+                    // BUG-260501.1: propagate _rescanForced to the (possibly new) coordinator
+                    // after a cluster reshuffle so the saturated-skip gate doesn't suppress it.
                     var coord = cluster.Coordinator;
                     if (coord != null)
                     {
@@ -167,11 +160,7 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             }
         }
 
-        /// <summary>
-        /// FEAT-072: Computes a numeric hash of all cluster-relevant fields.
-        /// Used in the fast path to detect settings changes without string allocation.
-        /// The full string key (ComputeClusterKey) is only computed when a rebuild is needed.
-        /// </summary>
+        /// <summary>FEAT-072: numeric hash of cluster-relevant fields (no string allocation).</summary>
         public static int ComputeClusterKeyHash(NanobotSystem system)
         {
             var s = system.Settings;
@@ -260,10 +249,7 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             key += "|" + system.Welder.OwnerId;
             key += "|" + (system.Welder.UseConveyorSystem ? "1" : "0");
 
-            // Safe zone state — BaRs inside vs outside safe zones need separate clusters
-            // so the coordinator's scan gates match all members' capabilities.
-            // BUG-053: Timing fix ensures safe zone state is refreshed for all BaRs
-            // immediately before RebuildClusters() (see Mod.RebuildSourcesAndTargetsTimer).
+            // BUG-053: safe-zone state in the cluster key (refreshed before RebuildClusters).
             key += "|SZ" + (system.State.SafeZoneAllowsWelding ? "1" : "0")
                  + (system.State.SafeZoneAllowsGrinding ? "1" : "0");
 

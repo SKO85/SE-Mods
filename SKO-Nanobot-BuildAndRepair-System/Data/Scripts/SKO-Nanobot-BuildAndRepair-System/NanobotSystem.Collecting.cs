@@ -23,9 +23,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
             if (!PowerHelper.HasRequiredElectricPower(this)) return; //-> Not enough power
 
-            // BUG-018: Guard against collecting when welder inventory is full.
-            // State.InventoryFull may not reflect the actual welder state yet (e.g. after
-            // world reload or when the welder is nearly-full but not at exact MaxVolume).
+            // BUG-018: refresh InventoryFull before collecting (may be stale on reload).
             CheckAndUpdateInventoryFull();
             if (State.InventoryFull) return;
 
