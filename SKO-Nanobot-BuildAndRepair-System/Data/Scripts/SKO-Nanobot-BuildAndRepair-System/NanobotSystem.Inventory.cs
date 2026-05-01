@@ -71,36 +71,59 @@ namespace SKONanobotBuildAndRepairSystem
 
                 _TempInventoryItems.Clear();
                 welderInventory.GetItems(_TempInventoryItems);
-                for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                var itemCount = _TempInventoryItems.Count;
+
+                // BUG-162: chunk push work to bound the per-tick cost. The original loop
+                // walked every welder item × up to 93 push destinations per item; with a
+                // full inventory this produced 40+ ms main-thread stalls. Cap each call by
+                // wall-clock (~5 ms) and item count (4). Cursor walks backward from a saved
+                // position; on reaching 0 it wraps to itemCount-1 for the NEXT call (never
+                // wraps within a single call, because backward-only iteration is index-safe
+                // when items get removed by full-stack transfer).
+                const int MaxPushItemsPerCall = 4;
+                var budgetTicks = Stopwatch.Frequency / 200; // 5 ms in Stopwatch ticks.
+                var startTs = Stopwatch.GetTimestamp();
+                var processed = 0;
+
+                if (itemCount > 0)
                 {
-                    var srcItem = _TempInventoryItems[srcItemIndex];
-                    if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Ore).Name || srcItem.Type.TypeId == typeof(MyObjectBuilder_Ingot).Name)
+                    // Clamp cursor; items can be removed externally between calls.
+                    if (_PushItemCursor < 0 || _PushItemCursor >= itemCount) _PushItemCursor = itemCount - 1;
+
+                    var srcItemIndex = _PushItemCursor;
+                    while (srcItemIndex >= 0)
                     {
-                        if ((Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0)
+                        if (processed >= MaxPushItemsPerCall) break;
+                        if (Stopwatch.GetTimestamp() - startTs >= budgetTicks) break;
+
+                        var srcItem = _TempInventoryItems[srcItemIndex];
+                        bool eligible;
+                        if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Ore).Name || srcItem.Type.TypeId == typeof(MyObjectBuilder_Ingot).Name)
+                            eligible = (Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0;
+                        else if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Component).Name)
+                            eligible = (Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0;
+                        else
+                            eligible = (Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0;
+
+                        if (eligible)
                         {
                             anyAttempted = true;
                             anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
                             _TryAutoPushInventoryLast = lastPush;
+                            processed++;
                         }
+                        srcItemIndex--;
                     }
-                    else if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Component).Name)
+
+                    if (srcItemIndex < 0)
                     {
-                        if ((Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0)
-                        {
-                            anyAttempted = true;
-                            anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
-                            _TryAutoPushInventoryLast = lastPush;
-                        }
+                        // Walked to the bottom: wrap cursor to the top for the next call so
+                        // older items at higher indices get their turn.
+                        _PushItemCursor = itemCount - 1;
                     }
                     else
                     {
-                        //Any kind of items (Tools, Weapons, Ammo, Bottles, ..)
-                        if ((Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0)
-                        {
-                            anyAttempted = true;
-                            anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
-                            _TryAutoPushInventoryLast = lastPush;
-                        }
+                        _PushItemCursor = srcItemIndex;
                     }
                 }
                 _TempInventoryItems.Clear();
@@ -108,6 +131,11 @@ namespace SKONanobotBuildAndRepairSystem
                 // BUG-016: If we attempted to push but nothing moved, mark push targets as full.
                 // This prevents constant iteration over full containers every tick.
                 // The flag is reset when push targets change or after a safety backoff.
+                // BUG-162: chunked iteration is OK to feed this flag — destination fullness is
+                // a property of the push-target list, not of which welder items we sampled in
+                // this call. If our 4-item chunk attempted at least one push and nothing moved,
+                // it's a strong signal the destinations are full. The flag is cleared on any
+                // successful push or when ComputePushTargetsSignature changes (containers swap).
                 if (anyAttempted && !anyPushed)
                 {
                     _PushTargetsFull = true;

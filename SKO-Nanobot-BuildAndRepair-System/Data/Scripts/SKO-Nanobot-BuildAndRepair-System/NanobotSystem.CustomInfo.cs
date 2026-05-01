@@ -149,6 +149,24 @@ namespace SKONanobotBuildAndRepairSystem
                 lock (_PossiblePushTargets) { pushTargetCount = _PossiblePushTargets.Count; }
                 customInfo.Append(string.Format("Sources: {0} | Push Targets: {1}{2}", sourceCount, pushTargetCount, Environment.NewLine));
 
+                // BUG-160 diagnostics: live BaR-on-grid counts for the BaR's current weld/grind grids.
+                // Lets the user observe directly whether MaxSystemsPerTargetGrid is being respected,
+                // and which grid is saturated. Format: "OnGrid W={count}/{limit} G={count}/{limit}".
+                var weldGridId = (State.CurrentWeldingBlock != null && State.CurrentWeldingBlock.CubeGrid != null)
+                    ? State.CurrentWeldingBlock.CubeGrid.EntityId : 0L;
+                var grindGridId = (State.CurrentGrindingBlock != null && State.CurrentGrindingBlock.CubeGrid != null)
+                    ? State.CurrentGrindingBlock.CubeGrid.EntityId : 0L;
+                int weldGridCount = 0, grindGridCount = 0;
+                if (weldGridId != 0L) Mod.GridSystemCount.TryGetValue(weldGridId, out weldGridCount);
+                if (grindGridId != 0L) Mod.GridSystemCount.TryGetValue(grindGridId, out grindGridCount);
+                var maxPerGrid = Mod.Settings.MaxSystemsPerTargetGrid;
+                customInfo.Append(string.Format("OnGrid: W={0}/{1} G={2}/{3}{4}",
+                    weldGridId != 0L ? weldGridCount.ToString() : "-",
+                    maxPerGrid,
+                    grindGridId != 0L ? grindGridCount.ToString() : "-",
+                    maxPerGrid,
+                    Environment.NewLine));
+
                 var cluster = AssignedCluster;
                 if (cluster != null)
                 {

@@ -224,6 +224,15 @@ namespace SKONanobotBuildAndRepairSystem
                 _InitialScanCompleted = false;
                 _PushTargetsFull = false;
 
+                // BUG-160: release any grid-count contribution before tear-down. Without this,
+                // a destroyed/disabled BaR still holding CurrentWeldingBlock or CurrentGrindingBlock
+                // leaks +1 to Mod.GridSystemCount[grid] forever. Over a long session this drift
+                // pushes counts past MaxSystemsPerTargetGrid even when the live BaR count is well
+                // under the limit, blocking new BaRs unnecessarily. Setting to null fires the
+                // setter which Dec's the grid count on the server.
+                State.CurrentWeldingBlock = null;
+                State.CurrentGrindingBlock = null;
+
                 _Effects.UpdateEffects(this);
                 _Effects.Close(this);
 

@@ -157,6 +157,26 @@ namespace SKONanobotBuildAndRepairSystem
                             _LastGrindWorldPosition = chosenGrindTarget.Block.CubeGrid.GridIntegerToWorld(chosenGrindTarget.Block.Position);
                             _HasLastGrindPosition = true;
                         }
+
+                        // BUG-165: drop razed blocks from the target list immediately so future
+                        // grind ticks don't iterate them. Pre-fix the list lingered with destroyed
+                        // entries until the next async scan rebuild (~2–5 s); profile showed
+                        // outliers with iterations=38, skipClosed=37 — pure waste stepping past
+                        // razed blocks. After RazeQueueHandler.Enqueue inside ServerDoGrind,
+                        // block.IsDestroyed is set immediately even though the engine raze runs
+                        // batched later. Remove the entry under lock so the iteration count drops
+                        // to actually-grindable targets.
+                        var grindBlock = chosenGrindTarget.Block;
+                        if (grindBlock != null && grindBlock.IsDestroyed)
+                        {
+                            lock (State.PossibleGrindTargets)
+                            {
+                                if (State.PossibleGrindTargets.Remove(chosenGrindTarget))
+                                {
+                                    State.PossibleGrindTargets.ChangeHash();
+                                }
+                            }
+                        }
                     }
                     else
                     {

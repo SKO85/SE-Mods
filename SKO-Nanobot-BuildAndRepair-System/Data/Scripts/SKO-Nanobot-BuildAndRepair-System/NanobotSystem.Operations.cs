@@ -317,20 +317,23 @@ namespace SKONanobotBuildAndRepairSystem
             if (!Mod.GridSystemCount.TryGetValue(gridEntityId, out count))
                 return 0;
 
-            // Subtract this system's contribution (mirrors the old "if (system == this) continue" logic).
-            long myWeldGridId = 0;
-            long myGrindGridId = 0;
+            // BUG-160: setters now contribute +1 per (BaR, grid) regardless of weld+grind on the
+            // same grid. Subtract at most 1 here to match. Previously the && check guarded against
+            // double-subtracting when both locks pinned the same grid — that was correct under the
+            // pre-fix +2 semantics, but the +2 itself was the bug. Under +1 semantics, this BaR
+            // owes exactly 1 if either lock is on this grid, 0 otherwise.
             var myWeldBlock = State.CurrentWeldingBlock;
-            if (myWeldBlock != null && myWeldBlock.CubeGrid != null)
-                myWeldGridId = myWeldBlock.CubeGrid.EntityId;
-            var myGrindBlock = State.CurrentGrindingBlock;
-            if (myGrindBlock != null && myGrindBlock.CubeGrid != null)
-                myGrindGridId = myGrindBlock.CubeGrid.EntityId;
-
+            var myWeldGridId = (myWeldBlock != null && myWeldBlock.CubeGrid != null) ? myWeldBlock.CubeGrid.EntityId : 0L;
             if (myWeldGridId == gridEntityId)
+            {
                 count--;
-            if (myGrindGridId == gridEntityId && myGrindGridId != myWeldGridId)
-                count--;
+            }
+            else
+            {
+                var myGrindBlock = State.CurrentGrindingBlock;
+                var myGrindGridId = (myGrindBlock != null && myGrindBlock.CubeGrid != null) ? myGrindBlock.CubeGrid.EntityId : 0L;
+                if (myGrindGridId == gridEntityId) count--;
+            }
 
             return count;
         }
@@ -367,6 +370,25 @@ namespace SKONanobotBuildAndRepairSystem
                 return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// BUG-164: returns the grid that the BaR's contribution will land on after this block
+        /// is welded. For projected blocks, ServerDoWeld swaps targetData.Block from the
+        /// projection grid (virtual) to the projector's parent grid (physical) once proj.Build
+        /// materializes. The lock-on Inc therefore lands on the parent grid, not the projection.
+        /// The pre-fix limit check used block.CubeGrid (projection), letting all 72 BaRs pass
+        /// because count[projectionGrid] stayed near 0, while count[parentGrid] inflated
+        /// without ever being checked. Resolve to the parent grid here so the limit is enforced
+        /// against the same grid the increment actually fires on.
+        /// </summary>
+        private static long GetEffectiveGridId(IMySlimBlock block)
+        {
+            if (block == null || block.CubeGrid == null) return 0L;
+            var myCubeGrid = block.CubeGrid as Sandbox.Game.Entities.MyCubeGrid;
+            if (myCubeGrid != null && myCubeGrid.Projector != null && myCubeGrid.Projector.CubeGrid != null)
+                return myCubeGrid.Projector.CubeGrid.EntityId;
+            return block.CubeGrid.EntityId;
         }
 
         /// <summary>

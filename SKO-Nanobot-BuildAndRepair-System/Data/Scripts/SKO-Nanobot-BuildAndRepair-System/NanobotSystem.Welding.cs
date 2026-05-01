@@ -245,7 +245,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                             if (Settings.CurrentPickedWeldingBlock == null)
                             {
-                                var gridId = targetData.Block.CubeGrid.EntityId;
+                                // BUG-164: use the effective (post-materialization) grid for the
+                                // limit check on projected blocks — that's the grid the Inc lands on.
+                                var gridId = GetEffectiveGridId(targetData.Block);
                                 _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                                 var overLimit = IsGridOverSystemLimit(gridId, ref lastRejectedGridId);
                                 if (_opTs != 0L) tsGridLimit += Stopwatch.GetTimestamp() - _opTs;
@@ -274,7 +276,8 @@ namespace SKONanobotBuildAndRepairSystem
                             // If over limit, release and find a target on another grid.
                             if (Settings.CurrentPickedWeldingBlock == null && targetData.Block.CubeGrid != null)
                             {
-                                var gridId = targetData.Block.CubeGrid.EntityId;
+                                // BUG-164: same effective-grid resolution for projected blocks.
+                                var gridId = GetEffectiveGridId(targetData.Block);
                                 _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                                 var overLimit = IsGridOverSystemLimit(gridId, ref lastRejectedGridId);
                                 if (_opTs != 0L) tsGridLimit += Stopwatch.GetTimestamp() - _opTs;
@@ -425,10 +428,28 @@ namespace SKONanobotBuildAndRepairSystem
                         if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
                     }
                     State.PossibleWeldTargets.ChangeHash();
-                    // Block completed this tick. Clear lock-on; next tick scans for the next
-                    // target (was previously a fall-through inside the lock — dropped on
-                    // purpose to avoid re-acquiring the lock for a second iteration).
-                    State.CurrentWeldingBlock = null;
+                    // BUG-163: when this BaR actually welded the block this tick (welding=true),
+                    // surface its grid contribution to GridSystemCount so MaxSystemsPerTargetGrid
+                    // gets enforced for one-shot welds. Without this, projected blocks finalized
+                    // in a single tick set chosenTarget.Ignore=true → the original code nulled
+                    // State.CurrentWeldingBlock without ever setting currentWeldingBlock, so the
+                    // setter never fired Inc(grid). Result: 72+ BaRs all welding the same grid
+                    // saw count=0 (because nobody was "locked on") and IsGridOverSystemLimit
+                    // always passed. Grinding doesn't have this path, which is why the user
+                    // observed grinding respecting the limit but welding ignoring it. Setting
+                    // currentWeldingBlock keeps the grid contribution alive for one tick;
+                    // next tick the welding loop sees Ignore=true and clears the lock-on
+                    // through the existing else-branch (around line 334), Dec'ing the count.
+                    if (welding)
+                    {
+                        currentWeldingBlock = chosenTarget.Block;
+                    }
+                    else
+                    {
+                        // Block ignored without welding work (e.g., safe zone blocked, broken proj).
+                        // No grid contribution to surface; clear lock-on as before.
+                        State.CurrentWeldingBlock = null;
+                    }
                 }
                 else if (welding || transporting)
                 {

@@ -668,6 +668,41 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
+        /// BUG-166: hash of all scan parameters that affect per-grid output, used as the
+        /// GridScanCache key alongside gridId. The cluster key in ScanClusterCoordinator
+        /// includes the BaR's home grid EntityId; this hash deliberately excludes it so two
+        /// clusters on different home grids with the same scan settings hit the same cache
+        /// entry. For multi-member clusters skipRangeCheck=true and the per-grid output is
+        /// position-independent, so this hash fully captures everything that determines the
+        /// candidate list.
+        /// </summary>
+        private int ComputeScanParamsHash(bool useIgnoreColor, uint ignoreColor, bool useGrindColor, uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions)
+        {
+            unchecked
+            {
+                int hash = (int)2166136261;
+                hash = (hash ^ (useIgnoreColor ? 1 : 0)) * 16777619;
+                if (useIgnoreColor) hash = (hash ^ (int)ignoreColor) * 16777619;
+                hash = (hash ^ (useGrindColor ? 1 : 0)) * 16777619;
+                if (useGrindColor) hash = (hash ^ (int)grindColor) * 16777619;
+                hash = (hash ^ (int)autoGrindRelation) * 16777619;
+                hash = (hash ^ (int)autoGrindOptions) * 16777619;
+                hash = (hash ^ (int)Settings.WeldOptions) * 16777619;
+                hash = (hash ^ ((Settings.Flags & SyncBlockSettings.Settings.AllowBuild) != 0 ? 1 : 0)) * 16777619;
+                hash = (hash ^ (int)(_Welder.OwnerId >> 32)) * 16777619;
+                hash = (hash ^ (int)_Welder.OwnerId) * 16777619;
+                // Priority strings — hash their .NET hash codes (stable within session).
+                hash = (hash ^ (Settings.WeldPriority != null ? Settings.WeldPriority.GetHashCode() : 0)) * 16777619;
+                hash = (hash ^ (Settings.GrindPriority != null ? Settings.GrindPriority.GetHashCode() : 0)) * 16777619;
+                // Safe zone state — different gates produce different filter results.
+                hash = (hash ^ (State.SafeZoneAllowsWelding ? 1 : 0)) * 16777619;
+                hash = (hash ^ (State.SafeZoneAllowsGrinding ? 1 : 0)) * 16777619;
+                hash = (hash ^ (State.SafeZoneAllowsBuildingProjections ? 1 : 0)) * 16777619;
+                return hash;
+            }
+        }
+
+        /// <summary>
         /// Scans a grid for target blocks, writing to cluster candidate lists.
         /// </summary>
         private void AsyncAddBlocksOfGrid(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMyCubeGrid cubeGrid, List<IMyCubeGrid> grids, List<ClusterTargetCandidate> clusterWeldTargets, List<ClusterTargetCandidate> clusterGrindTargets, int maxWeld, int maxGrind, bool skipRangeCheck)
@@ -805,6 +840,163 @@ namespace SKONanobotBuildAndRepairSystem
                 }
             }
 
+            // BUG-161: when both target types are nulled (cluster caps already saturated, or
+            // grind disabled and weld cap hit), the slim-block loop has no targets to add but
+            // still walks every block on the grid for connection/projector traversal. On a
+            // 7,600-block grid this costs 50–55 ms per cluster scan with weldAdded=0,
+            // grindAdded=0. Iterate only fat blocks (which is what connection traversal needs)
+            // — same shape as the empty-grid-cache fast path above. Projector traversal is
+            // already gated on weldTargetsForGrid != null, so it's a no-op here anyway.
+            if (weldTargetsForGrid == null && grindTargetsForGrid == null)
+            {
+                var fatBlocks = new List<IMySlimBlock>();
+                cubeGrid.GetBlocks(fatBlocks, _fatBlockFilter);
+                var fatNewCount = fatBlocks.Count;
+                foreach (var slimBlock in fatBlocks)
+                {
+                    if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
+
+                    var fatBlock = slimBlock.FatBlock;
+
+                    var mechanical = fatBlock as Sandbox.ModAPI.IMyMechanicalConnectionBlock;
+                    if (mechanical != null)
+                    {
+                        if (mechanical.TopGrid != null)
+                            AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, mechanical.TopGrid, grids, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                        continue;
+                    }
+
+                    var attachable = fatBlock as Sandbox.ModAPI.IMyAttachableTopBlock;
+                    if (attachable != null)
+                    {
+                        if (attachable.Base != null && attachable.Base.CubeGrid != null)
+                            AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, attachable.Base.CubeGrid, grids, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                        continue;
+                    }
+
+                    var connector = fatBlock as Sandbox.ModAPI.IMyShipConnector;
+                    if (connector != null)
+                    {
+                        if (connector.Status == Sandbox.ModAPI.Ingame.MyShipConnectorStatus.Connected && connector.OtherConnector != null)
+                            AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, connector.OtherConnector.CubeGrid, grids, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                        continue;
+                    }
+                }
+
+                if (profilerTs != 0L)
+                {
+                    var _gridEidFast = cubeGrid.EntityId;
+                    var _fatCount = fatNewCount;
+                    var _clusterMembersFast = _ClusterMemberAreaCenters != null ? _ClusterMemberAreaCenters.Count : 0;
+                    MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
+                        string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};weldAdded=0;grindAdded=0;weldCapSkip={5};grindCapSkip={6};skipRange={7};clusterMembers={8};fastPath=bothCapped",
+                            _Welder.EntityId, _gridEidFast, _fatCount,
+                            clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
+                            clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
+                            weldCapSkipped, grindCapSkipped, blockSkipRange, _clusterMembersFast));
+                }
+                return;
+            }
+
+            // BUG-166: per-grid scan cache. When two cluster coordinators target the same
+            // grid in the same scan window, the second one hits the cache and skips the
+            // 8K-block iteration. Only enabled for skipRangeCheck=true (multi-member
+            // clusters) — for solo BaRs the per-block IsInRange check makes the output
+            // position-dependent and the cache is invalid.
+            var paramsHash = 0;
+            var cacheEligible = skipRangeCheck;
+            if (cacheEligible)
+            {
+                paramsHash = ComputeScanParamsHash(useIgnoreColor, ignoreColor, useGrindColor, grindColor, autoGrindRelation, autoGrindOptions);
+                var cached = GridScanCache.TryGet(gridEntityId, paramsHash);
+                if (cached != null)
+                {
+                    var cacheWeldAdded = 0;
+                    var cacheGrindAdded = 0;
+                    if (weldTargetsForGrid != null && cached.WeldCandidates != null)
+                    {
+                        for (int i = 0; i < cached.WeldCandidates.Count; i++)
+                        {
+                            if (weldTargetsForGrid.Count >= maxWeld) break;
+                            weldTargetsForGrid.Add(cached.WeldCandidates[i]);
+                            cacheWeldAdded++;
+                        }
+                    }
+                    if (grindTargetsForGrid != null && cached.GrindCandidates != null)
+                    {
+                        for (int i = 0; i < cached.GrindCandidates.Count; i++)
+                        {
+                            if (grindTargetsForGrid.Count >= maxGrind) break;
+                            grindTargetsForGrid.Add(cached.GrindCandidates[i]);
+                            cacheGrindAdded++;
+                        }
+                    }
+
+                    // Update empty-grid cache the same way the slow path would have.
+                    var weldAfterCache = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
+                    var grindAfterCache = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
+                    if (weldAfterCache == weldBefore && grindAfterCache == grindBefore && !weldCapSkipped && !grindCapSkipped)
+                    {
+                        _EmptyGridCache[gridEntityId] = playTime;
+                    }
+                    else if (weldAfterCache != weldBefore || grindAfterCache != grindBefore)
+                    {
+                        TimeSpan dummy;
+                        _EmptyGridCache.TryRemove(gridEntityId, out dummy);
+                    }
+
+                    // Connection traversal still needs to happen — cache only covers slim-block
+                    // target collection for THIS grid, not recursion into mechanical/connector
+                    // children (those have their own cache entries keyed on their own gridId).
+                    var fatBlocksHit = new List<IMySlimBlock>();
+                    cubeGrid.GetBlocks(fatBlocksHit, _fatBlockFilter);
+                    foreach (var slimBlock in fatBlocksHit)
+                    {
+                        if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
+                        var fatBlock = slimBlock.FatBlock;
+
+                        var mechanical = fatBlock as Sandbox.ModAPI.IMyMechanicalConnectionBlock;
+                        if (mechanical != null)
+                        {
+                            if (mechanical.TopGrid != null)
+                                AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, mechanical.TopGrid, grids, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                            continue;
+                        }
+
+                        var attachable = fatBlock as Sandbox.ModAPI.IMyAttachableTopBlock;
+                        if (attachable != null)
+                        {
+                            if (attachable.Base != null && attachable.Base.CubeGrid != null)
+                                AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, attachable.Base.CubeGrid, grids, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                            continue;
+                        }
+
+                        var connector = fatBlock as Sandbox.ModAPI.IMyShipConnector;
+                        if (connector != null)
+                        {
+                            if (connector.Status == Sandbox.ModAPI.Ingame.MyShipConnectorStatus.Connected && connector.OtherConnector != null)
+                                AsyncAddBlocksOfGrid(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, autoGrindRelation, autoGrindOptions, connector.OtherConnector.CubeGrid, grids, clusterWeldTargets, clusterGrindTargets, maxWeld, maxGrind, skipRangeCheck);
+                            continue;
+                        }
+                    }
+
+                    if (profilerTs != 0L)
+                    {
+                        var _gridEid = cubeGrid.EntityId;
+                        var _cacheW = cacheWeldAdded;
+                        var _cacheG = cacheGrindAdded;
+                        var _clusterMembersHit = _ClusterMemberAreaCenters != null ? _ClusterMemberAreaCenters.Count : 0;
+                        MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
+                            string.Format("entityId={0};gridId={1};blocks=cached;weldTargets={2};grindTargets={3};weldAdded={4};grindAdded={5};weldCapSkip={6};grindCapSkip={7};skipRange={8};clusterMembers={9};fastPath=cached",
+                                _Welder.EntityId, _gridEid,
+                                clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
+                                clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
+                                _cacheW, _cacheG, weldCapSkipped, grindCapSkipped, blockSkipRange, _clusterMembersHit));
+                    }
+                    return;
+                }
+            }
+
             var newBlocks = GetBlocksFromCache(cubeGrid);
 
             foreach (var slimBlock in newBlocks)
@@ -938,6 +1130,29 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 TimeSpan dummy;
                 _EmptyGridCache.TryRemove(gridEntityId, out dummy);
+            }
+
+            // BUG-166: populate the per-grid scan cache so a second cluster scanning the
+            // same grid in the next ~3 s hits the fast path instead of re-iterating slim
+            // blocks. Slice the per-grid contribution out of the cluster lists. Only cache
+            // when both target types were active at this grid (no cap-skip) so the cached
+            // entry represents a complete contribution; otherwise the second cluster might
+            // be missing one type's data.
+            if (cacheEligible && !weldCapSkipped && !grindCapSkipped)
+            {
+                List<ClusterTargetCandidate> weldSlice = null;
+                List<ClusterTargetCandidate> grindSlice = null;
+                if (clusterWeldTargets != null && weldAfter > weldBefore)
+                {
+                    weldSlice = new List<ClusterTargetCandidate>(weldAfter - weldBefore);
+                    for (int i = weldBefore; i < weldAfter; i++) weldSlice.Add(clusterWeldTargets[i]);
+                }
+                if (clusterGrindTargets != null && grindAfter > grindBefore)
+                {
+                    grindSlice = new List<ClusterTargetCandidate>(grindAfter - grindBefore);
+                    for (int i = grindBefore; i < grindAfter; i++) grindSlice.Add(clusterGrindTargets[i]);
+                }
+                GridScanCache.Set(gridEntityId, paramsHash, weldSlice, grindSlice);
             }
 
             if (profilerTs != 0L)

@@ -72,6 +72,13 @@ namespace SKONanobotBuildAndRepairSystem
         private long _PushTargetsFullSignature;
         private TimeSpan _PushTargetsFullSince;
 
+        // BUG-162: round-robin cursor for ServerTryPushInventory chunking. Welder inv
+        // can hold 10+ item stacks; each push attempt iterates up to 93 destinations and
+        // can spike to 40+ ms when inventory is full (one BaR's tick = entire frame).
+        // The cursor advances each call so a long inv is drained across multiple ticks
+        // instead of one huge stall.
+        private int _PushItemCursor = 0;
+
         /// <summary>
         /// When true, the welding loop found nothing on its last full iteration
         /// (all targets grid-limited or assigned to other systems). The loop is

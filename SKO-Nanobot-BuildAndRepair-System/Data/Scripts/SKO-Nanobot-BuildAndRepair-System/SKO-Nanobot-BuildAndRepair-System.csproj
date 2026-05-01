@@ -118,6 +118,7 @@
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Cluster\GridScanCache.cs" />
     <Compile Include="Cluster\ScanCluster.cs" />
     <Compile Include="Cluster\ScanClusterCoordinator.cs" />
     <Compile Include="Cluster\ScanClusterResult.cs" />

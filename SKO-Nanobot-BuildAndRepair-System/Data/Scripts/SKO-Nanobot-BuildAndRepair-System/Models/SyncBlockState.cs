@@ -188,12 +188,22 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     var newPos = value != null ? value.Position : default(Vector3I);
                     var samePhysicalBlock = oldGridId != 0L && oldGridId == newGridId && oldPos == newPos;
 
+                    // BUG-160: count-once-per-grid semantics. MaxSystemsPerTargetGrid means
+                    // "max BaR SYSTEMS targeting a grid", not "max lock-on slots". A BaR doing
+                    // both weld+grind on the same grid must contribute +1, not +2. Pre-fix:
+                    // weld setter Inc'd, grind setter Inc'd → 5 BaRs welding+grinding the same
+                    // grid drove count to 10 with limit=10, blocking new BaRs while the actual
+                    // BaR count was 5. New BaRs whose lock landed on a partial grid where this
+                    // BaR contributes once also see inflated counts. Fix: skip Inc/Dec when the
+                    // OTHER lock (grind here, weld in the other setter) already pins the same grid.
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
                         if (oldGridId != newGridId)
                         {
-                            if (oldGridId != 0L) Mod.DecrementGridCount(oldGridId);
-                            if (newGridId != 0L) Mod.IncrementGridCount(newGridId);
+                            var otherGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
+                                ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
+                            if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
+                            if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
                         }
                     }
                     _CurrentWeldingBlock = value;
@@ -235,12 +245,17 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     var newPos = value != null ? value.Position : default(Vector3I);
                     var samePhysicalBlock = oldGridId != 0L && oldGridId == newGridId && oldPos == newPos;
 
+                    // BUG-160: see CurrentWeldingBlock — count-once-per-grid. Skip Inc/Dec when
+                    // the welding lock already pins the same grid, so a BaR welding+grinding the
+                    // same grid contributes exactly +1 to MaxSystemsPerTargetGrid.
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
                         if (oldGridId != newGridId)
                         {
-                            if (oldGridId != 0L) Mod.DecrementGridCount(oldGridId);
-                            if (newGridId != 0L) Mod.IncrementGridCount(newGridId);
+                            var otherGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
+                                ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
+                            if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
+                            if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
                         }
                     }
                     _CurrentGrindingBlock = value;
