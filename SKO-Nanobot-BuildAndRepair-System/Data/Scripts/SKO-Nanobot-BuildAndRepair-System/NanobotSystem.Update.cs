@@ -245,12 +245,15 @@ namespace SKONanobotBuildAndRepairSystem
                         if (tsResourceMark != 0L) tsResourceSink = Stopwatch.GetTimestamp() - tsResourceMark;
                     }
 
+                    TryTransmitState();
+                    }
+
+                    // Persist settings for both enabled and disabled welders so admin/script
+                    // edits made while a BaR is off aren't lost on reload. TrySave is cheap
+                    // when nothing changed (Changed-bit gate + 20s debounce).
                     var tsSettingsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                     Settings.TrySave(Entity, Mod.ModGuid);
                     if (tsSettingsMark != 0L) tsSettingsSave = Stopwatch.GetTimestamp() - tsSettingsMark;
-
-                    TryTransmitState();
-                    }
                 }
                 else
                 {
