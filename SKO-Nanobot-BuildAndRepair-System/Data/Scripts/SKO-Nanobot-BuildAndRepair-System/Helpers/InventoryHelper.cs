@@ -135,11 +135,22 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
                 return cachedConnected;
             }
 
-            // Cache miss: probe connectivity once per block (all inventories share endpoint).
+            // Cache miss: probe each inventory until one is connected. In vanilla SE all
+            // inventories on a block share the conveyor endpoint, but modded blocks can
+            // expose the port on a non-zero slot — checking only slot 0 would memoize a
+            // false negative for the whole block.
             var welderInventory = welder.GetInventory(0);
             var maxInvCross = terminalBlock.InventoryCount;
-            var firstInventory = maxInvCross > 0 ? terminalBlock.GetInventory(0) : null;
-            var isConnected = firstInventory != null && firstInventory.IsConnectedTo(welderInventory);
+            var isConnected = false;
+            for (var i = 0; i < maxInvCross; i++)
+            {
+                var inventory = terminalBlock.GetInventory(i);
+                if (inventory != null && inventory.IsConnectedTo(welderInventory))
+                {
+                    isConnected = true;
+                    break;
+                }
+            }
 
             if (isConnected)
             {

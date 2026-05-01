@@ -290,9 +290,12 @@ namespace SKONanobotBuildAndRepairSystem
                 // and assignment are preserved so the same BaR resumes the same block.
                 if (!Mod.TryClaimWeldSlot())
                 {
-                    // Treat as "needs welding but couldn't this tick" so the caller's
-                    // outer state stays consistent (NeedWelding remains true downstream).
+                    // Treat as "needs welding but couldn't this tick"; propagate the chosen
+                    // target back as currentWeldingBlock so the caller's
+                    // State.CurrentWeldingBlock = currentWeldingBlock write preserves the
+                    // lock-on instead of clearing it.
                     needWelding = true;
+                    currentWeldingBlock = chosenTarget.Block;
                 }
                 else
                 {
