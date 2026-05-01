@@ -91,6 +91,7 @@
 				<MountPoint Side="Top" StartX="0.00" StartY="0.00" EndX="3.00" EndY="1.00" />
 				<MountPoint Side="Back" StartX="0.00" StartY="0.00" EndX="3.00" EndY="3.00" Default="true"/>
          </MountPoints>
+         <IsAirTight>true</IsAirTight>
          <BuildProgressModels>
 				<Model BuildPercentUpperBound="0.33" File="Models\NanobotBuildAndRepairSystem\SELtdSmallNanobotBuildAndRepairSystem_Constr1.mwm" />
 				<Model BuildPercentUpperBound="0.67" File="Models\NanobotBuildAndRepairSystem\SELtdSmallNanobotBuildAndRepairSystem_Constr2.mwm" />

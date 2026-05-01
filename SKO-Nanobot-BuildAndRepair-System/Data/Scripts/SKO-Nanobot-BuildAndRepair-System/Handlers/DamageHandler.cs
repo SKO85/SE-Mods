@@ -3,6 +3,7 @@ using Sandbox.ModAPI.Weapons;
 using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Collections.Generic;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -11,6 +12,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 {
     public static class DamageHandler
     {
+        // Reused dedup buffer for OnAfterDamage's NanobotSystems walk. Damage
+        // handlers fire on the main simulation thread, so a single static set
+        // is safe — clear, fill, done. Replaces a per-event HashSet allocation
+        // that fired on every friendly grind-damage event.
+        private static readonly HashSet<long> _seenOwnersBuffer = new HashSet<long>();
+
         #region Registration
 
         private static bool _registered = false;
@@ -61,7 +68,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         Mod.NanobotSystems.TryGetValue(info.AttackerId, out logicalComponent);
                         if (logicalComponent != null)
                         {
-                            var terminalBlock = logicalComponent.Entity as IMyTerminalBlock;
                             info.Amount = 0;
                         }
                     }
@@ -113,14 +119,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                             // not always populated for `attackerId`; iterate NanobotSystems here.
                             // Damage events are rare so the N-walk is acceptable.
                             var deadline = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
-                            var seenOwners = new System.Collections.Generic.HashSet<long>();
+                            _seenOwnersBuffer.Clear();
                             foreach (var entry in Mod.NanobotSystems)
                             {
                                 var welder = entry.Value != null ? entry.Value.Welder : null;
                                 if (welder == null) continue;
                                 var welderOwner = welder.OwnerId;
                                 if (welderOwner == 0) continue;
-                                if (!seenOwners.Add(welderOwner)) continue;
+                                if (!_seenOwnersBuffer.Add(welderOwner)) continue;
                                 var relation = welder.GetUserRelationToOwner(attackerId);
                                 if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
                                 {
@@ -134,7 +140,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
             catch (Exception e)
             {
-                Logging.Instance.Error("BuildAndRepairSystemMod: Exception in BeforeDamageHandlerNoDamageByBuildAndRepairSystem: Source={0}, Message={1}", e.Source, e.Message);
+                Logging.Instance.Error("BuildAndRepairSystemMod: Exception in AfterDamageHandlerFriendlyGrind: Source={0}, Message={1}", e.Source, e.Message);
             }
         }
     }

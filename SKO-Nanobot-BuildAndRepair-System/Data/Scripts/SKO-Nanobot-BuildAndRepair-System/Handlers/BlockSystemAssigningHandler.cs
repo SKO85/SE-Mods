@@ -58,7 +58,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
         }
 
-        private static TtlCache<BlockKey, long> Cache = new TtlCache<BlockKey, long>(TimeSpan.FromSeconds(8));
+        // Pre-sized for high-density BaR clusters: this cache can hold thousands of
+        // entries (one per actively-claimed block), so starting at the default
+        // ~31 buckets would force many rehashes during a server's first minutes
+        // under load.
+        private static readonly TtlCache<BlockKey, long> Cache = new TtlCache<BlockKey, long>(
+            TimeSpan.FromSeconds(8), null, 4, 256);
 
         public static int AssignmentCount { get { return Cache.Count; } }
 
@@ -82,21 +87,18 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             var key = GetBlockKey(block);
             long assignedSystemId;
-            if (Cache.TryGet(key, out assignedSystemId))
+            // Held by another system — can't claim.
+            if (Cache.TryGet(key, out assignedSystemId) && assignedSystemId != systemId)
             {
-                // Already assigned to this system.
-                if (assignedSystemId == systemId)
-                {
-                    return true;
-                }
-
-                // Already assigned to another system.
                 return false;
             }
 
-            // Assign to this system.
-            Cache.Set(key, systemId, TimeSpan.FromSeconds(Mod.Settings.AssignmentTtlSeconds));
-            return true;
+            // Free, or already ours: (re)assign and refresh TTL. Refresh on re-claim
+            // is required — the welding loop calls this every tick on the lock-on
+            // block to keep the assignment alive while welding takes >TTL seconds.
+            // Set returns false if there's no session yet; propagate that so callers
+            // don't think they own a block whose claim was never written.
+            return Cache.Set(key, systemId, TimeSpan.FromSeconds(Mod.Settings.AssignmentTtlSeconds));
         }
 
         public static void ReleaseFromSystem(this IMySlimBlock block)

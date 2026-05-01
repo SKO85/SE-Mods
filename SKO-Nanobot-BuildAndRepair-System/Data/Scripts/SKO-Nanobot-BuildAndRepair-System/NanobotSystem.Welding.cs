@@ -37,10 +37,15 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByIgnore = 0;
             var skippedByGridLimit = 0;
             var skippedByAssign = 0;
+            var skippedByFailCooldown = 0;
             var componentFailures = 0;
+            // BUG-135: lastFailPriority/consecutiveAtPriority were used only by the in-loop
+            // failure-priority tracker that lived alongside the welding work. With that work
+            // moved outside the lock, the tracker no longer accumulates within a single call
+            // (compChecks=1 in profile data, so it never fired anyway). starvedPriorityBits
+            // and starvedSkipped are kept because the cheap pre-filter at line 176 still reads
+            // them; they're inert under the new control flow but harmless.
             var starvedPriorityBits = 0L;
-            var lastFailPriority = -1;
-            var consecutiveAtPriority = 0;
             var starvedSkipped = 0;
             var totalComponentChecks = 0;
             var lookingForNextChecked = 0;
@@ -68,6 +73,15 @@ namespace SKONanobotBuildAndRepairSystem
             var tsGridLimit = 0L;
             var tsPriority = 0L;
             long _opTs;
+            // BUG-135: weld work (ServerFindMissingComponents → PullFromSourcesOnePass walks ~80
+            // source inventories; ServerDoWeld; ServerEmptyTransportInventory) used to run inside
+            // lock(State.PossibleWeldTargets). Profile session welding1 showed that single block
+            // holding the lock for 20-23 ms while the inner inventory pull ran, blocking async
+            // scan publish, IsTargetListSaturated and RebuildHash on the same lock. Capture the
+            // chosen target under the lock and run the expensive work outside it. Lock duration
+            // drops to iteration cost (< 1 ms) even when the inventory pull spikes.
+            TargetBlockData chosenTarget = null;
+            bool chosenIsLockOnBlock = false;
             try
             {
 
@@ -163,6 +177,19 @@ namespace SKONanobotBuildAndRepairSystem
                             skippedByAssign++;
                             continue;
                         }
+                    }
+
+                    // FEAT-AI: skip blocks that recently failed for any BaR. Lock-on and
+                    // lookingForNext are exempt — lock-on is the BaR's committed target
+                    // (we want it to resume the moment components arrive), and the
+                    // looking-for-next path is already capped at 20 iterations and only
+                    // runs once per tick after the previous block finished.
+                    if (!isLockOnBlock && !lookingForNext
+                        && BlockFailureCooldownHandler.IsOnCooldown(targetData.Block))
+                    {
+                        skippedByFailCooldown++;
+                        needWelding = true;
+                        continue;
                     }
 
                     var isIgnored = targetData.Ignore;
@@ -284,82 +311,11 @@ namespace SKONanobotBuildAndRepairSystem
                             break;
                         }
 
-                        if (!transporting) //Transport needs to be weld afterwards
-                        {
-                            transporting = ServerFindMissingComponents(targetData);
-                            totalComponentChecks++;
-                        }
-
-                        welding = ServerDoWeld(targetData);
-
-                        ServerEmptyTransportInventory(false);
-
-                        if (targetData.Ignore)
-                        {
-                            // BUG-053: Only release assignment when the block was successfully
-                            // processed (welding=true). Failed projected builds (safe zone blocked)
-                            // keep the assignment so other BaRs in the same tick don't cascade
-                            // through the same block. The TTL will release it naturally.
-                            if (Mod.Settings.AssignToSystemEnabled && welding)
-                            {
-                                _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                                targetData.Block.ReleaseFromSystem();
-                                if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
-                            }
-                            State.PossibleWeldTargets.ChangeHash();
-                            // Block completed this tick. Clear lock-on and search for the
-                            // next target in the same iteration. welding stays true so
-                            // state and effects remain correct for this tick.
-                            State.CurrentWeldingBlock = null;
-                            lookingForNext = true;
-                            // Do NOT break — fall through to find the next target.
-                        }
-                        else if (welding || transporting)
-                        {
-                            currentWeldingBlock = targetData.Block;
-                            break; //Only weld one block at once (do not split over all blocks as the base shipwelder does)
-                        }
-                        else
-                        {
-                            // Block can't be welded right now (no components available).
-                            if (isLockOnBlock)
-                            {
-                                State.CurrentWeldingBlock = null;
-                            }
-
-                            if (Mod.Settings.AssignToSystemEnabled)
-                            {
-                                _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                                targetData.Block.ReleaseFromSystem();
-                                if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
-                            }
-
-                            // Track consecutive failures at the same priority level.
-                            _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                            var failPriority = BlockWeldPriority.GetPriority(targetData.Block);
-                            if (_opTs != 0L) tsPriority += Stopwatch.GetTimestamp() - _opTs;
-                            if (failPriority == lastFailPriority)
-                            {
-                                consecutiveAtPriority++;
-                            }
-                            else
-                            {
-                                lastFailPriority = failPriority;
-                                consecutiveAtPriority = 1;
-                            }
-
-                            // After 3 failures at one priority, mark it starved — remaining
-                            // blocks at this level share component needs and will also fail.
-                            if (consecutiveAtPriority >= 3 && failPriority > 0 && failPriority < 64)
-                            {
-                                starvedPriorityBits |= (1L << failPriority);
-                            }
-
-                            componentFailures++;
-                            // Global safety cap: bound main-thread cost regardless of priority diversity.
-                            if (totalComponentChecks >= 10)
-                                break;
-                        }
+                        // BUG-135: capture the target and exit the lock. Expensive welding work
+                        // (component pull, ServerDoWeld, transport inventory empty) runs outside.
+                        chosenTarget = targetData;
+                        chosenIsLockOnBlock = isLockOnBlock;
+                        break;
                     }
                     else
                     {
@@ -400,11 +356,10 @@ namespace SKONanobotBuildAndRepairSystem
                     skippedByGridLimit = 0;
                     skippedByIgnore = 0;
                     skippedByAssign = 0;
+                    skippedByFailCooldown = 0;
                     checkedByWeldable = 0;
                     componentFailures = 0;
                     starvedPriorityBits = 0L;
-                    lastFailPriority = -1;
-                    consecutiveAtPriority = 0;
                     starvedSkipped = 0;
                     totalComponentChecks = 0;
                     lookingForNextChecked = 0;
@@ -420,6 +375,89 @@ namespace SKONanobotBuildAndRepairSystem
                     _weldExhaustedAtHash = State.PossibleWeldTargets.CurrentHash;
                 }
                 if (tsBeforeLock != 0L) tsInLock = Stopwatch.GetTimestamp() - tsAfterAcquire;
+            }
+
+            // BUG-135: deferred weld work. Runs OUTSIDE lock(State.PossibleWeldTargets) so the
+            // 20+ ms PullFromSourcesOnePass spike no longer blocks the async scan publish, the
+            // saturation check, the welding-loop iteration of other ticks, or RebuildHash.
+            // The chosenTarget reference and its Block survive after we exit the lock — even if
+            // the background scan publishes a new list, the IMySlimBlock referenced by chosenTarget
+            // remains valid (the engine retains it; only the list-membership changes).
+            if (chosenTarget != null)
+            {
+                // BUG-154: Global weld budget — cap ServerDoWeld calls per tick (count + time).
+                // When the budget is exhausted, defer this BaR's weld work to the next tick.
+                // Lock-on (CurrentWeldingBlock) is preserved so the same BaR resumes the
+                // same block; assignment stays so other BaRs don't steal it. Same shape as
+                // the grind budget (BUG-137).
+                if (!Mod.TryClaimWeldSlot())
+                {
+                    // Treat as "needs welding but couldn't this tick" so the caller's
+                    // outer state stays consistent (NeedWelding remains true downstream).
+                    needWelding = true;
+                }
+                else
+                {
+                    var weldTs = Stopwatch.GetTimestamp();
+
+                    if (!transporting)
+                    {
+                        transporting = ServerFindMissingComponents(chosenTarget);
+                        totalComponentChecks++;
+                    }
+
+                    welding = ServerDoWeld(chosenTarget);
+
+                    Mod.ReportWeldTime((Stopwatch.GetTimestamp() - weldTs) * 1000.0 / Stopwatch.Frequency);
+
+                    ServerEmptyTransportInventory(false);
+
+                if (chosenTarget.Ignore)
+                {
+                    // BUG-053: Only release assignment when the block was successfully
+                    // processed (welding=true). Failed projected builds (safe zone blocked)
+                    // keep the assignment so other BaRs in the same tick don't cascade
+                    // through the same block. The TTL will release it naturally.
+                    if (Mod.Settings.AssignToSystemEnabled && welding)
+                    {
+                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                        chosenTarget.Block.ReleaseFromSystem();
+                        if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
+                    }
+                    State.PossibleWeldTargets.ChangeHash();
+                    // Block completed this tick. Clear lock-on; next tick scans for the next
+                    // target (was previously a fall-through inside the lock — dropped on
+                    // purpose to avoid re-acquiring the lock for a second iteration).
+                    State.CurrentWeldingBlock = null;
+                }
+                else if (welding || transporting)
+                {
+                    currentWeldingBlock = chosenTarget.Block;
+                }
+                else
+                {
+                    // Block can't be welded right now (no components available).
+                    if (chosenIsLockOnBlock)
+                    {
+                        State.CurrentWeldingBlock = null;
+                    }
+
+                    if (Mod.Settings.AssignToSystemEnabled)
+                    {
+                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                        chosenTarget.Block.ReleaseFromSystem();
+                        if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
+                    }
+
+                    // FEAT-AI: parking the failed block in the global cooldown so other
+                    // BaRs (and this BaR's next tick) skip it instead of re-claiming and
+                    // re-failing. TTL is short (a few seconds); components arriving
+                    // mid-cooldown only delay welding by that window.
+                    BlockFailureCooldownHandler.MarkFailed(chosenTarget.Block);
+
+                    componentFailures++;
+                }
+                } // end of TryClaimWeldSlot else-branch (BUG-154)
             }
 
             }
@@ -438,6 +476,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var _skippedByIgnore = skippedByIgnore;
                     var _skippedByGridLimit = skippedByGridLimit;
                     var _skippedByAssign = skippedByAssign;
+                    var _skippedByFailCooldown = skippedByFailCooldown;
                     var _componentFailures = componentFailures;
                     var _lockOnLost = hadLockOn && !lockOnFound;
                     var _starvedSkipped = starvedSkipped;
@@ -452,11 +491,11 @@ namespace SKONanobotBuildAndRepairSystem
                     var _gridLimitMs = tsGridLimit * 1000.0 / tsFreq;
                     var _priorityMs = tsPriority * 1000.0 / tsFreq;
                     MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};componentFails={14};starvedSkip={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3};assignOpsMs={22:F3};gridLimitMs={23:F3};priorityMs={24:F3}",
+                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};skipFailCooldown={14};componentFails={15};starvedSkip={16};compChecks={17};nextCap={18};exhaustedSkip={19};saturatedGrids={20};lockAcquireMs={21:F3};inLockMs={22:F3};assignOpsMs={23:F3};gridLimitMs={24:F3};priorityMs={25:F3}",
                             _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
                             State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
                             _hadLockOn, _lockOnFound, _lockOnLost,
-                            _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _componentFailures,
+                            _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _skippedByFailCooldown, _componentFailures,
                             _starvedSkipped, _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount,
                             _lockAcquireMs, _inLockMs, _assignOpsMs, _gridLimitMs, _priorityMs));
                 }
@@ -650,7 +689,7 @@ namespace SKONanobotBuildAndRepairSystem
                             // Mark the block as ignored so the loop moves on; profiler still logs the failure.
                             try
                             {
-                                proj.Build(target, _Welder.OwnerId, _Welder.EntityId, false, _Welder.OwnerId);
+                                proj.Build(target, _Welder.OwnerId, _Welder.EntityId, true, _Welder.OwnerId);
                             }
                             catch (NullReferenceException ex)
                             {
@@ -1102,15 +1141,86 @@ namespace SKONanobotBuildAndRepairSystem
         /// BUG-134: empty sources are skipped without paying the GetItems engine call, and
         /// the source that succeeded on the previous call is tried first to exploit temporal
         /// locality (back-to-back welds usually need the same components from the same place).
+        /// BUG-136: walk is capped at MaxSourcesPerPullWalk sources per call and resumes from
+        /// _NextPullSourceIdx next call (round-robin). On grids with many cargo containers
+        /// (~80) the uncapped walk caused 20 ms spikes per weld cycle while every BaR-related
+        /// lock was held — see ServerTryWelding's deferred-work block. The cap accepts partial
+        /// component pulls (transport starts with whatever was found; the weld cycle re-runs
+        /// against the same block on the next tick) in exchange for bounded per-call cost.
+        /// BUG-141: per-call detailed instrumentation. Identifies whether spikes come from
+        /// the engine GetItems walk (large/many cargos = many items to enumerate),
+        /// CanTransferItemTo (conveyor topology re-walk), MaxItemsAddable (volume math),
+        /// or TransferItemFrom (the actual item move). Each sub-time is a sum across
+        /// the sources visited in this call.
         /// </summary>
+        private const int MaxSourcesPerPullWalk = 16;
+
+        // BUG-141: aggregate stats accumulated across all TryPullFromSource calls in one
+        // PullFromSourcesOnePass invocation. Pass-by-ref so each TryPullFromSource adds
+        // its own contribution without per-call profiler overhead.
+        // ProfilerEnabled gate so Stopwatch.GetTimestamp calls are zero-cost when
+        // profiling is off (mirrors the profilerTs!=0L pattern used elsewhere).
+        // BUG-148: TsCanTransfer kept as zero placeholder for log format back-compat
+        // after CanTransferItemTo pre-flight call was removed. CanTransferCalls still
+        // increments to match the count of attempted transfers.
+        private struct PullSourceStats
+        {
+            public bool ProfilerEnabled;   // gate sub-timers when profiling is off
+            public int SourcesEmpty;       // ItemCount==0 short-circuits
+            public int ItemsExamined;      // total items walked across all visited sources
+            public int CanTransferCalls;   // counter retained for back-compat (was CanTransferItemTo invocations)
+            public int MaxItemsAddCalls;   // MaxItemsAddable invocations
+            public int TransferAttempts;   // TransferItemFrom invocations
+            public int TransferSucceeded;  // TransferItemFrom returns true
+            public long TsGetItems;        // sum of srcInventory.GetItems engine ticks
+            public long TsCanTransfer;     // BUG-148: now always 0; kept for log format back-compat
+            public long TsMaxItemsAdd;     // sum of MaxItemsAddable engine ticks
+            public long TsTransfer;        // sum of TransferItemFrom engine ticks
+            public long MaxSourceTicks;    // longest single TryPullFromSource call
+        }
+
         private bool PullFromSourcesOnePass(ref float remainingVolume)
         {
+            // BUG-141: per-call profile entry separate from outer ServerFindMissingComponents
+            // pullPickMs. Lets us see source-walk patterns directly: how many sources visited,
+            // empty-skip rate, time split across engine calls, max single-source cost.
+            var profilerTs = MethodProfiler.Start();
             var picked = false;
             var welderInventory = _Welder.GetInventory(0);
-            if (welderInventory == null) return false;
+            if (welderInventory == null)
+            {
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("PullFromSourcesOnePass", profilerTs, () =>
+                        string.Format("entityId={0};earlyExit=noWelderInv", _Welder.EntityId));
+                }
+                return false;
+            }
+
+            var stats = new PullSourceStats();
+            stats.ProfilerEnabled = profilerTs != 0L;  // BUG-141 fix: gate sub-timers
+            stats.TsCanTransfer = 0L;  // BUG-148: explicit assignment to silence CS0649; field kept for log back-compat
+            var sourcesAvailable = 0;
+            var sourcesVisited = 0;
+            var lastSuccessfulHit = false;
+            var lockAcquireTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
 
             lock (_PossibleSources)
             {
+                var lockAcquiredTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                var lockWaitTicks = lockAcquiredTs != 0L ? lockAcquiredTs - lockAcquireTs : 0L;
+                sourcesAvailable = _PossibleSources.Count;
+                if (sourcesAvailable == 0)
+                {
+                    if (profilerTs != 0L)
+                    {
+                        var _lockWaitMs = lockWaitTicks * 1000.0 / Stopwatch.Frequency;
+                        MethodProfiler.StopAndLog("PullFromSourcesOnePass", profilerTs, () =>
+                            string.Format("entityId={0};earlyExit=noSources;lockWaitMs={1:F3}", _Welder.EntityId, _lockWaitMs));
+                    }
+                    return false;
+                }
+
                 // BUG-134: locate the last successful source in the current list. Linear scan
                 // (~µs for ~80 entries). Reference invalidates after a scan rebuilds the list,
                 // in which case we just fall through to the normal walk.
@@ -1118,7 +1228,7 @@ namespace SKONanobotBuildAndRepairSystem
                 int lastSuccessfulIdx = -1;
                 if (lastSuccessful != null)
                 {
-                    for (int i = 0; i < _PossibleSources.Count; i++)
+                    for (int i = 0; i < sourcesAvailable; i++)
                     {
                         if (ReferenceEquals(_PossibleSources[i], lastSuccessful))
                         {
@@ -1131,36 +1241,124 @@ namespace SKONanobotBuildAndRepairSystem
                 bool abort = false;
                 if (lastSuccessfulIdx >= 0)
                 {
-                    abort = TryPullFromSource(_PossibleSources[lastSuccessfulIdx], welderInventory, ref remainingVolume, ref picked);
-                    if (abort || remainingVolume <= 0 || _TempPullRemaining.Count == 0) return picked;
+                    var srcStartTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                    abort = TryPullFromSource(_PossibleSources[lastSuccessfulIdx], welderInventory, ref remainingVolume, ref picked, ref stats);
+                    if (srcStartTs != 0L)
+                    {
+                        var srcTicks = Stopwatch.GetTimestamp() - srcStartTs;
+                        if (srcTicks > stats.MaxSourceTicks) stats.MaxSourceTicks = srcTicks;
+                    }
+                    sourcesVisited++;
+                    lastSuccessfulHit = true;
+                    if (abort || remainingVolume <= 0 || _TempPullRemaining.Count == 0)
+                    {
+                        if (profilerTs != 0L)
+                        {
+                            EmitPullStats(profilerTs, sourcesAvailable, sourcesVisited, lastSuccessfulHit, lockWaitTicks, ref stats, "lastSuccessfulSatisfied");
+                        }
+                        return picked;
+                    }
                 }
 
-                for (var srcIdx = 0; srcIdx < _PossibleSources.Count; srcIdx++)
+                // BUG-136: capped, round-robin walk. Start where the last call left off so
+                // calls that miss _LastSuccessfulSource still eventually visit every source
+                // instead of always re-walking the same low-index entries.
+                if (_NextPullSourceIdx < 0 || _NextPullSourceIdx >= sourcesAvailable)
+                    _NextPullSourceIdx = 0;
+                var startIdx = _NextPullSourceIdx;
+                var visited = 0;
+                string exitReason = "capReached";
+
+                for (var step = 0; step < sourcesAvailable; step++)
                 {
+                    if (visited >= MaxSourcesPerPullWalk) { exitReason = "capReached"; break; }
+                    var srcIdx = (startIdx + step) % sourcesAvailable;
                     if (srcIdx == lastSuccessfulIdx) continue;
-                    if (remainingVolume <= 0 || _TempPullRemaining.Count == 0) break;
-                    if (TryPullFromSource(_PossibleSources[srcIdx], welderInventory, ref remainingVolume, ref picked)) break;
+
+                    visited++;
+                    if (remainingVolume <= 0) { exitReason = "noVolume"; break; }
+                    if (_TempPullRemaining.Count == 0) { exitReason = "needsSatisfied"; break; }
+
+                    var srcStartTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                    var welderFull = TryPullFromSource(_PossibleSources[srcIdx], welderInventory, ref remainingVolume, ref picked, ref stats);
+                    if (srcStartTs != 0L)
+                    {
+                        var srcTicks = Stopwatch.GetTimestamp() - srcStartTs;
+                        if (srcTicks > stats.MaxSourceTicks) stats.MaxSourceTicks = srcTicks;
+                    }
+                    sourcesVisited++;
+
+                    // Advance the cursor past this source even on misses so the next call
+                    // resumes further into the list rather than retrying the same ones.
+                    var next = srcIdx + 1;
+                    if (next >= sourcesAvailable) next = 0;
+                    _NextPullSourceIdx = next;
+
+                    if (welderFull) { exitReason = "welderFull"; break; }
+                }
+
+                if (profilerTs != 0L)
+                {
+                    EmitPullStats(profilerTs, sourcesAvailable, sourcesVisited, lastSuccessfulHit, lockWaitTicks, ref stats, exitReason);
                 }
             }
 
             return picked;
         }
 
+        private void EmitPullStats(long profilerTs, int sourcesAvailable, int sourcesVisited, bool lastSuccessfulHit, long lockWaitTicks, ref PullSourceStats stats, string exitReason)
+        {
+            var tsFreq = Stopwatch.Frequency;
+            var _lockWaitMs = lockWaitTicks * 1000.0 / tsFreq;
+            var _getItemsMs = stats.TsGetItems * 1000.0 / tsFreq;
+            var _canTransferMs = stats.TsCanTransfer * 1000.0 / tsFreq;
+            var _maxItemsAddMs = stats.TsMaxItemsAdd * 1000.0 / tsFreq;
+            var _transferMs = stats.TsTransfer * 1000.0 / tsFreq;
+            var _maxSourceMs = stats.MaxSourceTicks * 1000.0 / tsFreq;
+            var _entityId = _Welder.EntityId;
+            var _sourcesAvailable = sourcesAvailable;
+            var _sourcesVisited = sourcesVisited;
+            var _sourcesEmpty = stats.SourcesEmpty;
+            var _itemsExamined = stats.ItemsExamined;
+            var _canTransferCalls = stats.CanTransferCalls;
+            var _maxItemsAddCalls = stats.MaxItemsAddCalls;
+            var _transferAttempts = stats.TransferAttempts;
+            var _transferSucceeded = stats.TransferSucceeded;
+            var _lastSuccessfulHit = lastSuccessfulHit;
+            var _exitReason = exitReason;
+            MethodProfiler.StopAndLog("PullFromSourcesOnePass", profilerTs, () =>
+                string.Format("entityId={0};available={1};visited={2};empty={3};itemsExamined={4};canTransferCalls={5};maxItemsAddCalls={6};transferAttempts={7};transferSucceeded={8};lastSuccessfulHit={9};getItemsMs={10:F3};canTransferMs={11:F3};maxItemsAddMs={12:F3};transferMs={13:F3};maxSourceMs={14:F3};lockWaitMs={15:F3};exit={16}",
+                    _entityId, _sourcesAvailable, _sourcesVisited, _sourcesEmpty, _itemsExamined, _canTransferCalls, _maxItemsAddCalls, _transferAttempts, _transferSucceeded, _lastSuccessfulHit,
+                    _getItemsMs, _canTransferMs, _maxItemsAddMs, _transferMs, _maxSourceMs, _lockWaitMs, _exitReason));
+        }
+
         /// <summary>
         /// BUG-134: per-source pull body. Returns true if the welder is full and the caller
         /// should abort the entire walk (no further source can yield anything that fits).
         /// Returning false means "ok, continue with next source".
+        /// BUG-141: stats ref accumulates engine-call timings + counters across all calls
+        /// in one PullFromSourcesOnePass invocation. Whether the spike is in GetItems
+        /// (engine inventory enumeration on large cargos), CanTransferItemTo (conveyor
+        /// network walk), or TransferItemFrom (the actual move) becomes visible.
         /// </summary>
-        private bool TryPullFromSource(IMyInventory srcInventory, IMyInventory welderInventory, ref float remainingVolume, ref bool picked)
+        private bool TryPullFromSource(IMyInventory srcInventory, IMyInventory welderInventory, ref float remainingVolume, ref bool picked, ref PullSourceStats stats)
         {
             if (srcInventory == null) return false;
             var srcOwner = srcInventory.Owner as IMyEntity;
             if (srcOwner == null || srcOwner.MarkedForClose) return false;
             // BUG-134: skip empty sources without paying the GetItems engine call.
-            if (srcInventory.ItemCount == 0) return false;
+            if (srcInventory.ItemCount == 0)
+            {
+                stats.SourcesEmpty++;
+                return false;
+            }
 
             _TempPullInventoryItems.Clear();
+            // BUG-141 fix: gate Stopwatch.GetTimestamp on stats.ProfilerEnabled so the
+            // calls are zero-cost when profiling is off (matches BUG-122 pattern).
+            var tsMark = stats.ProfilerEnabled ? Stopwatch.GetTimestamp() : 0L;
             srcInventory.GetItems(_TempPullInventoryItems);
+            if (tsMark != 0L) stats.TsGetItems += Stopwatch.GetTimestamp() - tsMark;
 
             for (int i = _TempPullInventoryItems.Count - 1; i >= 0; i--)
             {
@@ -1168,6 +1366,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var srcItem = _TempPullInventoryItems[i];
                 if (srcItem == null || srcItem.Amount <= 0) continue;
 
+                stats.ItemsExamined++;
                 var subtypeName = srcItem.Type.SubtypeId;
                 int neededAmount;
                 if (!_TempPullRemaining.TryGetValue(subtypeName, out neededAmount) || neededAmount <= 0) continue;
@@ -1177,22 +1376,43 @@ namespace SKONanobotBuildAndRepairSystem
                 var volume = definition.Volume;
                 var componentId = new MyDefinitionId(typeof(MyObjectBuilder_Component), subtypeName);
 
-                if (!srcInventory.CanTransferItemTo(welderInventory, componentId)) continue;
+                // BUG-148: skip the pre-flight CanTransferItemTo check. The source is in
+                // _PossibleSources, which means AddIfConnectedToInventory already proved
+                // conveyor reachability via IsConnectedTo (cached in InventoryHelper).
+                // The remaining purpose of CanTransferItemTo was to detect per-component
+                // sorter filters — but on servers without per-component sorters (the
+                // common case) it's pure cost. Profile session 20260430234507 (Torch)
+                // showed canTransferMs=4-5ms recurring at the spike rate (~every 5s)
+                // because each weld probes 5-7 unique (src,welder,component) combinations
+                // for the FIRST time — TTL bumps don't help, only avoiding the call does.
+                // Trade-off: if a sorter blocks the component, MaxItemsAddable +
+                // TransferItemFrom will both fire and TransferItemFrom returns false →
+                // we lose two cheap engine calls per blocked component. Massive net win
+                // when sorters are absent or rare.
+                stats.CanTransferCalls++;  // kept for stats compatibility (always 0 cost now)
 
                 var maxByVolume = (int)Math.Floor(remainingVolume / volume);
                 if (maxByVolume <= 0) continue;
                 var amountPossible = Math.Min(Math.Min(neededAmount, (int)srcItem.Amount), maxByVolume);
                 if (amountPossible <= 0) continue;
 
+                stats.MaxItemsAddCalls++;
+                tsMark = stats.ProfilerEnabled ? Stopwatch.GetTimestamp() : 0L;
                 var amountMoveable = (int)welderInventory.MaxItemsAddable(amountPossible, componentId);
+                if (tsMark != 0L) stats.TsMaxItemsAdd += Stopwatch.GetTimestamp() - tsMark;
                 if (amountMoveable <= 0)
                 {
                     _TempPullInventoryItems.Clear();
                     return true; // welder full → stop the whole walk
                 }
 
-                if (welderInventory.TransferItemFrom(srcInventory, i, null, true, amountMoveable))
+                stats.TransferAttempts++;
+                tsMark = stats.ProfilerEnabled ? Stopwatch.GetTimestamp() : 0L;
+                var transferred = welderInventory.TransferItemFrom(srcInventory, i, null, true, amountMoveable);
+                if (tsMark != 0L) stats.TsTransfer += Stopwatch.GetTimestamp() - tsMark;
+                if (transferred)
                 {
+                    stats.TransferSucceeded++;
                     int needed = neededAmount;
                     picked = ServerPickFromWelder(componentId, volume, ref needed, ref remainingVolume) || picked;
                     if (needed > 0) _TempPullRemaining[subtypeName] = needed;

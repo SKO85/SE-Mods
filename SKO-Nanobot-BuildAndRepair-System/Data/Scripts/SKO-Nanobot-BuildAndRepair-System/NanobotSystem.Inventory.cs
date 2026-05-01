@@ -5,6 +5,7 @@ using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
@@ -221,52 +222,110 @@ namespace SKONanobotBuildAndRepairSystem
             return empty;
         }
 
+        // BUG-146: per-call profiling for EmptyBlockInventories. Engine-heavy on cargo
+        // containers / refineries when grinding them down: srcInventory.GetItems +
+        // GetItemByID per item + TransferItemFrom per item. Sub-timers identify whether
+        // the spike is in enumeration, item lookup, or the actual transfer.
         private bool EmptyBlockInventories(IMyEntity entity, IMyInventory dstInventory, out bool isEmpty)
         {
+            var profilerTs = MethodProfiler.Start();
             var running = false;
             var remainingVolume = _MaxTransportVolume - (float)dstInventory.CurrentVolume;
             isEmpty = true;
+            var inventoriesScanned = 0;
+            var inventoriesEmpty = 0;
+            var itemsExamined = 0;
+            var transferAttempts = 0;
+            var transfersSucceeded = 0;
+            var tsGetItems = 0L;
+            var tsGetItemById = 0L;
+            var tsTransfer = 0L;
+            long tsMark;
+            var entityId = entity != null ? entity.EntityId : 0L;
+            var inventoryCount = entity != null ? entity.InventoryCount : 0;
 
-            for (int i1 = 0; i1 < entity.InventoryCount; i1++)
+            try
             {
-                var srcInventory = entity.GetInventory(i1);
-                if (srcInventory.Empty()) continue;
-
-                if (remainingVolume <= 0) return true; //No more transport volume
-
-                _TempInventoryItems.Clear();
-                srcInventory.GetItems(_TempInventoryItems);
-                for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                for (int i1 = 0; i1 < inventoryCount; i1++)
                 {
-                    var srcItem = srcInventory.GetItemByID(_TempInventoryItems[srcItemIndex].ItemId);
-                    if (srcItem == null) continue;
+                    var srcInventory = entity.GetInventory(i1);
+                    inventoriesScanned++;
+                    if (srcInventory.Empty()) { inventoriesEmpty++; continue; }
 
-                    var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(srcItem.Content.GetId());
-                    if (definition == null) continue;
+                    if (remainingVolume <= 0) return true; //No more transport volume
 
-                    var maxpossibleAmountFP = Math.Min((float)srcItem.Amount, (remainingVolume / definition.Volume));
-                    //Real Transport Volume is always bigger than logical _MaxTransportVolume so ceiling is no problem
-                    var maxpossibleAmount = (MyFixedPoint)(definition.HasIntegralAmounts ? Math.Ceiling(maxpossibleAmountFP) : maxpossibleAmountFP);
-                    if (dstInventory.TransferItemFrom(srcInventory, srcItemIndex, null, true, maxpossibleAmount, false))
+                    _TempInventoryItems.Clear();
+                    // BUG-146 fix: gate Stopwatch.GetTimestamp on profilerTs so the calls
+                    // are zero-cost when profiling is off (matches BUG-122 / BUG-141 pattern
+                    // used in welding). Without the gate, this loop pays ~50ns × 3-per-item
+                    // even in production where profiling never runs.
+                    tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                    srcInventory.GetItems(_TempInventoryItems);
+                    if (tsMark != 0L) tsGetItems += Stopwatch.GetTimestamp() - tsMark;
+
+                    for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                     {
-                        remainingVolume -= (float)maxpossibleAmount * definition.Volume;
-                        running = true;
+                        itemsExamined++;
+                        tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                        var srcItem = srcInventory.GetItemByID(_TempInventoryItems[srcItemIndex].ItemId);
+                        if (tsMark != 0L) tsGetItemById += Stopwatch.GetTimestamp() - tsMark;
+                        if (srcItem == null) continue;
 
-                        if (remainingVolume <= 0)
+                        var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(srcItem.Content.GetId());
+                        if (definition == null) continue;
+
+                        var maxpossibleAmountFP = Math.Min((float)srcItem.Amount, (remainingVolume / definition.Volume));
+                        //Real Transport Volume is always bigger than logical _MaxTransportVolume so ceiling is no problem
+                        var maxpossibleAmount = (MyFixedPoint)(definition.HasIntegralAmounts ? Math.Ceiling(maxpossibleAmountFP) : maxpossibleAmountFP);
+                        transferAttempts++;
+                        tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                        var transferred = dstInventory.TransferItemFrom(srcInventory, srcItemIndex, null, true, maxpossibleAmount, false);
+                        if (tsMark != 0L) tsTransfer += Stopwatch.GetTimestamp() - tsMark;
+                        if (transferred)
+                        {
+                            transfersSucceeded++;
+                            remainingVolume -= (float)maxpossibleAmount * definition.Volume;
+                            running = true;
+
+                            if (remainingVolume <= 0)
+                            {
+                                isEmpty = false;
+                                return true; //No more transport volume
+                            }
+                        }
+                        else
                         {
                             isEmpty = false;
-                            return true; //No more transport volume
+                            return running; //No more space
                         }
                     }
-                    else
-                    {
-                        isEmpty = false;
-                        return running; //No more space
-                    }
+                    _TempInventoryItems.Clear();
                 }
-                _TempInventoryItems.Clear();
+                return running;
             }
-            return running;
+            finally
+            {
+                if (profilerTs != 0L)
+                {
+                    var tsFreq = Stopwatch.Frequency;
+                    var _getItemsMs = tsGetItems * 1000.0 / tsFreq;
+                    var _getItemByIdMs = tsGetItemById * 1000.0 / tsFreq;
+                    var _transferMs = tsTransfer * 1000.0 / tsFreq;
+                    var _entityId = entityId;
+                    var _inventoryCount = inventoryCount;
+                    var _inventoriesScanned = inventoriesScanned;
+                    var _inventoriesEmpty = inventoriesEmpty;
+                    var _itemsExamined = itemsExamined;
+                    var _transferAttempts = transferAttempts;
+                    var _transfersSucceeded = transfersSucceeded;
+                    var _isEmptyResult = isEmpty;
+                    var _running = running;
+                    MethodProfiler.StopAndLog("EmptyBlockInventories", profilerTs, () =>
+                        string.Format("entityId={0};inventoryCount={1};invScanned={2};invEmpty={3};itemsExamined={4};transferAttempts={5};transferSucceeded={6};isEmpty={7};running={8};getItemsMs={9:F3};getItemByIdMs={10:F3};transferMs={11:F3}",
+                            _entityId, _inventoryCount, _inventoriesScanned, _inventoriesEmpty, _itemsExamined, _transferAttempts, _transfersSucceeded, _isEmptyResult, _running,
+                            _getItemsMs, _getItemByIdMs, _transferMs));
+                }
+            }
         }
 
         // BUG-133: PullComponents (per-component source walk) retired in favor of

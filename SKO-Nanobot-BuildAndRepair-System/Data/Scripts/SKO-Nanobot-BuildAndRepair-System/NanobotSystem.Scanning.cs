@@ -11,6 +11,7 @@ using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -28,32 +29,67 @@ namespace SKONanobotBuildAndRepairSystem
         /// Used when work completes (so new targets surface without a scan-interval delay)
         /// and when terminal settings change (FEAT-080) so the player sees the effect of
         /// their setting change right away. No-op on clients (only the server runs scans).
+        ///
+        /// <paramref name="bypassDebounce"/> drops the FEAT-075 forceDebounce on the next
+        /// rescan check by zeroing the coordinator's last-full-scan timestamp. Use it for
+        /// user-driven triggers (settings change) where waiting up to 5s for debounce makes
+        /// the toggle feel broken — the BaR keeps processing the *old* sorted list during
+        /// the debounce window. For automatic triggers (work-complete) the default debounce
+        /// still applies as a coalescing guard against scan storms.
         /// </summary>
-        internal void TriggerImmediateRescan(string reason)
+        internal void TriggerImmediateRescan(string reason, bool bypassDebounce = false)
         {
             if (!MyAPIGateway.Session.IsServer) return;
 
             var immediateScanTs = MethodProfiler.Start();
             _LastTargetsUpdate = TimeSpan.Zero;
 
-            // Also signal the cluster coordinator to rescan on its next timer tick
-            // instead of waiting up to 10 seconds. Without this, members re-apply the
-            // stale cached result and idle until the coordinator's interval expires.
-            // _rescanForced bypasses the FEAT-075 saturated check, which would otherwise
-            // skip the scan because the coordinator's OWN targets are still full.
-            var cluster = AssignedCluster;
-            if (cluster != null && cluster.Coordinator != null && cluster.Coordinator != this)
+            // BUG-139: also set _rescanForced on THIS BaR, not just on the current
+            // coordinator. WorkMode (and other ClusterRelevantFlags) is part of the
+            // cluster-key hash, so a settings-change call here may be followed within
+            // 2s by ScanClusterCoordinator.RebuildClusters reshuffling this BaR into
+            // a different cluster (often as solo coordinator). The OLD coordinator
+            // had _rescanForced set by the loop below; the NEW coordinator (which may
+            // be this BaR) didn't — so the FEAT-075 saturated-skip gate could
+            // suppress the rescan and the BaR appeared to "stagger" for several
+            // scans before noticing the new settings. Setting it here on `this`
+            // survives any reshuffle: whichever cluster this BaR ends up in, if it
+            // becomes coordinator the flag triggers an immediate scan.
+            _rescanForced = true;
+            if (bypassDebounce)
             {
-                cluster.Coordinator._LastTargetsUpdate = TimeSpan.Zero;
-                cluster.Coordinator._rescanForced = true;
+                _lastFullScanTime = TimeSpan.Zero;
+            }
+
+            // Always poke the coordinator's forced-rescan flag — including when this BaR
+            // *is* the coordinator (solo cluster, or a member that happens to be the
+            // coordinator). The previous version skipped the self case, so the FEAT-075
+            // saturated-skip gate kept suppressing rescans for solo BaRs after a settings
+            // change until the saturated targets drained or MaxScanSkipDuration (60s)
+            // elapsed — leaving the BaR processing the previously-sorted target list with
+            // the old GrindNearFirst/SmallestGridFirst order.
+            var cluster = AssignedCluster;
+            var coordinator = cluster != null ? cluster.Coordinator : null;
+            if (coordinator != null)
+            {
+                coordinator._rescanForced = true;
+                if (coordinator != this)
+                {
+                    coordinator._LastTargetsUpdate = TimeSpan.Zero;
+                }
+                if (bypassDebounce)
+                {
+                    coordinator._lastFullScanTime = TimeSpan.Zero;
+                }
             }
             UpdateSourcesAndTargetsTimer();
 
             if (immediateScanTs != 0L)
             {
                 var _reason = reason;
+                var _bypass = bypassDebounce;
                 MethodProfiler.StopAndLog("ImmediateRescanTrigger", immediateScanTs, () =>
-                    string.Format("entityId={0};reason={1}", _Welder.EntityId, _reason));
+                    string.Format("entityId={0};reason={1};bypassDebounce={2}", _Welder.EntityId, _reason, _bypass));
             }
         }
 
@@ -234,6 +270,14 @@ namespace SKONanobotBuildAndRepairSystem
             for (var i = 0; i < possibleSources.Count; i++) dedupSet.Add(possibleSources[i]);
             toVisit.Enqueue(_Welder.CubeGrid);
 
+            // BUG-141: source-scan diagnostics. Helps identify whether large-cargo source
+            // scans spike from sheer block count (blocksExamined), per-block AddIfConnectedToInventory
+            // cost (addIfConnTotalMs), or grid traversal overhead.
+            var blocksExamined = 0;
+            var terminalBlocksChecked = 0;
+            var addIfConnCalls = 0;
+            var tsAddIfConnTotal = 0L;
+
             try
             {
                 while (toVisit.Count > 0)
@@ -246,6 +290,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                     foreach (var slimBlock in blocks)
                     {
+                        blocksExamined++;
                         var fatBlock = slimBlock.FatBlock;
                         if (fatBlock == null) continue;
 
@@ -277,12 +322,16 @@ namespace SKONanobotBuildAndRepairSystem
                         var terminalBlock = fatBlock as IMyTerminalBlock;
                         if (terminalBlock != null && terminalBlock.EntityId != _Welder.EntityId && terminalBlock.IsFunctional)
                         {
+                            terminalBlocksChecked++;
                             var relation = terminalBlock.GetUserRelationToOwner(_Welder.OwnerId);
                             if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
                             {
                                 try
                                 {
+                                    addIfConnCalls++;
+                                    var tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                                     terminalBlock.AddIfConnectedToInventory(_Welder, possibleSources, dedupSet);
+                                    if (tsMark != 0L) tsAddIfConnTotal += Stopwatch.GetTimestamp() - tsMark;
                                 }
                                 catch (Exception ex)
                                 {
@@ -299,9 +348,13 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     var _visitedCount = visited.Count;
                     var _sourceCount = possibleSources.Count;
+                    var _blocksExamined = blocksExamined;
+                    var _terminalBlocksChecked = terminalBlocksChecked;
+                    var _addIfConnCalls = addIfConnCalls;
+                    var _addIfConnTotalMs = tsAddIfConnTotal * 1000.0 / Stopwatch.Frequency;
                     MethodProfiler.StopAndLog("AsyncScanForSources", profilerTs, () =>
-                        string.Format("entityId={0};gridsVisited={1};sourcesFound={2}",
-                            _Welder.EntityId, _visitedCount, _sourceCount));
+                        string.Format("entityId={0};gridsVisited={1};sourcesFound={2};blocksExamined={3};terminalBlocksChecked={4};addIfConnCalls={5};addIfConnTotalMs={6:F3}",
+                            _Welder.EntityId, _visitedCount, _sourceCount, _blocksExamined, _terminalBlocksChecked, _addIfConnCalls, _addIfConnTotalMs));
                 }
             }
         }

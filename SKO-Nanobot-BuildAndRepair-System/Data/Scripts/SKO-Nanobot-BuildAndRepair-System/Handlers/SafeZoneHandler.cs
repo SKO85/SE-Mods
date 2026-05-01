@@ -96,6 +96,37 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
         }
 
+        /// <summary>
+        /// BUG-143: lightweight periodic alternative to GetSafeZones. Skips the full entity walk
+        /// (MyAPIGateway.Entities.GetEntities filtered for MySafeZone) since OnEntityAdd /
+        /// OnEntityRemove already maintain the Zones dictionary in real time. The full walk
+        /// in GetSafeZones was responsible for 1-3 ms per periodic tick (every 6 s on background)
+        /// — pure waste with the events registered. CleanupStaleZones still runs as a guard
+        /// against missed events, plus the three TtlCache cleanups that GetSafeZones used to do.
+        /// GetSafeZones() is still used at Register() time as the initial seed.
+        /// </summary>
+        public static void CleanupSafeZones()
+        {
+            var profilerTs = MethodProfiler.Start();
+            try
+            {
+                CleanupStaleZones();
+                GridIntersectingZones.CleanupExpired();
+                ProtectedFromGrindingCache.CleanupExpired();
+                BlockIntersectingZones.CleanupExpired();
+            }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.CleanupSafeZones: {0}", ex.Message); }
+            finally
+            {
+                if (profilerTs != 0L)
+                {
+                    var _zoneCount = Zones.Count;
+                    MethodProfiler.StopAndLog("SafeZoneHandler.CleanupSafeZones", profilerTs, () =>
+                        string.Format("zones={0}", _zoneCount));
+                }
+            }
+        }
+
         public static void Unregister()
         {
             if (!_registered || MyAPIGateway.Session == null)

@@ -27,6 +27,13 @@ namespace SKONanobotBuildAndRepairSystem
         public static bool SettingsValid = false;
         public static bool CustomSettingsLoaded = false;
         public static SyncModSettings Settings = new SyncModSettings();
+
+        // Tick-cached MyAPIGateway.Session.ElapsedPlayTime. Refreshed once per
+        // UpdateBeforeSimulation; consumed by TtlCache and any other hot-path
+        // code that would otherwise pay for a Session+ElapsedPlayTime accessor
+        // chain on every call. TimeSpan reads/writes are atomic on x64 so
+        // background-thread readers (TTL cleanup) see a stable value.
+        public static TimeSpan NowPlayTime;
         public static readonly ConcurrentDictionary<long, NanobotSystem> NanobotSystems = new ConcurrentDictionary<long, NanobotSystem>();
         public static ShieldApi Shield; // Centralized DefenseShields API instance
 
@@ -140,6 +147,25 @@ namespace SKONanobotBuildAndRepairSystem
         public static int GrindBudgetPeakUsed { get { return _grindPeakUsed; } }
         public static void ResetGrindBudgetStats() { _grindPeakUsed = 0; }
 
+        // --- BUG-154: Global weld budget per tick ---
+        // Caps total ServerDoWeld calls per tick across all BaRs. Mirrors the grind
+        // budget. Reason: profiling on a 60-BaR server (transmit disabled to isolate)
+        // showed Mod.UpdateBeforeSimulation peaking at 36 ms with ServerDoWeld up to
+        // 11 ms per call (engine welder.Weld() cost is opaque). When 3+ BaRs land on
+        // ServerDoWeld in the same tick the costs stack into a visible server spike.
+        // Two budgets: count (MaxWeldsPerTick) and time (MaxWeldMsPerTick) — the time
+        // budget caps cumulative damage when single welds spike.
+        public const int MaxWeldsPerTickDefault = 10;
+        public const double MaxWeldMsPerTickDefault = 8.0;
+        private static int _weldsThisTick;
+        private static double _weldMsThisTick;
+        private static int _lastWeldBudgetTick = -1;
+
+        // Peak weld usage tracking for HUD debug
+        private static int _weldPeakUsed;
+        public static int WeldBudgetPeakUsed { get { return _weldPeakUsed; } }
+        public static void ResetWeldBudgetStats() { _weldPeakUsed = 0; }
+
         public static int GetEffectiveMaxGrindsPerTick()
         {
             var configured = Settings.MaxGrindsPerTick;
@@ -171,6 +197,39 @@ namespace SKONanobotBuildAndRepairSystem
         public static void ReportGrindTime(double ms)
         {
             _grindMsThisTick += ms;
+        }
+
+        public static int GetEffectiveMaxWeldsPerTick()
+        {
+            var configured = Settings.MaxWeldsPerTick;
+            if (configured > 0) return configured;
+            // Auto: scale with BaR count, minimum 5.
+            var total = NanobotSystems.Count;
+            return Math.Max(5, Math.Min(MaxWeldsPerTickDefault, total));
+        }
+
+        public static bool TryClaimWeldSlot()
+        {
+            var tick = MyAPIGateway.Session.GameplayFrameCounter;
+            if (tick != _lastWeldBudgetTick)
+            {
+                _lastWeldBudgetTick = tick;
+                _weldsThisTick = 0;
+                _weldMsThisTick = 0.0;
+            }
+            if (_weldsThisTick >= GetEffectiveMaxWeldsPerTick()) return false;
+            if (_weldMsThisTick >= MaxWeldMsPerTickDefault) return false;
+            _weldsThisTick++;
+            if (_weldsThisTick > _weldPeakUsed) _weldPeakUsed = _weldsThisTick;
+            return true;
+        }
+
+        /// <summary>
+        /// Called after each ServerDoWeld to accumulate time spent welding this tick.
+        /// </summary>
+        public static void ReportWeldTime(double ms)
+        {
+            _weldMsThisTick += ms;
         }
 
         // --- Lightweight tick cost tracking (always-on, for debug HUD) ---
@@ -365,6 +424,9 @@ namespace SKONanobotBuildAndRepairSystem
             // Clear block assigned handler.
             try { BlockSystemAssigningHandler.Clear(); } catch { }
 
+            // Clear block failure cooldown handler.
+            try { BlockFailureCooldownHandler.Clear(); } catch { }
+
             // Clear cluster coordinator.
             try { ScanClusterCoordinator.Clear(); } catch { }
 
@@ -408,6 +470,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (MyAPIGateway.Session == null)
                         return;
 
+                    NowPlayTime = MyAPIGateway.Session.ElapsedPlayTime;
                     Init();
                 }
 
@@ -415,6 +478,7 @@ namespace SKONanobotBuildAndRepairSystem
                 else
                 {
                     var now = MyAPIGateway.Session.ElapsedPlayTime;
+                    NowPlayTime = now;
 
                     // Start processing.
                     if (MyAPIGateway.Session.IsServer)

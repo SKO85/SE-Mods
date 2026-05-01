@@ -1,5 +1,6 @@
 ﻿using ProtoBuf;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Xml.Serialization;
@@ -136,6 +137,25 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(39), XmlElement]
         public int AssignmentTtlSeconds { get; set; }
 
+        /// <summary>
+        /// Global cap on ServerDoWeld calls per tick across all BaRs.
+        /// 0 = auto (scales with total BaR count). Range: 0-100.
+        /// Higher values allow faster welding but risk frame spikes when the engine
+        /// welder.Weld() call is heavy on a tick (5-11 ms per call observed under load).
+        /// </summary>
+        [ProtoMember(40), XmlElement]
+        public int MaxWeldsPerTick { get; set; }
+
+        /// <summary>
+        /// How long (seconds) a block stays on the global fail-cooldown after a
+        /// failed weld attempt (no components, projector NRE, etc.). Other BaRs
+        /// (and this BaR's later ticks) skip the block during the cooldown so N
+        /// BaRs don't all bounce off the same un-weldable target each tick.
+        /// 0 disables the feature. Range: 0-30. Default: 4.
+        /// </summary>
+        [ProtoMember(41), XmlElement]
+        public int BlockFailureCooldownSeconds { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -161,6 +181,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
             StaggerGroupCount = 0;
             MaxGrindsPerTick = 0;
             AssignmentTtlSeconds = 8;
+            MaxWeldsPerTick = 0;
+            BlockFailureCooldownSeconds = BlockFailureCooldownHandler.CooldownSecondsDefault;
         }
 
         public static SyncModSettings Load()
@@ -330,6 +352,17 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 adjusted = true;
             }
 
+            if (settings.MaxWeldsPerTick < 0)
+            {
+                settings.MaxWeldsPerTick = 0;
+                adjusted = true;
+            }
+            else if (settings.MaxWeldsPerTick > 100)
+            {
+                settings.MaxWeldsPerTick = 100;
+                adjusted = true;
+            }
+
             if (settings.AssignmentTtlSeconds < 2)
             {
                 settings.AssignmentTtlSeconds = 2;
@@ -338,6 +371,17 @@ namespace SKONanobotBuildAndRepairSystem.Models
             else if (settings.AssignmentTtlSeconds > 30)
             {
                 settings.AssignmentTtlSeconds = 30;
+                adjusted = true;
+            }
+
+            if (settings.BlockFailureCooldownSeconds < BlockFailureCooldownHandler.CooldownSecondsMin)
+            {
+                settings.BlockFailureCooldownSeconds = BlockFailureCooldownHandler.CooldownSecondsMin;
+                adjusted = true;
+            }
+            else if (settings.BlockFailureCooldownSeconds > BlockFailureCooldownHandler.CooldownSecondsMax)
+            {
+                settings.BlockFailureCooldownSeconds = BlockFailureCooldownHandler.CooldownSecondsMax;
                 adjusted = true;
             }
 

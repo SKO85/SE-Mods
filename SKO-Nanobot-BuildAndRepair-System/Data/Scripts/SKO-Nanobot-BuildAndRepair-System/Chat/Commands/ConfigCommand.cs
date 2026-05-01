@@ -1,3 +1,4 @@
+using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
@@ -80,9 +81,17 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 IntSetting("MaxGrindsPerTick",
                     () => Mod.Settings.MaxGrindsPerTick,
                     v => { Mod.Settings.MaxGrindsPerTick = v; }, 0, 100),
+                IntSetting("MaxWeldsPerTick",
+                    () => Mod.Settings.MaxWeldsPerTick,
+                    v => { Mod.Settings.MaxWeldsPerTick = v; }, 0, 100),
                 IntSetting("AssignmentTtlSeconds",
                     () => Mod.Settings.AssignmentTtlSeconds,
                     v => { Mod.Settings.AssignmentTtlSeconds = v; }, 2, 30),
+                IntSetting("BlockFailureCooldownSeconds",
+                    () => Mod.Settings.BlockFailureCooldownSeconds,
+                    v => { Mod.Settings.BlockFailureCooldownSeconds = v; },
+                    BlockFailureCooldownHandler.CooldownSecondsMin,
+                    BlockFailureCooldownHandler.CooldownSecondsMax),
                 FloatSetting("WeldingMultiplier",
                     () => Mod.Settings.Welder.WeldingMultiplier,
                     v => { Mod.Settings.Welder.WeldingMultiplier = v; }, 0.1f, 100f),

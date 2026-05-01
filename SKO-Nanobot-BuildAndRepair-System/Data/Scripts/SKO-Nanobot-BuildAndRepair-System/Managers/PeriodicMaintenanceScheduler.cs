@@ -31,12 +31,15 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             Work = () => GridOwnershipCacheHandler.Update()
         };
 
-        // Safe-zone refresh (6 s).
+        // Safe-zone cache cleanup (6 s). BUG-143: was GetSafeZones() which did a full
+        // MyAPIGateway.Entities.GetEntities walk (1-3 ms per tick). The walk was redundant
+        // because OnEntityAdd/OnEntityRemove already maintain the Zones dict in real time.
+        // CleanupSafeZones does just the cache cleanups (~µs) and the stale-entry guard.
         private static PeriodicTask _safeZone = new PeriodicTask
         {
             Interval = TimeSpan.FromSeconds(6),
             LastRun = TimeSpan.Zero,
-            Work = () => SafeZoneHandler.GetSafeZones()
+            Work = () => SafeZoneHandler.CleanupSafeZones()
         };
 
         // TTL-cache cleanup batch (2 min).
@@ -49,6 +52,7 @@ namespace SKONanobotBuildAndRepairSystem.Managers
                 try { InventoryHelper.Cleanup(); } catch { }
                 try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
                 try { BlockSystemAssigningHandler.Cleanup(); } catch { }
+                try { BlockFailureCooldownHandler.Cleanup(); } catch { }
                 try { SharedGridBlockCache.Cleanup(); } catch { }
                 try { SharedEntityCache.Cleanup(); } catch { }
             }

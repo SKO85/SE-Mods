@@ -82,8 +82,11 @@ namespace SKONanobotBuildAndRepairSystem
             // FEAT-080: terminal settings just changed (work mode, priority list, area, color
             // filter, search mode, etc.). Force the next scan to fire immediately so new
             // targets matching the updated settings surface right away instead of waiting
-            // up to 10 s for the next scan-timer tick. No-op on clients.
-            TriggerImmediateRescan("settingsChanged");
+            // up to 10 s for the next scan-timer tick. bypassDebounce=true skips the
+            // FEAT-075 forceDebounce so a near/far toggle takes effect on the very next
+            // scan tick instead of up to 5 s later — otherwise the BaR keeps processing
+            // the *old* sorted target list during the debounce window. No-op on clients.
+            TriggerImmediateRescan("settingsChanged", true);
         }
 
         /// <summary>

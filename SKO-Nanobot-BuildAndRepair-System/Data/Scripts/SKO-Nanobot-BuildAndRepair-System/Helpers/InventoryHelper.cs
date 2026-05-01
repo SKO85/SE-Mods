@@ -4,7 +4,9 @@ using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using System.Collections.Generic;
 using VRage;
+using VRage.Game;
 using VRage.Game.ModAPI;
+using VRage.ModAPI;
 
 namespace SKONanobotBuildAndRepairSystem.Helpers
 {
@@ -20,6 +22,84 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             comparer: new MyTupleComparer<long, long>(),
             concurrencyLevel: 4,
             capacity: 2048);
+
+        // BUG-142: cache for srcInventory.CanTransferItemTo(dstInventory, componentId).
+        // Profile session 20260430230215 showed 18.7 ms canTransferMs spikes on a single call
+        // — the engine walks the conveyor topology (worse than IsConnectedTo because it also
+        // checks per-component sorter filters). Same TTL/strategy as ConnectionCache.
+        // Key includes componentSubtype because conveyor sorters can block specific items;
+        // most paths are unfiltered and cache-hit immediately.
+        public struct TransferKey : IEquatable<TransferKey>
+        {
+            public readonly long SrcEntityId;
+            public readonly long DstEntityId;
+            public readonly int ComponentHash;
+
+            public TransferKey(long srcEntityId, long dstEntityId, int componentHash)
+            {
+                SrcEntityId = srcEntityId;
+                DstEntityId = dstEntityId;
+                ComponentHash = componentHash;
+            }
+
+            public bool Equals(TransferKey other)
+            {
+                return SrcEntityId == other.SrcEntityId
+                    && DstEntityId == other.DstEntityId
+                    && ComponentHash == other.ComponentHash;
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (!(obj is TransferKey)) return false;
+                return Equals((TransferKey)obj);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    var hash = 17;
+                    hash = hash * 31 + SrcEntityId.GetHashCode();
+                    hash = hash * 31 + DstEntityId.GetHashCode();
+                    hash = hash * 31 + ComponentHash;
+                    return hash;
+                }
+            }
+        }
+
+        private static readonly TtlCache<TransferKey, bool> TransferCache = new TtlCache<TransferKey, bool>(
+            defaultTtl: TimeSpan.FromSeconds(60),
+            comparer: null,
+            concurrencyLevel: 4,
+            capacity: 4096);
+
+        public static int TransferCacheCount { get { return TransferCache.Count; } }
+
+        /// <summary>
+        /// BUG-142: cached wrapper around IMyInventory.CanTransferItemTo. The engine call walks
+        /// the conveyor topology and (with sorters present) re-checks per-component filters —
+        /// observed 18.7 ms spikes per call on a busy grid. Cached result returns sub-µs after
+        /// the first probe. Falls back to direct engine call if owner entity ids can't be
+        /// resolved (defensive — never happens for normal block inventories).
+        /// </summary>
+        public static bool CanTransferItemToCached(this IMyInventory srcInventory, IMyInventory dstInventory, MyDefinitionId componentId)
+        {
+            if (srcInventory == null || dstInventory == null) return false;
+            var srcOwner = srcInventory.Owner as IMyEntity;
+            var dstOwner = dstInventory.Owner as IMyEntity;
+            if (srcOwner == null || dstOwner == null)
+                return srcInventory.CanTransferItemTo(dstInventory, componentId);
+
+            var key = new TransferKey(srcOwner.EntityId, dstOwner.EntityId, componentId.SubtypeId.GetHashCode());
+            bool cached;
+            if (TransferCache.TryGet(key, out cached))
+                return cached;
+
+            var result = srcInventory.CanTransferItemTo(dstInventory, componentId);
+            TransferCache.Set(key, result);
+            return result;
+        }
 
         // BUG-133: SourceHasComponentCache retired. The cache existed to skip the per-source
         // FindItem call when we'd already learned the source didn't hold a given component.
@@ -112,6 +192,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
         public static void Cleanup()
         {
             ConnectionCache.CleanupExpired();
+            TransferCache.CleanupExpired();
         }
     }
 }

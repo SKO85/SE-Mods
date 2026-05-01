@@ -52,7 +52,7 @@ namespace SKONanobotBuildAndRepairSystem
         private const int MaxPossibleFloatingTargets = 16;
 
         private const int TransmitStateMinIntervalSeconds = 1;
-        private const int TransmitStateMaxIntervalSeconds = 2;
+        private const int TransmitStateMaxIntervalSeconds = 4;
         private const int TransmitSettingsIntervalSeconds = 1;
 
         public const int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
@@ -226,6 +226,11 @@ namespace SKONanobotBuildAndRepairSystem
         // the in-list check at the start of PullFromSourcesOnePass and we fall through to the
         // normal walk.
         private VRage.Game.ModAPI.IMyInventory _LastSuccessfulSource;
+        // BUG-136: round-robin cursor for the capped source walk. PullFromSourcesOnePass visits
+        // at most MaxSourcesPerPullWalk sources per call (avoids 20 ms spikes on busy grids with
+        // 80+ cargo containers) and resumes from this index next call so all sources are
+        // eventually visited even when _LastSuccessfulSource cannot satisfy the current need.
+        private int _NextPullSourceIdx;
 
         private int _UpdateEffectsInterval;
         private bool _UpdateCustomInfoNeeded;
@@ -245,7 +250,9 @@ namespace SKONanobotBuildAndRepairSystem
         private int _UpdateStateTransmitInterval;
 
         // FEAT-038: Progressive backoff for unchanged state transmits.
-        private int _lastTransmittedFingerprint;
+        // BUG-150: widened from int to long to match ComputeStateFingerprint() which now
+        // mixes list CurrentHash (long) values for content-aware fingerprinting.
+        private long _lastTransmittedFingerprint;
         private int _transmitBackoffMultiplier = 1;
 
         private TimeSpan _PeriodicExtraChecksLast;

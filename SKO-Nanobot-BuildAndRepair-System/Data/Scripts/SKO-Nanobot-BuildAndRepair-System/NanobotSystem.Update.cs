@@ -13,6 +13,14 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public partial class NanobotSystem
     {
+        // FEAT-AI: how aggressively to stretch the BaR's update cadence when its
+        // cluster is in idle backoff (>= IdleScansBeforeBackoff consecutive empty
+        // scans) and this BaR has no active state. 4× means an idle BaR running
+        // at WorkSpeed=1 with effectiveGroups=3 fires every ~12 cycles ≈ 20s
+        // instead of every ~3 cycles ≈ 5s — the same order as IdleScanInterval,
+        // matching the assumption that nothing is going to happen in the gap.
+        private const int IdleCadenceMultiplier = 4;
+
         public override void UpdateBeforeSimulation()
         {
             try
@@ -51,6 +59,37 @@ namespace SKONanobotBuildAndRepairSystem
             UpdateBeforeSimulation10_100();
         }
 
+        /// <summary>
+        /// True when the cluster coordinator has seen IdleScansBeforeBackoff or more
+        /// consecutive empty scans AND this BaR is not holding any active state
+        /// (no scan targets, no transport in flight, no buffered inventory). Used by
+        /// UpdateBeforeSimulation10_100 to stretch the per-BaR update cadence on
+        /// idle fleets, saving wrapper overhead (Settings.TrySave, TryTransmitState,
+        /// periodic checks) without delaying the response when work appears.
+        /// Mirrors the guards in Operations.isIdleNoWork — match that set so the
+        /// stretch only kicks in when ServerTryWeldingGrindingCollecting would
+        /// have taken its idle fast path anyway.
+        /// </summary>
+        private bool IsIdleForCadenceStretch()
+        {
+            var cluster = AssignedCluster;
+            if (cluster == null) return false;
+            var coordinator = cluster.Coordinator;
+            var idleCount = coordinator != null ? coordinator._consecutiveEmptyScans : 0;
+            if (idleCount < IdleScansBeforeBackoff) return false;
+
+            if (State.PossibleWeldTargets.CurrentCount > 0
+                || State.PossibleGrindTargets.CurrentCount > 0
+                || State.PossibleFloatingTargets.CurrentCount > 0
+                || State.CurrentTransportStartTime > TimeSpan.Zero
+                || _TransportInventory.CurrentVolume > 0
+                || State.InventoryFull)
+            {
+                return false;
+            }
+            return true;
+        }
+
         private void UpdateBeforeSimulation10_100()
         {
             var profilerTs = MethodProfiler.Start();
@@ -83,6 +122,54 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (MyAPIGateway.Session.IsServer)
                 {
+                    // BUG-138: disabled / non-functional BaR fast path. The engine fires
+                    // UpdateBeforeSimulation10 for every game-logic component (every BaR
+                    // placed in the world), regardless of state. Without this gate every
+                    // disabled BaR still paid for the stagger calculation, Settings.TrySave,
+                    // and TryTransmitState every 10 frames — 60 BaRs (1 enabled, 59 disabled)
+                    // observed at 360 calls/sec to TryTransmitState alone, all skip-path.
+                    // BUG-151: also reset all work-state flags on the disable-transition tick.
+                    // Pre-fix only Ready was reset, so State.Welding / State.Grinding /
+                    // State.Transporting kept their last "true" values — clients received
+                    // Ready=false but the work flags stayed true, so welding/grinding
+                    // animations and sounds kept playing on clients after the BaR was disabled.
+                    // Each setter is no-op if value is already false; only changed setters
+                    // mark Changed=true. The TryTransmitState below will then propagate the
+                    // reset values (BUG-150 fingerprint will differ → real send).
+                    if (!_Welder.Enabled || !_Welder.IsFunctional)
+                    {
+                        if (State.Ready)
+                        {
+                            State.Ready = false;
+                            State.Welding = false;
+                            State.NeedWelding = false;
+                            State.Grinding = false;
+                            State.NeedGrinding = false;
+                            State.NeedCollecting = false;
+                            State.Transporting = false;
+                            State.CurrentWeldingBlock = null;
+                            State.CurrentGrindingBlock = null;
+                            State.CurrentTransportTarget = null;
+                            State.CurrentTransportStartTime = TimeSpan.Zero;
+                            State.CurrentTransportTime = TimeSpan.Zero;
+                            // BUG-152: bypass ALL transmit gates for the disable transition.
+                            // The interval gate (4-6s), fingerprint check, and BUG-153
+                            // per-cluster budget would each potentially silently skip the
+                            // send, leaving clients believing the BaR is still welding —
+                            // animations/sounds keep playing. After this transition tick
+                            // the BaR enters the disabled fast path next tick (State.Ready
+                            // is now false, so the if-block above is skipped) and never
+                            // retries the send. Send directly; this is a safety-critical
+                            // transition, not subject to throttling.
+                            State.ForceFullTransmit();
+                            NetworkMessagingHandler.MsgBlockStateSend(0, this);
+                            _UpdateStateTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
+                            _UpdateStateTransmitInterval = 0;
+                            _transmitBackoffMultiplier = 1;
+                        }
+                    }
+                    else
+                    {
                     CreativeModeActive = MyAPIGateway.Session.CreativeMode;
 
                     // BUG-130: per-BaR CleanupFriendlyDamage retired. Shared owner-keyed map
@@ -122,8 +209,21 @@ namespace SKONanobotBuildAndRepairSystem
                         effectiveGroups = Math.Min(modWideStagger, effectiveGroups + simPenalty);
                     }
 
+                    // FEAT-AI: when the cluster is in idle backoff and this BaR has no
+                    // active state (no targets, no transport, empty inventory), stretch
+                    // the cadence so the wrapper itself fires less often. Reactive — the
+                    // moment the next scan finds targets, _consecutiveEmptyScans resets
+                    // and the multiplier drops on the very next tick. Worst-case latency
+                    // when targets reappear: one stretched cycle (≤ ~7s at default WorkSpeed=1).
+                    var idleStretched = false;
+                    if (effectiveGroups > 0 && IsIdleForCadenceStretch())
+                    {
+                        effectiveGroups *= IdleCadenceMultiplier;
+                        idleStretched = true;
+                    }
+
                     var isMyTurn = _staggerSlot < 0 || effectiveGroups <= 1 || (cycle % effectiveGroups) == (_staggerSlot % effectiveGroups);
-                    throttleReason = isMyTurn ? "fired" : "stagger";
+                    throttleReason = isMyTurn ? "fired" : (idleStretched ? "idleStretch" : "stagger");
 
                     // When sim-speed override is active, simulate the reduced tick rate.
                     // Real low sim-speed naturally halves ticks; the override must replicate that.
@@ -184,6 +284,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (tsSettingsMark != 0L) tsSettingsSave = Stopwatch.GetTimestamp() - tsSettingsMark;
 
                     TryTransmitState();
+                    } // BUG-138: close the disabled-fast-path else
                 }
                 else
                 {
@@ -200,6 +301,18 @@ namespace SKONanobotBuildAndRepairSystem
                     _UpdateSettingsTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
                     NetworkMessagingHandler.MsgBlockSettingsSend(0, this);
                     if (tsMsgMark != 0L) tsMsgSend = Stopwatch.GetTimestamp() - tsMsgMark;
+
+                    // Settings just mutated locally (terminal toggle, scripting API, etc.) and we
+                    // broadcast to clients. On a server-with-player host the broadcast doesn't
+                    // echo back, so the network-receive path's SettingsChanged() never fires for
+                    // us — and TriggerImmediateRescan never gets called, leaving the BaR working
+                    // the OLD sorted target list until the next scheduled scan (up to
+                    // TargetsUpdateInterval = 10 s). Calling SettingsChanged() here closes the
+                    // gap so a near/far toggle takes effect within 1-2 s.
+                    if (MyAPIGateway.Session.IsServer)
+                    {
+                        SettingsChanged();
+                    }
                 }
 
                 if (_UpdateCustomInfoNeeded) UpdateCustomInfo(false);

@@ -559,11 +559,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             s.GrindBudgetMax = Mod.GetEffectiveMaxGrindsPerTick();
             s.GrindBudgetPeak = Mod.GrindBudgetPeakUsed;
             Mod.ResetGrindBudgetStats();
+            s.WeldBudgetMax = Mod.GetEffectiveMaxWeldsPerTick();
+            s.WeldBudgetPeak = Mod.WeldBudgetPeakUsed;
+            Mod.ResetWeldBudgetStats();
             s.SimSpeed = Mod.GetEffectiveSimSpeed();
             s.BgTasksEnqueued = Mod.BackgroundTasksEnqueued;
             s.BgTasksPeakRunning = Mod.BackgroundPeakRunning;
             Mod.ResetBackgroundTaskStats();
             s.BlockAssignments = BlockSystemAssigningHandler.AssignmentCount;
+            s.BlockFailCooldowns = BlockFailureCooldownHandler.CooldownCount;
             s.MaxSysPerGrid = Mod.Settings.MaxSystemsPerTargetGrid;
 
             s.SafeZoneCount = SafeZoneHandler.Zones.Count;
@@ -753,6 +757,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     grindSaturated ? "<color=255,180,100>" : "<color=200,255,200>",
                     s.GrindBudgetPeak, s.GrindBudgetMax,
                     grindSaturated ? "  <color=255,180,100>CAPPED" : ""));
+            var weldSaturated = s.WeldBudgetPeak >= s.WeldBudgetMax;
+            AddRow("<color=white>Weld Budget",
+                string.Format("{0}{1}<color=white> / {2} per tick{3}",
+                    weldSaturated ? "<color=255,180,100>" : "<color=200,255,200>",
+                    s.WeldBudgetPeak, s.WeldBudgetMax,
+                    weldSaturated ? "  <color=255,180,100>CAPPED" : ""));
             AddRow("<color=white>Sim Speed", string.Format("{0}{1:0.00}", simColor, s.SimSpeed));
             AddRow("<color=white>Bg Tasks",
                 string.Format("<color=200,255,200>{0}<color=white> enq  <color=200,255,200>{1}<color=white> peak",
@@ -764,6 +774,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             AddSpacer();
             AddRow("<color=130,180,230>--- ASSIGNMENTS ---", "<color=130,180,230>---");
             AddRow("<color=white>Block Assigns", string.Format("<color=200,255,200>{0}", s.BlockAssignments));
+            AddRow("<color=white>Fail Cooldowns", string.Format("<color=200,255,200>{0}", s.BlockFailCooldowns));
             if (s.MaxSysPerGrid > 0)
                 AddRow("<color=white>Max Sys/Grid", string.Format("<color=200,255,200>{0}", s.MaxSysPerGrid));
 

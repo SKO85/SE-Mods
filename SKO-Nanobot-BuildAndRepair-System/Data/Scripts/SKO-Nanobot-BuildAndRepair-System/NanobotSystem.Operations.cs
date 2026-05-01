@@ -374,6 +374,11 @@ namespace SKONanobotBuildAndRepairSystem
         /// Compares a lightweight fingerprint of key state fields against last transmit.
         /// When unchanged, progressively extends the interval (1-2s → 2-4s → 4-8s).
         /// Resets to base interval on any visible state change.
+        /// BUG-150: when the fingerprint hasn't changed since last sent, SKIP the transmit
+        /// entirely (not just stretch the next interval). The pre-fix code still sent the
+        /// payload — and the engine still paid the async serialize / network-queue cost
+        /// (which was the hidden lag source identified during the server profile session).
+        /// Now: fingerprint match = skip + ResetChanged + extend backoff.
         /// </summary>
         private void TryTransmitState()
         {
@@ -402,11 +407,30 @@ namespace SKONanobotBuildAndRepairSystem
 
             var fingerprint = ComputeStateFingerprint();
             var fingerprintChanged = fingerprint != _lastTransmittedFingerprint;
-            if (fingerprintChanged)
+
+            // BUG-150: nothing visibly changed since last transmit — skip the send,
+            // reset Changed so we don't re-evaluate every tick, and extend backoff so
+            // the next interval check is longer too. Saves the engine async network cost.
+            if (!fingerprintChanged)
             {
-                _transmitBackoffMultiplier = 1;
-                _lastTransmittedFingerprint = fingerprint;
+                State.ResetChanged();
+                _UpdateStateTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
+                var baseIntervalSkip = _RandomDelay.Next(TransmitStateMinIntervalSeconds, TransmitStateMaxIntervalSeconds + 1);
+                _UpdateStateTransmitInterval = baseIntervalSkip * _transmitBackoffMultiplier;
+                _transmitBackoffMultiplier = Math.Min(_transmitBackoffMultiplier * 2, 4);
+                Mod.ReportSyncSkipped();
+                if (profilerTs != 0L)
+                {
+                    var _backoffSkip = _transmitBackoffMultiplier;
+                    MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
+                        string.Format("entityId={0};action=skip;reason=fpUnchanged;backoff={1}", _Welder.EntityId, _backoffSkip));
+                }
+                return;
             }
+
+            // Fingerprint changed → real send.
+            _transmitBackoffMultiplier = 1;
+            _lastTransmittedFingerprint = fingerprint;
 
             _UpdateStateTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
             var baseInterval = _RandomDelay.Next(TransmitStateMinIntervalSeconds, TransmitStateMaxIntervalSeconds + 1);
@@ -420,19 +444,26 @@ namespace SKONanobotBuildAndRepairSystem
             if (profilerTs != 0L)
             {
                 MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
-                    string.Format("entityId={0};action=send;fpChanged={1};backoff={2};excluded={3}",
-                        _Welder.EntityId, fingerprintChanged, _transmitBackoffMultiplier, excludedBefore));
+                    string.Format("entityId={0};action=send;fpChanged=True;backoff={1};excluded={2}",
+                        _Welder.EntityId, _transmitBackoffMultiplier, excludedBefore));
             }
         }
 
         /// <summary>
         /// Lightweight hash of key visible state fields for transmit backoff comparison.
-        /// Captures working state + target counts — enough to detect meaningful changes
-        /// without comparing full serialized payloads.
+        /// Captures working state + target list contents — enough to detect any meaningful
+        /// change without comparing full serialized payloads.
+        /// BUG-150: now uses list CurrentHash instead of CurrentCount. The hash captures
+        /// content changes (e.g. same count of weld targets but different blocks), so
+        /// fingerprint match is a reliable "nothing visible changed" signal that can
+        /// safely skip the transmit. Pre-fix this used Count, which would miss content
+        /// changes — same fingerprint could mean different list members, so skipping
+        /// would have been unsafe.
         /// </summary>
-        private int ComputeStateFingerprint()
+        private long ComputeStateFingerprint()
         {
-            var hash = 17;
+            // Mix bool flags into the high bits, list hashes into the low bits.
+            long hash = 17;
             hash = hash * 31 + (State.Ready ? 1 : 0);
             hash = hash * 31 + (State.Welding ? 1 : 0);
             hash = hash * 31 + (State.NeedWelding ? 1 : 0);
@@ -442,9 +473,21 @@ namespace SKONanobotBuildAndRepairSystem
             hash = hash * 31 + (State.Transporting ? 1 : 0);
             hash = hash * 31 + (State.InventoryFull ? 1 : 0);
             hash = hash * 31 + (State.LimitsExceeded ? 1 : 0);
-            hash = hash * 31 + State.PossibleWeldTargets.CurrentCount;
-            hash = hash * 31 + State.PossibleGrindTargets.CurrentCount;
-            hash = hash * 31 + State.PossibleFloatingTargets.CurrentCount;
+            hash = hash * 31 + State.PossibleWeldTargets.CurrentHash;
+            hash = hash * 31 + State.PossibleGrindTargets.CurrentHash;
+            hash = hash * 31 + State.PossibleFloatingTargets.CurrentHash;
+            hash = hash * 31 + State.MissingComponents.CurrentHash;
+            // BUG-155: include CurrentTransportTarget so block-to-block transitions during
+            // continuous welding/grinding trigger a transmit. Quantized to integer metres so
+            // sub-block jitter doesn't churn the hash. Without this, the beam/particle
+            // endpoint on clients sticks on the previous block until some other field flips.
+            if (State.CurrentTransportTarget.HasValue)
+            {
+                var t = State.CurrentTransportTarget.Value;
+                hash = hash * 31 + (long)t.X;
+                hash = hash * 31 + (long)t.Y;
+                hash = hash * 31 + (long)t.Z;
+            }
             return hash;
         }
     }

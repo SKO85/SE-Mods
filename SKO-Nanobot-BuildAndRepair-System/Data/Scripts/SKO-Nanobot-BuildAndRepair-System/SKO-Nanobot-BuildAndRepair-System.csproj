@@ -121,6 +121,7 @@
     <Compile Include="Cluster\ScanCluster.cs" />
     <Compile Include="Cluster\ScanClusterCoordinator.cs" />
     <Compile Include="Cluster\ScanClusterResult.cs" />
+    <Compile Include="Handlers\BlockFailureCooldownHandler.cs" />
     <Compile Include="Handlers\BlockSystemAssigningHandler.cs" />
     <Compile Include="Handlers\GridSaturationHandler.cs" />
     <Compile Include="Handlers\HudHandler.cs" />
