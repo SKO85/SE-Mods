@@ -1,6 +1,6 @@
 # BUG-110: Pool per-cluster-scan collections to reduce GC pressure on main thread
 
-## Status: Fixed (initial pass — collection pooling)
+## Status: Fixed
 ## Severity: Medium
 ## Version: v2.5.4
 ## Found In: `NanobotSystem.cs`, `NanobotSystem.Scanning.cs`

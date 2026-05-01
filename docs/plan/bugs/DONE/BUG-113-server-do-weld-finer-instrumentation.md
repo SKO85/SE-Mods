@@ -1,6 +1,6 @@
 # BUG-113: Add finer sub-timers to ServerDoWeld
 
-## Status: Fixed (diagnostic complete — proj.Build confirmed as 99% of every spike)
+## Status: Fixed
 ## Severity: Low (diagnostic)
 ## Version: v2.5.4
 ## Found In: `NanobotSystem.Welding.cs`

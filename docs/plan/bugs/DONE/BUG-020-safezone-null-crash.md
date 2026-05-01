@@ -1,7 +1,7 @@
 # BUG-020: SafeZoneHandler null reference crash on safeZoneBlock lookup
 ## Severity: High
 ## Version: v2.5.0
-## Status: Done
+## Status: Fixed
 
 ## File
 `Handlers/SafeZoneHandler.cs:446-449`

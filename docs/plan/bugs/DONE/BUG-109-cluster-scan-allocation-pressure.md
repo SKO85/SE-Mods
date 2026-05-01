@@ -1,6 +1,6 @@
 # BUG-109: Cluster scan allocation pressure causing recurring 5-7s GC spikes on main thread
 
-## Status: Fixed (audit complete; pooling shipped as BUG-110, struct conversion as BUG-111)
+## Status: Fixed
 ## Severity: Medium (perf — recurring spikes felt as 21→70% CPU jumps every ~5s during grinding)
 ## Version: v2.5.4
 ## Found In: `NanobotSystem.Scanning.cs`

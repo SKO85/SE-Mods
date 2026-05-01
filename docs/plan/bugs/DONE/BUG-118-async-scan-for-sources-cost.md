@@ -1,6 +1,6 @@
 # BUG-118: AsyncScanForSources avg 107 ms / max 303 ms on large-ship worlds
 
-## Status: Fixed (cascading from BUG-119)
+## Status: Fixed
 ## Severity: Medium (background, infrequent firing but very expensive per call)
 ## Version: v2.5.4
 ## Found In: `NanobotSystem.Scanning.cs` `AsyncScanForSources`, `Helpers/InventoryHelper.cs` `AddIfConnectedToInventory`

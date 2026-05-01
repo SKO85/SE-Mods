@@ -1,6 +1,6 @@
 # BUG-126: Welder-full state triggers constant CPU spikes — `PullComponents` walks all sources, `ServerEmptyTransportInventory` iterates transport items, both useless when welder cannot receive more
 
-## Status: Open
+## Status: Fixed
 ## Severity: High (constant main-thread spikes when welder inventories are full, observed in 3-large-ship 58-BaR scenario)
 ## Version: v2.5.5
 ## Found In: `NanobotSystem.Inventory.cs:280-339` (`PullComponents`), `NanobotSystem.Inventory.cs:181-200` (`ServerEmptyTransportInventory` transport-drain loop)

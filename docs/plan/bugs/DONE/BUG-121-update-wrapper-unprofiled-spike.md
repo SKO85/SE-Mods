@@ -1,6 +1,6 @@
 # BUG-121: UpdateBeforeSimulation10_100 wrapper has 59 ms / 49 ms spikes in unprofiled code paths
 
-## Status: Done (diagnostic complete)
+## Status: Fixed
 ## Severity: High (largest single main-thread spike at filing)
 ## Version: v2.5.5
 ## Found In: `NanobotSystem.Update.cs` `UpdateBeforeSimulation10_100`

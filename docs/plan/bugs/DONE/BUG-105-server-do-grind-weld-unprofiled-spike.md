@@ -1,6 +1,6 @@
 # BUG-105: ServerDoGrind / ServerDoWeld 19 ms spike has unprofiled cost — diagnostic instrumentation added
 
-## Status: Fixed (diagnosis complete)
+## Status: Fixed
 ## Severity: Medium (perf diagnosis)
 ## Version: v2.5.4
 ## Found In: `NanobotSystem.Grinding.cs`, `NanobotSystem.Welding.cs`

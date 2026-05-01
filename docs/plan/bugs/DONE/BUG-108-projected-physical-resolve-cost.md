@@ -1,6 +1,6 @@
 # BUG-108: Projected→physical block resolution can spike to 2.5 ms — diagnostic split added
 
-## Status: Fixed (diagnostic complete; no further action unless future data warrants)
+## Status: Fixed
 ## Severity: Low (perf diagnosis)
 ## Version: v2.5.4
 ## Found In: `NanobotSystem.Welding.cs`

@@ -1,7 +1,7 @@
 # BUG-026: SafeZoneHandler LINQ allocations in GetSafeZonesInRange
 ## Severity: Medium
 ## Version: v2.5.0
-## Status: DONE
+## Status: Fixed
 
 ## File
 `Handlers/SafeZoneHandler.cs:163-181`

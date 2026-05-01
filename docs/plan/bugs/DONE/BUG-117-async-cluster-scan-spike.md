@@ -1,6 +1,6 @@
 # BUG-117: AsyncClusterScan max 428 ms / avg 84 ms on large-ship worlds
 
-## Status: Fixed (Layer A delivered; Layers B/C deferred — not justified by residual cost)
+## Status: Fixed
 ## Severity: Medium (background, not main-thread, but contributes to scan latency)
 ## Version: v2.5.4
 ## Found In: `NanobotSystem.Scanning.cs` `AsyncClusterScan`, `AsyncAddBlocksOfGrid`; `Utils/Utils.cs` `GetUserRelationToOwner`

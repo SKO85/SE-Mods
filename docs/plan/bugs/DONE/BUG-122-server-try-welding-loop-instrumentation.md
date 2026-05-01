@@ -1,6 +1,6 @@
 # BUG-122: ServerTryWelding loop body has ~15 ms unaccounted cost; ServerFindMissingComponents projected-block 9-10 ms spike has no internal sub-timing
 
-## Status: Open
+## Status: Fixed
 ## Severity: High (now the largest visible main-thread spike, post-BUG-121)
 ## Version: v2.5.5
 ## Found In: `NanobotSystem.Welding.cs` `ServerTryWelding`, `NanobotSystem.Inventory.cs` `ServerFindMissingComponents`

@@ -1,6 +1,6 @@
 # BUG-129: `PullComponents` walks all 94 sources via `FindItem` per missing component — cache "source has component" to skip sources known not to contain it
 
-## Status: Open
+## Status: Fixed
 ## Severity: High (`pullPickMs=6.5 ms` on `LargeRefinery` projected, dominant per-tick spike on large projection welding)
 ## Version: v2.5.5
 ## Found In: `NanobotSystem.Inventory.cs:280-339` (`PullComponents` source-walk loop)

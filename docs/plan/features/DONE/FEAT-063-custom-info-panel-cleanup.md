@@ -1,5 +1,5 @@
 # FEAT-063: Clean up custom info panel — remove redundant debug info
-## Status: Fixed
+## Status: Done
 ## Priority: Low
 ## Version: v2.5.0
 ## Description
