@@ -120,7 +120,7 @@ namespace SKONanobotBuildAndRepairSystem.Chat
             // On a local game session the client IS the server, so we only show one line.
             if (args[0] == "version")
             {
-                console.ShowMessage("Nanobars", string.Format("BaR Mod Client: v{0} (build {1})", Constants.ModVersion, Constants.BuildId));
+                console.ShowMessage("Nanobars", string.Format("Client: v{0} (build {1})", Constants.ModVersion, Constants.BuildId));
                 if (!MyAPIGateway.Session.IsServer)
                 {
                     NetworkMessagingHandler.MsgModCommandSend("version");
