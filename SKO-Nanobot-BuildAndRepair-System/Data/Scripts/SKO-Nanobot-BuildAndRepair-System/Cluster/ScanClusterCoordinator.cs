@@ -117,6 +117,33 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                     }
                     clusterCount++;
                     clusteredSystems += cluster.Members.Count;
+
+                    // BUG-260501.1: propagate any pending _rescanForced from non-coordinator
+                    // members to the (possibly new) coordinator. A ClusterRelevantFlags toggle
+                    // (e.g. GrindNearFirst) reshuffles the toggling BaR into a different cluster
+                    // whose coordinator never received TriggerImmediateRescan — without this
+                    // hop, the saturated-skip gate suppresses the scan for up to 60s and the
+                    // cluster keeps serving the pre-toggle sort order. Clear the member flag
+                    // on consumption so we don't re-trigger on subsequent rebuilds.
+                    var coord = cluster.Coordinator;
+                    if (coord != null)
+                    {
+                        var hasPendingTrigger = false;
+                        for (int i = 0; i < cluster.Members.Count; i++)
+                        {
+                            var m = cluster.Members[i];
+                            if (m == coord) continue;
+                            if (m._rescanForced)
+                            {
+                                hasPendingTrigger = true;
+                                m._rescanForced = false;
+                            }
+                        }
+                        if (hasPendingTrigger)
+                        {
+                            coord.InheritForcedRescan();
+                        }
+                    }
                 }
 
                 // Clean up empty clusters

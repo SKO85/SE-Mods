@@ -93,6 +93,24 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
+        /// <summary>
+        /// BUG-260501.1: called from ScanClusterCoordinator.RebuildClusters when a
+        /// cluster reshuffle moves a BaR carrying a pending _rescanForced flag into
+        /// a cluster whose coordinator never received TriggerImmediateRescan. Without
+        /// this surfacing step, the new coordinator's saturated-skip gate suppresses
+        /// the rescan until the target list drops below saturation or
+        /// MaxScanSkipDuration (60s) elapses — leaving the cluster grinding the
+        /// pre-toggle sort order. Always treats the inherited trigger as bypassDebounce
+        /// (zeroes _lastFullScanTime) since the only loss of bypass-info would have
+        /// been on the *old* coordinator, which is no longer relevant.
+        /// </summary>
+        internal void InheritForcedRescan()
+        {
+            _rescanForced = true;
+            _lastFullScanTime = TimeSpan.Zero;
+            _LastTargetsUpdate = TimeSpan.Zero;
+        }
+
         public void UpdateSourcesAndTargetsTimer()
         {
             // Block is off — skip scanning. Reset initial-scan flag so a scan
