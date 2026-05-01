@@ -86,8 +86,8 @@ There is no server-side setting to lock or override the weld mode — it is alwa
 
 | Setting             | Default | Description                                                                                     |
 | ------------------- | ------- | ----------------------------------------------------------------------------------------------- |
-| `AllowBuildDefault` | `true`  | Default state of the Build (weld projected blocks) option in the terminal.                      |
-| `AllowBuildFixed`   | `false` | Set to `true` to lock the Build option server-wide. Players cannot change it from the terminal. |
+| `AllowBuildDefault` | `true`  | Default state of the **Build Projections** option in the terminal (the toggle that controls welding of projected blocks). |
+| `AllowBuildFixed`   | `false` | Set to `true` to lock the **Build Projections** option server-wide. Players cannot change it from the terminal.            |
 
 ---
 
@@ -188,4 +188,4 @@ These `Fixed` flags lock specific terminal options server-wide. When set to `tru
 | `AreaOffsetFixed`      | `false` | Work Area offset controls |
 | `PriorityFixed`        | `false` | Weld/grind priority list  |
 | `CollectPriorityFixed` | `false` | Collect priority list     |
-| `ScriptControlFixed`   | `false` | Script control option     |
+| `ScriptControllFixed`  | `false` | Script control option (note: the XML element name has a double `l` — `ScriptControll**Fixed**` — for backwards compatibility with the original mod) |

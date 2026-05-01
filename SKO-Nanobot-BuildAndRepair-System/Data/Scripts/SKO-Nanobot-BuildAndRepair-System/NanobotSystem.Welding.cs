@@ -39,14 +39,6 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByAssign = 0;
             var skippedByFailCooldown = 0;
             var componentFailures = 0;
-            // BUG-135: lastFailPriority/consecutiveAtPriority were used only by the in-loop
-            // failure-priority tracker that lived alongside the welding work. With that work
-            // moved outside the lock, the tracker no longer accumulates within a single call
-            // (compChecks=1 in profile data, so it never fired anyway). starvedPriorityBits
-            // and starvedSkipped are kept because the cheap pre-filter at line 176 still reads
-            // them; they're inert under the new control flow but harmless.
-            var starvedPriorityBits = 0L;
-            var starvedSkipped = 0;
             var totalComponentChecks = 0;
             var lookingForNextChecked = 0;
             var lockOnFound = false;
@@ -194,25 +186,12 @@ namespace SKONanobotBuildAndRepairSystem
 
                     var isIgnored = targetData.Ignore;
 
-                    // BUG-116: Cheap pre-filter for starved priorities BEFORE Weldable(). Profile session
-                    // 20260429013527 showed 100+ Weldable() calls per spike tick (each ~0.1ms engine call)
-                    // when components are missing, with 70-100% of those getting starved-skipped right
-                    // afterwards. Moving the priority lookup (cheap dict read) ahead of the engine call
-                    // skips the expensive CanBuild check for already-known-starved blocks, dropping the
-                    // 30-45ms spikes to single-digit ms.
-                    if (!isIgnored && !isLockOnBlock && !lookingForNext && starvedPriorityBits != 0)
-                    {
-                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                        var earlyPriority = BlockWeldPriority.GetPriority(targetData.Block);
-                        if (_opTs != 0L) tsPriority += Stopwatch.GetTimestamp() - _opTs;
-                        if (earlyPriority > 0 && earlyPriority < 64 && (starvedPriorityBits & (1L << earlyPriority)) != 0)
-                        {
-                            needWelding = true;
-                            starvedSkipped++;
-                            continue;
-                        }
-                    }
-
+                    // BUG-116 (CLN-2): the BUG-116 starved-priority pre-filter relied on a
+                    // bitset (`starvedPriorityBits`) that the in-loop fail handler used to
+                    // populate. After BUG-135 moved the welding work outside the lock, the
+                    // bitset was never written to within a single call, so this gate (and its
+                    // post-Weldable counterpart) ran on a permanently-zero mask and was
+                    // unreachable. Removed both gates and the bookkeeping fields.
                     var isWeldable = !isIgnored && Weldable(targetData);
                     if (!isIgnored) checkedByWeldable++;
                     else skippedByIgnore++;
@@ -226,23 +205,6 @@ namespace SKONanobotBuildAndRepairSystem
 
                         if (!isLockOnBlock)
                         {
-                            // BUG-116: starved-priority skip kept here as a fallback for the case where
-                            // starvedPriorityBits gets set on the same tick AFTER this block was already
-                            // past the early pre-filter (race with the in-loop fail handler at the bottom).
-                            // First-time hit on a newly-starved priority still pays the Weldable cost once.
-                            if (!lookingForNext && starvedPriorityBits != 0)
-                            {
-                                _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                                var blockPriority = BlockWeldPriority.GetPriority(targetData.Block);
-                                if (_opTs != 0L) tsPriority += Stopwatch.GetTimestamp() - _opTs;
-                                if (blockPriority > 0 && blockPriority < 64 && (starvedPriorityBits & (1L << blockPriority)) != 0)
-                                {
-                                    needWelding = true;
-                                    starvedSkipped++;
-                                    continue;
-                                }
-                            }
-
                             if (Settings.CurrentPickedWeldingBlock == null)
                             {
                                 // BUG-164: use the effective (post-materialization) grid for the
@@ -283,12 +245,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 if (_opTs != 0L) tsGridLimit += Stopwatch.GetTimestamp() - _opTs;
                                 if (overLimit)
                                 {
-                                    if (Mod.Settings.AssignToSystemEnabled)
-                                    {
-                                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                                        targetData.Block.ReleaseFromSystem();
-                                        if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
-                                    }
+                                    ReleaseAssignmentIfEnabled(targetData.Block, profilerTs != 0L, ref tsAssignOps);
                                     State.CurrentWeldingBlock = null;
                                     lookingForNext = true;
                                     skippedByGridLimit++;
@@ -322,12 +279,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                     else
                     {
-                        if (Mod.Settings.AssignToSystemEnabled)
-                        {
-                            _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                            targetData.Block.ReleaseFromSystem();
-                            if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
-                        }
+                        ReleaseAssignmentIfEnabled(targetData.Block, profilerTs != 0L, ref tsAssignOps);
                         if (targetData.Ignore)
                         {
                             State.PossibleWeldTargets.ChangeHash();
@@ -345,12 +297,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // after projector update). Clear lock-on and re-iterate so this tick isn't wasted.
                 if (!lockOnRetry && State.CurrentWeldingBlock != null && !lockOnFound)
                 {
-                    if (Mod.Settings.AssignToSystemEnabled)
-                    {
-                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                        State.CurrentWeldingBlock.ReleaseFromSystem();
-                        if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
-                    }
+                    ReleaseAssignmentIfEnabled(State.CurrentWeldingBlock, profilerTs != 0L, ref tsAssignOps);
                     State.CurrentWeldingBlock = null;
                     // Reset all in-loop counters so the BUG-122 lock-acquire / in-lock
                     // instrumentation reports first-pass-only values; otherwise a retry
@@ -362,8 +309,6 @@ namespace SKONanobotBuildAndRepairSystem
                     skippedByFailCooldown = 0;
                     checkedByWeldable = 0;
                     componentFailures = 0;
-                    starvedPriorityBits = 0L;
-                    starvedSkipped = 0;
                     totalComponentChecks = 0;
                     lookingForNextChecked = 0;
                     lockOnRetry = true;
@@ -421,12 +366,7 @@ namespace SKONanobotBuildAndRepairSystem
                     // processed (welding=true). Failed projected builds (safe zone blocked)
                     // keep the assignment so other BaRs in the same tick don't cascade
                     // through the same block. The TTL will release it naturally.
-                    if (Mod.Settings.AssignToSystemEnabled && welding)
-                    {
-                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                        chosenTarget.Block.ReleaseFromSystem();
-                        if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
-                    }
+                    if (welding) ReleaseAssignmentIfEnabled(chosenTarget.Block, profilerTs != 0L, ref tsAssignOps);
                     State.PossibleWeldTargets.ChangeHash();
                     // BUG-163: when this BaR actually welded the block this tick (welding=true),
                     // surface its grid contribution to GridSystemCount so MaxSystemsPerTargetGrid
@@ -463,12 +403,7 @@ namespace SKONanobotBuildAndRepairSystem
                         State.CurrentWeldingBlock = null;
                     }
 
-                    if (Mod.Settings.AssignToSystemEnabled)
-                    {
-                        _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                        chosenTarget.Block.ReleaseFromSystem();
-                        if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
-                    }
+                    ReleaseAssignmentIfEnabled(chosenTarget.Block, profilerTs != 0L, ref tsAssignOps);
 
                     // FEAT-AI: parking the failed block in the global cooldown so other
                     // BaRs (and this BaR's next tick) skip it instead of re-claiming and
@@ -500,7 +435,6 @@ namespace SKONanobotBuildAndRepairSystem
                     var _skippedByFailCooldown = skippedByFailCooldown;
                     var _componentFailures = componentFailures;
                     var _lockOnLost = hadLockOn && !lockOnFound;
-                    var _starvedSkipped = starvedSkipped;
                     var _totalComponentChecks = totalComponentChecks;
                     var _lookingForNextChecked = lookingForNextChecked;
                     var _weldSkipped = weldSkipped;
@@ -512,12 +446,12 @@ namespace SKONanobotBuildAndRepairSystem
                     var _gridLimitMs = tsGridLimit * 1000.0 / tsFreq;
                     var _priorityMs = tsPriority * 1000.0 / tsFreq;
                     MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};skipFailCooldown={14};componentFails={15};starvedSkip={16};compChecks={17};nextCap={18};exhaustedSkip={19};saturatedGrids={20};lockAcquireMs={21:F3};inLockMs={22:F3};assignOpsMs={23:F3};gridLimitMs={24:F3};priorityMs={25:F3}",
+                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};skipFailCooldown={14};componentFails={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3};assignOpsMs={22:F3};gridLimitMs={23:F3};priorityMs={24:F3}",
                             _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
                             State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
                             _hadLockOn, _lockOnFound, _lockOnLost,
                             _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _skippedByFailCooldown, _componentFailures,
-                            _starvedSkipped, _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount,
+                            _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount,
                             _lockAcquireMs, _inLockMs, _assignOpsMs, _gridLimitMs, _priorityMs));
                 }
             }
@@ -537,7 +471,7 @@ namespace SKONanobotBuildAndRepairSystem
                     // The per-TargetBlockData Ignore flag is wiped each scan refresh, so without this
                     // persistent check the BaR re-locks the same broken block tick-after-tick and the
                     // NRE keeps appearing in the mod log every scan cycle.
-                    if (target != null && _BrokenProjBuildKeys.Count > 0 && _BrokenProjBuildKeys.Contains(GetBrokenBlockKey(target)))
+                    if (target != null && _BrokenProjBuildKeys.Contains(GetBrokenBlockKey(target)))
                     {
                         targetData.Ignore = true;
                         return false;
@@ -682,19 +616,14 @@ namespace SKONanobotBuildAndRepairSystem
                             // a not-yet-built block would null out the target and ignore it.
                             if (!Mod.TryClaimProjBuildSlot())
                             {
-                                if (profilerTs != 0L)
-                                {
-                                    var _findItemMs = tsFindItem * 1000.0 / Stopwatch.Frequency;
-                                    var _limitsMs = tsLimitsCheck * 1000.0 / Stopwatch.Frequency;
-                                    MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
-                                        string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};resolveMs={7:F3};stockpileMs={8:F3};mountMs={9:F3};deformMs={10:F3};findItemMs={11:F3};limitsMs={12:F3};canContinueMs={13:F3};integrityCheckMs={14:F3};assignMs={15:F3};weldAmount={16:F2};integrityRatio={17:F3};completed={18};distance={19:F1};earlyExit=projBuildSlot",
-                                            _Welder.EntityId,
-                                            targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
-                                            true, false, false, false,
-                                            0.0, 0.0, 0.0, 0.0, 0.0,
-                                            _findItemMs, _limitsMs, 0.0, 0.0, 0.0,
-                                            0f, 0f, false, targetData.Distance));
-                                }
+                                EmitServerDoWeldProfile(profilerTs,
+                                    targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
+                                    true, false, false, false,
+                                    0.0, 0.0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0,
+                                    tsFindItem * 1000.0 / Stopwatch.Frequency, tsLimitsCheck * 1000.0 / Stopwatch.Frequency, 0.0, 0.0, 0.0,
+                                    0f, 0f, false, targetData.Distance,
+                                    "projBuildSlot");
                                 return false;
                             }
 
@@ -756,20 +685,14 @@ namespace SKONanobotBuildAndRepairSystem
                                         projectorEntityId, projectorGridName,
                                         ex.Message);
                                 }
-                                if (profilerTs != 0L)
-                                {
-                                    var _findItemMs = tsFindItem * 1000.0 / Stopwatch.Frequency;
-                                    var _limitsMs = tsLimitsCheck * 1000.0 / Stopwatch.Frequency;
-                                    var _buildMs = tsBuild * 1000.0 / Stopwatch.Frequency;
-                                    MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
-                                        string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};resolveMs={7:F3};stockpileMs={8:F3};mountMs={9:F3};deformMs={10:F3};findItemMs={11:F3};limitsMs={12:F3};canContinueMs={13:F3};integrityCheckMs={14:F3};assignMs={15:F3};weldAmount={16:F2};integrityRatio={17:F3};completed={18};distance={19:F1};earlyExit=projBuildNRE",
-                                            _Welder.EntityId,
-                                            targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
-                                            true, false, false, false,
-                                            _buildMs, 0.0, 0.0, 0.0, 0.0,
-                                            _findItemMs, _limitsMs, 0.0, 0.0, 0.0,
-                                            0f, 0f, true, targetData.Distance));
-                                }
+                                EmitServerDoWeldProfile(profilerTs,
+                                    targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
+                                    true, false, false, false,
+                                    tsBuild * 1000.0 / Stopwatch.Frequency, 0.0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0,
+                                    tsFindItem * 1000.0 / Stopwatch.Frequency, tsLimitsCheck * 1000.0 / Stopwatch.Frequency, 0.0, 0.0, 0.0,
+                                    0f, 0f, true, targetData.Distance,
+                                    "projBuildNRE");
                                 return false;
                             }
                             tsBuild = Stopwatch.GetTimestamp() - tsBuild;
@@ -804,7 +727,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 // dictionary ops). Cheap individually but worth measuring under contention.
                                 var tsAssignMark = Stopwatch.GetTimestamp();
                                 // Release the projected block's assignment before switching to the physical block.
-                                if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
+                                ReleaseAssignmentIfEnabled(targetData.Block);
                                 targetData.Block = target;
                                 targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
                                 created = true;
@@ -929,44 +852,27 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             var result = welding || created;
-            if (profilerTs != 0L)
-            {
-                var _tsBuild = tsBuild;
-                var _tsResolve = tsResolve;
-                var _tsResolveCoord = tsResolveCoord;
-                var _tsResolveLookup = tsResolveLookup;
-                var _tsStockpile = tsStockpile;
-                var _tsMount = tsMount;
-                var _tsDeform = tsDeform;
-                var _tsFindItem = tsFindItem;
-                var _tsLimitsCheck = tsLimitsCheck;
-                var _tsCanContinue = tsCanContinue;
-                var _tsIntegrityCheck = tsIntegrityCheck;
-                var _tsAssign = tsAssign;
-                var _weldAmount = appliedWeldAmount;
-                var _integrityRatio = target != null && target.MaxIntegrity > 0f ? target.Integrity / target.MaxIntegrity : 0f;
-                var _completed = targetData.Ignore;
-                var _distance = targetData.Distance;
-                MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
-                    string.Format("entityId={0};block={1};projected={2};created={3};welding={4};result={5};buildMs={6:F3};resolveMs={7:F3};resolveCoordMs={8:F3};resolveLookupMs={9:F3};stockpileMs={10:F3};mountMs={11:F3};deformMs={12:F3};findItemMs={13:F3};limitsMs={14:F3};canContinueMs={15:F3};integrityCheckMs={16:F3};assignMs={17:F3};weldAmount={18:F2};integrityRatio={19:F3};completed={20};distance={21:F1}",
-                        _Welder.EntityId,
-                        targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
-                        (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
-                        created, welding, result,
-                        _tsBuild * 1000.0 / Stopwatch.Frequency,
-                        _tsResolve * 1000.0 / Stopwatch.Frequency,
-                        _tsResolveCoord * 1000.0 / Stopwatch.Frequency,
-                        _tsResolveLookup * 1000.0 / Stopwatch.Frequency,
-                        _tsStockpile * 1000.0 / Stopwatch.Frequency,
-                        _tsMount * 1000.0 / Stopwatch.Frequency,
-                        _tsDeform * 1000.0 / Stopwatch.Frequency,
-                        _tsFindItem * 1000.0 / Stopwatch.Frequency,
-                        _tsLimitsCheck * 1000.0 / Stopwatch.Frequency,
-                        _tsCanContinue * 1000.0 / Stopwatch.Frequency,
-                        _tsIntegrityCheck * 1000.0 / Stopwatch.Frequency,
-                        _tsAssign * 1000.0 / Stopwatch.Frequency,
-                        _weldAmount, _integrityRatio, _completed, _distance));
-            }
+            EmitServerDoWeldProfile(profilerTs,
+                targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
+                (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
+                created, welding, result,
+                tsBuild * 1000.0 / Stopwatch.Frequency,
+                tsResolve * 1000.0 / Stopwatch.Frequency,
+                tsResolveCoord * 1000.0 / Stopwatch.Frequency,
+                tsResolveLookup * 1000.0 / Stopwatch.Frequency,
+                tsStockpile * 1000.0 / Stopwatch.Frequency,
+                tsMount * 1000.0 / Stopwatch.Frequency,
+                tsDeform * 1000.0 / Stopwatch.Frequency,
+                tsFindItem * 1000.0 / Stopwatch.Frequency,
+                tsLimitsCheck * 1000.0 / Stopwatch.Frequency,
+                tsCanContinue * 1000.0 / Stopwatch.Frequency,
+                tsIntegrityCheck * 1000.0 / Stopwatch.Frequency,
+                tsAssign * 1000.0 / Stopwatch.Frequency,
+                appliedWeldAmount,
+                target != null && target.MaxIntegrity > 0f ? target.Integrity / target.MaxIntegrity : 0f,
+                targetData.Ignore,
+                targetData.Distance,
+                null);
             return result;
         }
 
@@ -1181,20 +1087,15 @@ namespace SKONanobotBuildAndRepairSystem
         // its own contribution without per-call profiler overhead.
         // ProfilerEnabled gate so Stopwatch.GetTimestamp calls are zero-cost when
         // profiling is off (mirrors the profilerTs!=0L pattern used elsewhere).
-        // BUG-148: TsCanTransfer kept as zero placeholder for log format back-compat
-        // after CanTransferItemTo pre-flight call was removed. CanTransferCalls still
-        // increments to match the count of attempted transfers.
         private struct PullSourceStats
         {
             public bool ProfilerEnabled;   // gate sub-timers when profiling is off
             public int SourcesEmpty;       // ItemCount==0 short-circuits
             public int ItemsExamined;      // total items walked across all visited sources
-            public int CanTransferCalls;   // counter retained for back-compat (was CanTransferItemTo invocations)
             public int MaxItemsAddCalls;   // MaxItemsAddable invocations
             public int TransferAttempts;   // TransferItemFrom invocations
             public int TransferSucceeded;  // TransferItemFrom returns true
             public long TsGetItems;        // sum of srcInventory.GetItems engine ticks
-            public long TsCanTransfer;     // BUG-148: now always 0; kept for log format back-compat
             public long TsMaxItemsAdd;     // sum of MaxItemsAddable engine ticks
             public long TsTransfer;        // sum of TransferItemFrom engine ticks
             public long MaxSourceTicks;    // longest single TryPullFromSource call
@@ -1220,7 +1121,6 @@ namespace SKONanobotBuildAndRepairSystem
 
             var stats = new PullSourceStats();
             stats.ProfilerEnabled = profilerTs != 0L;  // BUG-141 fix: gate sub-timers
-            stats.TsCanTransfer = 0L;  // BUG-148: explicit assignment to silence CS0649; field kept for log back-compat
             var sourcesAvailable = 0;
             var sourcesVisited = 0;
             var lastSuccessfulHit = false;
@@ -1332,7 +1232,6 @@ namespace SKONanobotBuildAndRepairSystem
             var tsFreq = Stopwatch.Frequency;
             var _lockWaitMs = lockWaitTicks * 1000.0 / tsFreq;
             var _getItemsMs = stats.TsGetItems * 1000.0 / tsFreq;
-            var _canTransferMs = stats.TsCanTransfer * 1000.0 / tsFreq;
             var _maxItemsAddMs = stats.TsMaxItemsAdd * 1000.0 / tsFreq;
             var _transferMs = stats.TsTransfer * 1000.0 / tsFreq;
             var _maxSourceMs = stats.MaxSourceTicks * 1000.0 / tsFreq;
@@ -1341,16 +1240,15 @@ namespace SKONanobotBuildAndRepairSystem
             var _sourcesVisited = sourcesVisited;
             var _sourcesEmpty = stats.SourcesEmpty;
             var _itemsExamined = stats.ItemsExamined;
-            var _canTransferCalls = stats.CanTransferCalls;
             var _maxItemsAddCalls = stats.MaxItemsAddCalls;
             var _transferAttempts = stats.TransferAttempts;
             var _transferSucceeded = stats.TransferSucceeded;
             var _lastSuccessfulHit = lastSuccessfulHit;
             var _exitReason = exitReason;
             MethodProfiler.StopAndLog("PullFromSourcesOnePass", profilerTs, () =>
-                string.Format("entityId={0};available={1};visited={2};empty={3};itemsExamined={4};canTransferCalls={5};maxItemsAddCalls={6};transferAttempts={7};transferSucceeded={8};lastSuccessfulHit={9};getItemsMs={10:F3};canTransferMs={11:F3};maxItemsAddMs={12:F3};transferMs={13:F3};maxSourceMs={14:F3};lockWaitMs={15:F3};exit={16}",
-                    _entityId, _sourcesAvailable, _sourcesVisited, _sourcesEmpty, _itemsExamined, _canTransferCalls, _maxItemsAddCalls, _transferAttempts, _transferSucceeded, _lastSuccessfulHit,
-                    _getItemsMs, _canTransferMs, _maxItemsAddMs, _transferMs, _maxSourceMs, _lockWaitMs, _exitReason));
+                string.Format("entityId={0};available={1};visited={2};empty={3};itemsExamined={4};maxItemsAddCalls={5};transferAttempts={6};transferSucceeded={7};lastSuccessfulHit={8};getItemsMs={9:F3};maxItemsAddMs={10:F3};transferMs={11:F3};maxSourceMs={12:F3};lockWaitMs={13:F3};exit={14}",
+                    _entityId, _sourcesAvailable, _sourcesVisited, _sourcesEmpty, _itemsExamined, _maxItemsAddCalls, _transferAttempts, _transferSucceeded, _lastSuccessfulHit,
+                    _getItemsMs, _maxItemsAddMs, _transferMs, _maxSourceMs, _lockWaitMs, _exitReason));
         }
 
         /// <summary>
@@ -1410,7 +1308,6 @@ namespace SKONanobotBuildAndRepairSystem
                 // TransferItemFrom will both fire and TransferItemFrom returns false →
                 // we lose two cheap engine calls per blocked component. Massive net win
                 // when sorters are absent or rare.
-                stats.CanTransferCalls++;  // kept for stats compatibility (always 0 cost now)
 
                 var maxByVolume = (int)Math.Floor(remainingVolume / volume);
                 if (maxByVolume <= 0) continue;
@@ -1501,19 +1398,6 @@ namespace SKONanobotBuildAndRepairSystem
             return picked;
         }
 
-        /// <summary>
-        /// Compares two slim blocks by identity rather than reference equality.
-        /// Background scans create new IMySlimBlock references for the same physical block;
-        /// ReferenceEquals short-circuits the common case, grid+position handles the rest.
-        /// </summary>
-        private static bool IsSameBlock(IMySlimBlock a, IMySlimBlock b)
-        {
-            if (ReferenceEquals(a, b)) return true;
-            if (a == null || b == null) return false;
-            return a.CubeGrid != null && b.CubeGrid != null
-                && a.CubeGrid.EntityId == b.CubeGrid.EntityId && a.Position == b.Position;
-        }
-
         private void AddToMissingComponents(MyDefinitionId componentId, int neededAmount)
         {
             int missingAmount;
@@ -1525,6 +1409,42 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 State.MissingComponents.Add(componentId, neededAmount);
             }
+        }
+
+        // REF-5: single source of truth for the ServerDoWeld profile emit format. Pre-fix
+        // the format string was duplicated at three call sites (two early exits + the
+        // regular exit) and had already drifted — the regular exit grew resolveCoordMs /
+        // resolveLookupMs sub-timers (BUG-108) while the two early exits stayed on the
+        // older shape. Canonical format here covers all sub-timers plus a trailing
+        // earlyExit field. Early-exit callers pass `0.0` for unmeasured timers and a
+        // non-empty reason ("projBuildSlot", "projBuildNRE"); the regular exit passes
+        // empty string.
+        private const string ServerDoWeldProfileFormat =
+            "entityId={0};block={1};projected={2};created={3};welding={4};result={5};" +
+            "buildMs={6:F3};resolveMs={7:F3};resolveCoordMs={8:F3};resolveLookupMs={9:F3};" +
+            "stockpileMs={10:F3};mountMs={11:F3};deformMs={12:F3};" +
+            "findItemMs={13:F3};limitsMs={14:F3};canContinueMs={15:F3};integrityCheckMs={16:F3};" +
+            "assignMs={17:F3};weldAmount={18:F2};integrityRatio={19:F3};completed={20};" +
+            "distance={21:F1};earlyExit={22}";
+
+        private void EmitServerDoWeldProfile(long profilerTs,
+            string blockSubtype, bool projected, bool created, bool welding, bool result,
+            double buildMs, double resolveMs, double resolveCoordMs, double resolveLookupMs,
+            double stockpileMs, double mountMs, double deformMs,
+            double findItemMs, double limitsMs, double canContinueMs, double integrityCheckMs, double assignMs,
+            float weldAmount, float integrityRatio, bool completed, double distance,
+            string earlyExit)
+        {
+            if (profilerTs == 0L) return;
+            var entityId = _Welder.EntityId;
+            MethodProfiler.StopAndLog("ServerDoWeld", profilerTs, () =>
+                string.Format(ServerDoWeldProfileFormat,
+                    entityId, blockSubtype, projected, created, welding, result,
+                    buildMs, resolveMs, resolveCoordMs, resolveLookupMs,
+                    stockpileMs, mountMs, deformMs,
+                    findItemMs, limitsMs, canContinueMs, integrityCheckMs, assignMs,
+                    weldAmount, integrityRatio, completed, distance,
+                    earlyExit ?? string.Empty));
         }
     }
 }

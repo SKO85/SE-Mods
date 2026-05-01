@@ -197,6 +197,7 @@
     <Compile Include="NanobotSystem.Collecting.cs" />
     <Compile Include="NanobotSystem.Inventory.cs" />
     <Compile Include="NanobotSystem.Scanning.cs" />
+    <Compile Include="NanobotSystem.Scanning.Block.cs" />
     <Compile Include="NanobotSystem.State.cs" />
     <Compile Include="NanobotSystem.CustomInfo.cs" />
     <Compile Include="NanobotSystem.Scripting.cs" />

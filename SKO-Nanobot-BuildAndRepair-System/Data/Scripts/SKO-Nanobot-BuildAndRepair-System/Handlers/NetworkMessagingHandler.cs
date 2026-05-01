@@ -150,19 +150,36 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
         }
 
+        // PERF-8: pooled scratch for IsRemoteAdmin. Server-only, main-thread call site,
+        // never recurses into SendToAdmins, so a dedicated pool is safest (avoids any
+        // risk of clobbering _adminBroadcastPlayers mid-iteration).
+        private static readonly List<IMyPlayer> _adminCheckPlayers = new List<IMyPlayer>();
+
         private static bool IsRemoteAdmin(ulong steamId)
         {
-            var players = new List<IMyPlayer>();
-            MyAPIGateway.Players.GetPlayers(players);
-            foreach (var player in players)
+            _adminCheckPlayers.Clear();
+            MyAPIGateway.Players.GetPlayers(_adminCheckPlayers);
+            try
             {
-                if (player.SteamUserId == steamId)
+                for (var i = 0; i < _adminCheckPlayers.Count; i++)
                 {
-                    var promoteLevel = player.PromoteLevel.ToString();
-                    return promoteLevel == "Admin" || promoteLevel == "SpaceMaster" || promoteLevel == "Owner";
+                    var player = _adminCheckPlayers[i];
+                    if (player.SteamUserId == steamId)
+                    {
+                        // REF-4: compare MyPromoteLevel enum directly. Avoids the .ToString()
+                        // allocation and is fragile-rename-proof.
+                        var level = player.PromoteLevel;
+                        return level == MyPromoteLevel.Admin
+                            || level == MyPromoteLevel.SpaceMaster
+                            || level == MyPromoteLevel.Owner;
+                    }
                 }
+                return false;
             }
-            return false;
+            finally
+            {
+                _adminCheckPlayers.Clear();
+            }
         }
 
         #endregion Server Message Received Handlers

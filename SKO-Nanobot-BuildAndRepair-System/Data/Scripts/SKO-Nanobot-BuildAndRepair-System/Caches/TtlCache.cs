@@ -30,6 +30,13 @@ namespace SKONanobotBuildAndRepairSystem.Caches
 
         public ConcurrentDictionary<TKey, CacheItem> Entries;
 
+        // REF-2: pooled scratch buffer reused across CleanupExpired calls. All known
+        // CleanupExpired call sites run on the main thread (SafeZoneHandler maintenance,
+        // BlockSystemAssigningHandler.Cleanup, BlockFailureCooldownHandler.Cleanup,
+        // InventoryHelper.Cleanup, GridOwnershipCacheHandler.Update), so a single
+        // per-instance buffer is safe and avoids a List allocation per cleanup tick.
+        private readonly List<TKey> _expiredKeysBuffer = new List<TKey>();
+
         private readonly TimeSpan _defaultTtl;
 
         // Basic constructor
@@ -124,19 +131,21 @@ namespace SKONanobotBuildAndRepairSystem.Caches
         {
             TimeSpan now;
             if (!TryGetNow(out now)) return;
-            var expiredKeys = new List<TKey>();
+            // REF-2: reuse the pooled buffer instead of allocating a fresh List per call.
+            _expiredKeysBuffer.Clear();
             foreach (var pair in Entries)
             {
                 if (pair.Value.IsExpired(now))
                 {
-                    expiredKeys.Add(pair.Key);
+                    _expiredKeysBuffer.Add(pair.Key);
                 }
             }
             CacheItem removed;
-            foreach (var key in expiredKeys)
+            for (int i = 0; i < _expiredKeysBuffer.Count; i++)
             {
-                Entries.TryRemove(key, out removed);
+                Entries.TryRemove(_expiredKeysBuffer[i], out removed);
             }
+            _expiredKeysBuffer.Clear();
         }
     }
 }

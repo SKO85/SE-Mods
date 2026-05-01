@@ -32,7 +32,7 @@ Both versions are functionally identical. They only differ in the resources requ
 - **Multigrid Projection** — welds projected grids using the multigrid-projection plugin
 - **Creative Mode** — welds and builds blocks without requiring components in inventory
 - **Priority Lists** — configure which block types to weld or grind first, with Enable All / Disable All buttons
-- **Ignore Priority Order** — optionally bypass the priority list and target the nearest block instead
+- **Ignore Priority Order (Grinding)** — optionally bypass the grind priority list and target the nearest grind block instead
 - **Inventory Sources** — pulls components from Cargo, Connectors, Sorters, Grinders, Cryo Chambers, and Refineries; pushes excess items back to the same block types
 - **Weld Mode** — choose how far blocks are welded: Weld to Full (100%), Weld to Functional Only (stops at functional threshold), or Weld to Skeleton (places projected blocks only, never repairs)
 - **Work Modes** — choose between Weld Before Grind, Grind Before Weld, Grind If Stuck, Weld Only, or Grind Only; in Weld Before Grind and Grind Before Weld modes, if no actionable targets exist for the primary mode the system now falls through to the secondary mode instead of going idle
@@ -133,9 +133,17 @@ _Applies to the (Maintained) - Nerfed Version only. See the [Original Resources 
 ## Documentation
 
 - [Configuration File](Config/) — all `ModSettings.xml` settings with defaults and descriptions
-- [Companion Script](Companion-Script/) — automatic assembler queuing and multi-display status output
-- [Scripting API](Scripting/) — terminal properties available to Programmable Block scripts
 - [FAQ](FAQ/) — common questions and troubleshooting steps
+- [Chat Commands](Chat-Commands/) — admin and player chat commands
+- [Companion Script](Companion-Script/) — automatic assembler queuing and multi-display status output
+- [Welding](Welding/) — weld modes, lock-on, projector cold-start, performance safeguards
+- [Grinding](Grinding/) — grind colors, Grind Janitor, work modes, plugin / Safe Zone interaction
+- [Collecting](Collecting/) — when items are collected, push targets, supported block types
+- [Effects & Sound](Effects/) — visual / sound effects, ticking sound, server-wide toggles, debug HUD
+- [Other Features](Other-Features/) — work area, friendly damage, sim-speed throttling, localisation, etc.
+  - [Cluster Coordinator](Other-Features/Cluster-Coordinator/) — automatic scan-sharing for co-located BaRs
+- [Debug & Diagnostics](Debug-and-Diagnostics/) — DebugMode, the in-world Debug HUD, the built-in profiler, BuildId, sim-speed override, and how to report issues
+- [Scripting API](Scripting/) — terminal properties available to Programmable Block scripts
 - [Release Notes](Release-Notes/) — full version history
 
 ---

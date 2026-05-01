@@ -15,6 +15,7 @@ Items in `TODO/` are pending. Items in `DONE/` are completed.
 | REVIEW-full-code-review-v250-r4 | Full code review round 4 — pre-merge review of fix/new_v2.5.0 | 2026-03-26 | v2.5.0 | Done |
 | REVIEW-full-code-review-v250-r5 | Full code review round 5 — threading, null safety, performance (BUG-065..071) | 2026-03-26 | v2.5.0 | Done |
 | REVIEW-full-code-review-v250-r6 | Full code review round 6 — dead code, exception handling, input validation, atomicity (BUG-072..083) | 2026-03-26 | v2.5.0 | Done |
+| REVIEW-260501.1 | Structure / cleanup / consolidation / reusable refactor / performance (35 findings, 27 implemented + 8 deferred) | 2026-05-01 | v2.5.4 | Done |
 
 ## Bugs
 

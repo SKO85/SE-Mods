@@ -140,7 +140,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // OPT 3: Global grind budget — cap ServerDoGrind calls per tick (count + time).
                 if (!Mod.TryClaimGrindSlot())
                 {
-                    if (Mod.Settings.AssignToSystemEnabled) chosenGrindTarget.Block.ReleaseFromSystem();
+                    ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
                 }
                 else
                 {
@@ -181,10 +181,7 @@ namespace SKONanobotBuildAndRepairSystem
                     else
                     {
                         // Grinding failed — release assignment regardless of reason so other BaRs aren't starved.
-                        if (Mod.Settings.AssignToSystemEnabled)
-                        {
-                            chosenGrindTarget.Block.ReleaseFromSystem();
-                        }
+                        ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
                     }
                 }
             }
@@ -332,18 +329,17 @@ namespace SKONanobotBuildAndRepairSystem
                 // these across ticks avoids compounding when many BaRs grind simultaneously.
                 if (integrityRatio <= 0f && !Mod.TryClaimDismountSlot())
                 {
-                    if (profilerTs != 0L)
-                    {
-                        var _emptyMsR = tsEmpty * 1000.0 / tsFreq;
-                        MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
-                            string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};mountLevelMs={10:F3};moveItemsMs={11:F3};dismountCheckMs={12:F3};razeMs={13:F3};mechCheckMs={14:F3};transportMs={15:F3};damage={16:F2};distance={17:F1};transportTimeS={18:F3};earlyExit=dismountSlot",
-                                _Welder.EntityId,
-                                target != null ? target.BlockDefinition.Id.SubtypeName : "null",
-                                (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
-                                false, false, target != null ? target.Integrity / target.MaxIntegrity : 0f,
-                                _emptyMsR, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                                damage, targetData.Distance, 0.0));
-                    }
+                    EmitServerDoGrindProfile(profilerTs,
+                        target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                        (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                        false, false,
+                        target != null ? target.Integrity / target.MaxIntegrity : 0f,
+                        tsEmpty * 1000.0 / tsFreq, 0.0, 0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0,
+                        damage, targetData.Distance, 0.0,
+                        "dismountSlot");
                     return false;
                 }
 
@@ -403,25 +399,22 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
                             // Log even on early-return so the cost shows up in the profile.
-                            if (profilerTs != 0L)
-                            {
-                                var _emptyMsR = tsEmpty * 1000.0 / tsFreq;
-                                var _friendlyMsR = tsFriendly * 1000.0 / tsFreq;
-                                var _mountLevelMsR = tsMountLevel * 1000.0 / tsFreq;
-                                var _moveItemsMsR = tsMoveItems * 1000.0 / tsFreq;
-                                var _dismountCheckMsR = tsDismountCheck * 1000.0 / tsFreq;
-                                var _decreaseMsR = _mountLevelMsR + _moveItemsMsR; // back-compat sum
-                                var _mechCheckMsR = tsMechCheck * 1000.0 / tsFreq;
-                                var _friendlyIterR = friendlyIter;
-                                MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
-                                    string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};mountLevelMs={10:F3};moveItemsMs={11:F3};dismountCheckMs={12:F3};razeMs={13:F3};mechCheckMs={14:F3};transportMs={15:F3};damage={16:F2};distance={17:F1};transportTimeS={18:F3};earlyExit=mechSlot",
-                                        _Welder.EntityId,
-                                        target != null ? target.BlockDefinition.Id.SubtypeName : "null",
-                                        (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
-                                        false, true, 0f,
-                                        _emptyMsR, _friendlyMsR, _friendlyIterR, _decreaseMsR, _mountLevelMsR, _moveItemsMsR, _dismountCheckMsR, 0.0, _mechCheckMsR, 0.0,
-                                        damage, targetData.Distance, 0.0));
-                            }
+                            EmitServerDoGrindProfile(profilerTs,
+                                target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                                (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                                false, true, 0f,
+                                tsEmpty * 1000.0 / tsFreq,
+                                tsFriendly * 1000.0 / tsFreq,
+                                friendlyIter,
+                                tsMountLevel * 1000.0 / tsFreq,
+                                tsMoveItems * 1000.0 / tsFreq,
+                                tsDismountCheck * 1000.0 / tsFreq,
+                                0.0,
+                                tsMechCheck * 1000.0 / tsFreq,
+                                0.0,
+                                0.0, 0.0, 0.0, 0.0,
+                                damage, targetData.Distance, 0.0,
+                                "mechSlot");
                             return false;
                         }
                     }
@@ -479,39 +472,70 @@ namespace SKONanobotBuildAndRepairSystem
             }
             tsTransport = Stopwatch.GetTimestamp() - tsMark;
 
-            if (profilerTs != 0L)
-            {
-                var _transporting = transporting;
-                var _emptyMs = tsEmpty * 1000.0 / tsFreq;
-                var _friendlyMs = tsFriendly * 1000.0 / tsFreq;
-                var _mountLevelMs = tsMountLevel * 1000.0 / tsFreq;
-                var _moveItemsMs = tsMoveItems * 1000.0 / tsFreq;
-                var _decreaseMs = _mountLevelMs + _moveItemsMs; // back-compat sum
-                var _dismountCheckMs = tsDismountCheck * 1000.0 / tsFreq;
-                var _razeMs = tsRaze * 1000.0 / tsFreq;
-                var _mechCheckMs = tsMechCheck * 1000.0 / tsFreq;
-                var _transportMs = tsTransport * 1000.0 / tsFreq;
-                var _transportGateMs = tsTransportGate * 1000.0 / tsFreq;
-                var _transportPosMs = tsTransportPos * 1000.0 / tsFreq;
-                var _transportSetMs = tsTransportSet * 1000.0 / tsFreq;
-                var _transportEmptyMs = tsTransportEmpty * 1000.0 / tsFreq;
-                var _friendlyIter = friendlyIter;
-                var _damage = damage;
-                var _distance = targetData.Distance;
-                var _transportTimeS = transporting ? State.CurrentTransportTime.TotalSeconds : 0.0;
-                MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
-                    string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};mountLevelMs={10:F3};moveItemsMs={11:F3};dismountCheckMs={12:F3};razeMs={13:F3};mechCheckMs={14:F3};transportMs={15:F3};transportGateMs={16:F3};transportPosMs={17:F3};transportSetMs={18:F3};transportEmptyMs={19:F3};damage={20:F2};distance={21:F1};transportTimeS={22:F3}",
-                        _Welder.EntityId,
-                        target != null ? target.BlockDefinition.Id.SubtypeName : "null",
-                        (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
-                        _transporting,
-                        target != null && target.IsFullyDismounted,
-                        target != null ? target.Integrity / target.MaxIntegrity : 0f,
-                        _emptyMs, _friendlyMs, _friendlyIter, _decreaseMs, _mountLevelMs, _moveItemsMs, _dismountCheckMs, _razeMs, _mechCheckMs, _transportMs,
-                        _transportGateMs, _transportPosMs, _transportSetMs, _transportEmptyMs,
-                        _damage, _distance, _transportTimeS));
-            }
+            EmitServerDoGrindProfile(profilerTs,
+                target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                transporting,
+                target != null && target.IsFullyDismounted,
+                target != null ? target.Integrity / target.MaxIntegrity : 0f,
+                tsEmpty * 1000.0 / tsFreq,
+                tsFriendly * 1000.0 / tsFreq,
+                friendlyIter,
+                tsMountLevel * 1000.0 / tsFreq,
+                tsMoveItems * 1000.0 / tsFreq,
+                tsDismountCheck * 1000.0 / tsFreq,
+                tsRaze * 1000.0 / tsFreq,
+                tsMechCheck * 1000.0 / tsFreq,
+                tsTransport * 1000.0 / tsFreq,
+                tsTransportGate * 1000.0 / tsFreq,
+                tsTransportPos * 1000.0 / tsFreq,
+                tsTransportSet * 1000.0 / tsFreq,
+                tsTransportEmpty * 1000.0 / tsFreq,
+                damage,
+                targetData.Distance,
+                transporting ? State.CurrentTransportTime.TotalSeconds : 0.0,
+                null);
             return true;
+        }
+
+        // REF-5: single source of truth for the ServerDoGrind profile emit format.
+        // Pre-fix the format string was duplicated at three call sites (dismountSlot
+        // early exit, mechSlot early exit, regular exit) and had drifted — the regular
+        // exit gained transportGate/Pos/Set/Empty sub-timers while the two early exits
+        // stayed on the older shape. Canonical format here covers all sub-timers plus
+        // a trailing earlyExit field. Early-exit callers pass `0.0` for unmeasured
+        // timers and a non-empty reason ("dismountSlot", "mechSlot"); regular exit
+        // passes empty string. `decreaseMs` kept as the back-compat sum of mountLevel +
+        // moveItems and is computed here so callers don't need to remember.
+        private const string ServerDoGrindProfileFormat =
+            "entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};" +
+            "emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};" +
+            "mountLevelMs={10:F3};moveItemsMs={11:F3};dismountCheckMs={12:F3};" +
+            "razeMs={13:F3};mechCheckMs={14:F3};transportMs={15:F3};" +
+            "transportGateMs={16:F3};transportPosMs={17:F3};transportSetMs={18:F3};transportEmptyMs={19:F3};" +
+            "damage={20:F2};distance={21:F1};transportTimeS={22:F3};earlyExit={23}";
+
+        private void EmitServerDoGrindProfile(long profilerTs,
+            string blockSubtype, bool autoGrind, bool transporting, bool dismounted, float integrity,
+            double emptyMs, double friendlyMs, int friendlyIter,
+            double mountLevelMs, double moveItemsMs, double dismountCheckMs,
+            double razeMs, double mechCheckMs, double transportMs,
+            double transportGateMs, double transportPosMs, double transportSetMs, double transportEmptyMs,
+            float damage, double distance, double transportTimeS,
+            string earlyExit)
+        {
+            if (profilerTs == 0L) return;
+            var entityId = _Welder.EntityId;
+            var decreaseMs = mountLevelMs + moveItemsMs; // back-compat sum
+            MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
+                string.Format(ServerDoGrindProfileFormat,
+                    entityId, blockSubtype, autoGrind, transporting, dismounted, integrity,
+                    emptyMs, friendlyMs, friendlyIter, decreaseMs,
+                    mountLevelMs, moveItemsMs, dismountCheckMs,
+                    razeMs, mechCheckMs, transportMs,
+                    transportGateMs, transportPosMs, transportSetMs, transportEmptyMs,
+                    damage, distance, transportTimeS,
+                    earlyExit ?? string.Empty));
         }
     }
 }

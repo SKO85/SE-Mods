@@ -132,39 +132,27 @@ namespace SKONanobotBuildAndRepairSystem
             return MyAPIGateway.Physics != null ? MyAPIGateway.Physics.ServerSimulationRatio : 1.0f;
         }
 
-        // --- OPT 3: Global grind budget per tick ---
-        // Caps total ServerDoGrind calls per tick across all BaRs.
-        // Two budgets: count-based (MaxGrindsPerTick) and time-based (MaxGrindMsPerTick).
-        // The time budget prevents multiple expensive grinds from stacking in one frame.
+        // --- OPT 3 / BUG-154: Global weld + grind budgets per tick ---
+        // CON-2: previously each side carried four static fields, three accessor methods
+        // and a TryClaim implementation. Both share the count+time+peak-tracking shape,
+        // so they're now backed by a single `PerTickBudget` class with a max-resolver
+        // delegate (so the cap can scale with BaR count) and an ms accumulator.
+        //
+        // Reason for the time budget: profiling on a 60-BaR server (transmit disabled
+        // to isolate) showed Mod.UpdateBeforeSimulation peaking at 36 ms with
+        // ServerDoWeld up to 11 ms per call (engine welder.Weld() cost is opaque). When
+        // 3+ BaRs land on ServerDoWeld in the same tick the costs stack into a visible
+        // server spike. The time cap prevents single-call spikes from breaching the
+        // frame budget.
         public const int MaxGrindsPerTickDefault = 10;
         public const double MaxGrindMsPerTickDefault = 8.0;
-        private static int _grindsThisTick;
-        private static double _grindMsThisTick;
-        private static int _lastGrindBudgetTick = -1;
-
-        // Peak grind usage tracking for HUD debug
-        private static int _grindPeakUsed;
-        public static int GrindBudgetPeakUsed { get { return _grindPeakUsed; } }
-        public static void ResetGrindBudgetStats() { _grindPeakUsed = 0; }
-
-        // --- BUG-154: Global weld budget per tick ---
-        // Caps total ServerDoWeld calls per tick across all BaRs. Mirrors the grind
-        // budget. Reason: profiling on a 60-BaR server (transmit disabled to isolate)
-        // showed Mod.UpdateBeforeSimulation peaking at 36 ms with ServerDoWeld up to
-        // 11 ms per call (engine welder.Weld() cost is opaque). When 3+ BaRs land on
-        // ServerDoWeld in the same tick the costs stack into a visible server spike.
-        // Two budgets: count (MaxWeldsPerTick) and time (MaxWeldMsPerTick) — the time
-        // budget caps cumulative damage when single welds spike.
         public const int MaxWeldsPerTickDefault = 10;
         public const double MaxWeldMsPerTickDefault = 8.0;
-        private static int _weldsThisTick;
-        private static double _weldMsThisTick;
-        private static int _lastWeldBudgetTick = -1;
 
-        // Peak weld usage tracking for HUD debug
-        private static int _weldPeakUsed;
-        public static int WeldBudgetPeakUsed { get { return _weldPeakUsed; } }
-        public static void ResetWeldBudgetStats() { _weldPeakUsed = 0; }
+        private static readonly PerTickBudget _grindBudget =
+            new PerTickBudget(GetEffectiveMaxGrindsPerTick, MaxGrindMsPerTickDefault);
+        private static readonly PerTickBudget _weldBudget =
+            new PerTickBudget(GetEffectiveMaxWeldsPerTick, MaxWeldMsPerTickDefault);
 
         public static int GetEffectiveMaxGrindsPerTick()
         {
@@ -173,30 +161,6 @@ namespace SKONanobotBuildAndRepairSystem
             // Auto: scale with BaR count, minimum 5.
             var total = NanobotSystems.Count;
             return Math.Max(5, Math.Min(MaxGrindsPerTickDefault, total));
-        }
-
-        public static bool TryClaimGrindSlot()
-        {
-            var tick = MyAPIGateway.Session.GameplayFrameCounter;
-            if (tick != _lastGrindBudgetTick)
-            {
-                _lastGrindBudgetTick = tick;
-                _grindsThisTick = 0;
-                _grindMsThisTick = 0.0;
-            }
-            if (_grindsThisTick >= GetEffectiveMaxGrindsPerTick()) return false;
-            if (_grindMsThisTick >= MaxGrindMsPerTickDefault) return false;
-            _grindsThisTick++;
-            if (_grindsThisTick > _grindPeakUsed) _grindPeakUsed = _grindsThisTick;
-            return true;
-        }
-
-        /// <summary>
-        /// Called after each ServerDoGrind to accumulate time spent grinding this tick.
-        /// </summary>
-        public static void ReportGrindTime(double ms)
-        {
-            _grindMsThisTick += ms;
         }
 
         public static int GetEffectiveMaxWeldsPerTick()
@@ -208,29 +172,19 @@ namespace SKONanobotBuildAndRepairSystem
             return Math.Max(5, Math.Min(MaxWeldsPerTickDefault, total));
         }
 
-        public static bool TryClaimWeldSlot()
-        {
-            var tick = MyAPIGateway.Session.GameplayFrameCounter;
-            if (tick != _lastWeldBudgetTick)
-            {
-                _lastWeldBudgetTick = tick;
-                _weldsThisTick = 0;
-                _weldMsThisTick = 0.0;
-            }
-            if (_weldsThisTick >= GetEffectiveMaxWeldsPerTick()) return false;
-            if (_weldMsThisTick >= MaxWeldMsPerTickDefault) return false;
-            _weldsThisTick++;
-            if (_weldsThisTick > _weldPeakUsed) _weldPeakUsed = _weldsThisTick;
-            return true;
-        }
+        public static bool TryClaimGrindSlot() { return _grindBudget.TryClaim(); }
+        public static bool TryClaimWeldSlot() { return _weldBudget.TryClaim(); }
 
-        /// <summary>
-        /// Called after each ServerDoWeld to accumulate time spent welding this tick.
-        /// </summary>
-        public static void ReportWeldTime(double ms)
-        {
-            _weldMsThisTick += ms;
-        }
+        /// <summary>Called after each ServerDoGrind to accumulate time spent grinding this tick.</summary>
+        public static void ReportGrindTime(double ms) { _grindBudget.ReportTime(ms); }
+
+        /// <summary>Called after each ServerDoWeld to accumulate time spent welding this tick.</summary>
+        public static void ReportWeldTime(double ms) { _weldBudget.ReportTime(ms); }
+
+        public static int GrindBudgetPeakUsed { get { return _grindBudget.PeakUsed; } }
+        public static int WeldBudgetPeakUsed { get { return _weldBudget.PeakUsed; } }
+        public static void ResetGrindBudgetStats() { _grindBudget.ResetStats(); }
+        public static void ResetWeldBudgetStats() { _weldBudget.ResetStats(); }
 
         // --- Lightweight tick cost tracking (always-on, for debug HUD) ---
         private static double _tickCostAccumMs;
@@ -530,8 +484,12 @@ namespace SKONanobotBuildAndRepairSystem
                         if (player != null)
                         {
                             _welcomeShown = true;
-                            var level = player.PromoteLevel.ToString();
-                            if (level == "Admin" || level == "SpaceMaster" || level == "Owner")
+                            // REF-4: compare MyPromoteLevel enum directly. Avoids the
+                            // .ToString() allocation and is rename-proof.
+                            var level = player.PromoteLevel;
+                            if (level == MyPromoteLevel.Admin
+                                || level == MyPromoteLevel.SpaceMaster
+                                || level == MyPromoteLevel.Owner)
                             {
                                 MyAPIGateway.Utilities.ShowMessage("Nanobars",
                                     string.Format("Hi admin! Build and Repair System v{0} loaded. Type /nanobars -help for available commands.", Constants.ModVersion));

@@ -55,11 +55,11 @@
              Values: Grids, BoundingBox. -->
         <SearchModeDefault>Grids</SearchModeDefault>
 
-        <!-- When true, the AllowBuild (weld projected blocks) option is locked server-wide
-             and players cannot change it from the terminal. -->
+        <!-- When true, the "Build Projections" terminal option is locked server-wide and
+             players cannot change it from the terminal. (Internal flag name: AllowBuild.) -->
         <AllowBuildFixed>false</AllowBuildFixed>
 
-        <!-- Default state of the AllowBuild (weld projected blocks) option. -->
+        <!-- Default state of the "Build Projections" option (welding of projected blocks). -->
         <AllowBuildDefault>true</AllowBuildDefault>
 
         <!-- Space-separated list of work modes available to players in the terminal.
@@ -238,9 +238,20 @@
          but use more CPU per tick. Range: 0–100. -->
     <MaxGrindsPerTick>0</MaxGrindsPerTick>
 
+    <!-- Maximum number of weld operations across all blocks per tick. 0 = automatic
+         (scales with block count). Higher values allow faster welding but risk frame
+         spikes when the engine weld call is heavy on a tick. Range: 0–100. -->
+    <MaxWeldsPerTick>0</MaxWeldsPerTick>
+
     <!-- How long (seconds) a block assignment reservation is held before expiring.
          Prevents two systems from targeting the same block. Lower = faster recycling
          when systems disconnect. Higher = more protection against assignment steals.
          Range: 2–30. -->
     <AssignmentTtlSeconds>8</AssignmentTtlSeconds>
+
+    <!-- After a block fails to weld (missing components, projector exception, etc.) it
+         is placed on a global fail-cooldown for this many seconds. Other Build and
+         Repair systems skip the cooldowned block, so many systems don't all bounce
+         off the same un-weldable target each tick. 0 disables the feature. Range: 0–30. -->
+    <BlockFailureCooldownSeconds>4</BlockFailureCooldownSeconds>
 </SyncModSettings>

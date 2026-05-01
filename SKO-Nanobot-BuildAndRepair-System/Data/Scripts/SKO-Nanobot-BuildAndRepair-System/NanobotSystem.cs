@@ -61,7 +61,14 @@ namespace SKONanobotBuildAndRepairSystem
         internal bool CreativeModeActive = false;
 
         private static readonly MyStringId RangeGridResourceId = MyStringId.GetOrCompute("WelderGrid");
-        private static readonly Random _RandomDelay = new Random();
+
+        // PERF-10: per-instance Random seeded from the welder's EntityId. Random is not
+        // thread-safe; the static instance previously shared across all BaRs assumed all
+        // call sites stayed on the main thread. A per-instance Random eliminates that
+        // implicit constraint and decorrelates the jitter so two BaRs with identical
+        // call patterns don't draw identical sequences. EntityId is set by the engine
+        // before Init runs, so the seed is stable per BaR for the session lifetime.
+        private Random _RandomDelay;
 
         private Stopwatch _DelayWatch = new Stopwatch();
         private int _Delay = 0;
@@ -96,6 +103,13 @@ namespace SKONanobotBuildAndRepairSystem
         private bool _grindLoopExhausted = false;
         private long _grindExhaustedAtHash;
         private int _grindExhaustedSaturatedCount;
+        // REF-1: Background-scan-thread-only scratch lists used by ApplyClusterResultToSelf
+        // to stage the next target/source/push-target sets before they are atomically swapped
+        // into State.PossibleXxxTargets / _PossibleSources / _PossiblePushTargets under the
+        // appropriate lock. Per-BaR scan dispatch is serialised, so within a single instance
+        // there is at most one writer at a time. **Do not touch these from the main thread**
+        // — read-only consumers should go through the published State.* / _PossibleSources
+        // collections, which are the synchronised, swap-published outputs.
         private List<TargetBlockData> _TempPossibleWeldTargets = new List<TargetBlockData>();
         private List<TargetBlockData> _TempPossibleGrindTargets = new List<TargetBlockData>();
         private List<TargetEntityData> _TempPossibleFloatingTargets = new List<TargetEntityData>();
@@ -201,6 +215,10 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private ConcurrentDictionary<long, TimeSpan> _EmptyGridCache = new ConcurrentDictionary<long, TimeSpan>();
         public int EmptyGridCacheCount { get { return _EmptyGridCache.Count; } }
+
+        // REF-2: pooled scratch for CleanupEmptyGridCache. Per-BaR scan dispatch is
+        // serialised, so a single instance field is safe from concurrent access.
+        private List<long> _emptyGridExpiredKeys;
 
         /// <summary>
         /// FEAT-073: Static predicate for filtering to fat-block-only lists.
@@ -402,5 +420,24 @@ namespace SKONanobotBuildAndRepairSystem
         /// the full cluster key string every second.
         /// </summary>
         internal int _lastClusterKeyHash;
+
+        // CON-3: shared release helper used by the weld/grind loops in place of
+        // repeated `if (Mod.Settings.AssignToSystemEnabled) block.ReleaseFromSystem();`
+        // bodies. Two overloads preserve the existing profiler-timing behaviour at
+        // call sites that were aggregating `tsAssignOps`. Eliminates ~30 lines of
+        // duplicated boilerplate across Welding.cs and Grinding.cs without changing
+        // semantics.
+        private static void ReleaseAssignmentIfEnabled(IMySlimBlock block)
+        {
+            if (Mod.Settings.AssignToSystemEnabled) block.ReleaseFromSystem();
+        }
+
+        private static void ReleaseAssignmentIfEnabled(IMySlimBlock block, bool profilerEnabled, ref long tsAssignOps)
+        {
+            if (!Mod.Settings.AssignToSystemEnabled) return;
+            var ts = profilerEnabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+            block.ReleaseFromSystem();
+            if (ts != 0L) tsAssignOps += System.Diagnostics.Stopwatch.GetTimestamp() - ts;
+        }
     }
 }

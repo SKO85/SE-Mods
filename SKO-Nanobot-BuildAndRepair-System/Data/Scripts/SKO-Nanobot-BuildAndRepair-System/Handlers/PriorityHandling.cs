@@ -110,15 +110,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         }
 
         /// <summary>
-        /// Retrieve if the build/repair of this item kind is enabled.
-        /// </summary>
-        //internal bool GetEnabled(C a)
-        //{
-        //   if (_HashDirty) UpdateHash();
-        //   return _PrioHash[a.Key] < int.MaxValue;
-        //}
-
-        /// <summary>
         /// Get the item key value
         /// </summary>
         /// <param name="a"></param>
@@ -254,12 +245,17 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         internal string GetEntries()
         {
-            var value = string.Empty;
-            foreach (var entry in this)
+            if (Count == 0) return string.Empty;
+            var sb = new System.Text.StringBuilder(Count * 8);
+            for (var i = 0; i < Count; i++)
             {
-                value += string.Format("{0};{1}|", entry.PrioItem.Key, entry.Enabled);
+                if (i > 0) sb.Append('|');
+                var entry = this[i];
+                sb.Append(entry.PrioItem.Key);
+                sb.Append(';');
+                sb.Append(entry.Enabled);
             }
-            return value.Remove(value.Length - 1);
+            return sb.ToString();
         }
 
         internal void SetEntries(string value)
@@ -309,7 +305,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 var newClassList = new MemorySafeList<string>();
                 foreach (var item in this)
                 {
-                    newClassList.Add(string.Format("{0};{1}", item.PrioItem.Key, item.Enabled));
+                    // PERF-6: avoid string.Format boxing for the int + bool args.
+                    newClassList.Add(item.PrioItem.Key.ToString() + ";" + (item.Enabled ? "True" : "False"));
                 }
 
                 var newPrioHash = new Dictionary<int, int>(this.Count);

@@ -522,9 +522,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     case WorkModes.WeldBeforeGrind: s.ModeWeldBefore++; break;
                     case WorkModes.GrindBeforeWeld: s.ModeGrindBefore++; break;
-                    case WorkModes.GrindIfWeldGetStuck: s.ModeStuck++; break;
                     case WorkModes.WeldOnly: s.ModeWeldOnly++; break;
                     case WorkModes.GrindOnly: s.ModeGrindOnly++; break;
+                    // GrindIfWeldGetStuck is migrated to WeldBeforeGrind by SyncBlockSettings;
+                    // no live BaR can carry this value at read time. ModeStuck stays on the
+                    // wire message for protobuf back-compat with older clients.
                 }
                 if (sys.Settings.SearchMode == SearchModes.Grids) s.SearchGrids++;
                 else if (sys.Settings.SearchMode == SearchModes.BoundingBox) s.SearchBBox++;
@@ -723,7 +725,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             AddRow("<color=130,180,230>--- WORK MODES ---", "<color=130,180,230>---");
             AddRow("<color=white>Weld > Grind", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.ModeWeldBefore, s.Active > 0 ? s.ModeWeldBefore * 100 / s.Active : 0));
             AddRow("<color=white>Grind > Weld", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.ModeGrindBefore, s.Active > 0 ? s.ModeGrindBefore * 100 / s.Active : 0));
-            AddRow("<color=white>Grind If Stuck", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.ModeStuck, s.Active > 0 ? s.ModeStuck * 100 / s.Active : 0));
             AddRow("<color=white>Weld Only", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.ModeWeldOnly, s.Active > 0 ? s.ModeWeldOnly * 100 / s.Active : 0));
             AddRow("<color=white>Grind Only", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.ModeGrindOnly, s.Active > 0 ? s.ModeGrindOnly * 100 / s.Active : 0));
             AddRow("<color=white>Search Grids", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.SearchGrids, s.Active > 0 ? s.SearchGrids * 100 / s.Active : 0));

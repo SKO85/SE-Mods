@@ -32,14 +32,19 @@ Available to **all players** (not just admins). Used to diagnose version mismatc
 |---|---|
 | `/nanobars version` | Show the client version and, on dedicated servers, also the server version |
 
-On a dedicated server the response looks like:
+On a dedicated server the response is delivered as **two separate chat messages** — the client version is shown locally first, and the server version arrives as a follow-up message once the server responds:
 
 ```
-BaR Mod Client: v2.5.2
-BaR Mod Server: v2.5.2
+Nanobars: Client: v2.5.4 (build 260501.3)
+```
+
+```
+Nanobars: Server: v2.5.4 (build 260501.3)
 ```
 
 On a local (single-player or listen) game session only the client line is shown, since there is no separate server process.
+
+The trailing `(build YYMMDD.N)` is the `BuildId` — versions that share the same `2.5.4` mod version may differ by `BuildId` between dev/preview/release builds. Include it when reporting issues so the exact build can be identified.
 
 If the two lines differ, one side should update before reporting issues — version drift commonly causes subtle sync glitches or missing features that look like bugs.
 

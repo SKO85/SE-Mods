@@ -115,6 +115,13 @@ namespace SKONanobotBuildAndRepairSystem
             // Force HelpOthers off — the mod does not use this option.
             _Welder.HelpOthers = false;
 
+            // PERF-10: per-instance Random seeded from the welder's EntityId. EntityId is
+            // a 64-bit handle from the engine; folding the high half into the low half
+            // avoids two Random instances drawing identical sequences when EntityIds
+            // differ only in the upper bits.
+            var seed = (int)(_Welder.EntityId ^ (_Welder.EntityId >> 32));
+            _RandomDelay = new Random(seed);
+
             // Assign stagger slot so BaR updates are distributed across ticks.
             _staggerSlot = Mod.ClaimStaggerSlot();
 
