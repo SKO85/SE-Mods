@@ -346,6 +346,24 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     ReleaseSurplusLockOnsForLoweredLimit(currentLimit);
                 }
+                // BUG-260511.14: any change to the limit (up or down) must reset
+                // the FEAT-076 loop-exhausted flags on every BaR. If we don't,
+                // BaRs that went exhausted during a lowered-limit window stay
+                // exhausted even after the limit goes back up — the saturated-
+                // count guard matches (was 0 then, still 0 now) and the picker
+                // fast-skip never lifts until some unrelated trigger changes
+                // the target-list hash. Profile confirmed this: 6960 grind/weld
+                // picker calls × ~1.5 µs each = the fast-skip was firing on
+                // every call.
+                if (_lastMaxSystemsPerTargetGrid > 0
+                    && currentLimit > 0
+                    && currentLimit != _lastMaxSystemsPerTargetGrid)
+                {
+                    foreach (var pair in NanobotSystems)
+                    {
+                        if (pair.Value != null) pair.Value.ResetLoopExhaustedFlags();
+                    }
+                }
                 _lastMaxSystemsPerTargetGrid = currentLimit;
 
                 // Trigger settings changed for all nanobots first.

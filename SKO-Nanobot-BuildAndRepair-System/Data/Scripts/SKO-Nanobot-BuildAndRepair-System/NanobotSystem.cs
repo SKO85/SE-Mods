@@ -94,6 +94,20 @@ namespace SKONanobotBuildAndRepairSystem
         private bool _grindLoopExhausted = false;
         private long _grindExhaustedAtHash;
         private int _grindExhaustedSaturatedCount;
+
+        /// <summary>
+        /// BUG-260511.14: reset both loop-exhausted flags so the next picker tick
+        /// performs a full iteration. Called from Mod.SettingsChanged when
+        /// MaxSystemsPerTargetGrid changes in either direction — the
+        /// FEAT-076 fast-skip's saturated-count guard can match a stale
+        /// exhausted state when the limit comes back up, leaving the BaR
+        /// permanently fast-skipping until some other trigger invalidates it.
+        /// </summary>
+        internal void ResetLoopExhaustedFlags()
+        {
+            _weldLoopExhausted = false;
+            _grindLoopExhausted = false;
+        }
         // Background-scan-thread-only staging lists; swapped into the published State.*
         // / _PossibleSources / _PossiblePushTargets under their locks. Don't touch from
         // the main thread — read consumers go through the published collections.
