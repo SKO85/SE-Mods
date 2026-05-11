@@ -50,9 +50,16 @@ namespace SKONanobotBuildAndRepairSystem
                 if (tsBeforeLock != 0L) tsLockAcquire = tsAfterAcquire - tsBeforeLock;
                 // FEAT-076: skip iteration when previous run found nothing grindable;
                 // resets on target-list hash change or saturated-grid set change.
+                // BUG-260511.16: also retry after ExhaustedRetryInterval so BaRs notice
+                // claims expiring in BlockSystemAssigningHandler (invisible to the
+                // hash / saturation guards). Without this, exhausted BaRs stay stuck
+                // until the next cluster scan bumps the hash, even though slots free
+                // up continuously as TTL claims drain.
+                var grindExhaustedAge = Mod.NowPlayTime.Subtract(_grindExhaustedAtTime);
                 if (_grindLoopExhausted
                     && State.PossibleGrindTargets.CurrentHash == _grindExhaustedAtHash
-                    && _gridSaturation.Count == _grindExhaustedSaturatedCount)
+                    && _gridSaturation.Count == _grindExhaustedSaturatedCount
+                    && grindExhaustedAge < ExhaustedRetryInterval)
                 {
                     loopSkipped = true;
                     if (tsBeforeLock != 0L) tsInLock = Stopwatch.GetTimestamp() - tsAfterAcquire;
@@ -133,6 +140,7 @@ namespace SKONanobotBuildAndRepairSystem
                     _grindLoopExhausted = true;
                     _grindExhaustedAtHash = State.PossibleGrindTargets.CurrentHash;
                     _grindExhaustedSaturatedCount = _gridSaturation.Count;
+                    _grindExhaustedAtTime = Mod.NowPlayTime;
                 }
                 if (tsBeforeLock != 0L) tsInLock = Stopwatch.GetTimestamp() - tsAfterAcquire;
             }

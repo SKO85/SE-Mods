@@ -89,11 +89,28 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private bool _weldLoopExhausted = false;
         private long _weldExhaustedAtHash;
+        private TimeSpan _weldExhaustedAtTime;
 
         /// <summary>FEAT-076: same as _weldLoopExhausted, for the grind loop.</summary>
         private bool _grindLoopExhausted = false;
         private long _grindExhaustedAtHash;
         private int _grindExhaustedSaturatedCount;
+        private TimeSpan _grindExhaustedAtTime;
+
+        /// <summary>
+        /// BUG-260511.16: how long an exhausted BaR may fast-skip before re-iterating.
+        /// FEAT-076 invalidates on target-list hash change or saturation count change,
+        /// but BlockSystemAssigningHandler TTL claim expiry is invisible to both —
+        /// without a time-based retry, BaRs that exhausted while many blocks were
+        /// claimed stay exhausted long after those claims drain (until the next
+        /// cluster scan bumps the hash, ~5–10 s). The retry interval is a fraction
+        /// of AssignmentTtlSeconds so a BaR re-checks at least once per claim
+        /// lifetime.
+        /// </summary>
+        private static TimeSpan ExhaustedRetryInterval
+        {
+            get { return TimeSpan.FromSeconds(Math.Max(1, Mod.Settings.AssignmentTtlSeconds / 3.0)); }
+        }
 
         /// <summary>
         /// BUG-260511.15: timestamp of the cluster result this BaR has actually

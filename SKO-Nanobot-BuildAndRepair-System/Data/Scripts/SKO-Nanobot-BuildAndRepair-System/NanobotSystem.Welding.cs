@@ -67,7 +67,12 @@ namespace SKONanobotBuildAndRepairSystem
                 // OPT: When the previous iteration found nothing to weld (all targets grid-limited
                 // or assigned), skip the full iteration until the target list changes (new scan).
                 // Hash read is under lock so it can't race with background scan updates.
-                if (_weldLoopExhausted && State.PossibleWeldTargets.CurrentHash == _weldExhaustedAtHash)
+                // BUG-260511.16: retry after ExhaustedRetryInterval so BaRs notice
+                // BlockSystemAssigningHandler TTL claims expiring (invisible to the hash guard).
+                var weldExhaustedAge = Mod.NowPlayTime.Subtract(_weldExhaustedAtTime);
+                if (_weldLoopExhausted
+                    && State.PossibleWeldTargets.CurrentHash == _weldExhaustedAtHash
+                    && weldExhaustedAge < ExhaustedRetryInterval)
                 {
                     weldSkipped = true;
                     return;
@@ -278,6 +283,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _weldLoopExhausted = true;
                     _weldExhaustedAtHash = State.PossibleWeldTargets.CurrentHash;
+                    _weldExhaustedAtTime = Mod.NowPlayTime;
                 }
                 if (tsBeforeLock != 0L) tsInLock = Stopwatch.GetTimestamp() - tsAfterAcquire;
             }
