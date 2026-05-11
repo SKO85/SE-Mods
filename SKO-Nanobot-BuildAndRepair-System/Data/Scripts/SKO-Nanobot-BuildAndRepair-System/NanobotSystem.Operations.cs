@@ -541,7 +541,28 @@ namespace SKONanobotBuildAndRepairSystem
                 hash = hash * 31 + (long)t.Y;
                 hash = hash * 31 + (long)t.Z;
             }
+            // BUG-260511.8: include lock-on targets (welding + grinding). Their setters
+            // flip State.Changed when the physical block changes, but the fingerprint
+            // didn't hash them — so the BUG-150 fpUnchanged early-return swallowed
+            // lock-on changes and clients kept stale beam/effect targets.
+            hash = hash * 31 + ComputeBlockKey(State.CurrentWeldingBlock);
+            hash = hash * 31 + ComputeBlockKey(State.CurrentGrindingBlock);
             return hash;
+        }
+
+        private static long ComputeBlockKey(IMySlimBlock block)
+        {
+            if (block == null) return 0L;
+            var gridId = block.CubeGrid != null ? block.CubeGrid.EntityId : 0L;
+            var pos = block.Position;
+            // Mix grid id with the 3 int coords. Position values are small (block
+            // coords on a grid), so a simple 31-multiplier mix is enough to avoid
+            // collisions between different blocks on the same grid.
+            long key = gridId;
+            key = key * 31 + pos.X;
+            key = key * 31 + pos.Y;
+            key = key * 31 + pos.Z;
+            return key;
         }
     }
 }
