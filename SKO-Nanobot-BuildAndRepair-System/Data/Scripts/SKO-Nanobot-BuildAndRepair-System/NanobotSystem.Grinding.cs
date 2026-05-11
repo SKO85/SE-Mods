@@ -78,7 +78,17 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
 
-                    if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && Settings.CurrentPickedGrindingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
+                    // Check-only (no claim) during iteration: skip blocks already
+                    // claimed by ANOTHER BaR. We must NOT call AssignToSystem here
+                    // because it would claim every block we iterate past on the way
+                    // to the chosen one — one BaR's single picker call would leak
+                    // claims onto many blocks (skeleton orphans, blocks past the
+                    // first valid target, etc.), blocking other BaRs from grabbing
+                    // them for the next AssignmentTtlSeconds. Mirrors ServerTryWelding's
+                    // two-phase IsAssignedToOtherSystem-then-AssignToSystem pattern.
+                    if (Mod.Settings.AssignToSystemEnabled
+                        && Settings.CurrentPickedGrindingBlock == null
+                        && targetData.Block.IsAssignedToOtherSystem(_Welder.EntityId))
                     {
                         skippedByAssign++;
                         continue;
@@ -128,6 +138,24 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // BUG-137: deferred grind work runs outside the target-list lock.
+            if (chosenGrindTarget != null)
+            {
+                // Claim the chosen target (the matching read in the picker only
+                // checked IsAssignedToOtherSystem). If another BaR raced in between
+                // the iteration's read and now, AssignToSystem fails and we drop
+                // the target for this cycle — next cycle's picker will try again.
+                if (Mod.Settings.AssignToSystemEnabled
+                    && _Welder.IsWorking
+                    && _Welder.Enabled
+                    && Settings.CurrentPickedGrindingBlock == null)
+                {
+                    if (!chosenGrindTarget.Block.AssignToSystem(_Welder.EntityId))
+                    {
+                        skippedByAssign++;
+                        chosenGrindTarget = null;
+                    }
+                }
+            }
             if (chosenGrindTarget != null)
             {
                 // OPT 3: Global grind budget — cap ServerDoGrind calls per tick (count + time).
