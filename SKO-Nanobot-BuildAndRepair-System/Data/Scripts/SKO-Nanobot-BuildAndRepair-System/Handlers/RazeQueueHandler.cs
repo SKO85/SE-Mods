@@ -19,7 +19,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         public const int ProcessIntervalTicks = 10;
 
         private static int _tickCounter;
-        private static readonly Queue<IMySlimBlock> _queue = new Queue<IMySlimBlock>();
+
+        // BUG-260511.10: queue entry pairs the block with its precomputed dedup
+        // key so Process can free the key even if target.CubeGrid has gone null
+        // between enqueue and dequeue.
+        private struct QueueEntry
+        {
+            public BlockSystemAssigningHandler.BlockKey Key;
+            public IMySlimBlock Block;
+        }
+        private static readonly Queue<QueueEntry> _queue = new Queue<QueueEntry>();
 
         // Dedup so 58 BaRs all enqueueing the same orphaned skeleton block don't
         // pile up thousands of redundant queue entries before the first raze
@@ -43,7 +52,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             // Skip if already pending — multiple BaRs spotting the same orphaned
             // fully-dismounted block on different cycles is the common case.
             if (!_pendingKeys.Add(key)) return;
-            _queue.Enqueue(block);
+            _queue.Enqueue(new QueueEntry { Key = key, Block = block });
         }
 
         public static int GetQueueDepth()
@@ -77,14 +86,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 while (processed < MaxRazesPerDrainDefault)
                 {
                     if (_queue.Count == 0) break;
-                    var target = _queue.Dequeue();
+                    var entry = _queue.Dequeue();
+                    // BUG-260511.10: free the dedup slot up front, before any
+                    // continue path, so a vanished grid / null block can't strand
+                    // the key in _pendingKeys forever.
+                    _pendingKeys.Remove(entry.Key);
+
+                    var target = entry.Block;
                     if (target == null) { skippedNullTarget++; continue; }
                     var grid = target.CubeGrid;
                     if (grid == null) { skippedNullGrid++; continue; }
-                    // Free the dedup slot once dequeued — if RazeBlocks below fails
-                    // or the engine refuses (e.g. block re-welded between enqueue and
-                    // now), a future Enqueue should still be accepted.
-                    _pendingKeys.Remove(new BlockSystemAssigningHandler.BlockKey(grid.EntityId, target.Position));
                     // Skip blocks that have been welded back up or razed elsewhere.
                     if (target.FatBlock != null && target.FatBlock.Closed) { skippedClosedFat++; continue; }
                     // Slim armor: IsDestroyed flips false on re-weld; don't undo it.
