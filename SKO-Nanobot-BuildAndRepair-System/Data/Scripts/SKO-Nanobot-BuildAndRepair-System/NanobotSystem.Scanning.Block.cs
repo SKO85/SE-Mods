@@ -800,7 +800,25 @@ namespace SKONanobotBuildAndRepairSystem
             emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
             var areaBoundingBox = Settings.CorrectedAreaBoundingBox.TransformFast(emitterMatrix);
 
-            var entityInRange = SharedEntityCache.GetEntitiesInBox(ref areaBoundingBox);
+            // Multi-member cluster discovery: union the coordinator's AABB with every
+            // member's AABB so external grids visible to ANY member are found by the
+            // entity query. Per-member range filtering still happens downstream
+            // (skipRangeCheck=true here, ApplyClusterResultToSelf trims per-member).
+            // Without this, only grids inside the coordinator's box are visible —
+            // members positioned far from the coordinator can't see their own targets.
+            var discoveryBox = areaBoundingBox;
+            var clusterUnionUsed = false;
+            if (_ClusterMemberAreaBoxes != null && _ClusterMemberAreaBoxes.Count > 1)
+            {
+                for (int i = 0; i < _ClusterMemberAreaBoxes.Count; i++)
+                {
+                    var memberAABB = _ClusterMemberAreaBoxes[i].GetAABB();
+                    discoveryBox = BoundingBoxD.CreateMerged(discoveryBox, memberAABB);
+                }
+                clusterUnionUsed = true;
+            }
+
+            var entityInRange = SharedEntityCache.GetEntitiesInBox(ref discoveryBox);
 
             if (entityInRange != null)
             {
@@ -895,13 +913,16 @@ namespace SKONanobotBuildAndRepairSystem
             }
             if (profilerTs != 0L)
             {
+                var _unionUsed = clusterUnionUsed;
+                var _memberBoxes = _ClusterMemberAreaBoxes != null ? _ClusterMemberAreaBoxes.Count : 0;
                 MethodProfiler.StopAndLog("AsyncAddBlocksOfBox", profilerTs, () =>
-                    string.Format("entityId={0};entities={1};weldTargets={2};grindTargets={3};floatTargets={4}",
+                    string.Format("entityId={0};entities={1};weldTargets={2};grindTargets={3};floatTargets={4};clusterUnion={5};memberBoxes={6}",
                         _Welder.EntityId,
                         entityInRange != null ? entityInRange.Count : 0,
                         clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
                         clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
-                        clusterFloatingTargets != null ? clusterFloatingTargets.Count : -1));
+                        clusterFloatingTargets != null ? clusterFloatingTargets.Count : -1,
+                        _unionUsed, _memberBoxes));
             }
         }
         // FEAT-070: shared sort key helpers used by per-grid, cluster-wide, and per-BaR sorts.

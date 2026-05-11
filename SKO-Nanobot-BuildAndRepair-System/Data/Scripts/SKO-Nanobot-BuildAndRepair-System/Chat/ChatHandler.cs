@@ -1,7 +1,10 @@
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Chat.Commands;
+using SKONanobotBuildAndRepairSystem.Cluster;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using System;
+using System.Collections.Generic;
+using System.Text;
 
 namespace SKONanobotBuildAndRepairSystem.Chat
 {
@@ -181,6 +184,46 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                     return;
                 }
 
+                // Local-only: toggle the cluster-area visualization. Renders each
+                // multi-member cluster's per-member working OBBs (the actual scan
+                // coverage) plus a gold marker around the coordinator block. Only
+                // enabled / ready / functional BaRs participate, matching the
+                // server's cluster membership filter. No server I/O.
+                if (sub == "cluster-area" || sub == "clusterarea")
+                {
+                    if (MyAPIGateway.Utilities.IsDedicated)
+                    {
+                        console.ShowMessage("Nanobars", "Cluster-area visualization is client-side only and not available on a dedicated server.");
+                        return;
+                    }
+                    var newState = !HudHandler.LocalClusterAreaVisible;
+                    HudHandler.SetLocalClusterAreaVisible(newState);
+                    console.ShowMessage("Nanobars", string.Format("Cluster-area visualization {0}.", newState ? "shown" : "hidden"));
+                    if (newState)
+                    {
+                        ShowClusterSizeSummary();
+                    }
+                    return;
+                }
+
+                // Local-only: toggle red wireframe outlines around each BaR's current
+                // weld/grind target blocks. Useful to see what each BaR is about to
+                // act on. Reads server-side State.Possible*Targets, so on a dedicated
+                // client (where those lists are empty) nothing draws — the toggle is
+                // listen-server / single-player meaningful only.
+                if (sub == "targets")
+                {
+                    if (MyAPIGateway.Utilities.IsDedicated)
+                    {
+                        console.ShowMessage("Nanobars", "Targets visualization is client-side only and not available on a dedicated server.");
+                        return;
+                    }
+                    var newState = !HudHandler.LocalTargetsVisible;
+                    HudHandler.SetLocalTargetsVisible(newState);
+                    console.ShowMessage("Nanobars", string.Format("Targets visualization {0}.", newState ? "shown" : "hidden"));
+                    return;
+                }
+
                 // Server-side: on/off/true/false → forwarded as config set DebugMode
                 if (sub == "on" || sub == "true")
                 {
@@ -194,7 +237,7 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                 }
                 else
                 {
-                    console.ShowMessage("Nanobars", "Usage: /nanobars debug [on|off|show|hide|left|right]");
+                    console.ShowMessage("Nanobars", "Usage: /nanobars debug [on|off|show|hide|left|right|cluster-area|targets]");
                     return;
                 }
             }
@@ -330,6 +373,67 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                     result.ScreenSubtitle ?? "", "", result.Message);
             else
                 MyAPIGateway.Utilities.ShowMessage("Nanobars", result.Message);
+        }
+
+        /// <summary>
+        /// Print a one-line summary of cluster sizes (counting only cluster-eligible
+        /// BaRs — enabled, functional, ready) to chat when the cluster-area overlay
+        /// is enabled. Saves the admin from eyeballing OBB counts in 3D space.
+        /// </summary>
+        private static void ShowClusterSizeSummary()
+        {
+            // Per-cluster member counts keyed by cluster hash so we can label each
+            // cluster by its overlay colour name.
+            var counts = new Dictionary<int, int>();
+            foreach (var pair in Mod.NanobotSystems)
+            {
+                var sys = pair.Value;
+                if (!ScanClusterCoordinator.IsClusterEligible(sys)) continue;
+                var hash = ScanClusterCoordinator.ComputeClusterKeyHash(sys);
+                int c;
+                counts[hash] = counts.TryGetValue(hash, out c) ? c + 1 : 1;
+            }
+
+            if (counts.Count == 0)
+            {
+                MyAPIGateway.Utilities.ShowMessage("Nanobars", "No enabled BaR clusters to visualize.");
+                return;
+            }
+
+            // Sort by size desc so the biggest cluster reads first.
+            var ordered = new List<KeyValuePair<int, int>>(counts);
+            ordered.Sort((a, b) => b.Value.CompareTo(a.Value));
+
+            var multiMembers = new StringBuilder();
+            var multiMemberCount = 0;
+            var soloCount = 0;
+            var totalMembers = 0;
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                var hash = ordered[i].Key;
+                var size = ordered[i].Value;
+                totalMembers += size;
+                if (size >= 2)
+                {
+                    if (multiMemberCount > 0) multiMembers.Append(", ");
+                    multiMembers.Append(NanobotSystem.GetClusterColorName(hash));
+                    multiMembers.Append('=');
+                    multiMembers.Append(size);
+                    multiMemberCount++;
+                }
+                else
+                {
+                    soloCount++;
+                }
+            }
+
+            var summary = string.Format(
+                "{0} cluster(s) · {1} BaRs total · sizes: [{2}]{3}",
+                ordered.Count,
+                totalMembers,
+                multiMemberCount > 0 ? multiMembers.ToString() : "none",
+                soloCount > 0 ? string.Format(" · {0} solo (not drawn)", soloCount) : "");
+            MyAPIGateway.Utilities.ShowMessage("Nanobars", summary);
         }
     }
 }

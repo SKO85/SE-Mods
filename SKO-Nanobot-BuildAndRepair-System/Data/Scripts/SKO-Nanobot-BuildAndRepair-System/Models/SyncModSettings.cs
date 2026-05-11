@@ -156,6 +156,26 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(41), XmlElement]
         public int BlockFailureCooldownSeconds { get; set; }
 
+        /// <summary>
+        /// Per-gameplay-frame wall-clock budget (ms) for grind work across all BaRs.
+        /// Caps total ServerDoGrind time per tick so engine spikes can't push a
+        /// frame past the sim budget. With many BaRs the time cap typically wins
+        /// over MaxGrindsPerTick — raise this to allow more BaRs to grind in
+        /// parallel each tick. Range: 1-100. Default: 8.
+        /// </summary>
+        [ProtoMember(42), XmlElement]
+        public int MaxGrindMsPerTick { get; set; }
+
+        /// <summary>
+        /// Per-gameplay-frame wall-clock budget (ms) for weld work across all BaRs.
+        /// Same role as MaxGrindMsPerTick for the weld path. Engine welder.Weld()
+        /// calls can spike 5-30 ms on complex blocks, so raising this can let more
+        /// BaRs weld in parallel at the cost of occasional larger tick spikes.
+        /// Range: 1-100. Default: 8.
+        /// </summary>
+        [ProtoMember(43), XmlElement]
+        public int MaxWeldMsPerTick { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -183,6 +203,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
             AssignmentTtlSeconds = 8;
             MaxWeldsPerTick = 0;
             BlockFailureCooldownSeconds = BlockFailureCooldownHandler.CooldownSecondsDefault;
+            MaxGrindMsPerTick = (int)Mod.MaxGrindMsPerTickDefault;
+            MaxWeldMsPerTick = (int)Mod.MaxWeldMsPerTickDefault;
         }
 
         public static SyncModSettings Load()
@@ -360,6 +382,28 @@ namespace SKONanobotBuildAndRepairSystem.Models
             else if (settings.MaxWeldsPerTick > 100)
             {
                 settings.MaxWeldsPerTick = 100;
+                adjusted = true;
+            }
+
+            if (settings.MaxGrindMsPerTick < 1)
+            {
+                settings.MaxGrindMsPerTick = (int)Mod.MaxGrindMsPerTickDefault;
+                adjusted = true;
+            }
+            else if (settings.MaxGrindMsPerTick > 100)
+            {
+                settings.MaxGrindMsPerTick = 100;
+                adjusted = true;
+            }
+
+            if (settings.MaxWeldMsPerTick < 1)
+            {
+                settings.MaxWeldMsPerTick = (int)Mod.MaxWeldMsPerTickDefault;
+                adjusted = true;
+            }
+            else if (settings.MaxWeldMsPerTick > 100)
+            {
+                settings.MaxWeldMsPerTick = 100;
                 adjusted = true;
             }
 

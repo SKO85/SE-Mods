@@ -292,10 +292,18 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        // Safety cap on multi-action iterations per cycle. The PerTickBudget
-        // (MaxWeldsPerTick / MaxGrindsPerTick) is the real throttle — this just
-        // prevents an unbounded loop if the budget is misconfigured.
-        private const int MaxActionsPerCycle = 32;
+        // Cap on multi-action iterations per cycle per BaR.
+        //
+        // Set to 1 so each BaR claims exactly one grid slot per cycle. Higher
+        // values let one BaR work blocks on multiple grids within a single cycle,
+        // which silently bypasses MaxSystemsPerTargetGrid: iter 1 puts the BaR on
+        // grid G (count += 1), iter 2 moves it to grid H (count[G] -= 1, count[H]
+        // += 1) — so by end of cycle grid G is undercounted and another BaR can
+        // sneak in. Throughput is paced by the per-tick budgets (MaxGrindsPerTick
+        // + MaxGrindMsPerTick) which are now both configurable, so keeping this
+        // at 1 doesn't reduce total work — it just distributes the budget more
+        // evenly across BaRs.
+        private const int MaxActionsPerCycle = 1;
 
         /// <summary>
         /// Calls ServerTryWelding repeatedly within a single cycle so the BaR can
@@ -303,6 +311,12 @@ namespace SKONanobotBuildAndRepairSystem
         /// Stops when no further welding fires (no target, budget exhausted, or
         /// transport gate). The internal lock-on logic re-picks the same block
         /// each call until it completes, then moves to the next eligible block.
+        ///
+        /// State.CurrentWeldingBlock is committed between iterations so the next
+        /// iteration's IsGridOverSystemLimit check sees the updated GridSystemCount
+        /// — otherwise a BaR that touched grid G in iter 1 and grid H in iter 2
+        /// looks "still on its previous grid" to the limit check inside iter 3,
+        /// effectively bypassing MaxSystemsPerTargetGrid.
         /// </summary>
         private void MultiWeld(ref bool welding, ref bool needWelding, ref bool transporting, ref IMySlimBlock currentWeldingBlock)
         {
@@ -314,7 +328,13 @@ namespace SKONanobotBuildAndRepairSystem
                 if (w) welding = true;
                 if (nw) needWelding = true;
                 if (t) transporting = true;
-                if (cwb != null) currentWeldingBlock = cwb;
+                if (cwb != null)
+                {
+                    currentWeldingBlock = cwb;
+                    // Commit the lock-on/grid-count change immediately so subsequent
+                    // iterations see the updated Mod.GridSystemCount.
+                    State.CurrentWeldingBlock = cwb;
+                }
                 if (!w) break;
             }
         }
@@ -323,6 +343,8 @@ namespace SKONanobotBuildAndRepairSystem
         /// Calls ServerTryGrinding repeatedly within a single cycle so the BaR can
         /// consume the full PerTickBudget instead of doing one grind per Update10.
         /// Stops when no further grinding fires (no target left, or budget exhausted).
+        /// State.CurrentGrindingBlock is committed between iterations for the same
+        /// MaxSystemsPerTargetGrid-correctness reason as MultiWeld above.
         /// </summary>
         private void MultiGrind(ref bool grinding, ref bool needGrinding, ref bool transporting, ref IMySlimBlock currentGrindingBlock)
         {
@@ -334,7 +356,11 @@ namespace SKONanobotBuildAndRepairSystem
                 if (g) grinding = true;
                 if (ng) needGrinding = true;
                 if (t) transporting = true;
-                if (cgb != null) currentGrindingBlock = cgb;
+                if (cgb != null)
+                {
+                    currentGrindingBlock = cgb;
+                    State.CurrentGrindingBlock = cgb;
+                }
                 if (!g) break;
             }
         }

@@ -29,6 +29,8 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 sb.AppendLine("[debug on|off]: Enable/disable debug mode (server-wide)");
                 sb.AppendLine("[debug show|hide]: Show/hide the debug HUD locally");
                 sb.AppendLine("[debug left|right]: Set HUD position and show");
+                sb.AppendLine("[debug cluster-area]: Toggle local visualization of each cluster's union AABB");
+                sb.AppendLine("[debug targets]: Toggle red wireframes around each BaR's current weld/grind targets");
                 sb.AppendLine("[mods]: Shows status of mod integrations (TextHudAPI, DefenseShields)");
                 sb.AppendLine("[systems help]: Shows systems management command syntax");
                 sb.AppendLine("[systems list]: List all BaR blocks on the server");

@@ -127,9 +127,9 @@ namespace SKONanobotBuildAndRepairSystem
         public const double MaxWeldMsPerTickDefault = 8.0;
 
         private static readonly PerTickBudget _grindBudget =
-            new PerTickBudget(GetEffectiveMaxGrindsPerTick, MaxGrindMsPerTickDefault);
+            new PerTickBudget(GetEffectiveMaxGrindsPerTick, GetEffectiveMaxGrindMsPerTick);
         private static readonly PerTickBudget _weldBudget =
-            new PerTickBudget(GetEffectiveMaxWeldsPerTick, MaxWeldMsPerTickDefault);
+            new PerTickBudget(GetEffectiveMaxWeldsPerTick, GetEffectiveMaxWeldMsPerTick);
 
         public static int GetEffectiveMaxGrindsPerTick()
         {
@@ -147,6 +147,18 @@ namespace SKONanobotBuildAndRepairSystem
             // Auto: scale with BaR count, minimum 5.
             var total = NanobotSystems.Count;
             return Math.Max(5, Math.Min(MaxWeldsPerTickDefault, total));
+        }
+
+        public static double GetEffectiveMaxGrindMsPerTick()
+        {
+            var configured = Settings.MaxGrindMsPerTick;
+            return configured > 0 ? configured : MaxGrindMsPerTickDefault;
+        }
+
+        public static double GetEffectiveMaxWeldMsPerTick()
+        {
+            var configured = Settings.MaxWeldMsPerTick;
+            return configured > 0 ? configured : MaxWeldMsPerTickDefault;
         }
 
         public static bool TryClaimGrindSlot() { return _grindBudget.TryClaim(); }

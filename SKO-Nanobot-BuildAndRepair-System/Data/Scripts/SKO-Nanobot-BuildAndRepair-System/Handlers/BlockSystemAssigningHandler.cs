@@ -107,6 +107,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         }
 
         /// <summary>
+        /// Returns true with the assigned system id if the block currently has a
+        /// live assignment, false otherwise. Used by the local debug overlay to
+        /// recolour assigned target blocks with their owner's cluster colour.
+        /// </summary>
+        public static bool TryGetAssignedSystem(this IMySlimBlock block, out long systemId)
+        {
+            return Cache.TryGet(GetBlockKey(block), out systemId);
+        }
+
+        /// <summary>
         /// Drops every assignment currently held by the given system. Used on
         /// sort-relevant settings changes so the BaR can re-pick from the freshly
         /// sorted target list without waiting for phantom claims (from the

@@ -29,6 +29,23 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             SyncBlockSettings.Settings.GrindIgnorePriorityOrder;
 
         /// <summary>
+        /// True when this NanobotSystem should participate in a cluster — i.e. the
+        /// block is functional, terminal-enabled, ready, and has a valid welder/grid.
+        /// Disabled or broken BaRs are excluded from cluster membership so the
+        /// coordinator's scan range and the discovery union AABB only reflect BaRs
+        /// that can actually do work.
+        /// </summary>
+        public static bool IsClusterEligible(NanobotSystem system)
+        {
+            return system != null
+                && system.Welder != null
+                && system.Welder.CubeGrid != null
+                && system.Welder.IsFunctional
+                && system.Welder.Enabled
+                && system.State.Ready;
+        }
+
+        /// <summary>
         /// Rebuilds clusters from all active NanobotSystems. O(N) on main thread.
         /// All systems (including solo BaRs) get assigned to a cluster.
         /// </summary>
@@ -76,7 +93,7 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                 foreach (var system in Mod.NanobotSystems.Values)
                 {
                     // Skip systems that aren't ready for scanning
-                    if (system.Welder == null || !system.Welder.IsFunctional || !system.Welder.Enabled || !system.State.Ready)
+                    if (!IsClusterEligible(system))
                     {
                         system.AssignedCluster = null;
                         system._lastClusterKey = null;

@@ -46,6 +46,34 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             if (!visible) SetVisible(false);
         }
 
+        /// <summary>
+        /// Local-only visualization of the per-cluster union AABB. Drawn each frame
+        /// by NanobotSystem.UpdateBeforeSimulation when enabled. Off by default;
+        /// toggled via /nanobars debug cluster-area. Never set on dedicated servers
+        /// because the draw call is client-side only.
+        /// </summary>
+        private static bool _localClusterAreaVisible;
+        public static bool LocalClusterAreaVisible { get { return _localClusterAreaVisible; } }
+
+        public static void SetLocalClusterAreaVisible(bool visible)
+        {
+            _localClusterAreaVisible = visible;
+        }
+
+        /// <summary>
+        /// Local-only visualization of every BaR's current weld/grind target blocks
+        /// in red, drawn through walls so the admin can see what each BaR is about
+        /// to do. Toggled via /nanobars debug targets. Off by default; never set on
+        /// dedicated servers because the draw is client-side only.
+        /// </summary>
+        private static bool _localTargetsVisible;
+        public static bool LocalTargetsVisible { get { return _localTargetsVisible; } }
+
+        public static void SetLocalTargetsVisible(bool visible)
+        {
+            _localTargetsVisible = visible;
+        }
+
         // TextHudAPI coords: X [-1..1] left-right, Y [1..-1] top-bottom.
         private static readonly Vector2D OriginLeft = new Vector2D(-0.98, 0.98);
         private static readonly Vector2D OriginRight = new Vector2D(0.48, 0.98);

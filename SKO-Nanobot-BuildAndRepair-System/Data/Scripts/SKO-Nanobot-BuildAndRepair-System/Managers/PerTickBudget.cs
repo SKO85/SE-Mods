@@ -22,6 +22,7 @@ namespace SKONanobotBuildAndRepairSystem.Managers
         private readonly int _max;
         private readonly Func<int> _maxResolver;
         private readonly double _maxMs;
+        private readonly Func<double> _maxMsResolver;
         private int _thisTick;
         private double _msThisTick;
         private int _lastTick = -1;
@@ -36,6 +37,17 @@ namespace SKONanobotBuildAndRepairSystem.Managers
         {
             _maxResolver = maxResolver;
             _maxMs = maxMsPerTick;
+        }
+
+        /// <summary>
+        /// Dynamic-cap constructor: both the count and the ms-per-tick budget are
+        /// resolved via delegates each TryClaim call, so admins can re-tune from
+        /// settings without restarting the session.
+        /// </summary>
+        public PerTickBudget(Func<int> maxResolver, Func<double> maxMsResolver)
+        {
+            _maxResolver = maxResolver;
+            _maxMsResolver = maxMsResolver;
         }
 
         public int PeakUsed { get { return _peakUsed; } }
@@ -53,7 +65,8 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             }
             var max = _maxResolver != null ? _maxResolver() : _max;
             if (_thisTick >= max) return false;
-            if (_maxMs > 0 && _msThisTick >= _maxMs) return false;
+            var maxMs = _maxMsResolver != null ? _maxMsResolver() : _maxMs;
+            if (maxMs > 0 && _msThisTick >= maxMs) return false;
             _thisTick++;
             if (_thisTick > _peakUsed) _peakUsed = _thisTick;
             return true;
