@@ -54,7 +54,8 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             Work = () => SafeZoneHandler.CleanupSafeZones()
         };
 
-        // TTL-cache cleanup batch (2 min).
+        // TTL-cache cleanup batch (2 min) — for caches whose TTL semantics tolerate
+        // long lingering of expired entries (TryGet filters them at read time).
         private static PeriodicTask _ttlCleanup = new PeriodicTask
         {
             Interval = TimeSpan.FromMinutes(2),
@@ -63,11 +64,23 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             {
                 try { InventoryHelper.Cleanup(); } catch { }
                 try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
-                try { BlockSystemAssigningHandler.Cleanup(); } catch { }
                 try { BlockFailureCooldownHandler.Cleanup(); } catch { }
                 try { SharedGridBlockCache.Cleanup(); } catch { }
                 try { SharedEntityCache.Cleanup(); } catch { }
             }
+        };
+
+        // BUG-260511.18: BlockSystemAssigningHandler cleanup runs frequently (5 s)
+        // so the live AssignmentCount displayed in the debug HUD ("BlockAssigns")
+        // reflects actual live claims rather than 2-minute-stale entries. TtlCache
+        // TryGet already filters expired entries on read, but Count is the raw
+        // dictionary size — without frequent cleanup it climbs unboundedly during
+        // active grinding and looks like a leak to admins watching the panel.
+        private static PeriodicTask _assignmentCleanup = new PeriodicTask
+        {
+            Interval = TimeSpan.FromSeconds(5),
+            LastRun = TimeSpan.Zero,
+            Work = () => { try { BlockSystemAssigningHandler.Cleanup(); } catch { } }
         };
 
         // BUG-123: friendly-BaR cache rebuild (5 s cadence). MUST run on the main
@@ -99,6 +112,7 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             TryFire(ref _ownership, now);
             TryFire(ref _safeZone, now);
             TryFire(ref _ttlCleanup, now);
+            TryFire(ref _assignmentCleanup, now);
             TryFire(ref _friendlyRebuild, now);
             TryFire(ref _profilerFlush, now);
         }

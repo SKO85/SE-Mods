@@ -134,20 +134,6 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
-                // BUG-260511.17: prune closed-FatBlock entries that accumulated since
-                // the last cluster scan. BUG-165 only removes blocks THIS BaR grinds
-                // to completion; blocks ground by OTHER cluster members stay in this
-                // BaR's local list (with closed FatBlocks) until the next scan
-                // rebuilds. Profile `20260511221733` showed iterations=256 / skipClosed=174,
-                // i.e. 68% of the list was dead entries — pushing exhaustion despite
-                // plenty of real targets. Prune when meaningfully many were skipped.
-                if (skippedByClosedFatBlock >= 16)
-                {
-                    State.PossibleGrindTargets.RemoveAll(t =>
-                        t != null && t.Block != null && t.Block.FatBlock != null && t.Block.FatBlock.Closed);
-                    State.PossibleGrindTargets.ChangeHash();
-                }
-
                 // FEAT-076: mark exhausted when the full iteration found nothing grindable.
                 if (!grinding && !needGrinding)
                 {
