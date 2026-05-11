@@ -363,6 +363,16 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if (pair.Value != null) pair.Value.ResetLoopExhaustedFlags();
                     }
+
+                    // BUG-260511.20: on any MaxSystemsPerTargetGrid change, also
+                    // clear the entire BlockSystemAssigningHandler cache. Stale
+                    // TTL claims (up to 8 s old) from BaRs that recently finished
+                    // or moved would otherwise make the picker's
+                    // IsAssignedToOtherSystem skip-everything path fire — even on
+                    // the BaRs we WANT to pick up the work post-change. Clean
+                    // slate; the picker will repopulate from scratch within a
+                    // tick or two.
+                    BlockSystemAssigningHandler.Clear();
                 }
                 _lastMaxSystemsPerTargetGrid = currentLimit;
 
