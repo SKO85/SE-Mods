@@ -325,10 +325,29 @@ namespace SKONanobotBuildAndRepairSystem
             Logging.Instance.Write("BuildAndRepairSystemMod: Initialized.");
         }
 
+        // BUG-260511.13: tracks the last applied MaxSystemsPerTargetGrid so a
+        // lowered limit can pre-release surplus BaR lock-ons before the per-BaR
+        // SettingsChanged fan-out. Without this, every grid stays over the new
+        // limit (count is held by existing CurrentWelding/CurrentGrindingBlock
+        // references) and no BaR can pick a new target — the fleet deadlocks
+        // and sim drops.
+        private static int _lastMaxSystemsPerTargetGrid = -1;
+
         public static void SettingsChanged()
         {
             if (SettingsValid)
             {
+                // Detect a *lowered* MaxSystemsPerTargetGrid and force-release
+                // surplus lock-ons so GridSystemCount can drop to the new ceiling.
+                // Runs BEFORE per-BaR SettingsChanged so the immediate rescans
+                // see a clean saturation state.
+                var currentLimit = Settings.MaxSystemsPerTargetGrid;
+                if (_lastMaxSystemsPerTargetGrid > 0 && currentLimit > 0 && currentLimit < _lastMaxSystemsPerTargetGrid)
+                {
+                    ReleaseSurplusLockOnsForLoweredLimit(currentLimit);
+                }
+                _lastMaxSystemsPerTargetGrid = currentLimit;
+
                 // Trigger settings changed for all nanobots first.
                 foreach (var entry in NanobotSystems)
                 {
@@ -337,6 +356,60 @@ namespace SKONanobotBuildAndRepairSystem
 
                 // Init terminal controls after settings have changed for all nanobots.
                 InitControls();
+            }
+        }
+
+        /// <summary>
+        /// BUG-260511.13: when the admin lowers MaxSystemsPerTargetGrid below the
+        /// existing per-grid system count, release the lock-ons of every BaR
+        /// currently working a now-over-limit grid. GridSystemCount drops as
+        /// the setters fire, the BaRs' next-cycle pickers see a clean saturation
+        /// state, and the first `newLimit` BaRs per grid re-acquire targets.
+        /// </summary>
+        private static void ReleaseSurplusLockOnsForLoweredLimit(int newLimit)
+        {
+            // Identify grids over the new limit BEFORE releasing anything — the
+            // setters mutate GridSystemCount while we iterate.
+            var overLimitGrids = new HashSet<long>();
+            foreach (var kvp in GridSystemCount)
+            {
+                if (kvp.Value > newLimit) overLimitGrids.Add(kvp.Key);
+            }
+            if (overLimitGrids.Count == 0) return;
+
+            var released = 0;
+            foreach (var pair in NanobotSystems)
+            {
+                var bar = pair.Value;
+                if (bar == null || bar.State == null) continue;
+
+                var weldBlock = bar.State.CurrentWeldingBlock;
+                var grindBlock = bar.State.CurrentGrindingBlock;
+
+                var weldGridId = (weldBlock != null && weldBlock.CubeGrid != null) ? weldBlock.CubeGrid.EntityId : 0L;
+                var grindGridId = (grindBlock != null && grindBlock.CubeGrid != null) ? grindBlock.CubeGrid.EntityId : 0L;
+
+                var weldOver = weldGridId != 0L && overLimitGrids.Contains(weldGridId);
+                var grindOver = grindGridId != 0L && overLimitGrids.Contains(grindGridId);
+                if (!weldOver && !grindOver) continue;
+
+                // Setters Dec GridSystemCount; subsequent ticks rebuild saturation
+                // and only `newLimit` BaRs per grid re-acquire.
+                if (weldOver) bar.State.CurrentWeldingBlock = null;
+                if (grindOver) bar.State.CurrentGrindingBlock = null;
+
+                if (Settings.AssignToSystemEnabled && bar.Welder != null)
+                {
+                    BlockSystemAssigningHandler.ReleaseAllForSystem(bar.Welder.EntityId);
+                }
+                released++;
+            }
+
+            if (released > 0)
+            {
+                Logging.Instance.Write(Logging.Level.Info,
+                    "MaxSystemsPerTargetGrid lowered to {0}; released {1} BaR lock-on(s) across {2} over-limit grid(s).",
+                    newLimit, released, overLimitGrids.Count);
             }
         }
 
