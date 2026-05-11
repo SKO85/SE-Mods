@@ -534,6 +534,21 @@ namespace SKONanobotBuildAndRepairSystem
         // alpha-stacking that makes the fill look near-opaque. Keyed by grid id +
         // local position (BlockSystemAssigningHandler.BlockKey), cleared on the
         // first call of each gameplay frame.
+        // Per-BaR cached snapshot of "what to draw" for the target overlay. The
+        // expensive bookkeeping (lock, IsLive check, assignment lookup, cross-BaR
+        // dedup) runs only on snapshot refresh — every TargetSnapshotIntervalFrames
+        // frames. Intermediate frames just replay the cached entries so the
+        // immediate-mode draw stays solid (no strobe).
+        private struct TargetDrawEntry
+        {
+            public IMySlimBlock Block;
+            public Color FillColor;
+        }
+        private readonly System.Collections.Generic.List<TargetDrawEntry> _cachedTargetDrawList = new System.Collections.Generic.List<TargetDrawEntry>();
+        private int _cachedTargetDrawFrame = -1;
+        private Color _cachedTargetBorderColor;
+        private const int TargetSnapshotIntervalFrames = 10;
+
         private static readonly System.Collections.Generic.HashSet<Handlers.BlockSystemAssigningHandler.BlockKey> _drawnTargetsThisFrame
             = new System.Collections.Generic.HashSet<Handlers.BlockSystemAssigningHandler.BlockKey>();
         private static int _drawnTargetsFrame = -1;
@@ -549,44 +564,63 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (!ScanClusterCoordinator.IsClusterEligible(this)) return;
 
-            // Reset the per-frame dedup set on the first call this gameplay frame.
-            // GameplayFrameCounter monotonically increases on the main thread; a
-            // mismatch with our cached value means we crossed a frame boundary.
             var currentFrame = MyAPIGateway.Session.GameplayFrameCounter;
-            if (_drawnTargetsFrame != currentFrame)
+            var refresh = _cachedTargetDrawFrame < 0
+                || currentFrame - _cachedTargetDrawFrame >= TargetSnapshotIntervalFrames;
+
+            if (refresh)
             {
-                _drawnTargetsThisFrame.Clear();
-                _drawnTargetsFrame = currentFrame;
+                // Reset the per-frame dedup set on the first refresh this gameplay frame.
+                // Snapshot rebuilds all use the same elapsed-frames trigger, so co-located
+                // BaRs refresh on the same frame and share one dedup pass.
+                if (_drawnTargetsFrame != currentFrame)
+                {
+                    _drawnTargetsThisFrame.Clear();
+                    _drawnTargetsFrame = currentFrame;
+                }
+
+                _cachedTargetDrawList.Clear();
+                _cachedTargetBorderColor = ClusterColorFromHash(ScanClusterCoordinator.ComputeClusterKeyHash(this));
+
+                // Target lists are refreshed every TargetsUpdateInterval (~10s), not per
+                // weld/grind operation. Between scans they contain blocks that have
+                // already been completed: welded blocks at full integrity, grinded
+                // blocks already destroyed, blocks whose fat-block has closed. Filter
+                // those out at snapshot-build time so the visualization tracks live
+                // work, not historical entries from the last scan.
+                lock (State.PossibleWeldTargets)
+                {
+                    foreach (var target in State.PossibleWeldTargets)
+                    {
+                        if (target == null || target.Block == null) continue;
+                        if (!IsLiveWeldTarget(target.Block)) continue;
+                        if (!ClaimTargetForDraw(target.Block)) continue;
+                        _cachedTargetDrawList.Add(new TargetDrawEntry { Block = target.Block, FillColor = GetTargetFillColor(target.Block) });
+                    }
+                }
+
+                lock (State.PossibleGrindTargets)
+                {
+                    foreach (var target in State.PossibleGrindTargets)
+                    {
+                        if (target == null || target.Block == null) continue;
+                        if (!IsLiveGrindTarget(target.Block)) continue;
+                        if (!ClaimTargetForDraw(target.Block)) continue;
+                        _cachedTargetDrawList.Add(new TargetDrawEntry { Block = target.Block, FillColor = GetTargetFillColor(target.Block) });
+                    }
+                }
+
+                _cachedTargetDrawFrame = currentFrame;
             }
 
-            var borderColor = ClusterColorFromHash(ScanClusterCoordinator.ComputeClusterKeyHash(this));
-
-            // Target lists are refreshed every TargetsUpdateInterval (~10s), not per
-            // weld/grind operation. Between scans they contain blocks that have
-            // already been completed: welded blocks at full integrity, grinded
-            // blocks already destroyed, blocks whose fat-block has closed. Filter
-            // those out at draw time so the visualization tracks live work, not
-            // historical entries from the last scan.
-            lock (State.PossibleWeldTargets)
+            // Replay snapshot every frame — immediate-mode draw requires per-frame
+            // submission to stay on screen, but the per-block bookkeeping above
+            // only runs at the snapshot cadence.
+            for (int i = 0; i < _cachedTargetDrawList.Count; i++)
             {
-                foreach (var target in State.PossibleWeldTargets)
-                {
-                    if (target == null || target.Block == null) continue;
-                    if (!IsLiveWeldTarget(target.Block)) continue;
-                    if (!ClaimTargetForDraw(target.Block)) continue;
-                    DrawTargetOutline(target.Block, GetTargetFillColor(target.Block), borderColor);
-                }
-            }
-
-            lock (State.PossibleGrindTargets)
-            {
-                foreach (var target in State.PossibleGrindTargets)
-                {
-                    if (target == null || target.Block == null) continue;
-                    if (!IsLiveGrindTarget(target.Block)) continue;
-                    if (!ClaimTargetForDraw(target.Block)) continue;
-                    DrawTargetOutline(target.Block, GetTargetFillColor(target.Block), borderColor);
-                }
+                var entry = _cachedTargetDrawList[i];
+                if (entry.Block == null) continue;
+                DrawTargetOutline(entry.Block, entry.FillColor, _cachedTargetBorderColor);
             }
         }
 

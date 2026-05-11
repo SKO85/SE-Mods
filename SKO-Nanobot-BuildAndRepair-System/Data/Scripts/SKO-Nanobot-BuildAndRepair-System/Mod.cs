@@ -238,7 +238,7 @@ namespace SKONanobotBuildAndRepairSystem
         private bool _initialized = false;
         private bool _welcomeShown = false;
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
-        private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(1);
+        private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);
         private static TimeSpan _LastSyncModDataRequestSend;
 
         // Background task queue forwarders — implementation lives in
