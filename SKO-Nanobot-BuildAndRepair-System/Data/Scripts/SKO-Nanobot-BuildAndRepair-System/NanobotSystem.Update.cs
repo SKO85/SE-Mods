@@ -186,8 +186,12 @@ namespace SKONanobotBuildAndRepairSystem
                     var modWideStagger = Mod.GetEffectiveStaggerGroupCount();
                     if (clusterSize == 1)
                     {
-                        // BUG-102: isolated BaRs use mod-wide stagger directly.
-                        effectiveGroups = modWideStagger;
+                        // BUG-102: isolated BaRs use mod-wide stagger, but cap at 2 —
+                        // a single BaR firing only every 3rd cycle (WorkSpeed=10 → 2 fires/sec
+                        // instead of 6) feels visibly sluggish to the player, and the CPU
+                        // saving from 3-way vs. 2-way staggering of solo BaRs is minor
+                        // unless the world has many dozens of isolated BaRs.
+                        effectiveGroups = Math.Min(modWideStagger, 2);
                     }
                     else if (clusterSize < 6)
                     {
