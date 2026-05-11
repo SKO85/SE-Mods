@@ -396,41 +396,73 @@ namespace SKONanobotBuildAndRepairSystem
         /// All boxes render with BlendTypeEnum.PostPP so they show through other
         /// blocks — admin can see them from any vantage point on the ship.
         /// </summary>
+        // Per-BaR cached snapshot of the cluster-area overlay. Like the targets
+        // overlay, the bookkeeping (NanobotSystems enumeration, eligibility +
+        // hash checks, lead election) runs only on snapshot refresh every
+        // ClusterAreaSnapshotIntervalFrames frames. Replay each frame submits
+        // the immediate-mode draw calls without re-discovering the cluster.
+        private bool _cachedClusterAreaIsLead;
+        private Color _cachedClusterAreaColor;
+        private readonly System.Collections.Generic.List<NanobotSystem> _cachedClusterAreaMembers = new System.Collections.Generic.List<NanobotSystem>();
+        private int _cachedClusterAreaFrame = -1;
+        private const int ClusterAreaSnapshotIntervalFrames = 10;
+
         private void DrawClusterAreaIfLead()
         {
             if (!ScanClusterCoordinator.IsClusterEligible(this)) return;
 
-            var myHash = ScanClusterCoordinator.ComputeClusterKeyHash(this);
-            var myEid = _Welder.EntityId;
+            var currentFrame = MyAPIGateway.Session.GameplayFrameCounter;
+            var refresh = _cachedClusterAreaFrame < 0
+                || currentFrame - _cachedClusterAreaFrame >= ClusterAreaSnapshotIntervalFrames;
 
-            // Lead check + member count in one pass.
-            var memberCount = 1;
-            foreach (var pair in Mod.NanobotSystems)
+            if (refresh)
             {
-                var other = pair.Value;
-                if (other == this) continue;
-                if (!ScanClusterCoordinator.IsClusterEligible(other)) continue;
-                if (ScanClusterCoordinator.ComputeClusterKeyHash(other) != myHash) continue;
-                if (pair.Key < myEid) return; // not lead — someone else will draw
-                memberCount++;
+                _cachedClusterAreaMembers.Clear();
+                _cachedClusterAreaIsLead = false;
+                _cachedClusterAreaFrame = currentFrame;
+
+                var myHash = ScanClusterCoordinator.ComputeClusterKeyHash(this);
+                var myEid = _Welder.EntityId;
+                var isLead = true;
+
+                foreach (var pair in Mod.NanobotSystems)
+                {
+                    var other = pair.Value;
+                    if (other == this) continue;
+                    if (!ScanClusterCoordinator.IsClusterEligible(other)) continue;
+                    if (ScanClusterCoordinator.ComputeClusterKeyHash(other) != myHash) continue;
+                    if (pair.Key < myEid)
+                    {
+                        // Not lead — someone else will draw. Drop anything collected so far.
+                        isLead = false;
+                        break;
+                    }
+                    _cachedClusterAreaMembers.Add(other);
+                }
+
+                if (isLead && _cachedClusterAreaMembers.Count >= 1)
+                {
+                    _cachedClusterAreaIsLead = true;
+                    _cachedClusterAreaColor = ClusterColorFromHash(myHash);
+                }
+                else
+                {
+                    _cachedClusterAreaMembers.Clear();
+                }
             }
 
-            if (memberCount < 2) return; // solo cluster — nothing useful to draw
+            if (!_cachedClusterAreaIsLead) return;
 
-            var color = ClusterColorFromHash(myHash);
+            // Replay: coordinator (this) + each cached member.
+            DrawBlockMarker(this, _cachedClusterAreaColor, extendUpward: true);
+            DrawWorkingAreaOBB(this, _cachedClusterAreaColor);
 
-            // Coordinator: block marker (with upward pillar) + working-area OBB.
-            DrawBlockMarker(this, color, extendUpward: true);
-            DrawWorkingAreaOBB(this, color);
-
-            foreach (var pair in Mod.NanobotSystems)
+            for (int i = 0; i < _cachedClusterAreaMembers.Count; i++)
             {
-                var other = pair.Value;
-                if (other == this) continue;
-                if (!ScanClusterCoordinator.IsClusterEligible(other)) continue;
-                if (ScanClusterCoordinator.ComputeClusterKeyHash(other) != myHash) continue;
-                DrawBlockMarker(other, color, extendUpward: false);
-                DrawWorkingAreaOBB(other, color);
+                var other = _cachedClusterAreaMembers[i];
+                if (other == null) continue;
+                DrawBlockMarker(other, _cachedClusterAreaColor, extendUpward: false);
+                DrawWorkingAreaOBB(other, _cachedClusterAreaColor);
             }
         }
 
