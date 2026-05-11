@@ -471,10 +471,24 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         return response;
                     }
                 }
-            }
-            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.GetActionsAllowedForSystem: {0}", ex.Message); }
 
-            return response;
+                // No intersecting safe zone → permissive (BaR is not inside any zone).
+                return response;
+            }
+            catch (Exception ex)
+            {
+                Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.GetActionsAllowedForSystem: {0}", ex.Message);
+                // BUG-260502.1: fail closed. A transient engine exception during
+                // safe-zone evaluation must not silently unlock actions that
+                // should be restricted. The caller retries on the next tick;
+                // by then the engine state has typically stabilised.
+                return new ActionsState()
+                {
+                    IsGrindingAllowed = false,
+                    IsWeldingAllowed = false,
+                    IsBuildingProjectionsAllowed = false,
+                };
+            }
         }
 
         private static void SetIsProtectedFromGrinding(IMySlimBlock targetBlock, long attackerBlockId, bool isProtected)
@@ -586,10 +600,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, true);
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
-                SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
-                return false;
+                // BUG-260502.2: fail closed. The original catch wrote false (not
+                // protected) into the 15 s TTL cache and returned false, so a
+                // single transient exception would let the BaR grind a
+                // protected block for up to 15 s. Now: log, return true (treat
+                // as protected), and SKIP the cache write so the next call
+                // retries clean against live engine state.
+                Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.IsProtectedFromGrinding: {0}", ex.Message);
+                return true;
             }
             finally
             {
