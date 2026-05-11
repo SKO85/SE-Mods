@@ -10,6 +10,6 @@ namespace SKONanobotBuildAndRepairSystem
         // reset to today's date with N=1. Surfaced in the debug HUD, /nanobars
         // version, /nanobars -help, and the profiler summary header so we can
         // confirm which build produced a given diagnostic.
-        public const string BuildId = "260511.55";
+        public const string BuildId = "260511.56";
     }
 }

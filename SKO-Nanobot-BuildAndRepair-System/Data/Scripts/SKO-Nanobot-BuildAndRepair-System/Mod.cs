@@ -337,44 +337,32 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (SettingsValid)
             {
-                // Detect a *lowered* MaxSystemsPerTargetGrid and force-release
-                // surplus lock-ons so GridSystemCount can drop to the new ceiling.
-                // Runs BEFORE per-BaR SettingsChanged so the immediate rescans
-                // see a clean saturation state.
+                // BUG-260511.21: simpler, more robust recovery on ANY mod-level
+                // settings change — clear the assignment cache and reset the
+                // per-BaR loop-exhausted flags on every BaR. Previously these
+                // ran only on detected MaxSystemsPerTargetGrid changes, but any
+                // setting that influences picker decisions (priority list,
+                // safe-zone flag, weld-options, etc.) can leave stale state
+                // that causes the picker fast-skip to fire on BaRs we want
+                // working. The cost is microseconds; the picker repopulates
+                // claims organically within a tick or two.
                 var currentLimit = Settings.MaxSystemsPerTargetGrid;
                 if (_lastMaxSystemsPerTargetGrid > 0 && currentLimit > 0 && currentLimit < _lastMaxSystemsPerTargetGrid)
                 {
+                    // Still need the lock-on release on a LOWERED limit so
+                    // GridSystemCount drops below the new ceiling — the
+                    // setters Dec when CurrentGrindingBlock is cleared. The
+                    // generic clear+reset below doesn't touch
+                    // State.CurrentGrindingBlock.
                     ReleaseSurplusLockOnsForLoweredLimit(currentLimit);
                 }
-                // BUG-260511.14: any change to the limit (up or down) must reset
-                // the FEAT-076 loop-exhausted flags on every BaR. If we don't,
-                // BaRs that went exhausted during a lowered-limit window stay
-                // exhausted even after the limit goes back up — the saturated-
-                // count guard matches (was 0 then, still 0 now) and the picker
-                // fast-skip never lifts until some unrelated trigger changes
-                // the target-list hash. Profile confirmed this: 6960 grind/weld
-                // picker calls × ~1.5 µs each = the fast-skip was firing on
-                // every call.
-                if (_lastMaxSystemsPerTargetGrid > 0
-                    && currentLimit > 0
-                    && currentLimit != _lastMaxSystemsPerTargetGrid)
-                {
-                    foreach (var pair in NanobotSystems)
-                    {
-                        if (pair.Value != null) pair.Value.ResetLoopExhaustedFlags();
-                    }
-
-                    // BUG-260511.20: on any MaxSystemsPerTargetGrid change, also
-                    // clear the entire BlockSystemAssigningHandler cache. Stale
-                    // TTL claims (up to 8 s old) from BaRs that recently finished
-                    // or moved would otherwise make the picker's
-                    // IsAssignedToOtherSystem skip-everything path fire — even on
-                    // the BaRs we WANT to pick up the work post-change. Clean
-                    // slate; the picker will repopulate from scratch within a
-                    // tick or two.
-                    BlockSystemAssigningHandler.Clear();
-                }
                 _lastMaxSystemsPerTargetGrid = currentLimit;
+
+                foreach (var pair in NanobotSystems)
+                {
+                    if (pair.Value != null) pair.Value.ResetLoopExhaustedFlags();
+                }
+                BlockSystemAssigningHandler.Clear();
 
                 // Trigger settings changed for all nanobots first.
                 foreach (var entry in NanobotSystems)
