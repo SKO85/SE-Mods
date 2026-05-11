@@ -106,6 +106,14 @@ namespace SKONanobotBuildAndRepairSystem
                     else
                     {
                         skippedByDestroyed++;
+                        // Fully-dismounted block (integrity 0 AND stockpile empty) that
+                        // is still on the grid — usually a skeleton wheel / attachable
+                        // left over from damage events, or a block dismounted by a
+                        // previous BaR before this one's first scan picked it up.
+                        // Enqueue for raze (queue itself dedups) so the cleanup path
+                        // removes it; ServerDoGrind isn't called for these so the
+                        // existing post-grind enqueue can't reach them.
+                        RazeQueueHandler.Enqueue(targetData.Block);
                     }
                 }
 
