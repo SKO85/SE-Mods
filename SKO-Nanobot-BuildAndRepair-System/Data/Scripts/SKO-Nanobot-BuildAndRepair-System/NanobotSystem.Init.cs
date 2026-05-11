@@ -1,5 +1,6 @@
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Cluster;
 using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
@@ -78,6 +79,26 @@ namespace SKONanobotBuildAndRepairSystem
             _MaxGrindTransportVolume = ((float)_TransportInventory.MaxVolume * grindMult) / WELDER_TRANSPORTVOLUME_DIVISOR;
 
             UpdateCustomInfo(true);
+
+            // When a sort-relevant flag changed (near/far, smallest-grid, ignore color,
+            // search mode, work mode, priority lists, etc.), the cluster key hash differs
+            // from the last rebuild. Drop the in-flight lock-on AND release every
+            // assignment held by this BaR — the multi-action wrapper may have claimed
+            // several blocks in one cycle, and we want the next scan to pick from the
+            // freshly sorted list with no carryover.
+            if (_Welder != null && _Welder.CubeGrid != null)
+            {
+                var newClusterHash = ScanClusterCoordinator.ComputeClusterKeyHash(this);
+                if (_lastClusterKeyHash != 0 && newClusterHash != _lastClusterKeyHash)
+                {
+                    State.CurrentWeldingBlock = null;
+                    State.CurrentGrindingBlock = null;
+                    if (Mod.Settings.AssignToSystemEnabled)
+                    {
+                        BlockSystemAssigningHandler.ReleaseAllForSystem(_Welder.EntityId);
+                    }
+                }
+            }
 
             // FEAT-080: settings changed — force immediate rescan, bypassing FEAT-075 debounce.
             TriggerImmediateRescan("settingsChanged", true);

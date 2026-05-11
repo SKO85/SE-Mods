@@ -106,6 +106,29 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             Cache.Remove(GetBlockKey(block));
         }
 
+        /// <summary>
+        /// Drops every assignment currently held by the given system. Used on
+        /// sort-relevant settings changes so the BaR can re-pick from the freshly
+        /// sorted target list without waiting for phantom claims (from the
+        /// multi-action wrapper that may have assigned several blocks in one
+        /// cycle) to TTL-expire. Returns the number of entries removed.
+        /// </summary>
+        public static int ReleaseAllForSystem(long systemId)
+        {
+            var removed = 0;
+            TtlCache<BlockKey, long>.CacheItem dummy;
+            // ConcurrentDictionary enumerators tolerate concurrent modification,
+            // so a single-pass remove is safe and avoids the extra key-buffer.
+            foreach (var pair in Cache.Entries)
+            {
+                if (pair.Value.Value == systemId)
+                {
+                    if (Cache.Entries.TryRemove(pair.Key, out dummy)) removed++;
+                }
+            }
+            return removed;
+        }
+
         public static void Cleanup()
         {
             var profilerTs = MethodProfiler.Start();
