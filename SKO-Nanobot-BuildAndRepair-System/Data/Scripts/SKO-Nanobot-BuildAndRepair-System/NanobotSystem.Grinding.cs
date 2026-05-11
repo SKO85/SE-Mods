@@ -90,7 +90,13 @@ namespace SKONanobotBuildAndRepairSystem
                         continue;
                     }
 
-                    if (!targetData.Block.IsDestroyed)
+                    // IsDestroyed is true as soon as Integrity reaches 0, but the
+                    // construction stockpile can still contain components — wheels and
+                    // other attachable blocks frequently end up in that state. Using
+                    // IsFullyDismounted instead means we keep grinding the block until
+                    // both integrity AND components are stripped, so we don't orphan
+                    // partially-dismounted blocks on the grid forever.
+                    if (!targetData.Block.IsFullyDismounted)
                     {
                         needGrinding = true;
                         // BUG-137: capture target; ServerDoGrind runs outside the lock.
@@ -137,9 +143,12 @@ namespace SKONanobotBuildAndRepairSystem
                             _HasLastGrindPosition = true;
                         }
 
-                        // BUG-165: drop razed blocks immediately so future ticks skip them.
+                        // BUG-165: drop razed / fully-dismounted blocks immediately so
+                        // future ticks skip them. Use IsFullyDismounted (not IsDestroyed)
+                        // so partially-dismounted blocks (integrity 0 with components
+                        // still in the stockpile) stay in the list for further grinding.
                         var grindBlock = chosenGrindTarget.Block;
-                        if (grindBlock != null && grindBlock.IsDestroyed)
+                        if (grindBlock != null && grindBlock.IsFullyDismounted)
                         {
                             lock (State.PossibleGrindTargets)
                             {

@@ -626,13 +626,15 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// A grind target is "live" until the block has been destroyed (integrity 0)
-        /// or its fat-block has closed.
+        /// A grind target is "live" until the block is fully dismounted (integrity 0
+        /// AND construction stockpile empty) or its fat-block has closed. Using
+        /// IsFullyDismounted matches the picker filter in ServerTryGrinding —
+        /// integrity-0 blocks with components remaining still need work.
         /// </summary>
         private static bool IsLiveGrindTarget(IMySlimBlock block)
         {
             if (block.CubeGrid == null) return false;
-            if (block.IsDestroyed) return false;
+            if (block.IsFullyDismounted) return false;
             if (block.FatBlock != null && block.FatBlock.Closed) return false;
             return true;
         }
