@@ -21,21 +21,36 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             public TimeSpan Interval;
             public TimeSpan LastRun;
             public Action Work;
+            /// <summary>
+            /// When true, Work runs inline on the main thread instead of being
+            /// dispatched to MyAPIGateway.Parallel.StartBackground. Required for
+            /// tasks that touch engine APIs not safe off the main thread
+            /// (faction/relation, entity tree, projector state, etc.).
+            /// </summary>
+            public bool MainThread;
         }
 
-        // Periodic ownership cache refresh (10 s).
+        // Periodic ownership cache refresh (10 s). MUST run on the main thread —
+        // RefreshExpiredEntries touches MyAPIGateway.Entities.TryGetEntityById and
+        // reads grid state (.Closed, .BigOwners), none of which is safe to call
+        // from MyAPIGateway.Parallel.StartBackground.
         private static PeriodicTask _ownership = new PeriodicTask
         {
             Interval = TimeSpan.FromSeconds(10),
             LastRun = TimeSpan.Zero,
+            MainThread = true,
             Work = () => GridOwnershipCacheHandler.Update()
         };
 
-        // BUG-143: safe-zone cache cleanup (6 s); skips the redundant GetSafeZones walk.
+        // BUG-143: safe-zone cache cleanup (6 s); skips the redundant GetSafeZones
+        // walk. MUST run on the main thread — CleanupStaleZones reads
+        // MySafeZone.MarkedForClose / .Closed (engine state) and shares the
+        // _staleZoneKeys scratch buffer with main-thread maintenance paths.
         private static PeriodicTask _safeZone = new PeriodicTask
         {
             Interval = TimeSpan.FromSeconds(6),
             LastRun = TimeSpan.Zero,
+            MainThread = true,
             Work = () => SafeZoneHandler.CleanupSafeZones()
         };
 
@@ -55,28 +70,37 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             }
         };
 
-        // BUG-123/125: friendly-BaR cache rebuild + profiler flush (5 s cadence).
-        private static PeriodicTask _friendlyAndProfiler = new PeriodicTask
+        // BUG-123: friendly-BaR cache rebuild (5 s cadence). MUST run on the main
+        // thread — IMyEntity.GetUserRelationToOwner touches engine faction state
+        // and is not safe to call from MyAPIGateway.Parallel.StartBackground.
+        private static PeriodicTask _friendlyRebuild = new PeriodicTask
         {
             Interval = TimeSpan.FromSeconds(5),
             LastRun = TimeSpan.Zero,
-            Work = () =>
-            {
-                try { FriendlyRelationsHandler.Rebuild(); } catch { }
-                try { MethodProfiler.FlushAll(); } catch { }
-            }
+            MainThread = true,
+            Work = () => FriendlyRelationsHandler.Rebuild()
+        };
+
+        // BUG-125: profiler flush (5 s cadence). Plain .NET file I/O — safe off
+        // the main thread, kept on background to avoid blocking the sim tick.
+        private static PeriodicTask _profilerFlush = new PeriodicTask
+        {
+            Interval = TimeSpan.FromSeconds(5),
+            LastRun = TimeSpan.Zero,
+            Work = () => MethodProfiler.FlushAll()
         };
 
         /// <summary>
         /// Called once per server-side UpdateBeforeSimulation. Each task whose interval
-        /// has elapsed dispatches its Work onto a background thread.
+        /// has elapsed runs either inline (MainThread=true) or on a background thread.
         /// </summary>
         public static void Tick(TimeSpan now)
         {
             TryFire(ref _ownership, now);
             TryFire(ref _safeZone, now);
             TryFire(ref _ttlCleanup, now);
-            TryFire(ref _friendlyAndProfiler, now);
+            TryFire(ref _friendlyRebuild, now);
+            TryFire(ref _profilerFlush, now);
         }
 
         private static void TryFire(ref PeriodicTask task, TimeSpan now)
@@ -84,6 +108,11 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             if (now.Subtract(task.LastRun) < task.Interval) return;
             task.LastRun = now;
             var work = task.Work;
+            if (task.MainThread)
+            {
+                try { work(); } catch { }
+                return;
+            }
             MyAPIGateway.Parallel.StartBackground(() =>
             {
                 try { work(); } catch { }
