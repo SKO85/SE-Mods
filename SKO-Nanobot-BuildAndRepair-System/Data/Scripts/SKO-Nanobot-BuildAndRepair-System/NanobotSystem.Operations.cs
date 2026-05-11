@@ -547,6 +547,28 @@ namespace SKONanobotBuildAndRepairSystem
             // lock-on changes and clients kept stale beam/effect targets.
             hash = hash * 31 + ComputeBlockKey(State.CurrentWeldingBlock);
             hash = hash * 31 + ComputeBlockKey(State.CurrentGrindingBlock);
+
+            // BUG-260511.9: every SyncBlockState setter that flips Changed=true must
+            // be reflected in the fingerprint, or the BUG-150 fpUnchanged path will
+            // swallow the change. The audit caught two more groups:
+            //   * Safe-zone / shield visibility — flips when entering/leaving a zone.
+            //   * Transport metadata (LastTransportTarget, IsPick, Time, StartTime) —
+            //     seeded once per transport (BUG-260511.1 gate), not per tick, so
+            //     hashing them does not churn the fingerprint.
+            hash = hash * 31 + (State.SafeZoneAllowsWelding ? 1 : 0);
+            hash = hash * 31 + (State.SafeZoneAllowsGrinding ? 1 : 0);
+            hash = hash * 31 + (State.SafeZoneAllowsBuildingProjections ? 1 : 0);
+            hash = hash * 31 + (State.IsShielded ? 1 : 0);
+            hash = hash * 31 + (State.CurrentTransportIsPick ? 1 : 0);
+            hash = hash * 31 + State.CurrentTransportTime.Ticks;
+            hash = hash * 31 + State.CurrentTransportStartTime.Ticks;
+            if (State.LastTransportTarget.HasValue)
+            {
+                var lt = State.LastTransportTarget.Value;
+                hash = hash * 31 + (long)lt.X;
+                hash = hash * 31 + (long)lt.Y;
+                hash = hash * 31 + (long)lt.Z;
+            }
             return hash;
         }
 
