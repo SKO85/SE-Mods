@@ -164,6 +164,7 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
   <li>Check the block's <strong>Search Mode</strong> dropdown — <strong>Walk</strong> mode (default) only sees grids connected to the BaR via connectors, pistons, rotors, or mergers, while <strong>Fly</strong> mode also picks up unconnected grids inside the work area. The wrong choice for your situation can hide the target from the BaR. See <a href="../Welding/#search-mode--walk-vs-fly">Welding → Search Mode</a> for the full breakdown.</li>
   <li>Check the <strong>info panel</strong> in the terminal — it often shows a specific reason why the system is idle.</li>
   <li>Are you using a <strong>block or PCU limiter plugin</strong> on the server (e.g. BuildLimiter for Torch)? These plugins can silently prevent blocks from being placed or welded without any visible error message. Ask your server admin whether any build limits are in effect.</li>
+  <li>If you are an admin on a listen-server or single-player session, try the in-world cluster overlay: <code>/nanobars debug cluster-area</code>. It draws every cluster's per-member working area in 3D space, so you can see at a glance whether the cluster's reach actually covers the target grid. Combine with <code>/nanobars debug targets</code> to see which blocks are discovered and which are already assigned to a system. See <a href="../Debug-and-Diagnostics/#cluster-area-overlay-build-260511x">Debug &amp; Diagnostics → Cluster-Area Overlay</a>.</li>
 </ul>
 </div>
 </details>

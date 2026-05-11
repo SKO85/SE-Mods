@@ -123,3 +123,82 @@ The output no longer repeats the redundant `BaR Mod` prefix on each line. Format
 v2.5.4 (260501.3) — Client
 v2.5.4 (260501.3) — Server
 ```
+
+---
+
+## Late-Cycle Additions (Build 260511.x)
+
+These landed after the initial v2.5.4 publish and are part of the same release line. `BuildId` shown in the debug HUD / `/nanobars version` indicates which build a given world is running.
+
+### New: Configurable Per-Tick ms Budgets
+
+Two new settings cap the **wall-clock time** the mod is allowed to spend on grind and weld work each tick, independent of the existing operation-count caps:
+
+| Setting | Default | Range | Effect |
+|---|---:|---:|---|
+| `MaxGrindMsPerTick` | 8 | 1–100 | Total `ServerDoGrind` time per tick (across all systems) |
+| `MaxWeldMsPerTick` | 8 | 1–100 | Total `ServerDoWeld` time per tick (across all systems) |
+
+With many systems active the ms cap usually wins over `MaxGrindsPerTick` / `MaxWeldsPerTick` (count caps), so on busy worlds raising the ms budget is the lever that actually increases throughput. **Recommended starting point for fleets of 30+ systems: `30 ms` each.** Defaults are unchanged from before — admins who don't touch the new settings keep the existing behaviour.
+
+Set via chat: `/nanobars config set MaxGrindMsPerTick 30` (and save).
+
+### New: `/nanobars debug cluster-area`
+
+Local wireframe overlay that draws every multi-system cluster's per-member working areas, plus a tall green pillar above each cluster's coordinator block. Up to **8 cluster colours** (yellow, pink, green, purple, cyan, orange, red, white), assigned deterministically from the cluster's hash. When toggled on, a chat line summarises cluster sizes labelled by colour:
+
+```
+4 cluster(s) · 47 systems total · sizes: [pink=20, yellow=12, cyan=9, green=6]
+```
+
+Useful for diagnosing "why is system X idle?" — if its working area doesn't visibly cover any reachable target grid, that's the answer. Only enabled / functional / ready systems are drawn. Listen-server / single-player only — rejected on dedicated servers because the draw is client-side.
+
+### New: `/nanobars debug targets`
+
+Local wireframe overlay around every system's current weld and grind target blocks:
+
+- **Border = cluster colour** of the system that has the target in its list.
+- **Solid red fill** for targets that are currently assigned to a system.
+- **Wireframe only** for unassigned targets (visible but not yet claimed).
+
+Lets you see at a glance how many of a grid's blocks are actually being worked vs. just discovered. Per-frame dedup means each block renders exactly once regardless of how many systems see it. Listen-server / single-player only.
+
+### Performance: Cluster Discovery Now Covers All Members
+
+Background scans in BoundingBox mode used to query only the **coordinator's** AABB for entities — so cluster members positioned outside the coordinator's box couldn't see external target grids and went idle even when targets were physically near them. Discovery now unions the AABBs of **every** cluster member before the spatial-index query, so all reachable grids are considered. Per-block range filtering is unchanged (each system still trims to its own oriented working area downstream), so coverage semantics are exactly the same — the change only affects which grids get a chance to be considered.
+
+Trade-off: larger query → 30–60 ms `AsyncAddBlocksOfBox` on 58-member clusters (background thread). Solo clusters skip the union and behave exactly as before.
+
+### Behaviour: Toggling Sort Drops In-Flight Claims Immediately
+
+FEAT-080 (v2.5.4) made the next scan happen right away on a settings change, but in-flight block assignments were preserved — so the system kept chipping at its previously-claimed block for a couple of seconds before adopting the new sort order. Sort-relevant settings changes (Nearest/Farthest/Smallest Grid, priority lists, search mode, etc.) now also release the system's claimed blocks so the very next pick uses the freshly sorted list. Cosmetic toggles (sound volume, ShowArea, multipliers) don't trigger this — they don't affect the cluster key, so claims aren't churned.
+
+---
+
+## Late-Cycle Fixes (Build 260511.x)
+
+### Grind Picker Skipped Wheels and Other 0 % Integrity Blocks With Components Remaining (BUG-260511.2)
+
+Player report: wheels and other attachable blocks ended up at 0 % integrity but never finished — components still in the construction stockpile, block never razed, the skeleton stayed on the grid.
+
+**Root cause:** the grind picker filtered on `IsDestroyed` (true as soon as integrity reaches 0), which doesn't account for components still in the stockpile. The system skipped those blocks before stripping the remaining components.
+
+**Fix:** filter changed to `IsFullyDismounted` (true only when integrity is 0 **and** the stockpile is empty). The system now keeps stripping components after integrity hits 0; once truly dismounted, the block flows into the existing raze cleanup path.
+
+### Orphan Skeleton Blocks Never Got Razed (BUG-260511.3)
+
+Follow-up to the BUG-260511.2 fix: after the picker correctly skipped already-fully-dismounted blocks, those blocks were never queued for raze (the queue was only fed from inside the grind path). Skeleton orphans from earlier damage events or detached subgrids stayed on the grid forever.
+
+**Fix:** the picker's skip branch now enqueues fully-dismounted blocks for raze. The queue itself was upgraded with a dedup so 58 systems all spotting the same orphan don't pile up redundant entries.
+
+### Grind Picker Hoarded Block Assignments (BUG-260511.4)
+
+The grind picker called `AssignToSystem` (a claim, with TTL refresh) on every block it iterated past before landing on a grindable target. So a single system's single picker cycle could leak claims onto many blocks, blocking other systems from grabbing them for the next `AssignmentTtlSeconds`. On large fleets work piled up on a few systems while others sat idle.
+
+**Fix:** picker now uses `IsAssignedToOtherSystem` (pure read) during iteration and only claims the **chosen** target after the loop. Mirrors the welding picker's existing behaviour. Each system holds at most one assignment per cycle. Distribution across a 58-system fleet is now even.
+
+### Cosmetic Grind Transport Timer Kept Restarting (BUG-260511.1)
+
+The visual particle-trail timer for grind transport could get pinned to "now" under certain conditions (multi-block destructions in quick succession), so particles streamed out forever without "arriving" at the system.
+
+**Fix:** the cosmetic transport is only seeded when one isn't already in flight; the inventory transfer still runs every gate-open. Functional behaviour unchanged.

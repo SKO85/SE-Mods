@@ -90,8 +90,10 @@ Toggle debug diagnostics and the debug HUD overlay.
 | `/nanobars debug hide` | Hide the debug HUD overlay locally |
 | `/nanobars debug left` | Position the debug HUD on the left side and show it |
 | `/nanobars debug right` | Position the debug HUD on the right side and show it |
+| `/nanobars debug cluster-area` | Toggle a local wireframe overlay showing every cluster's per-member working areas plus a green pillar above the coordinator block. Up to 8 cluster colours (yellow, pink, green, purple, cyan, orange, red, white). Only enabled / functional / ready blocks count. Lists per-cluster sizes in chat when shown. Listen-server / single-player only. |
+| `/nanobars debug targets` | Toggle a local wireframe overlay around every Build and Repair system's current weld and grind targets. Border = the cluster that discovered the target; solid red fill = the target is currently assigned to a system. Listen-server / single-player only. |
 
-> **Note:** The debug HUD overlay requires the [TextHudAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=758597413) (BuildInfo) mod to be installed. The `on/off` commands control the server-wide debug mode, while `show/hide/left/right` control the local client display.
+> **Note:** The debug HUD overlay (`show/hide/left/right`) requires the [TextHudAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=758597413) (BuildInfo) mod to be installed. The `on/off` commands control the server-wide debug mode. The cluster-area and targets overlays are drawn directly through SE's transparent-box renderer and do not require TextHudAPI; they only render on the local client (not on a dedicated server).
 
 ---
 

@@ -93,6 +93,52 @@ The HUD reads live data from whatever BaRs the server reports; it does not alter
 
 ---
 
+## Cluster-Area Overlay (build 260511.x+)
+
+`/nanobars debug cluster-area` toggles an in-world wireframe overlay that visualises every multi-system cluster directly in 3D space:
+
+- A **per-member working-area box** for each system in a cluster — one of 8 distinct colours (yellow, pink, green, purple, cyan, orange, red, white), assigned deterministically per cluster.
+- A **tall green pillar** above each cluster's *coordinator* block — the system that performs the scan on behalf of the cluster.
+- Drawn with `PostPP` blend so wireframes are visible **through** other blocks; you don't have to crawl into the ship's interior to spot them.
+
+When toggled on, a chat line summarises the cluster sizes labelled by their overlay colour:
+
+```
+4 cluster(s) · 47 systems total · sizes: [pink=20, yellow=12, cyan=9, green=6]
+```
+
+Solo clusters (single-system) aren't drawn — they're already visualised by the per-block **Show area** terminal toggle.
+
+The overlay matches the server-side cluster filter exactly: only systems that are **enabled, functional, and ready** participate. A disabled or broken system won't appear in any cluster.
+
+**Use case:** if a system is reported as idle, this overlay shows you immediately whether the cluster's reach actually covers any reachable target grid. If the wireframes don't visibly contain any target grid, the answer is "geometry" — reposition the system or enlarge its area.
+
+Client-side only. Rejected on dedicated servers — the draw runs on the local renderer; on a DS the command prints a message and doesn't enable the toggle.
+
+---
+
+## Targets Overlay (build 260511.x+)
+
+`/nanobars debug targets` toggles an in-world wireframe overlay around every system's current weld and grind target blocks:
+
+- **Border colour** = the cluster colour of the system that has the target in its scan list (matches the cluster-area palette above).
+- **Solid red fill** (semi-transparent) = the target is currently **assigned** to a system — i.e., a system has claimed it via the assignment handler.
+- **Wireframe only, no fill** = the target is **discovered** by at least one cluster but no system has claimed it yet.
+
+Same `PostPP` blend as the cluster overlay — visible through walls.
+
+Lets you see at a glance:
+
+- Which blocks are actually being worked on vs. just discovered.
+- How target work is distributed between clusters (different border colours).
+- Whether the per-grid limit (`MaxSystemsPerTargetGrid`) is keeping systems off a grid (filled blocks span multiple cluster colours rather than concentrating in one).
+
+Per-frame dedup ensures each block renders exactly once regardless of how many systems list it as a target. Stale targets (already welded to full integrity, already razed) are filtered out so the overlay tracks live work rather than the last scan's snapshot.
+
+Client-side only. Same DS rejection as the cluster-area overlay.
+
+---
+
 ## BuildId
 
 Every build of the mod ships with a `BuildId` of the form `YYMMDD.N` (e.g. `260501.3`) that surfaces in:
