@@ -797,15 +797,26 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
             if ((Mod.Settings.Welder.AllowedWorkModes & WorkMode) == 0 || init)
             {
-                if ((Mod.Settings.Welder.AllowedWorkModes & Mod.Settings.Welder.WorkModeDefault) != 0)
+                // BUG-260511.12: defensive normalisation. SyncModSettings.ValidateAndClamp
+                // already folds the deprecated GrindIfWeldGetStuck bit into
+                // WeldBeforeGrind, but runtime-mutated allow-masks could still
+                // contain it — handle it locally too so the clamp is robust.
+                var allowed = Mod.Settings.Welder.AllowedWorkModes;
+                if ((allowed & WorkModes.GrindIfWeldGetStuck) != 0)
+                {
+                    allowed = (allowed & ~WorkModes.GrindIfWeldGetStuck) | WorkModes.WeldBeforeGrind;
+                }
+
+                if ((allowed & Mod.Settings.Welder.WorkModeDefault) != 0)
                 {
                     WorkMode = Mod.Settings.Welder.WorkModeDefault;
                 }
-                else
-                {
-                    if ((Mod.Settings.Welder.AllowedWorkModes & WorkModes.WeldBeforeGrind) != 0) WorkMode = WorkModes.WeldBeforeGrind;
-                    else if ((Mod.Settings.Welder.AllowedWorkModes & WorkModes.GrindBeforeWeld) != 0) WorkMode = WorkModes.GrindBeforeWeld;
-                }
+                else if ((allowed & WorkModes.WeldBeforeGrind) != 0) WorkMode = WorkModes.WeldBeforeGrind;
+                else if ((allowed & WorkModes.GrindBeforeWeld) != 0) WorkMode = WorkModes.GrindBeforeWeld;
+                else if ((allowed & WorkModes.WeldOnly) != 0) WorkMode = WorkModes.WeldOnly;
+                else if ((allowed & WorkModes.GrindOnly) != 0) WorkMode = WorkModes.GrindOnly;
+                // If nothing matches (allowed == 0), leave WorkMode unchanged —
+                // ValidateAndClamp restores a non-empty default on the next load.
             }
         }
     }

@@ -462,6 +462,33 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 adjusted = true;
             }
 
+            // BUG-260511.12: GrindIfWeldGetStuck is deprecated; the WorkMode setter
+            // migrates the field, but legacy worlds (or hand-edited ModSettings.xml)
+            // can still have the bit set in AllowedWorkModes. Combobox rendering
+            // and the per-block clamp don't know how to handle it, so a mask
+            // containing only this bit leaves the terminal empty and per-block
+            // WorkMode outside the allow-mask. Fold the bit into WeldBeforeGrind
+            // (its canonical migration target) and clear the deprecated flag.
+            if ((settings.Welder.AllowedWorkModes & WorkModes.GrindIfWeldGetStuck) != 0)
+            {
+                settings.Welder.AllowedWorkModes =
+                    (settings.Welder.AllowedWorkModes & ~WorkModes.GrindIfWeldGetStuck) | WorkModes.WeldBeforeGrind;
+                adjusted = true;
+            }
+            if (settings.Welder.WorkModeDefault == WorkModes.GrindIfWeldGetStuck)
+            {
+                settings.Welder.WorkModeDefault = WorkModes.WeldBeforeGrind;
+                adjusted = true;
+            }
+            // Empty AllowedWorkModes leaves every per-block clamp falling through
+            // to nothing — restore the full default so the terminal isn't empty.
+            if (settings.Welder.AllowedWorkModes == 0)
+            {
+                settings.Welder.AllowedWorkModes =
+                    WorkModes.WeldBeforeGrind | WorkModes.GrindBeforeWeld | WorkModes.WeldOnly | WorkModes.GrindOnly;
+                adjusted = true;
+            }
+
             return adjusted;
         }
 
