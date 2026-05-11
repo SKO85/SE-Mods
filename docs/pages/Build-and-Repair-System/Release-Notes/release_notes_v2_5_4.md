@@ -209,6 +209,18 @@ Two related issues. (1) A single active system in a world with many other placed
 
 **Fix:** solo clusters now cap at 2-way stagger regardless of mod-wide value; the auto formula now counts only **enabled** systems. Toggling unused systems off restores responsiveness for the working fleet — no admin override needed. Explicit `/nanobars config set StaggerGroupCount N` still wins over both.
 
+### Server Stability: Maintenance Tasks Off Main Thread (BUG-260511.7)
+
+Three periodic maintenance tasks (friendly-BaR cache rebuild every 5 s, grid-ownership cache refresh every 10 s, safe-zone cleanup every 6 s) were being dispatched onto the background-thread pool, but each of them touched engine APIs that aren't thread-safe — `GetUserRelationToOwner`, `Entities.TryGetEntityById`, `MySafeZone.Closed`/`MarkedForClose`. Under load this is exactly the class of thing that produces intermittent crashes or state corruption that doesn't reliably reproduce.
+
+**Fix:** those three tasks now run inline on the sim tick. Cost is sub-millisecond to a few milliseconds per fire, once every 5–10 s. The TTL-cache cleanup and the profiler-file flush continue to run on the background pool — those genuinely don't touch engine state. No player-facing behaviour change; this closes a latent stability risk.
+
+### Multiplayer Sync: Lock-On Target Changes Lost (BUG-260511.8)
+
+On dedicated servers, when a Build and Repair system changed its current weld or grind target (typical lock-on hand-off), clients sometimes kept showing the **previous** target's beam and weld/grind particles. The state transmission was being suppressed by a fingerprint compare that didn't include the lock-on target fields, so a target swap with no other accompanying state change got dropped.
+
+**Fix:** the fingerprint now includes both current targets (keyed by grid + position). A true target change always shifts the fingerprint and triggers a send; a same-block reference refresh leaves it identical (still correctly suppressed). Clients now see the new target within the normal ~1–2 s sync interval.
+
 ---
 
 ## Late-Cycle Additions (Build 260511.x) — continued
