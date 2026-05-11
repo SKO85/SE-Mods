@@ -90,15 +90,39 @@ namespace SKONanobotBuildAndRepairSystem
         public const int StaggerGroupCountDefault = 3;
         private static int _nextStaggerSlot;
 
+        // Cache for the enabled-BaR count → mod-wide stagger. Refreshed lazily every
+        // ~60 frames (~1 s @ 60Hz) so the per-tick call from each BaR's Update10
+        // doesn't re-enumerate NanobotSystems every fire.
+        private const int StaggerAutoCacheFrames = 60;
+        private static int _cachedAutoStagger = -1;
+        private static int _cachedAutoStaggerFrame = int.MinValue;
+
         public static int GetEffectiveStaggerGroupCount()
         {
             var configured = Settings.StaggerGroupCount;
             if (configured > 0) return configured;
-            // BUG-102: scale by placed-BaR count (disabled BaRs still run orchestration).
-            var total = NanobotSystems.Count;
-            if (total <= 5) return 1;
-            if (total <= 10) return 2;
-            return StaggerGroupCountDefault;
+
+            var frame = MyAPIGateway.Session != null ? MyAPIGateway.Session.GameplayFrameCounter : 0;
+            if (_cachedAutoStagger > 0 && frame - _cachedAutoStaggerFrame < StaggerAutoCacheFrames)
+                return _cachedAutoStagger;
+
+            // Auto-scale by ENABLED BaR count only. Disabled BaRs short-circuit before
+            // ServerTryWeldingGrindingCollecting, so they shouldn't punish staggering math
+            // for the active population.
+            var enabled = 0;
+            foreach (var kvp in NanobotSystems)
+            {
+                if (kvp.Value != null && kvp.Value.IsEnabled) enabled++;
+            }
+
+            int value;
+            if (enabled <= 5) value = 1;
+            else if (enabled <= 10) value = 2;
+            else value = StaggerGroupCountDefault;
+
+            _cachedAutoStagger = value;
+            _cachedAutoStaggerFrame = frame;
+            return value;
         }
 
         public static int ClaimStaggerSlot()

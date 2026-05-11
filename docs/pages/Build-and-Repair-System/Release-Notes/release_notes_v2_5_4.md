@@ -202,3 +202,34 @@ The grind picker called `AssignToSystem` (a claim, with TTL refresh) on every bl
 The visual particle-trail timer for grind transport could get pinned to "now" under certain conditions (multi-block destructions in quick succession), so particles streamed out forever without "arriving" at the system.
 
 **Fix:** the cosmetic transport is only seeded when one isn't already in flight; the inventory transfer still runs every gate-open. Functional behaviour unchanged.
+
+### Solo / Small Fleet Felt Sluggish (BUG-260511.5, BUG-260511.6)
+
+Two related issues. (1) A single active system in a world with many other placed systems inherited the mod-wide 3-way stagger and only fired every 3rd cycle — visibly slow at `WorkSpeed=10`. (2) The auto-staggering formula counted every placed Build and Repair block, including ones that were toggled **off**, so a world with 2 enabled + 58 disabled systems was scored as a 60-system world.
+
+**Fix:** solo clusters now cap at 2-way stagger regardless of mod-wide value; the auto formula now counts only **enabled** systems. Toggling unused systems off restores responsiveness for the working fleet — no admin override needed. Explicit `/nanobars config set StaggerGroupCount N` still wins over both.
+
+---
+
+## Late-Cycle Additions (Build 260511.x) — continued
+
+### `--global` Flag for `/nanobars config save` (FEAT-260511.7)
+
+Restores the legacy mod's `-cpsf` parity. Two save targets are now distinguished by flag:
+
+| Command | Target |
+|---|---|
+| `/nanobars config save` | World folder (per-world settings — unchanged default) |
+| `/nanobars config save --global` | PC-wide mod storage folder — acts as a default for every world on this machine |
+
+Layering: the world file always wins on load. The PC-wide file is only used when a world has no `ModSettings.xml` of its own. `/nanobars config reload` now also tells you which source it read from, so you can confirm at a glance whether your PC-wide defaults are in effect.
+
+`/nanobars config delete` is correspondingly scoped:
+
+| Command | Effect |
+|---|---|
+| `/nanobars config delete` | Deletes only the world file (new default — was: both) |
+| `/nanobars config delete --global` | Deletes only the PC-wide file |
+| `/nanobars config delete --all` | Deletes both (matches old behaviour) |
+
+**Breaking change:** the old `delete` wiped both files unconditionally. Admins who relied on that should add `--all`.

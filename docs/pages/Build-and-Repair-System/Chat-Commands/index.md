@@ -61,10 +61,11 @@ Manage the `ModSettings.xml` server settings at runtime. Changes take effect imm
 | `/nanobars config get <setting>` | Get a specific setting value |
 | `/nanobars config set <setting> <value>` | Set a setting (takes effect immediately) |
 | `/nanobars config save` | Save current settings to `ModSettings.xml` in the world folder |
-| `/nanobars config create` | Alias for `config save` (creates the file if it doesn't exist) |
+| `/nanobars config save --global` | Save current settings to `ModSettings.xml` in the **PC-wide** mod storage folder (`%AppData%\SpaceEngineers\Storage\<mod>`). Acts as a default for every world on this machine. The world-storage file (if present) always wins on load. |
+| `/nanobars config create` | Alias for `config save` (also accepts `--global`) |
 | `/nanobars config reload` | Reload settings from `ModSettings.xml` |
 | `/nanobars config reset` | Reset all settings to defaults |
-| `/nanobars config delete` | Reset to defaults and delete `ModSettings.xml` |
+| `/nanobars config delete` | Reset to defaults and delete the **world** `ModSettings.xml`. Add `--global` to delete only the PC-wide file, or `--all` to delete both. |
 
 ### Examples
 

@@ -23,9 +23,11 @@ Server admins can view and change settings at runtime without restarting, using 
 | `/nanobars config list` | List all settings with their current values. |
 | `/nanobars config get <setting>` | Get a specific setting's current value. |
 | `/nanobars config set <setting> <value>` | Change a setting immediately. |
-| `/nanobars config save` | Save current settings to `ModSettings.xml`. |
+| `/nanobars config save` | Save current settings to `ModSettings.xml` (world folder). |
+| `/nanobars config save --global` | Save settings to the PC-wide mod storage folder (`%AppData%\SpaceEngineers\Storage\<mod>`). Acts as a per-machine default for every world. World-storage file (if present) always wins on load. |
 | `/nanobars config reload` | Reload settings from `ModSettings.xml`. |
 | `/nanobars config reset` | Reset all settings to defaults. |
+| `/nanobars config delete` | Reset to defaults and delete the **world** `ModSettings.xml`. Add `--global` to delete only the PC-wide file, or `--all` to delete both. |
 
 Most settings take effect immediately. Some changes (such as range, power, and welder-specific settings) require a session restart.
 

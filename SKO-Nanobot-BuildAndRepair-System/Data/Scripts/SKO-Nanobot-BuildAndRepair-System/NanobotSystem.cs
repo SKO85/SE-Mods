@@ -42,9 +42,9 @@ namespace SKONanobotBuildAndRepairSystem
         public const float WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT = 50f;
         public const float WELDER_TRANSPORTVOLUME_DIVISOR = 10f;
         public const float WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER = 8f;
-        public const float WELDER_AMOUNT_PER_SECOND = 4f;
+        public const float WELDER_AMOUNT_PER_SECOND = 2f;
         public const float WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED = 0.2f;
-        public const float GRINDER_AMOUNT_PER_SECOND = 8f;
+        public const float GRINDER_AMOUNT_PER_SECOND = 4f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
         private const int MaxPossibleWeldTargets = 128;
@@ -172,6 +172,12 @@ namespace SKONanobotBuildAndRepairSystem
         private static readonly Func<IMySlimBlock, bool> _fatBlockFilter = block => block.FatBlock != null;
 
         private IMyShipWelder _Welder;
+
+        public bool IsEnabled
+        {
+            get { return _Welder != null && _Welder.Enabled; }
+        }
+
         public IMyInventory _TransportInventory;
         private Effects _Effects = new Effects();
 

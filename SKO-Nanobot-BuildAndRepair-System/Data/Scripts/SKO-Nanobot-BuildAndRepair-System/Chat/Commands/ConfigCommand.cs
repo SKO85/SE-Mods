@@ -130,13 +130,13 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                     return ExecuteList();
                 case "save":
                 case "create":
-                    return ExecuteSave();
+                    return ExecuteSave(args);
                 case "reload":
                     return ExecuteReload();
                 case "reset":
                     return ExecuteReset();
                 case "delete":
-                    return ExecuteDelete();
+                    return ExecuteDelete(args);
                 default:
                     return ShowHelp();
             }
@@ -156,9 +156,13 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             sb.AppendLine("/nanobars config set <setting> <value>");
             sb.AppendLine("  Sets a setting to the specified value.");
             sb.AppendLine();
-            sb.AppendLine("/nanobars config save  (or: config create)");
+            sb.AppendLine("/nanobars config save [--global]  (or: config create)");
             sb.AppendLine("  Saves current settings to the world folder (ModSettings.xml).");
             sb.AppendLine("  Creates the file if it doesn't exist yet.");
+            sb.AppendLine("  With --global the file is written to the PC-wide local storage");
+            sb.AppendLine("  folder (%AppData%\\SpaceEngineers\\Storage\\<mod>) so the same defaults");
+            sb.AppendLine("  apply to every world on this machine. World-storage file (if any)");
+            sb.AppendLine("  always wins on load.");
             sb.AppendLine();
             sb.AppendLine("/nanobars config reload");
             sb.AppendLine("  Reloads settings from ModSettings.xml (world or local storage).");
@@ -166,8 +170,11 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             sb.AppendLine("/nanobars config reset");
             sb.AppendLine("  Resets all settings to defaults (keeps ModSettings.xml).");
             sb.AppendLine();
-            sb.AppendLine("/nanobars config delete");
-            sb.AppendLine("  Resets all settings to defaults and deletes ModSettings.xml.");
+            sb.AppendLine("/nanobars config delete [--global | --all]");
+            sb.AppendLine("  Resets settings to defaults and deletes ModSettings.xml.");
+            sb.AppendLine("  Default: deletes only the world-storage file.");
+            sb.AppendLine("  --global: deletes only the PC-wide local-storage file.");
+            sb.AppendLine("  --all:    deletes both world and PC-wide files.");
             sb.AppendLine();
             sb.AppendLine("Examples:");
             sb.AppendLine("  /nanobars config set DebugMode true");
@@ -226,21 +233,34 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
 
         private static string GetSettingsFilePath()
         {
-            try
-            {
-                var worldPath = Sandbox.ModAPI.MyAPIGateway.Session.CurrentPath;
-                if (!string.IsNullOrEmpty(worldPath))
-                    return worldPath + "\\Storage\\" + typeof(SyncModSettings).Name + "\\ModSettings.xml";
-            }
-            catch { }
-            return "ModSettings.xml (world storage)";
+            return GetSettingsFilePath(true);
         }
 
-        private static ChatCommandResult ExecuteSave()
+        private static string GetSettingsFilePath(bool world)
         {
-            SyncModSettings.Save(Mod.Settings, true);
+            return world
+                ? "ModSettings.xml (world Storage folder)"
+                : "ModSettings.xml (PC-wide %AppData%\\SpaceEngineers\\Storage folder)";
+        }
+
+        private static bool HasFlag(string[] args, string flag)
+        {
+            if (args == null) return false;
+            for (int i = 2; i < args.Length; i++)
+            {
+                if (string.Equals(args[i], flag, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        private static ChatCommandResult ExecuteSave(string[] args)
+        {
+            var global = HasFlag(args, "--global");
+            SyncModSettings.Save(Mod.Settings, !global);
             Mod.CustomSettingsLoaded = true;
-            return ChatCommandResult.Success(string.Format("Settings saved to: {0}", GetSettingsFilePath()));
+            var scope = global ? "PC-wide local storage" : "world storage";
+            return ChatCommandResult.Success(string.Format("Settings saved to {0}: {1}", scope, GetSettingsFilePath(!global)));
         }
 
         private static ChatCommandResult ExecuteReload()
@@ -252,7 +272,21 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             Mod.Settings = loaded;
             Mod.SettingsChanged();
             Handlers.NetworkMessagingHandler.BroadcastModSettings();
-            return ChatCommandResult.Success(string.Format("Settings reloaded from: {0}", GetSettingsFilePath()));
+
+            string source;
+            switch (SyncModSettings.LastLoadSource)
+            {
+                case SettingsLoadSource.WorldStorage:
+                    source = "world storage (ModSettings.xml)";
+                    break;
+                case SettingsLoadSource.LocalStorage:
+                    source = "PC-wide local storage (ModSettings.xml — global default; no world file present)";
+                    break;
+                default:
+                    source = "built-in defaults (no ModSettings.xml found in world or PC-wide storage)";
+                    break;
+            }
+            return ChatCommandResult.Success(string.Format("Settings reloaded from: {0}", source));
         }
 
         private static SyncModSettings CreateDefaults()
@@ -273,40 +307,60 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             return ChatCommandResult.Success("Settings reset to defaults. A session/server restart is recommended for all changes to take full effect.");
         }
 
-        private static ChatCommandResult ExecuteDelete()
+        private static ChatCommandResult ExecuteDelete(string[] args)
         {
+            var global = HasFlag(args, "--global");
+            var all = HasFlag(args, "--all");
+
             // Reset settings to defaults.
             Mod.Settings = CreateDefaults();
             Mod.CustomSettingsLoaded = false;
             Mod.SettingsChanged();
             Handlers.NetworkMessagingHandler.BroadcastModSettings();
 
-            // Delete ModSettings.xml from world and local storage.
+            // Determine which files to delete:
+            //   --all      → both world and PC-wide
+            //   --global   → PC-wide local storage only
+            //   (default)  → world storage only
+            var deleteWorld = all || !global;
+            var deleteLocal = all || global;
+
             var deleted = false;
-            try
+            if (deleteWorld)
             {
-                if (Sandbox.ModAPI.MyAPIGateway.Utilities.FileExistsInWorldStorage("ModSettings.xml", typeof(SyncModSettings)))
+                try
                 {
-                    Sandbox.ModAPI.MyAPIGateway.Utilities.DeleteFileInWorldStorage("ModSettings.xml", typeof(SyncModSettings));
-                    deleted = true;
+                    if (Sandbox.ModAPI.MyAPIGateway.Utilities.FileExistsInWorldStorage("ModSettings.xml", typeof(SyncModSettings)))
+                    {
+                        Sandbox.ModAPI.MyAPIGateway.Utilities.DeleteFileInWorldStorage("ModSettings.xml", typeof(SyncModSettings));
+                        deleted = true;
+                    }
                 }
+                catch { }
             }
-            catch { }
-            try
+            if (deleteLocal)
             {
-                if (Sandbox.ModAPI.MyAPIGateway.Utilities.FileExistsInLocalStorage("ModSettings.xml", typeof(SyncModSettings)))
+                try
                 {
-                    Sandbox.ModAPI.MyAPIGateway.Utilities.DeleteFileInLocalStorage("ModSettings.xml", typeof(SyncModSettings));
-                    deleted = true;
+                    if (Sandbox.ModAPI.MyAPIGateway.Utilities.FileExistsInLocalStorage("ModSettings.xml", typeof(SyncModSettings)))
+                    {
+                        Sandbox.ModAPI.MyAPIGateway.Utilities.DeleteFileInLocalStorage("ModSettings.xml", typeof(SyncModSettings));
+                        deleted = true;
+                    }
                 }
+                catch { }
             }
-            catch { }
+
+            string scope;
+            if (all) scope = "world + PC-wide";
+            else if (global) scope = "PC-wide";
+            else scope = "world";
 
             var restart = " A session/server restart is recommended for all changes to take full effect.";
             if (deleted)
-                return ChatCommandResult.Success(string.Format("Settings reset to defaults. Deleted: {0}.{1}", GetSettingsFilePath(), restart));
+                return ChatCommandResult.Success(string.Format("Settings reset to defaults. Deleted ({0}): {1}.{2}", scope, GetSettingsFilePath(!global), restart));
 
-            return ChatCommandResult.Success("Settings reset to defaults. No ModSettings.xml file found to delete." + restart);
+            return ChatCommandResult.Success(string.Format("Settings reset to defaults. No ModSettings.xml file found in {0} scope.{1}", scope, restart));
         }
 
         #region Setting builders

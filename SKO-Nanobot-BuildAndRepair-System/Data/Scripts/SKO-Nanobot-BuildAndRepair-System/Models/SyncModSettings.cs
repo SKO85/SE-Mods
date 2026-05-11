@@ -10,10 +10,21 @@ namespace SKONanobotBuildAndRepairSystem.Models
     /// <summary>
     /// The settings for Mod
     /// </summary>
+    public enum SettingsLoadSource
+    {
+        None,
+        WorldStorage,
+        LocalStorage
+    }
+
     [ProtoContract(SkipConstructor = true, UseProtoMembersOnly = true)]
     public class SyncModSettings
     {
         private const int CurrentSettingsVersion = 7;
+
+        // Set by Load() to record which storage path the settings were read from.
+        // Reset to None when no file was found and defaults were used.
+        public static SettingsLoadSource LastLoadSource = SettingsLoadSource.None;
 
         [ProtoMember(2000), XmlElement]
         public int Version { get; set; }
@@ -210,6 +221,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         public static SyncModSettings Load()
         {
             SyncModSettings settings = null;
+            LastLoadSource = SettingsLoadSource.None;
             try
             {
                 if (MyAPIGateway.Utilities.FileExistsInWorldStorage("ModSettings.xml", typeof(SyncModSettings)))
@@ -218,6 +230,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     {
                         settings = MyAPIGateway.Utilities.SerializeFromXML<SyncModSettings>(reader.ReadToEnd());
                     }
+                    if (settings != null) LastLoadSource = SettingsLoadSource.WorldStorage;
                 }
                 else if (MyAPIGateway.Utilities.FileExistsInLocalStorage("ModSettings.xml", typeof(SyncModSettings)))
                 {
@@ -225,6 +238,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     {
                         settings = MyAPIGateway.Utilities.SerializeFromXML<SyncModSettings>(reader.ReadToEnd());
                     }
+                    if (settings != null) LastLoadSource = SettingsLoadSource.LocalStorage;
                 }
 
                 Mod.CustomSettingsLoaded = settings != null;
