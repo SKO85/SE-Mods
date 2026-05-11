@@ -201,6 +201,29 @@ namespace SKONanobotBuildAndRepairSystem
                                     State.PossibleGrindTargets.ChangeHash();
                                 }
                             }
+
+                            // BUG-260511.19: propagate the removal to other cluster members
+                            // so they don't walk past this block as a closed-FatBlock entry
+                            // between scans. At WorkSpeed=10 with 20 active BaRs, ~120
+                            // blocks/s are destroyed cluster-wide and the dead-entry
+                            // accumulation rate exceeds the per-BaR list size before the
+                            // next scan rebuilds — that's the "1 BaR grinding while others
+                            // sit idle" pattern.
+                            var cluster = AssignedCluster;
+                            if (cluster != null && grindBlock.CubeGrid != null)
+                            {
+                                var gid = grindBlock.CubeGrid.EntityId;
+                                var pos = grindBlock.Position;
+                                var members = cluster.Members;
+                                for (int m = 0; m < members.Count; m++)
+                                {
+                                    var other = members[m];
+                                    if (other != null && other != this)
+                                    {
+                                        other.RemoveGrindTargetByPosition(gid, pos);
+                                    }
+                                }
+                            }
                         }
                     }
                     else

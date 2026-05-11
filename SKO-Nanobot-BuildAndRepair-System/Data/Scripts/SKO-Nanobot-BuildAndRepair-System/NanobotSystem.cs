@@ -135,6 +135,36 @@ namespace SKONanobotBuildAndRepairSystem
             _weldLoopExhausted = false;
             _grindLoopExhausted = false;
         }
+
+        /// <summary>
+        /// BUG-260511.19: removes the block (matched by grid id + Position, NOT
+        /// reference) from this BaR's grind target list. Called by a cluster
+        /// member that just ground a block to completion so OTHER members in the
+        /// cluster don't walk past it as a closed-FatBlock entry. Reference
+        /// equality is unreliable across BaRs because each BaR's
+        /// ApplyClusterResultToSelf wraps shared cluster candidates in fresh
+        /// TargetBlockData instances; only grid+position is stable.
+        /// </summary>
+        internal void RemoveGrindTargetByPosition(long gridEntityId, VRageMath.Vector3I position)
+        {
+            lock (State.PossibleGrindTargets)
+            {
+                for (int i = State.PossibleGrindTargets.Count - 1; i >= 0; i--)
+                {
+                    var t = State.PossibleGrindTargets[i];
+                    if (t == null || t.Block == null || t.Block.CubeGrid == null) continue;
+                    if (t.Block.CubeGrid.EntityId == gridEntityId
+                        && t.Block.Position.X == position.X
+                        && t.Block.Position.Y == position.Y
+                        && t.Block.Position.Z == position.Z)
+                    {
+                        State.PossibleGrindTargets.RemoveAt(i);
+                        State.PossibleGrindTargets.ChangeHash();
+                        return;
+                    }
+                }
+            }
+        }
         // Background-scan-thread-only staging lists; swapped into the published State.*
         // / _PossibleSources / _PossiblePushTargets under their locks. Don't touch from
         // the main thread — read consumers go through the published collections.
