@@ -3,7 +3,6 @@ using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using System.Collections.Generic;
-using VRage.Game;
 using VRage.Game.ModAPI;
 using VRageMath;
 

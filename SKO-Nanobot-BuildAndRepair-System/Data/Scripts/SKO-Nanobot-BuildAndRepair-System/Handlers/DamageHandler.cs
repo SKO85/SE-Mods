@@ -1,6 +1,5 @@
-﻿using Sandbox.ModAPI;
+using Sandbox.ModAPI;
 using Sandbox.ModAPI.Weapons;
-using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;

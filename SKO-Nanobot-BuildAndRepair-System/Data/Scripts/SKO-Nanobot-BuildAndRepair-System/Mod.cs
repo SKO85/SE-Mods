@@ -1,12 +1,10 @@
 namespace SKONanobotBuildAndRepairSystem
 {
     using DefenseShields;
-    using Sandbox.Game.EntityComponents;
     using Sandbox.ModAPI;
     using SKONanobotBuildAndRepairSystem.Cluster;
     using SKONanobotBuildAndRepairSystem.Chat;
     using SKONanobotBuildAndRepairSystem.Handlers;
-    using SKONanobotBuildAndRepairSystem.Helpers;
     using SKONanobotBuildAndRepairSystem.Managers;
     using SKONanobotBuildAndRepairSystem.Caches;
     using SKONanobotBuildAndRepairSystem.Models;
@@ -15,7 +13,6 @@ namespace SKONanobotBuildAndRepairSystem
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
-    using VRage.Game;
     using VRage.Game.Components;
     using VRage.Game.ModAPI;
 
@@ -205,7 +202,7 @@ namespace SKONanobotBuildAndRepairSystem
         private bool _initialized = false;
         private bool _welcomeShown = false;
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
-        private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);
+        private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(1);
         private static TimeSpan _LastSyncModDataRequestSend;
 
         // Background task queue forwarders — implementation lives in

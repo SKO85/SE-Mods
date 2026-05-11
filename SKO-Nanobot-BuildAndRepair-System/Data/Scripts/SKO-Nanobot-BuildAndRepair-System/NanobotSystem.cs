@@ -39,10 +39,10 @@ namespace SKONanobotBuildAndRepairSystem
         public const float WELDER_REQUIRED_ELECTRIC_POWER_WELDING_DEFAULT = 200.0f / 1000; // 200 kW
         public const float WELDER_REQUIRED_ELECTRIC_POWER_GRINDING_DEFAULT = 200.0f / 1000; // 200 kW
         public const float WELDER_REQUIRED_ELECTRIC_POWER_TRANSPORT_DEFAULT = 100.0f / 1000; // 100 kW
-        public const float WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT = 50f;
+        public const float WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT = 40f;
         public const float WELDER_TRANSPORTVOLUME_DIVISOR = 10f;
-        public const float WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER = 16f;
-        public const float WELDER_AMOUNT_PER_SECOND = 8f;
+        public const float WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER = 8f;
+        public const float WELDER_AMOUNT_PER_SECOND = 4f;
         public const float WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED = 0.2f;
         public const float GRINDER_AMOUNT_PER_SECOND = 8f;
         public const float WELDER_SOUND_VOLUME = 2f;

@@ -132,29 +132,29 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         case WorkModes.WeldBeforeGrind:
                         case WorkModes.GrindIfWeldGetStuck: // deprecated; treated as WeldBeforeGrind (defense; setter migrates on entry)
-                            ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
+                            MultiWeld(ref welding, ref needWelding, ref transporting, ref currentWeldingBlock);
                             if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
                             {
                                 primaryStuck = needWelding && !welding;
-                                ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
+                                MultiGrind(ref grinding, ref needGrinding, ref transporting, ref currentGrindingBlock);
                             }
                             break;
 
                         case WorkModes.GrindBeforeWeld:
-                            ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
+                            MultiGrind(ref grinding, ref needGrinding, ref transporting, ref currentGrindingBlock);
                             if (!(grinding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
                             {
                                 primaryStuck = needGrinding && !grinding;
-                                ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
+                                MultiWeld(ref welding, ref needWelding, ref transporting, ref currentWeldingBlock);
                             }
                             break;
 
                         case WorkModes.WeldOnly:
-                            ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
+                            MultiWeld(ref welding, ref needWelding, ref transporting, ref currentWeldingBlock);
                             break;
 
                         case WorkModes.GrindOnly:
-                            ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
+                            MultiGrind(ref grinding, ref needGrinding, ref transporting, ref currentGrindingBlock);
                             break;
                     }
                     State.MissingComponents.RebuildHash();
@@ -289,6 +289,53 @@ namespace SKONanobotBuildAndRepairSystem
                             _InitialScanCompleted, _PushTargetsFull, primaryStuck,
                             _transportBlocked, _transportTimeMs, _workSpeed));
                 }
+            }
+        }
+
+        // Safety cap on multi-action iterations per cycle. The PerTickBudget
+        // (MaxWeldsPerTick / MaxGrindsPerTick) is the real throttle — this just
+        // prevents an unbounded loop if the budget is misconfigured.
+        private const int MaxActionsPerCycle = 32;
+
+        /// <summary>
+        /// Calls ServerTryWelding repeatedly within a single cycle so the BaR can
+        /// consume the full PerTickBudget instead of doing one weld per Update10.
+        /// Stops when no further welding fires (no target, budget exhausted, or
+        /// transport gate). The internal lock-on logic re-picks the same block
+        /// each call until it completes, then moves to the next eligible block.
+        /// </summary>
+        private void MultiWeld(ref bool welding, ref bool needWelding, ref bool transporting, ref IMySlimBlock currentWeldingBlock)
+        {
+            for (int i = 0; i < MaxActionsPerCycle; i++)
+            {
+                bool w, nw, t;
+                IMySlimBlock cwb;
+                ServerTryWelding(out w, out nw, out t, out cwb);
+                if (w) welding = true;
+                if (nw) needWelding = true;
+                if (t) transporting = true;
+                if (cwb != null) currentWeldingBlock = cwb;
+                if (!w) break;
+            }
+        }
+
+        /// <summary>
+        /// Calls ServerTryGrinding repeatedly within a single cycle so the BaR can
+        /// consume the full PerTickBudget instead of doing one grind per Update10.
+        /// Stops when no further grinding fires (no target left, or budget exhausted).
+        /// </summary>
+        private void MultiGrind(ref bool grinding, ref bool needGrinding, ref bool transporting, ref IMySlimBlock currentGrindingBlock)
+        {
+            for (int i = 0; i < MaxActionsPerCycle; i++)
+            {
+                bool g, ng, t;
+                IMySlimBlock cgb;
+                ServerTryGrinding(out g, out ng, out t, out cgb);
+                if (g) grinding = true;
+                if (ng) needGrinding = true;
+                if (t) transporting = true;
+                if (cgb != null) currentGrindingBlock = cgb;
+                if (!g) break;
             }
         }
 

@@ -388,19 +388,30 @@ namespace SKONanobotBuildAndRepairSystem
             if (tsTransportMark != 0L) tsTransportGate = Stopwatch.GetTimestamp() - tsTransportMark;
             if (transportGateOpen)
             {
-                //Transport started
-                tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                var transportPos = ComputePosition(target);
-                if (tsTransportMark != 0L) tsTransportPos = Stopwatch.GetTimestamp() - tsTransportMark;
+                // Multi-grind: a previous block's cosmetic transport may still be
+                // animating this cycle. Resetting StartTime here would keep the timer
+                // pinned to "now" so IsTransportRunning never elapses, and the player
+                // sees particles leave the target but never arrive. Only seed a fresh
+                // transport when none is in flight.
+                var transportAlreadyRunning = State.CurrentTransportStartTime > TimeSpan.Zero;
 
-                tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                State.CurrentTransportIsPick = true;
-                State.CurrentTransportIsCollecting = false;
-                State.CurrentTransportTarget = transportPos;
-                State.CurrentTransportStartTime = playTime;
-                State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.GrindTransportSpeed);
-                if (tsTransportMark != 0L) tsTransportSet = Stopwatch.GetTimestamp() - tsTransportMark;
+                if (!transportAlreadyRunning)
+                {
+                    tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                    var transportPos = ComputePosition(target);
+                    if (tsTransportMark != 0L) tsTransportPos = Stopwatch.GetTimestamp() - tsTransportMark;
 
+                    tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                    State.CurrentTransportIsPick = true;
+                    State.CurrentTransportIsCollecting = false;
+                    State.CurrentTransportTarget = transportPos;
+                    State.CurrentTransportStartTime = playTime;
+                    State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.GrindTransportSpeed);
+                    if (tsTransportMark != 0L) tsTransportSet = Stopwatch.GetTimestamp() - tsTransportMark;
+                }
+
+                // Inventory transfer happens every time the gate opens, independent
+                // of the cosmetic timer — otherwise the BaR fills up and stalls.
                 tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 ServerEmptyTransportInventory(true);
                 if (tsTransportMark != 0L) tsTransportEmpty = Stopwatch.GetTimestamp() - tsTransportMark;

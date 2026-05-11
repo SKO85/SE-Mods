@@ -373,7 +373,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (_ParticleEffectTransport1 != null)
                     {
                         _ActiveTransportEffects++;
-                        _ParticleEffectTransport1.UserScale = 0.1f;
+                        _ParticleEffectTransport1.UserScale = 0.08f;
                         UpdateTransportEffectPosition(system);
                     }
                 }
