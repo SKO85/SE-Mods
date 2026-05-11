@@ -47,8 +47,8 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 6f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
-        private const int MaxPossibleWeldTargets = 128;
-        private const int MaxPossibleGrindTargets = 128;
+        private const int MaxPossibleWeldTargets = 256;
+        private const int MaxPossibleGrindTargets = 256;
         private const int MaxPossibleFloatingTargets = 16;
 
         private const int TransmitStateMinIntervalSeconds = 1;
@@ -94,6 +94,16 @@ namespace SKONanobotBuildAndRepairSystem
         private bool _grindLoopExhausted = false;
         private long _grindExhaustedAtHash;
         private int _grindExhaustedSaturatedCount;
+
+        /// <summary>
+        /// BUG-260511.15: timestamp of the cluster result this BaR has actually
+        /// applied (not the same as `_LastTargetsUpdate`, which is bumped even
+        /// when the apply was skipped). Members compare against
+        /// `cluster.GetResult().Timestamp` to detect a freshly-published result
+        /// and fire `AsyncApplyClusterResults` immediately, instead of waiting
+        /// up to `effectiveTargetInterval` for their own poll interval.
+        /// </summary>
+        internal TimeSpan _lastAppliedResultTimestamp = TimeSpan.Zero;
 
         /// <summary>
         /// BUG-260511.14: reset both loop-exhausted flags so the next picker tick

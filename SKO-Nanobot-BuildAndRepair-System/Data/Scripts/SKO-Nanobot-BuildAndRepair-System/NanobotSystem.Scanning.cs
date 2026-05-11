@@ -122,6 +122,20 @@ namespace SKONanobotBuildAndRepairSystem
                 ? IdleScanInterval
                 : Mod.Settings.TargetsUpdateInterval;
             var updateTargets = playTime.Subtract(_LastTargetsUpdate) >= effectiveTargetInterval;
+            // BUG-260511.15: members must also fire when the coordinator has
+            // published a fresher result than they have applied. Without this
+            // bypass the per-BaR poll interval can leave members up to
+            // `effectiveTargetInterval` behind a coordinator scan that picked
+            // up a freshly-pasted grid — visible to the player as "only one
+            // BaR works the new grid until I toggle a setting".
+            if (!updateTargets && !cluster.IsCoordinator(this))
+            {
+                var publishedResult = cluster.GetResult();
+                if (publishedResult != null && publishedResult.Timestamp > _lastAppliedResultTimestamp)
+                {
+                    updateTargets = true;
+                }
+            }
             var updateSources = updateTargets && playTime.Subtract(_LastSourceUpdate) >= Mod.Settings.SourcesUpdateInterval;
             if (updateTargets)
             {
@@ -563,6 +577,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 // Coordinator is also a member — apply own range/distance filtering
                 ApplyClusterResultToSelf(result, updateSource);
+                _lastAppliedResultTimestamp = result.Timestamp;
 
                 MissedResultCycles = 0;
                 _InitialScanCompleted = true;
@@ -788,6 +803,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 MissedResultCycles = 0;
                 ApplyClusterResultToSelf(result, updateSource);
+                _lastAppliedResultTimestamp = result.Timestamp;
                 _InitialScanCompleted = true;
 
             }
