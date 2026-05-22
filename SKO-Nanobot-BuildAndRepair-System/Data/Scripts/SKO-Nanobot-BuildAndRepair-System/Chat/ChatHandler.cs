@@ -326,8 +326,7 @@ namespace SKONanobotBuildAndRepairSystem.Chat
         {
             var player = MyAPIGateway.Session.Player;
             if (player == null) return true;
-            var promoteLevel = player.PromoteLevel.ToString();
-            return promoteLevel == "Admin" || promoteLevel == "SpaceMaster" || promoteLevel == "Owner";
+            return Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel);
         }
 
         private static bool IsLocalAdmin(VRage.Game.ModAPI.IMyUtilities console)

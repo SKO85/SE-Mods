@@ -83,12 +83,20 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             Work = () => { try { BlockSystemAssigningHandler.Cleanup(); } catch { } }
         };
 
-        // BUG-123: friendly-BaR cache rebuild (5 s cadence). MUST run on the main
-        // thread — IMyEntity.GetUserRelationToOwner touches engine faction state
-        // and is not safe to call from MyAPIGateway.Parallel.StartBackground.
+        // BUG-123: friendly-BaR cache rebuild. MUST run on the main thread —
+        // IMyEntity.GetUserRelationToOwner touches engine faction state and is
+        // not safe to call from MyAPIGateway.Parallel.StartBackground.
+        //
+        // BUG-260502.4: interval was 5 s; on multi-faction servers the rebuild
+        // is O(distinct_owners × N) on the main tick, hitting up to 3 600
+        // GetUserRelationToOwner calls per cycle in a 60-BaR / 60-owner setup.
+        // 15 s reduces that 3× while still keeping the worst-case friendly-
+        // damage semantics correct (a freshly-placed allied BaR is recognized
+        // within 15 s; friendly-damage TTL is 60 s so the window stays well
+        // inside the safety envelope).
         private static PeriodicTask _friendlyRebuild = new PeriodicTask
         {
-            Interval = TimeSpan.FromSeconds(5),
+            Interval = TimeSpan.FromSeconds(15),
             LastRun = TimeSpan.Zero,
             MainThread = true,
             Work = () => FriendlyRelationsHandler.Rebuild()

@@ -96,13 +96,11 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                     if (!IsClusterEligible(system))
                     {
                         system.AssignedCluster = null;
-                        system._lastClusterKey = null;
                         system._lastClusterKeyHash = 0;
                         continue;
                     }
 
                     var key = ComputeClusterKey(system);
-                    system._lastClusterKey = key;
                     system._lastClusterKeyHash = ComputeClusterKeyHash(system);
 
                     ScanCluster cluster;

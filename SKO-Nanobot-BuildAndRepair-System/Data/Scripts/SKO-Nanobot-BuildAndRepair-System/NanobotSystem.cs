@@ -412,12 +412,6 @@ namespace SKONanobotBuildAndRepairSystem
         internal int _staggerSlot = -1;
 
         /// <summary>
-        /// Last computed cluster key. Used by RebuildClusters to detect
-        /// settings changes and skip the full rebuild when nothing changed.
-        /// </summary>
-        internal string _lastClusterKey;
-
-        /// <summary>
         /// FEAT-072: Cached numeric hash of cluster-relevant fields.
         /// Compared in the RebuildClusters fast path instead of recomputing
         /// the full cluster key string every second.

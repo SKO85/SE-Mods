@@ -26,6 +26,13 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static HudAPIv2.BillBoardHUDMessage _background;
         private static StringBuilder _labelText = new StringBuilder(512);
         private static StringBuilder _valueText = new StringBuilder(512);
+
+        // BUG-260502.7: pooled scratch reused by BuildStats just to read PlayerCount.
+        // Previously a fresh List<IMyPlayer> was allocated on every call. BuildStats
+        // runs only while DebugMode/profiling is active, so impact is bounded, but
+        // matching the existing `_adminCheckPlayers` / `_adminBroadcastPlayers`
+        // pooling pattern keeps allocations consistent across the file.
+        private static readonly List<IMyPlayer> _playerCountScratch = new List<IMyPlayer>();
         private static bool _registered;
         private static TimeSpan _lastUpdate;
         private static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(2);
@@ -608,9 +615,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             s.BlockPriorityCache = BlockPriorityHandling.GetItemKeyCache.Count;
             s.CustomSettingsLoaded = Mod.CustomSettingsLoaded;
 
-            var playerList = new List<IMyPlayer>();
-            MyAPIGateway.Players.GetPlayers(playerList);
-            s.PlayerCount = playerList.Count;
+            _playerCountScratch.Clear();
+            MyAPIGateway.Players.GetPlayers(_playerCountScratch);
+            s.PlayerCount = _playerCountScratch.Count;
+            _playerCountScratch.Clear();
 
             s.TickCostAvgMs = (float)Mod.TickCostAvgMs;
             s.TickCostPeakMs = (float)Mod.TickCostPeakMs;
@@ -692,8 +700,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             var player = MyAPIGateway.Session.Player;
             if (player == null) return true;
-            var level = player.PromoteLevel.ToString();
-            return level == "Admin" || level == "SpaceMaster" || level == "Owner";
+            return SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel);
         }
 
         private static void SetVisible(bool visible)

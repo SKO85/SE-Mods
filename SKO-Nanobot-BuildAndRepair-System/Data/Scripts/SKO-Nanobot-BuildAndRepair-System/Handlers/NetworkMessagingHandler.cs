@@ -165,12 +165,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     var player = _adminCheckPlayers[i];
                     if (player.SteamUserId == steamId)
                     {
-                        // REF-4: compare MyPromoteLevel enum directly. Avoids the .ToString()
-                        // allocation and is fragile-rename-proof.
-                        var level = player.PromoteLevel;
-                        return level == MyPromoteLevel.Admin
-                            || level == MyPromoteLevel.SpaceMaster
-                            || level == MyPromoteLevel.Owner;
+                        // BUG-260502.3: use the shared canonical helper instead of an
+                        // inline copy of the REF-4 pattern.
+                        return SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel);
                     }
                 }
                 return false;
@@ -360,8 +357,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             foreach (var player in _adminBroadcastPlayers)
             {
                 if (player.SteamUserId == 0) continue;
-                var level = player.PromoteLevel.ToString();
-                if (level == "Admin" || level == "SpaceMaster" || level == "Owner")
+                if (SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel))
                 {
                     MyAPIGateway.Multiplayer.SendMessageTo(msgId, bytes, player.SteamUserId, true);
                 }
