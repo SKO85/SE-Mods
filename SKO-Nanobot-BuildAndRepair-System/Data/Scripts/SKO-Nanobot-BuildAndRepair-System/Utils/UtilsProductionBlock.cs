@@ -28,8 +28,16 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                 projectedCubeGrid.GetBlocks(projectedBlocks);
                 foreach (IMySlimBlock block in projectedBlocks)
                 {
+                    // BUG-260522.4: guard against unusual block definitions
+                    // returning null/empty Components. The sibling code path
+                    // SlimBlockExtensions.GetMissingComponents already does
+                    // this; without it a single bad definition NREs out of
+                    // the entire scripting-API call.
                     var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
-                    foreach (var component in blockDefinition.Components)
+                    if (blockDefinition == null) continue;
+                    var components = blockDefinition.Components;
+                    if (components == null || components.Length == 0) continue;
+                    foreach (var component in components)
                     {
                         if (componentList.ContainsKey(component.Definition.Id)) componentList[component.Definition.Id] += component.Count;
                         else componentList[component.Definition.Id] = component.Count;

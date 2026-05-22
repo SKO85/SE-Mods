@@ -10,7 +10,12 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 {
     public class Logging
     {
-        private static Logging _instance;
+        // BUG-260522.5: volatile required so the double-checked locking pattern
+        // is correct under the .NET memory model. Without it, another thread
+        // can observe `_instance != null` before the constructor has finished
+        // initializing the instance fields. Logging.Instance is hit from many
+        // threads (background scan workers via Mod.AddAsyncAction → Write).
+        private static volatile Logging _instance;
         private static readonly object _instanceLock = new object();
 
         public static Logging Instance

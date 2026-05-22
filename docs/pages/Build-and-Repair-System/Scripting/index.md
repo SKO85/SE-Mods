@@ -49,7 +49,7 @@ bool IsBuildAndRepairBlock(IMyTerminalBlock block)
 | Property                  | Type   | Description                                                                                                                                     |
 | ------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `BuildAndRepair.Mode`     | `long` | The active search mode. Cast to/from the `SearchModes` enum (`Grids`, `BoundingBox`).                                                           |
-| `BuildAndRepair.WorkMode` | `long` | The active work mode. Cast to/from the `WorkModes` enum (`WeldBeforeGrind`, `GrindBeforeWeld`, `WeldOnly`, `GrindOnly`). |
+| `BuildAndRepair.WorkMode` | `long` | The active work mode. Cast to/from the `WorkModes` enum (`WeldBeforeGrind`, `GrindBeforeWeld`, `WeldOnly`, `GrindOnly`). The legacy `GrindIfWeldGetStuck` value still exists in the enum for backwards-compatibility but is migrated to `WeldBeforeGrind` at runtime — new scripts should not use it. |
 | `BuildAndRepair.WeldMode` | `long` | The active weld mode. Cast to/from the `AutoWeldOptions` enum (`WeldFull`, `WeldFunctional`, `WeldSkeleton`).                                   |
 
 ### Colors

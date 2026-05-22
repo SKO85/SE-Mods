@@ -35,7 +35,7 @@ Both versions are functionally identical. They only differ in the resources requ
 - **Ignore Priority Order (Grinding)** — optionally bypass the grind priority list and target the nearest grind block instead
 - **Inventory Sources** — pulls components from Cargo, Connectors, Sorters, Grinders, Cryo Chambers, and Refineries; pushes excess items back to the same block types
 - **Weld Mode** — choose how far blocks are welded: Weld to Full (100%), Weld to Functional Only (stops at functional threshold), or Weld to Skeleton (places projected blocks only, never repairs)
-- **Work Modes** — choose between Weld Before Grind, Grind Before Weld, Grind If Stuck, Weld Only, or Grind Only; in Weld Before Grind and Grind Before Weld modes, if no actionable targets exist for the primary mode the system now falls through to the secondary mode instead of going idle
+- **Work Modes** — choose between Weld Before Grind, Grind Before Weld, Weld Only, or Grind Only; in Weld Before Grind and Grind Before Weld modes, if no actionable targets exist for the primary mode the system now falls through to the secondary mode instead of going idle
 - **Cluster Scan Coordinator** — blocks sharing the same working area elect a single coordinator to scan for targets, eliminating redundant scans across the cluster; the role is automatically re-elected if the coordinator is disabled or removed
 - **System Limit** — limit how many Build and Repair blocks may work on the same grid simultaneously
 - **Safe Zone Support** — respects Safe Zone rules before taking any action
