@@ -245,3 +245,66 @@ Layering: the world file always wins on load. The PC-wide file is only used when
 | `/nanobars config delete --all` | Deletes both (matches old behaviour) |
 
 **Breaking change:** the old `delete` wiped both files unconditionally. Admins who relied on that should add `--all`.
+
+---
+
+## Late-Cycle Fixes (Build 260511.x — continued)
+
+A second wave of fixes landed across builds `260511.9` through `260511.21` after the v2.5.4 publish. The themes:
+
+### Multiplayer Sync Robustness (BUG-260511.9)
+
+Follow-up to BUG-260511.8. The state fingerprint that decides whether the server needs to push an update to clients didn't include several `SyncBlockState` fields whose setters flip the change flag — safe-zone allow-flags (`SafeZoneAllowsWelding`, `SafeZoneAllowsGrinding`, `SafeZoneAllowsBuildingProjections`), `IsShielded`, and the transport metadata (`LastTransportTarget`, `CurrentTransportIsPick`, `CurrentTransportTime`, `CurrentTransportStartTime`). Audited every `Changed = true` setter and added the missing ones; HUD gating and beam state now refresh on zone/shield transitions and transport state changes.
+
+### Settings-Change Recovery (BUG-260511.13, .14, .20, .21)
+
+A saga of fixes for the `MaxSystemsPerTargetGrid` setting. Lowering it (e.g. 20 → 2) used to either deadlock the fleet ("stops doing anything") or leave it in a stuck state where only a fraction of BaRs engaged. Each iteration found a new edge:
+
+- **BUG-260511.13** — on a lowered limit, force-release lock-ons for BaRs whose current block is on a now-over-limit grid so `GridSystemCount` can drop below the new ceiling.
+- **BUG-260511.14** — reset the per-BaR `_grindLoopExhausted` / `_weldLoopExhausted` flags on every limit change. Without it the FEAT-076 fast-skip guard could re-match a stale saturation snapshot and the picker never re-iterated.
+- **BUG-260511.20** — clear the entire `BlockSystemAssigningHandler` cache on any limit change. Stale TTL claims (8 s) from BaRs that had recently finished or moved on would otherwise still appear "claimed" to other BaRs.
+- **BUG-260511.21** — generalised the fix: every `Mod.SettingsChanged` now unconditionally clears the assignment cache and resets exhausted flags. Any **future** setting that influences picker decisions gets the cleanup for free with no per-setting detection logic.
+
+Net effect: changing `MaxSystemsPerTargetGrid` (or any other mod-wide setting) now self-recovers within a tick or two regardless of direction.
+
+### Engagement at WorkSpeed=10 (BUG-260511.15, .16, .19)
+
+Player report: at `WorkSpeed=10` with a freshly pasted grid, only one BaR would grind at a time even with 20 systems in range. At `WorkSpeed=1`, all 20 grind in parallel. Three layered fixes for what turned out to be three layered problems:
+
+- **BUG-260511.15** — cluster members had to wait for their own poll interval (10–20 s) to apply a fresh cluster scan result, even after the coordinator had already published. Members now compare the published `ScanClusterResult.Timestamp` against the timestamp of the result they last applied and fire an apply immediately when a newer one is available. Drops engagement lag from up to 20 s to ~2 s.
+- **BUG-260511.16** — FEAT-076's "loop exhausted" fast-skip invalidated only on target-list hash and saturation changes, not on TTL claim expiry. BaRs that exhausted while many blocks were claimed stayed stuck until the next cluster scan even though slots drained in the meantime. Added a time-based retry of `AssignmentTtlSeconds / 3` (~2.7 s on the default) so the picker periodically re-checks after claims expire.
+- **BUG-260511.19** — the real culprit. `BUG-165` removes a completed block only from **the grinding BaR's** local target list. Other cluster members keep the block in their list as a `FatBlock.Closed` entry until the next cluster scan rebuilds (5–10 s). At WorkSpeed=10 the cross-BaR completion rate (~120/s with 20 grinders) fills each member's 256-entry list with dead entries within seconds; pickers exhaust, fleet collapses to one BaR. Fix: at block-completion, propagate the removal to every cluster member's local list. Engagement now tracks `MaxSystemsPerTargetGrid` steadily instead of cycling.
+
+(`BUG-260511.17` attempted a related fix — periodic prune of closed-FatBlock entries during picker iteration — but a profile session showed it regressed throughput in a different scenario. Reverted; the BUG-260511.19 at-source approach is what actually works.)
+
+### Raze Queue Hygiene (BUG-260511.10)
+
+`RazeQueueHandler.Process` previously stored dedup keys derived from `grid.EntityId` at enqueue time but couldn't reconstruct them at dequeue when `target.CubeGrid` had gone null. Result: keys for blocks whose grid had been removed sat in the dedup set indefinitely, slowly blocking future enqueues for the same grid+position. Fixed by pairing each queued block with its precomputed key in a `QueueEntry` struct so the key release is unconditional and order-independent.
+
+### Scan-Cache Correctness (BUG-260511.11, .12)
+
+- **BUG-260511.11** — `IsShielded` is now part of the per-grid-scan params hash. Toggling a shield while a cache entry was still fresh used to replay candidates computed under the old shield state for up to the 3 s TTL.
+- **BUG-260511.12** — `WorkModes.GrindIfWeldGetStuck` (deprecated, no longer in the terminal combobox) is now correctly migrated to `WeldBeforeGrind` in `AllowedWorkModes` too, not just per-block `WorkMode`. Legacy worlds with this bit set in their saved `ModSettings.xml` won't end up with an empty terminal combobox.
+
+### Debug HUD Cleanup (BUG-260511.18)
+
+`BlockAssigns` counter in the debug HUD used to climb steadily during grinding because the assignment cache's cleanup ran on the 2-minute TTL-cleanup batch — expired entries lingered up to two minutes. Split that one cache into its own 5-second cleanup task. Picker logic was always correct (it filtered expired entries at read time), this is purely a display-accuracy fix so admins watching the panel see the live claim count.
+
+---
+
+## Code-Review Follow-ups (Build 260522.x)
+
+PR #136 was reviewed by two bots that each flagged a separate set of issues. Shipped fixes:
+
+### From Codex review
+
+- **BUG-260522.1** — `RazeQueueHandler.Process` now counts every dequeue toward the per-tick budget, not just successful batch-adds. Stale entries (null target, missing grid, closed FatBlock, re-welded) used to slip past the budget gate and could monopolize the main thread under post-combat cleanup. Fixed.
+- **BUG-260522.2** — the same handler's `_batchByGrid` scratch dictionary is now cleared in a `finally` block. Previously, an exception thrown before the normal-path clear could strand stale entries that the next successful drain would replay as unintended extra `RazeBlocks` calls.
+- **BUG-260522.3** — `TtlCache.CleanupExpired` no longer reuses a per-instance buffer. After BUG-260511.7 / .18 split cleanup tasks onto the background pool with no in-flight guard, the buffer was technically at risk of concurrent mutation. Switched to a lazily-allocated method-local list; zero allocation in the common (no-expired-entries) path.
+
+### From Copilot review
+
+- **BUG-260522.4** — `UtilsProductionBlock.NeededComponentsForBlueprint` (the `BuildAndRepair.NeededComponentsForBlueprint` scripting API) now null-guards both the `MyCubeBlockDefinition` cast and `blockDefinition.Components` before iterating. NRE no longer possible from unusual block definitions.
+- **BUG-260522.5** — `Logging._instance` is now declared `volatile`. The double-checked locking pattern is now correct under the .NET memory model; readers who observe `_instance != null` are guaranteed to see the fully-constructed object. (Background-thread `Logging.Instance.Write` calls were the latent race surface.)
+- **BUG-260522.6** — the companion programmable-block script in `SKO-Nanobot-BuildAndRepair-System-Script/` is now bumped to v2.5.4 in both `metadata.mod` and the `Script.cs` header. Players verifying they have the matching companion build can now check either source-of-truth.
+- **BUG-260522.7** — docs caught up with the v2.5.4 `GrindIfWeldGetStuck` deprecation: the main feature-list bullet no longer advertises "Grind If Stuck" as a selectable mode, and the Scripting `WorkMode` enum row now mentions that the legacy value still exists for backwards-compat but is migrated to `WeldBeforeGrind` at runtime.
