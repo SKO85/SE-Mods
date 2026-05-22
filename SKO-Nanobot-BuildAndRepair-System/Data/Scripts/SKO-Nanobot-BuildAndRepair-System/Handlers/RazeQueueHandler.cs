@@ -82,11 +82,20 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             try
             {
+                // BUG-260522.1: count every DEQUEUE toward the budget, not just
+                // successful batch-adds. The old loop only `processed++`'d after
+                // a block passed all validity checks; stale entries (null,
+                // re-welded, missing grid) hit `continue` without counting, so
+                // a single Process() call could dequeue an unbounded number of
+                // stale entries and monopolize the main thread under common
+                // post-combat / post-repair cleanup conditions.
                 var processed = 0;
                 while (processed < MaxRazesPerDrainDefault)
                 {
                     if (_queue.Count == 0) break;
                     var entry = _queue.Dequeue();
+                    processed++;
+
                     // BUG-260511.10: free the dedup slot up front, before any
                     // continue path, so a vanished grid / null block can't strand
                     // the key in _pendingKeys forever.
@@ -108,7 +117,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         _batchByGrid[grid] = positions;
                     }
                     positions.Add(target.Position);
-                    processed++;
                     drained++;
                 }
 
@@ -137,7 +145,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                             Logging.Instance.Error(ex);
                         }
                     }
-                    _batchByGrid.Clear();
                 }
 
                 if (profilerTs != 0L)
@@ -169,6 +176,17 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     MethodProfiler.StopAndLog("RazeQueueHandler.Process", profilerTs, () =>
                         string.Format("queueAtEntry={0};exception=true", queueDepthAtEntry));
                 }
+            }
+            finally
+            {
+                // BUG-260522.2: clear the scratch batch on EVERY exit path — the
+                // previous code only cleared it inside the gridsTouched>0 branch
+                // and only on the normal-flow path. If anything in the try block
+                // threw before reaching the clear (e.g. while reading queued block
+                // state), the catch left stale positions in _batchByGrid, which
+                // the next successful drain would replay as unintended extra
+                // RazeBlocks calls.
+                _batchByGrid.Clear();
             }
         }
     }

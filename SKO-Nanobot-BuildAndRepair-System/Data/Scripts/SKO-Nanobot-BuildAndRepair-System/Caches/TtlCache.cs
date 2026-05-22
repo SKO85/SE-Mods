@@ -30,13 +30,6 @@ namespace SKONanobotBuildAndRepairSystem.Caches
 
         public ConcurrentDictionary<TKey, CacheItem> Entries;
 
-        // REF-2: pooled scratch buffer reused across CleanupExpired calls. All known
-        // CleanupExpired call sites run on the main thread (SafeZoneHandler maintenance,
-        // BlockSystemAssigningHandler.Cleanup, BlockFailureCooldownHandler.Cleanup,
-        // InventoryHelper.Cleanup, GridOwnershipCacheHandler.Update), so a single
-        // per-instance buffer is safe and avoids a List allocation per cleanup tick.
-        private readonly List<TKey> _expiredKeysBuffer = new List<TKey>();
-
         private readonly TimeSpan _defaultTtl;
 
         // Basic constructor
@@ -131,21 +124,28 @@ namespace SKONanobotBuildAndRepairSystem.Caches
         {
             TimeSpan now;
             if (!TryGetNow(out now)) return;
-            // REF-2: reuse the pooled buffer instead of allocating a fresh List per call.
-            _expiredKeysBuffer.Clear();
+            // BUG-260522.3: use a method-local list. The previous version reused a
+            // per-instance `_expiredKeysBuffer` field on the assumption that all
+            // CleanupExpired call sites ran on the main thread — that's no longer
+            // true after BUG-260511.7/18 left several caches' cleanup paths on the
+            // background pool (no in-flight guard in PeriodicMaintenanceScheduler).
+            // The allocation cost is negligible — cleanups fire every 5 s to 2 min
+            // and the list is small.
+            List<TKey> expiredKeys = null;
             foreach (var pair in Entries)
             {
                 if (pair.Value.IsExpired(now))
                 {
-                    _expiredKeysBuffer.Add(pair.Key);
+                    if (expiredKeys == null) expiredKeys = new List<TKey>();
+                    expiredKeys.Add(pair.Key);
                 }
             }
+            if (expiredKeys == null) return;
             CacheItem removed;
-            for (int i = 0; i < _expiredKeysBuffer.Count; i++)
+            for (int i = 0; i < expiredKeys.Count; i++)
             {
-                Entries.TryRemove(_expiredKeysBuffer[i], out removed);
+                Entries.TryRemove(expiredKeys[i], out removed);
             }
-            _expiredKeysBuffer.Clear();
         }
     }
 }
