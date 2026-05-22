@@ -1,6 +1,6 @@
 # BUG-007: Push targets include other BaR inventories — causes circular transfers and inventory-full gridlock
 
-## Status: Done
+## Status: Fixed
 ## Severity: High
 ## Version: v2.5.0
 ## Found In: NanobotSystem.Inventory.cs, NanobotSystem.Scanning.cs, Helpers/InventoryHelper.cs

@@ -1,14 +1,18 @@
 # Reviews
 
-Code review notes organized by phase and file.
+Code review notes organized by topic or scope.
+
+## Ticket ID format
+
+- **New tickets**: `REVIEW-YYMMDD.N` where `YYMMDD` is the date the review was opened and `N` is an auto-incrementing sequence number for that day, starting at 1. Example: the first review opened on 2026-05-12 is `REVIEW-260512.1`.
+- **Older tickets** (pre-format-change): keep their original `REVIEW-<topic>` filenames as-is. Do not rename. Cross-references in other tickets must keep matching the existing filename.
+- Filename: `<id>-<short-name>.md`. Example: `REVIEW-260512.1-async-scan-audit.md`.
 
 ## Template
 
-Filename: `REVIEW-[phase]-[file-or-topic].md`
-
 ```
-# Review: [File or Topic]
-## Phase: [1-4]
+# <id>: [Title]
+## Status: Open | In Progress | Done
 ## Reviewer: [Name / AI]
 ## Date: [YYYY-MM-DD]
 ## Version: [target version]
@@ -25,3 +29,4 @@ Filename: `REVIEW-[phase]-[file-or-topic].md`
 
 - Recommendations must be performance-conscious. This mod runs every tick in a game loop — avoid suggesting changes that add allocations, LINQ in hot paths, or unnecessary complexity.
 - Do not recommend over-engineering. Suggestions should target the minimum change needed. No refactoring for its own sake, no speculative abstractions.
+- Move reviews from `TODO/` to `DONE/` when status becomes `Done`. Delete reviews that are superseded or no longer applicable.

@@ -58,6 +58,10 @@ namespace SKONanobotBuildAndRepairSystem.Models
         public int GrindBudgetMax { get; set; }
         [ProtoMember(33)]
         public int GrindBudgetPeak { get; set; }
+        [ProtoMember(80)]
+        public int WeldBudgetMax { get; set; }
+        [ProtoMember(81)]
+        public int WeldBudgetPeak { get; set; }
         [ProtoMember(34)]
         public float SimSpeed { get; set; }
         [ProtoMember(35)]
@@ -74,6 +78,8 @@ namespace SKONanobotBuildAndRepairSystem.Models
         public int BlockAssignments { get; set; }
         [ProtoMember(41)]
         public int MaxSysPerGrid { get; set; }
+        [ProtoMember(42)]
+        public int BlockFailCooldowns { get; set; }
 
         // Caches
         [ProtoMember(50)]

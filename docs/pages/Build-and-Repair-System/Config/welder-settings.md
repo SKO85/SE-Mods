@@ -86,8 +86,8 @@ There is no server-side setting to lock or override the weld mode — it is alwa
 
 | Setting             | Default | Description                                                                                     |
 | ------------------- | ------- | ----------------------------------------------------------------------------------------------- |
-| `AllowBuildDefault` | `true`  | Default state of the Build (weld projected blocks) option in the terminal.                      |
-| `AllowBuildFixed`   | `false` | Set to `true` to lock the Build option server-wide. Players cannot change it from the terminal. |
+| `AllowBuildDefault` | `true`  | Default state of the **Build Projections** option in the terminal (the toggle that controls welding of projected blocks). |
+| `AllowBuildFixed`   | `false` | Set to `true` to lock the **Build Projections** option server-wide. Players cannot change it from the terminal.            |
 
 ---
 
@@ -97,8 +97,8 @@ Work mode determines the order in which the system tackles welding and grinding.
 
 | Setting            | Default                                                                  | Description                                                                                                                                                         |
 | ------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AllowedWorkModes` | `WeldBeforeGrind GrindBeforeWeld GrindIfWeldGetStuck WeldOnly GrindOnly` | Space-separated list of work modes available to players. Remove a value to hide that mode from the terminal.                                                        |
-| `WorkModeDefault`  | `WeldBeforeGrind`                                                        | The work mode applied when a block is first placed or reset. Accepted values: `WeldBeforeGrind`, `GrindBeforeWeld`, `GrindIfWeldGetStuck`, `WeldOnly`, `GrindOnly`. |
+| `AllowedWorkModes` | `WeldBeforeGrind GrindBeforeWeld WeldOnly GrindOnly` | Space-separated list of work modes available to players. Remove a value to hide that mode from the terminal.                                  |
+| `WorkModeDefault`  | `WeldBeforeGrind`                                    | The work mode applied when a block is first placed or reset. Accepted values: `WeldBeforeGrind`, `GrindBeforeWeld`, `WeldOnly`, `GrindOnly`. |
 
 ---
 
@@ -188,4 +188,4 @@ These `Fixed` flags lock specific terminal options server-wide. When set to `tru
 | `AreaOffsetFixed`      | `false` | Work Area offset controls |
 | `PriorityFixed`        | `false` | Weld/grind priority list  |
 | `CollectPriorityFixed` | `false` | Collect priority list     |
-| `ScriptControlFixed`   | `false` | Script control option     |
+| `ScriptControllFixed`  | `false` | Script control option (note: the XML element name has a double `l` — `ScriptControll**Fixed**` — for backwards compatibility with the original mod) |

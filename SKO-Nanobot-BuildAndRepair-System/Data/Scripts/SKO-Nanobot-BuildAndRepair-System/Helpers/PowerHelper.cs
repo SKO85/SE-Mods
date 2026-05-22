@@ -23,12 +23,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             var required = ComputeRequiredElectricPower(system);
             var maxAvailable = GetAvailablePower(system);
 
-            if (maxAvailable >= required)
-            {
-                return true;
-            }
-
-            return false;
+            return maxAvailable >= required;
         }
 
         public static float ComputeRequiredElectricPower(this NanobotSystem system)

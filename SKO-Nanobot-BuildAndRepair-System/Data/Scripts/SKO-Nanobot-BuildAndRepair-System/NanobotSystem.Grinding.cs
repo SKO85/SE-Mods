@@ -22,6 +22,19 @@ namespace SKONanobotBuildAndRepairSystem
             needGrinding = false;
             transporting = false;
             currentGrindingBlock = null;
+            // BUG-137: capture target under lock; expensive grind work runs outside.
+            TargetBlockData chosenGrindTarget = null;
+            // BUG-144: lock timing + iteration counters (mirrors BUG-122/131 in welding).
+            var skippedByNullBlock = 0;
+            var skippedByClosedFatBlock = 0;
+            var skippedByGridLimit = 0;
+            var skippedByAssign = 0;
+            var skippedByScript = 0;
+            var skippedByDestroyed = 0;
+            var iterationsExamined = 0;
+            var loopSkipped = false;
+            var tsLockAcquire = 0L;
+            var tsInLock = 0L;
             try
             {
 
@@ -30,66 +43,193 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!PowerHelper.HasRequiredElectricPower(this)) return; //No power -> nothing to do
 
+            var tsBeforeLock = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
             lock (State.PossibleGrindTargets)
             {
+                var tsAfterAcquire = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                if (tsBeforeLock != 0L) tsLockAcquire = tsAfterAcquire - tsBeforeLock;
+                // FEAT-076: skip iteration when previous run found nothing grindable;
+                // resets on target-list hash change or saturated-grid set change.
+                // BUG-260511.16: also retry after ExhaustedRetryInterval so BaRs notice
+                // claims expiring in BlockSystemAssigningHandler (invisible to the
+                // hash / saturation guards). Without this, exhausted BaRs stay stuck
+                // until the next cluster scan bumps the hash, even though slots free
+                // up continuously as TTL claims drain.
+                var grindExhaustedAge = Mod.NowPlayTime.Subtract(_grindExhaustedAtTime);
+                if (_grindLoopExhausted
+                    && State.PossibleGrindTargets.CurrentHash == _grindExhaustedAtHash
+                    && _gridSaturation.Count == _grindExhaustedSaturatedCount
+                    && grindExhaustedAge < ExhaustedRetryInterval)
+                {
+                    loopSkipped = true;
+                    if (tsBeforeLock != 0L) tsInLock = Stopwatch.GetTimestamp() - tsAfterAcquire;
+                    return;
+                }
+                _grindLoopExhausted = false;
+
                 long lastRejectedGridId = 0;
                 foreach (var targetData in State.PossibleGrindTargets)
                 {
-                    if (targetData.Block == null) continue;
-                    if (targetData.Block.CubeGrid == null) continue;
-                    if (targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed) continue;
+                    iterationsExamined++;
+                    if (targetData.Block == null) { skippedByNullBlock++; continue; }
+                    if (targetData.Block.CubeGrid == null) { skippedByNullBlock++; continue; }
+                    if (targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed) { skippedByClosedFatBlock++; continue; }
 
                     if (Settings.CurrentPickedGrindingBlock == null)
                     {
                         var gridId = targetData.Block.CubeGrid.EntityId;
                         if (IsGridOverSystemLimit(gridId, ref lastRejectedGridId))
                         {
+                            skippedByGridLimit++;
                             continue;
                         }
                     }
 
-                    if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled && Settings.CurrentPickedGrindingBlock == null && !targetData.Block.AssignToSystem(_Welder.EntityId))
+                    // Check-only (no claim) during iteration: skip blocks already
+                    // claimed by ANOTHER BaR. We must NOT call AssignToSystem here
+                    // because it would claim every block we iterate past on the way
+                    // to the chosen one — one BaR's single picker call would leak
+                    // claims onto many blocks (skeleton orphans, blocks past the
+                    // first valid target, etc.), blocking other BaRs from grabbing
+                    // them for the next AssignmentTtlSeconds. Mirrors ServerTryWelding's
+                    // two-phase IsAssignedToOtherSystem-then-AssignToSystem pattern.
+                    if (Mod.Settings.AssignToSystemEnabled
+                        && Settings.CurrentPickedGrindingBlock == null
+                        && targetData.Block.IsAssignedToOtherSystem(_Welder.EntityId))
                     {
+                        skippedByAssign++;
                         continue;
                     }
 
                     if (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && targetData.Block != Settings.CurrentPickedGrindingBlock)
                     {
+                        skippedByScript++;
                         continue;
                     }
 
-                    if (!targetData.Block.IsDestroyed)
+                    // IsDestroyed is true as soon as Integrity reaches 0, but the
+                    // construction stockpile can still contain components — wheels and
+                    // other attachable blocks frequently end up in that state. Using
+                    // IsFullyDismounted instead means we keep grinding the block until
+                    // both integrity AND components are stripped, so we don't orphan
+                    // partially-dismounted blocks on the grid forever.
+                    if (!targetData.Block.IsFullyDismounted)
                     {
                         needGrinding = true;
+                        // BUG-137: capture target; ServerDoGrind runs outside the lock.
+                        chosenGrindTarget = targetData;
+                        break;
+                    }
+                    else
+                    {
+                        skippedByDestroyed++;
+                        // Fully-dismounted block (integrity 0 AND stockpile empty) that
+                        // is still on the grid — usually a skeleton wheel / attachable
+                        // left over from damage events, or a block dismounted by a
+                        // previous BaR before this one's first scan picked it up.
+                        // Enqueue for raze (queue itself dedups) so the cleanup path
+                        // removes it; ServerDoGrind isn't called for these so the
+                        // existing post-grind enqueue can't reach them.
+                        RazeQueueHandler.Enqueue(targetData.Block);
+                    }
+                }
 
-                        // OPT 3: Global grind budget — cap ServerDoGrind calls per tick (count + time).
-                        if (!Mod.TryClaimGrindSlot())
+                // FEAT-076: mark exhausted when the full iteration found nothing grindable.
+                if (!grinding && !needGrinding)
+                {
+                    _grindLoopExhausted = true;
+                    _grindExhaustedAtHash = State.PossibleGrindTargets.CurrentHash;
+                    _grindExhaustedSaturatedCount = _gridSaturation.Count;
+                    _grindExhaustedAtTime = Mod.NowPlayTime;
+                }
+                if (tsBeforeLock != 0L) tsInLock = Stopwatch.GetTimestamp() - tsAfterAcquire;
+            }
+
+            // BUG-137: deferred grind work runs outside the target-list lock.
+            if (chosenGrindTarget != null)
+            {
+                // Claim the chosen target (the matching read in the picker only
+                // checked IsAssignedToOtherSystem). If another BaR raced in between
+                // the iteration's read and now, AssignToSystem fails and we drop
+                // the target for this cycle — next cycle's picker will try again.
+                if (Mod.Settings.AssignToSystemEnabled
+                    && _Welder.IsWorking
+                    && _Welder.Enabled
+                    && Settings.CurrentPickedGrindingBlock == null)
+                {
+                    if (!chosenGrindTarget.Block.AssignToSystem(_Welder.EntityId))
+                    {
+                        skippedByAssign++;
+                        chosenGrindTarget = null;
+                    }
+                }
+            }
+            if (chosenGrindTarget != null)
+            {
+                // OPT 3: Global grind budget — cap ServerDoGrind calls per tick (count + time).
+                if (!Mod.TryClaimGrindSlot())
+                {
+                    ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
+                }
+                else
+                {
+                    var grindTs = Stopwatch.GetTimestamp();
+                    grinding = ServerDoGrind(chosenGrindTarget, out transporting);
+                    Mod.ReportGrindTime((Stopwatch.GetTimestamp() - grindTs) * 1000.0 / Stopwatch.Frequency);
+
+                    if (grinding)
+                    {
+                        currentGrindingBlock = chosenGrindTarget.Block;
+                        // Record world position for locality-aware sort in next scan cycle.
+                        if (chosenGrindTarget.Block != null && chosenGrindTarget.Block.CubeGrid != null)
                         {
-                            if (Mod.Settings.AssignToSystemEnabled) targetData.Block.ReleaseFromSystem();
-                            break;
+                            _LastGrindWorldPosition = chosenGrindTarget.Block.CubeGrid.GridIntegerToWorld(chosenGrindTarget.Block.Position);
+                            _HasLastGrindPosition = true;
                         }
 
-                        var grindTs = Stopwatch.GetTimestamp();
-                        grinding = ServerDoGrind(targetData, out transporting);
-                        Mod.ReportGrindTime((Stopwatch.GetTimestamp() - grindTs) * 1000.0 / Stopwatch.Frequency);
-
-                        if (grinding)
+                        // BUG-165: drop razed / fully-dismounted blocks immediately so
+                        // future ticks skip them. Use IsFullyDismounted (not IsDestroyed)
+                        // so partially-dismounted blocks (integrity 0 with components
+                        // still in the stockpile) stay in the list for further grinding.
+                        var grindBlock = chosenGrindTarget.Block;
+                        if (grindBlock != null && grindBlock.IsFullyDismounted)
                         {
-                            currentGrindingBlock = targetData.Block;
-                            // Record world position for locality-aware sort in next scan cycle.
-                            if (targetData.Block != null && targetData.Block.CubeGrid != null)
+                            lock (State.PossibleGrindTargets)
                             {
-                                _LastGrindWorldPosition = targetData.Block.CubeGrid.GridIntegerToWorld(targetData.Block.Position);
-                                _HasLastGrindPosition = true;
+                                if (State.PossibleGrindTargets.Remove(chosenGrindTarget))
+                                {
+                                    State.PossibleGrindTargets.ChangeHash();
+                                }
                             }
-                            break; //Only grind one block at once
-                        }
 
-                        // Grinding failed — release assignment regardless of reason so other BaRs aren't starved.
-                        if (Mod.Settings.AssignToSystemEnabled)
-                        {
-                            targetData.Block.ReleaseFromSystem();
+                            // BUG-260511.19: propagate the removal to other cluster members
+                            // so they don't walk past this block as a closed-FatBlock entry
+                            // between scans. At WorkSpeed=10 with 20 active BaRs, ~120
+                            // blocks/s are destroyed cluster-wide and the dead-entry
+                            // accumulation rate exceeds the per-BaR list size before the
+                            // next scan rebuilds — that's the "1 BaR grinding while others
+                            // sit idle" pattern.
+                            var cluster = AssignedCluster;
+                            if (cluster != null && grindBlock.CubeGrid != null)
+                            {
+                                var gid = grindBlock.CubeGrid.EntityId;
+                                var pos = grindBlock.Position;
+                                var members = cluster.Members;
+                                for (int m = 0; m < members.Count; m++)
+                                {
+                                    var other = members[m];
+                                    if (other != null && other != this)
+                                    {
+                                        other.RemoveGrindTargetByPosition(gid, pos);
+                                    }
+                                }
+                            }
                         }
+                    }
+                    else
+                    {
+                        // Grinding failed — release assignment regardless of reason so other BaRs aren't starved.
+                        ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
                     }
                 }
             }
@@ -116,10 +256,22 @@ namespace SKONanobotBuildAndRepairSystem
                     var _needGrinding = needGrinding;
                     var _transporting = transporting;
                     var _targetCount = State.PossibleGrindTargets.CurrentCount;
+                    var tsFreq = Stopwatch.Frequency;
+                    var _lockAcquireMs = tsLockAcquire * 1000.0 / tsFreq;
+                    var _inLockMs = tsInLock * 1000.0 / tsFreq;
+                    var _iterationsExamined = iterationsExamined;
+                    var _skippedByNullBlock = skippedByNullBlock;
+                    var _skippedByClosedFatBlock = skippedByClosedFatBlock;
+                    var _skippedByGridLimit = skippedByGridLimit;
+                    var _skippedByAssign = skippedByAssign;
+                    var _skippedByScript = skippedByScript;
+                    var _skippedByDestroyed = skippedByDestroyed;
+                    var _loopSkipped = loopSkipped;
                     MethodProfiler.StopAndLog("ServerTryGrinding", profilerTs, () =>
-                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5}",
+                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15}",
                             _Welder.EntityId, _grinding, _needGrinding, _transporting, _targetCount,
-                            State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none"));
+                            State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none",
+                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped));
                 }
             }
         }
@@ -129,8 +281,8 @@ namespace SKONanobotBuildAndRepairSystem
             var profilerTs = MethodProfiler.Start();
             var target = targetData.Block;
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
+            // BUG-103: don't gate grind on the cosmetic transport timer.
             transporting = IsTransportRunning(playTime);
-            if (transporting) return false;
 
             var targetGrid = target.CubeGrid;
             if (targetGrid == null) return false;
@@ -185,12 +337,17 @@ namespace SKONanobotBuildAndRepairSystem
             var emptying = false;
             bool isEmpty = false;
 
-            // Sub-timing: measure each phase to identify spike source.
+            // BUG-140: split tsDecrease into MountLevel vs MoveItems sub-timers.
             var tsFreq = Stopwatch.Frequency;
             var tsEmpty = 0L;
-            var tsDecrease = 0L;
+            var tsMountLevel = 0L;
+            var tsMoveItems = 0L;
             var tsRaze = 0L;
             var tsTransport = 0L;
+            var tsFriendly = 0L;
+            var tsMechCheck = 0L;
+            var tsDismountCheck = 0L;
+            var friendlyIter = 0;
             long tsMark;
 
             tsMark = Stopwatch.GetTimestamp();
@@ -206,81 +363,195 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!emptying || isEmpty)
             {
+                // BUG-106: gate full dismount on the global budget before DecreaseMountLevel.
+                if (integrityRatio <= 0f && !Mod.TryClaimDismountSlot())
+                {
+                    EmitServerDoGrindProfile(profilerTs,
+                        target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                        (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                        false, false,
+                        target != null ? target.Integrity / target.MaxIntegrity : 0f,
+                        tsEmpty * 1000.0 / tsFreq, 0.0, 0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0,
+                        damage, targetData.Distance, 0.0,
+                        "dismountSlot");
+                    return false;
+                }
+
                 MyDamageInformation damageInfo = new MyDamageInformation(false, damage, MyDamageType.Grind, _Welder.EntityId);
 
                 if (target.UseDamageSystem)
                 {
-                    foreach (var entry in Mod.NanobotSystems)
+                    // BUG-130: owner-keyed friendly-damage map (one write per distinct owner).
+                    tsMark = Stopwatch.GetTimestamp();
+                    System.Collections.Generic.List<long> friendlyOwners;
+                    if (Mod.TryGetFriendlyOwnersForOwner(_Welder.OwnerId, out friendlyOwners) && friendlyOwners != null)
                     {
-                        var relation = entry.Value.Welder.GetUserRelationToOwner(_Welder.OwnerId);
-                        if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
+                        var deadline = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                        for (var i = 0; i < friendlyOwners.Count; i++)
                         {
-                            //A 'friendly' damage from grinder -> do not repair (for a while)
-                            //I don't check block relation here, because if it is enemy we won't repair it in any case and it just times out
-                            entry.Value.FriendlyDamage[target] = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                            friendlyIter++;
+                            Mod.MarkFriendlyDamage(friendlyOwners[i], target, deadline);
                         }
                     }
+                    tsFriendly = Stopwatch.GetTimestamp() - tsMark;
                 }
 
-                tsMark = Stopwatch.GetTimestamp();
+                // BUG-140: timers for DecreaseMountLevel and MoveItemsFromConstructionStockpile.
+                tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 target.DecreaseMountLevel(damageInfo.Amount, _TransportInventory);
-                target.MoveItemsFromConstructionStockpile(_TransportInventory);
-                tsDecrease = Stopwatch.GetTimestamp() - tsMark;
+                if (tsMark != 0L) tsMountLevel = Stopwatch.GetTimestamp() - tsMark;
 
-                if (target.IsFullyDismounted)
+                tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                target.MoveItemsFromConstructionStockpile(_TransportInventory);
+                if (tsMark != 0L) tsMoveItems = Stopwatch.GetTimestamp() - tsMark;
+
+                // BUG-140: instrument IsFullyDismounted.
+                tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                var fullyDismounted = target.IsFullyDismounted;
+                if (tsMark != 0L) tsDismountCheck = Stopwatch.GetTimestamp() - tsMark;
+
+                if (fullyDismounted)
                 {
                     // OPT 1: Mechanical blocks (pistons, rotors, hinges) cause 100-380ms spikes
                     // when destroyed because they detach subgrids. Cap to 1 destruction per tick globally.
+                    tsMark = Stopwatch.GetTimestamp();
                     if (target.FatBlock is Sandbox.ModAPI.IMyMechanicalConnectionBlock || target.FatBlock is Sandbox.ModAPI.IMyAttachableTopBlock)
                     {
                         if (!Mod.TryClaimMechanicalGrindSlot())
+                        {
+                            tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
+                            // Log even on early-return so the cost shows up in the profile.
+                            EmitServerDoGrindProfile(profilerTs,
+                                target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                                (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                                false, true, 0f,
+                                tsEmpty * 1000.0 / tsFreq,
+                                tsFriendly * 1000.0 / tsFreq,
+                                friendlyIter,
+                                tsMountLevel * 1000.0 / tsFreq,
+                                tsMoveItems * 1000.0 / tsFreq,
+                                tsDismountCheck * 1000.0 / tsFreq,
+                                0.0,
+                                tsMechCheck * 1000.0 / tsFreq,
+                                0.0,
+                                0.0, 0.0, 0.0, 0.0,
+                                damage, targetData.Distance, 0.0,
+                                "mechSlot");
                             return false;
+                        }
                     }
+                    tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
 
                     tsMark = Stopwatch.GetTimestamp();
-                    target.SpawnConstructionStockpile();
-                    target.CubeGrid.RazeBlock(target.Position);
+                    // BUG-127: defer raze to the batched RazeQueueHandler.
+                    RazeQueueHandler.Enqueue(target);
                     tsRaze = Stopwatch.GetTimestamp() - tsMark;
                 }
             }
 
+            // BUG-124: split tsTransport into Gate/Pos/Set/Empty sub-timers.
             tsMark = Stopwatch.GetTimestamp();
-            if ((float)_TransportInventory.CurrentVolume >= _MaxGrindTransportVolume || target.IsFullyDismounted)
+            var tsTransportGate = 0L;
+            var tsTransportPos = 0L;
+            var tsTransportSet = 0L;
+            var tsTransportEmpty = 0L;
+            long tsTransportMark;
+            tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+            var transportGateOpen = (float)_TransportInventory.CurrentVolume >= _MaxGrindTransportVolume || target.IsFullyDismounted;
+            if (tsTransportMark != 0L) tsTransportGate = Stopwatch.GetTimestamp() - tsTransportMark;
+            if (transportGateOpen)
             {
-                //Transport started
-                State.CurrentTransportIsPick = true;
-                State.CurrentTransportIsCollecting = false;
-                State.CurrentTransportTarget = ComputePosition(target);
-                State.CurrentTransportStartTime = playTime;
-                State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.GrindTransportSpeed);
+                // Multi-grind: a previous block's cosmetic transport may still be
+                // animating this cycle. Resetting StartTime here would keep the timer
+                // pinned to "now" so IsTransportRunning never elapses, and the player
+                // sees particles leave the target but never arrive. Only seed a fresh
+                // transport when none is in flight.
+                var transportAlreadyRunning = State.CurrentTransportStartTime > TimeSpan.Zero;
 
+                if (!transportAlreadyRunning)
+                {
+                    tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                    var transportPos = ComputePosition(target);
+                    if (tsTransportMark != 0L) tsTransportPos = Stopwatch.GetTimestamp() - tsTransportMark;
+
+                    tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                    State.CurrentTransportIsPick = true;
+                    State.CurrentTransportIsCollecting = false;
+                    State.CurrentTransportTarget = transportPos;
+                    State.CurrentTransportStartTime = playTime;
+                    State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.GrindTransportSpeed);
+                    if (tsTransportMark != 0L) tsTransportSet = Stopwatch.GetTimestamp() - tsTransportMark;
+                }
+
+                // Inventory transfer happens every time the gate opens, independent
+                // of the cosmetic timer — otherwise the BaR fills up and stalls.
+                tsTransportMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 ServerEmptyTransportInventory(true);
+                if (tsTransportMark != 0L) tsTransportEmpty = Stopwatch.GetTimestamp() - tsTransportMark;
                 transporting = true;
             }
             tsTransport = Stopwatch.GetTimestamp() - tsMark;
 
-            if (profilerTs != 0L)
-            {
-                var _transporting = transporting;
-                var _emptyMs = tsEmpty * 1000.0 / tsFreq;
-                var _decreaseMs = tsDecrease * 1000.0 / tsFreq;
-                var _razeMs = tsRaze * 1000.0 / tsFreq;
-                var _transportMs = tsTransport * 1000.0 / tsFreq;
-                var _damage = damage;
-                var _distance = targetData.Distance;
-                var _transportTimeS = transporting ? State.CurrentTransportTime.TotalSeconds : 0.0;
-                MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
-                    string.Format("entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};emptyMs={6:F3};decreaseMs={7:F3};razeMs={8:F3};transportMs={9:F3};damage={10:F2};distance={11:F1};transportTimeS={12:F3}",
-                        _Welder.EntityId,
-                        target != null ? target.BlockDefinition.Id.SubtypeName : "null",
-                        (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
-                        _transporting,
-                        target != null && target.IsFullyDismounted,
-                        target != null ? target.Integrity / target.MaxIntegrity : 0f,
-                        _emptyMs, _decreaseMs, _razeMs, _transportMs,
-                        _damage, _distance, _transportTimeS));
-            }
+            EmitServerDoGrindProfile(profilerTs,
+                target != null ? target.BlockDefinition.Id.SubtypeName : "null",
+                (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                transporting,
+                target != null && target.IsFullyDismounted,
+                target != null ? target.Integrity / target.MaxIntegrity : 0f,
+                tsEmpty * 1000.0 / tsFreq,
+                tsFriendly * 1000.0 / tsFreq,
+                friendlyIter,
+                tsMountLevel * 1000.0 / tsFreq,
+                tsMoveItems * 1000.0 / tsFreq,
+                tsDismountCheck * 1000.0 / tsFreq,
+                tsRaze * 1000.0 / tsFreq,
+                tsMechCheck * 1000.0 / tsFreq,
+                tsTransport * 1000.0 / tsFreq,
+                tsTransportGate * 1000.0 / tsFreq,
+                tsTransportPos * 1000.0 / tsFreq,
+                tsTransportSet * 1000.0 / tsFreq,
+                tsTransportEmpty * 1000.0 / tsFreq,
+                damage,
+                targetData.Distance,
+                transporting ? State.CurrentTransportTime.TotalSeconds : 0.0,
+                null);
             return true;
+        }
+
+        // Single source of truth for the ServerDoGrind profile format.
+        // Early-exit callers pass 0.0 for unmeasured timers and a non-empty earlyExit reason.
+        private const string ServerDoGrindProfileFormat =
+            "entityId={0};block={1};autoGrind={2};transporting={3};dismounted={4};integrity={5:F1};" +
+            "emptyMs={6:F3};friendlyMs={7:F3};friendlyIter={8};decreaseMs={9:F3};" +
+            "mountLevelMs={10:F3};moveItemsMs={11:F3};dismountCheckMs={12:F3};" +
+            "razeMs={13:F3};mechCheckMs={14:F3};transportMs={15:F3};" +
+            "transportGateMs={16:F3};transportPosMs={17:F3};transportSetMs={18:F3};transportEmptyMs={19:F3};" +
+            "damage={20:F2};distance={21:F1};transportTimeS={22:F3};earlyExit={23}";
+
+        private void EmitServerDoGrindProfile(long profilerTs,
+            string blockSubtype, bool autoGrind, bool transporting, bool dismounted, float integrity,
+            double emptyMs, double friendlyMs, int friendlyIter,
+            double mountLevelMs, double moveItemsMs, double dismountCheckMs,
+            double razeMs, double mechCheckMs, double transportMs,
+            double transportGateMs, double transportPosMs, double transportSetMs, double transportEmptyMs,
+            float damage, double distance, double transportTimeS,
+            string earlyExit)
+        {
+            if (profilerTs == 0L) return;
+            var entityId = _Welder.EntityId;
+            var decreaseMs = mountLevelMs + moveItemsMs; // back-compat sum
+            MethodProfiler.StopAndLog("ServerDoGrind", profilerTs, () =>
+                string.Format(ServerDoGrindProfileFormat,
+                    entityId, blockSubtype, autoGrind, transporting, dismounted, integrity,
+                    emptyMs, friendlyMs, friendlyIter, decreaseMs,
+                    mountLevelMs, moveItemsMs, dismountCheckMs,
+                    razeMs, mechCheckMs, transportMs,
+                    transportGateMs, transportPosMs, transportSetMs, transportEmptyMs,
+                    damage, distance, transportTimeS,
+                    earlyExit ?? string.Empty));
         }
     }
 }

@@ -1,7 +1,7 @@
 # BUG-022: BlockPriorityHandling GetItemKey cache ignores `real` parameter
 ## Severity: Medium
 ## Version: v2.5.0
-## Status: DONE
+## Status: Fixed
 
 ## File
 `Handlers/BlockPriorityHandling.cs:68,98`

@@ -1,24 +1,35 @@
 using Sandbox.ModAPI;
 using System.Collections.Generic;
-using System.Linq;
 using VRage.Game.ModAPI;
+using VRage.Game;
 
 namespace SKONanobotBuildAndRepairSystem.Utils
 {
     public static class UtilsPlayer
     {
-        public static IMyPlayer GetPlayer(long identityId)
+        /// <summary>
+        /// BUG-260502.3: canonical admin-role check. Direct enum compare avoids
+        /// the `.ToString()` allocation and is rename-proof if SE renames an
+        /// enum member. Mirrors the `// REF-4:` pattern in
+        /// `NetworkMessagingHandler.IsRemoteAdmin`.
+        /// </summary>
+        public static bool IsAdminLevel(MyPromoteLevel level)
         {
-            var players = GetAllPlayers();
-            var player = players.FirstOrDefault(c => c.IdentityId == identityId);
-            return player;
+            return level == MyPromoteLevel.Admin
+                || level == MyPromoteLevel.SpaceMaster
+                || level == MyPromoteLevel.Owner;
         }
 
-        public static List<IMyPlayer> GetAllPlayers()
+
+        public static IMyPlayer GetPlayer(long identityId)
         {
-            var list = new List<IMyPlayer>();
-            MyAPIGateway.Players.GetPlayers(list);
-            return list;
+            var players = new List<IMyPlayer>();
+            MyAPIGateway.Players.GetPlayers(players);
+            for (var i = 0; i < players.Count; i++)
+            {
+                if (players[i].IdentityId == identityId) return players[i];
+            }
+            return null;
         }
 
         public static long GetOwner(IMyCubeGrid grid)

@@ -1,7 +1,7 @@
 # BUG-021: DamageHandler thread-safety issues with FriendlyDamage and NanobotSystems
 ## Severity: High
 ## Version: v2.5.0
-## Status: DONE
+## Status: Fixed
 
 ## File
 `Handlers/DamageHandler.cs:109-118`

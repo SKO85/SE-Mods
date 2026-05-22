@@ -1,6 +1,7 @@
 ﻿using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Caches;
+using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using SpaceEngineers.Game.ModAPI;
@@ -17,7 +18,17 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 {
     public static class SafeZoneHandler
     {
+        // Sentinel returned by GetSafeZonesInRange when no zone matches; callers MUST NOT mutate.
         private static readonly List<MySafeZone> EmptyZoneList = new List<MySafeZone>();
+
+        // PERF-9: pooled scratch reused by GetSafeZones at Register/seeding time. Avoids
+        // a HashSet allocation per call. GetSafeZones runs on the main thread only.
+        private static readonly HashSet<IMyEntity> _seedZonesScratch = new HashSet<IMyEntity>();
+
+        // REF-2: pooled scratch for CleanupStaleZones. Maintenance runs on the main thread
+        // only (Mod.RebuildSourcesAndTargetsTimer + Register), so a single shared buffer
+        // is safe and avoids the per-call List allocation.
+        private static readonly List<long> _staleZoneKeys = new List<long>();
 
         public static readonly ConcurrentDictionary<long, MySafeZone> Zones = new ConcurrentDictionary<long, MySafeZone>();
 
@@ -70,13 +81,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             var profilerTs = MethodProfiler.Start();
             try
             {
-                HashSet<IMyEntity> safeZones = new HashSet<IMyEntity>();
-                MyAPIGateway.Entities.GetEntities(safeZones, e => e is MySafeZone);
+                _seedZonesScratch.Clear();
+                MyAPIGateway.Entities.GetEntities(_seedZonesScratch, e => e is MySafeZone);
 
-                foreach (var entity in safeZones)
+                foreach (var entity in _seedZonesScratch)
                 {
                     Zones[entity.EntityId] = entity as MySafeZone;
                 }
+                _seedZonesScratch.Clear();
 
                 CleanupStaleZones();
                 GridIntersectingZones.CleanupExpired();
@@ -90,6 +102,32 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     var _zoneCount = Zones.Count;
                     MethodProfiler.StopAndLog("SafeZoneHandler.GetSafeZones", profilerTs, () =>
+                        string.Format("zones={0}", _zoneCount));
+                }
+            }
+        }
+
+        /// <summary>
+        /// BUG-143: lightweight periodic cleanup; OnEntityAdd/OnEntityRemove keep
+        /// Zones live, so we skip the full GetSafeZones entity walk.
+        /// </summary>
+        public static void CleanupSafeZones()
+        {
+            var profilerTs = MethodProfiler.Start();
+            try
+            {
+                CleanupStaleZones();
+                GridIntersectingZones.CleanupExpired();
+                ProtectedFromGrindingCache.CleanupExpired();
+                BlockIntersectingZones.CleanupExpired();
+            }
+            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.CleanupSafeZones: {0}", ex.Message); }
+            finally
+            {
+                if (profilerTs != 0L)
+                {
+                    var _zoneCount = Zones.Count;
+                    MethodProfiler.StopAndLog("SafeZoneHandler.CleanupSafeZones", profilerTs, () =>
                         string.Format("zones={0}", _zoneCount));
                 }
             }
@@ -149,19 +187,21 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         /// </summary>
         public static void CleanupStaleZones()
         {
-            var staleKeys = new List<long>();
+            // REF-2: reuse the pooled buffer instead of allocating per call.
+            _staleZoneKeys.Clear();
             foreach (var pair in Zones)
             {
                 if (pair.Value == null || pair.Value.MarkedForClose || pair.Value.Closed)
                 {
-                    staleKeys.Add(pair.Key);
+                    _staleZoneKeys.Add(pair.Key);
                 }
             }
             MySafeZone removed;
-            foreach (var key in staleKeys)
+            for (int i = 0; i < _staleZoneKeys.Count; i++)
             {
-                Zones.TryRemove(key, out removed);
+                Zones.TryRemove(_staleZoneKeys[i], out removed);
             }
+            _staleZoneKeys.Clear();
         }
 
         /// <summary>
@@ -231,6 +271,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 // Get safe-zones within 300m range.
                 var zones = GetSafeZonesInRange(targetGrid, 300);
 
+                // CON-4 / PERF-2: fetch the mechanical group ONCE per call. Pre-fix, the
+                // subgrid-intersect / no-intersect / target-intersect paths each issued their
+                // own GridGroups.GetGroup engine call (target-intersects also reissued via
+                // CacheZoneForSubGrids), allocating two lists and walking the conveyor topology
+                // up to three times for the same target grid. Lazy-fetched so calls that exit
+                // before the foreach (no zones in range) pay nothing.
+                List<IMyCubeGrid> groups = null;
+
                 foreach (var zone in zones)
                 {
                     if (zone == null || zone.Closed || zone.MarkedForClose || !zone.Enabled)
@@ -238,25 +286,28 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         continue;
                     }
 
+                    if (groups == null)
+                    {
+                        groups = new List<IMyCubeGrid>();
+                        MyAPIGateway.GridGroups.GetGroup(targetGrid, GridLinkTypeEnum.Mechanical, groups);
+                    }
+
                     var targetIntersects = GridIntersects(targetGrid, zone);
                     if (targetIntersects)
                     {
                         // It intersects, so cache this and also for its subgrids.
                         GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
-                        CacheZoneForSubGrids(targetGrid, zone.EntityId);
+                        CacheZoneForSubGrids(targetGrid, zone.EntityId, groups);
 
                         // Return the intersecting zone.
                         return zone;
                     }
                     else
                     {
-                        // Get the subgrids.
-                        var groups = new List<IMyCubeGrid>();
-                        MyAPIGateway.GridGroups.GetGroup(targetGrid, GridLinkTypeEnum.Mechanical, groups);
-
                         var subGridIntersects = false;
-                        foreach (var subGrid in groups)
+                        for (int i = 0; i < groups.Count; i++)
                         {
+                            var subGrid = groups[i];
                             if (subGrid.EntityId == targetGrid.EntityId)
                                 continue;
 
@@ -267,7 +318,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                                 GridIntersectingZones.Set(subGrid.EntityId, zone.EntityId);
                                 GridIntersectingZones.Set(targetGrid.EntityId, zone.EntityId);
 
-                                CacheZoneForSubGrids(subGrid, zone.EntityId);
+                                CacheZoneForSubGrids(subGrid, zone.EntityId, groups);
                                 return zone;
                             }
                         }
@@ -276,7 +327,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         if (!subGridIntersects)
                         {
                             GridIntersectingZones.Set(targetGrid.EntityId, 0);
-                            CacheZoneForSubGrids(targetGrid, 0);
+                            CacheZoneForSubGrids(targetGrid, 0, groups);
                         }
                     }
                 }
@@ -294,10 +345,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
         }
 
-        private static void CacheZoneForSubGrids(IMyCubeGrid targetGrid, long zoneId)
+        // CON-4 / PERF-2: accepts an already-fetched mechanical group list (the caller
+        // typically has one because it just walked the same group). Falls back to fetching
+        // its own list when called without one — preserves the existing public surface.
+        private static void CacheZoneForSubGrids(IMyCubeGrid targetGrid, long zoneId, List<IMyCubeGrid> groups = null)
         {
-            var groups = new List<IMyCubeGrid>();
-            MyAPIGateway.GridGroups.GetGroup(targetGrid, GridLinkTypeEnum.Mechanical, groups);
+            if (groups == null)
+            {
+                groups = new List<IMyCubeGrid>();
+                MyAPIGateway.GridGroups.GetGroup(targetGrid, GridLinkTypeEnum.Mechanical, groups);
+            }
 
             foreach (var subGrid in groups)
             {
@@ -414,10 +471,24 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         return response;
                     }
                 }
-            }
-            catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.GetActionsAllowedForSystem: {0}", ex.Message); }
 
-            return response;
+                // No intersecting safe zone → permissive (BaR is not inside any zone).
+                return response;
+            }
+            catch (Exception ex)
+            {
+                Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.GetActionsAllowedForSystem: {0}", ex.Message);
+                // BUG-260502.1: fail closed. A transient engine exception during
+                // safe-zone evaluation must not silently unlock actions that
+                // should be restricted. The caller retries on the next tick;
+                // by then the engine state has typically stabilised.
+                return new ActionsState()
+                {
+                    IsGrindingAllowed = false,
+                    IsWeldingAllowed = false,
+                    IsBuildingProjectionsAllowed = false,
+                };
+            }
         }
 
         private static void SetIsProtectedFromGrinding(IMySlimBlock targetBlock, long attackerBlockId, bool isProtected)
@@ -513,13 +584,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         }
                     }
 
-                    if (targetBlock.OwnerId == attackerBlock.OwnerId)
-                    {
-                        SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
-                        return false;
-                    }
-
-                    // Check relation between attacker and target.
+                    // OwnerId equality already covered by both branches above; both early-return
+                    // before reaching here. Falling through to the user-relation check.
                     var targetRelation = targetBlock.GetUserRelationToOwner(attackerBlock.OwnerId);
 
                     // If owner, faction member or not owned, then allow grinding within the safe-zone.
@@ -534,10 +600,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, true);
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
-                SetIsProtectedFromGrinding(targetBlock, attackerBlock.EntityId, false);
-                return false;
+                // BUG-260502.2: fail closed. The original catch wrote false (not
+                // protected) into the 15 s TTL cache and returned false, so a
+                // single transient exception would let the BaR grind a
+                // protected block for up to 15 s. Now: log, return true (treat
+                // as protected), and SKIP the cache write so the next call
+                // retries clean against live engine state.
+                Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.IsProtectedFromGrinding: {0}", ex.Message);
+                return true;
             }
             finally
             {

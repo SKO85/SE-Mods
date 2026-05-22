@@ -1,9 +1,12 @@
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Cluster;
+using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Diagnostics;
 using VRage.Game;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
@@ -76,6 +79,29 @@ namespace SKONanobotBuildAndRepairSystem
             _MaxGrindTransportVolume = ((float)_TransportInventory.MaxVolume * grindMult) / WELDER_TRANSPORTVOLUME_DIVISOR;
 
             UpdateCustomInfo(true);
+
+            // When a sort-relevant flag changed (near/far, smallest-grid, ignore color,
+            // search mode, work mode, priority lists, etc.), the cluster key hash differs
+            // from the last rebuild. Drop the in-flight lock-on AND release every
+            // assignment held by this BaR — the multi-action wrapper may have claimed
+            // several blocks in one cycle, and we want the next scan to pick from the
+            // freshly sorted list with no carryover.
+            if (_Welder != null && _Welder.CubeGrid != null)
+            {
+                var newClusterHash = ScanClusterCoordinator.ComputeClusterKeyHash(this);
+                if (_lastClusterKeyHash != 0 && newClusterHash != _lastClusterKeyHash)
+                {
+                    State.CurrentWeldingBlock = null;
+                    State.CurrentGrindingBlock = null;
+                    if (Mod.Settings.AssignToSystemEnabled)
+                    {
+                        BlockSystemAssigningHandler.ReleaseAllForSystem(_Welder.EntityId);
+                    }
+                }
+            }
+
+            // FEAT-080: settings changed — force immediate rescan, bypassing FEAT-075 debounce.
+            TriggerImmediateRescan("settingsChanged", true);
         }
 
         /// <summary>
@@ -104,6 +130,10 @@ namespace SKONanobotBuildAndRepairSystem
             // Force HelpOthers off — the mod does not use this option.
             _Welder.HelpOthers = false;
 
+            // PERF-10: per-instance Random seeded from EntityId (XOR-fold high+low halves).
+            var seed = (int)(_Welder.EntityId ^ (_Welder.EntityId >> 32));
+            _RandomDelay = new Random(seed);
+
             // Assign stagger slot so BaR updates are distributed across ticks.
             _staggerSlot = Mod.ClaimStaggerSlot();
 
@@ -112,6 +142,10 @@ namespace SKONanobotBuildAndRepairSystem
 
             _onEnabledChanged += (block) =>
             {
+                // BUG-120: power-cycle resets the broken-block caches (player's retry path).
+                _BrokenProjBuildKeys.Clear();
+                _ProjBuildSilentFailCount.Clear();
+                _BrokenCacheOwnerId = _Welder != null ? _Welder.OwnerId : long.MinValue;
                 UpdateCustomInfo(true);
             };
 
@@ -128,11 +162,7 @@ namespace SKONanobotBuildAndRepairSystem
             if (welderInventory == null) return;
             _TransportInventory = new Sandbox.Game.MyInventory((float)welderInventory.MaxVolume / MyAPIGateway.Session.BlocksInventorySizeMultiplier, Vector3.MaxValue, MyInventoryFlags.CanSend);
 
-            // BUG-018: Initialize inventory state from current welder inventory.
-            // On world reload, State.InventoryFull defaults to false even when the welder
-            // is full from the previous session. This allows one round of collecting/grinding
-            // before the proactive check in ServerTryWeldingGrindingCollecting catches it,
-            // consuming floating items from the world that can't actually be stored.
+            // BUG-018: seed InventoryFull from current welder volume on world reload.
             if ((float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
             {
                 State.InventoryFull = true;
@@ -170,17 +200,18 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (_IsInit)
             {
-                // Wait for any in-flight async scan to finish before clearing shared state.
-                // The background task sets _AsyncUpdateSourcesAndTargetsRunning = false
-                // inside lock(_Welder) in its finally block. Check under the same lock
-                // to ensure we observe the write, not a stale cached value.
-                var deadline = DateTime.UtcNow.AddSeconds(5);
+                // Wait for any in-flight async scan to finish (1 s ceiling, ~1 ms spin).
+                var deadline = DateTime.UtcNow.AddSeconds(1);
+                var pollSpacingTicks = Stopwatch.Frequency / 1000;
+                var spin = new Stopwatch();
                 while (DateTime.UtcNow < deadline)
                 {
                     lock (_Welder)
                     {
                         if (!_AsyncUpdateSourcesAndTargetsRunning) break;
                     }
+                    spin.Restart();
+                    while (spin.ElapsedTicks < pollSpacingTicks) { }
                 }
 
                 if (_Welder != null)
@@ -196,6 +227,10 @@ namespace SKONanobotBuildAndRepairSystem
                 _InitialScanCompleted = false;
                 _PushTargetsFull = false;
 
+                // BUG-160: release grid-count contribution before tear-down (setter Dec's count).
+                State.CurrentWeldingBlock = null;
+                State.CurrentGrindingBlock = null;
+
                 _Effects.UpdateEffects(this);
                 _Effects.Close(this);
 
@@ -203,7 +238,7 @@ namespace SKONanobotBuildAndRepairSystem
                 lock (State.PossibleGrindTargets) State.PossibleGrindTargets?.Clear();
                 lock (State.PossibleFloatingTargets) State.PossibleFloatingTargets?.Clear();
                 lock (State.MissingComponents) State.MissingComponents?.Clear();
-                FriendlyDamage?.Clear();
+                // BUG-130: per-BaR FriendlyDamage retired; Mod's shared owner-keyed map persists.
 
                 _TempPossibleWeldTargets?.Clear();
                 _TempPossibleGrindTargets?.Clear();

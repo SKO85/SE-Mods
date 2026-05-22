@@ -10,14 +10,26 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 {
     public class Logging
     {
-        private static Logging _instance;
+        // BUG-260522.5: volatile required so the double-checked locking pattern
+        // is correct under the .NET memory model. Without it, another thread
+        // can observe `_instance != null` before the constructor has finished
+        // initializing the instance fields. Logging.Instance is hit from many
+        // threads (background scan workers via Mod.AddAsyncAction → Write).
+        private static volatile Logging _instance;
+        private static readonly object _instanceLock = new object();
 
         public static Logging Instance
         {
             get
             {
                 if (_instance == null)
-                    _instance = new Logging("SKONanobotBuildAndRepairSystem", 0, "NanobotBuildAndRepairSystem.log", typeof(Mod));
+                {
+                    lock (_instanceLock)
+                    {
+                        if (_instance == null)
+                            _instance = new Logging("SKONanobotBuildAndRepairSystem", 0, "NanobotBuildAndRepairSystem.log", typeof(Mod));
+                    }
+                }
                 return _instance;
             }
         }
@@ -36,7 +48,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         public enum BlockNameOptions
         {
             None = 0x0000,
-            IncludeTypename = 0x0001
+            IncludeTypeName = 0x0001
         }
 
         [Flags]
@@ -53,7 +65,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
         public static string BlockName(object block)
         {
-            return BlockName(block, BlockNameOptions.IncludeTypename);
+            return BlockName(block, BlockNameOptions.IncludeTypeName);
         }
 
         public static string BlockName(object block, BlockNameOptions options)
@@ -77,7 +89,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var terminalBlock = block as IMyTerminalBlock;
             if (terminalBlock != null)
             {
-                if ((options & BlockNameOptions.IncludeTypename) != 0)
+                if ((options & BlockNameOptions.IncludeTypeName) != 0)
                     return string.Format("{0}.{1} ({2})", terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid", terminalBlock.CustomName, terminalBlock.BlockDefinition.TypeIdString);
 
                 return string.Format("{0}.{1}", terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid", terminalBlock.CustomName);
@@ -92,7 +104,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var entity = block as IMyEntity;
             if (entity != null)
             {
-                if ((options & BlockNameOptions.IncludeTypename) != 0)
+                if ((options & BlockNameOptions.IncludeTypeName) != 0)
                     return string.Format("{0} ({1})", string.IsNullOrEmpty(entity.DisplayName) ? entity.GetFriendlyName() : entity.DisplayName, entity.GetType().Name);
 
                 return string.Format("{0}", entity.DisplayName);
@@ -118,8 +130,8 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         }
 
         /// <summary>
-        /// Precheckl to avoid retriveing large amout of data,
-        /// that might be not needed afterwards
+        /// Precheck to avoid retrieving a large amount of data
+        /// that might not be needed afterwards.
         /// </summary>
         /// <param name="level"></param>
         /// <returns></returns>
@@ -128,29 +140,24 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             return (LogLevel & level) != 0;
         }
 
-        /// <summary>
-        ///
-        /// </summary>
+        // Indent ops share the _Cache lock with Write() so a writer never observes
+        // a half-updated _Indent value when called concurrently with these.
         public void IncreaseIndent(Level level)
         {
-            if ((LogLevel & level) != 0) _Indent++;
+            if ((LogLevel & level) == 0) return;
+            lock (_Cache) { _Indent++; }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void DecreaseIndent(Level level)
         {
-            if ((LogLevel & level) != 0)
-                if (_Indent > 0) _Indent--;
+            if ((LogLevel & level) == 0) return;
+            lock (_Cache) { if (_Indent > 0) _Indent--; }
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         public void ResetIndent(Level level)
         {
-            if ((LogLevel & level) != 0) _Indent = 0;
+            if ((LogLevel & level) == 0) return;
+            lock (_Cache) { _Indent = 0; }
         }
 
         /// <summary>

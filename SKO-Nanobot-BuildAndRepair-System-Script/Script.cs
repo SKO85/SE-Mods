@@ -1,4 +1,4 @@
-﻿// Version: v2.5.2 - 10.04.2026
+﻿// Version: v2.5.4 - 22.05.2026
 // Compatible with: SKO Nanobot Build and Repair System (Maintained) v2.5.0+
 // This script only works with SKO's maintained versions of the mod.
 // It will NOT work with the original mod by Dummy08.
@@ -1002,6 +1002,9 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         WeldBeforeGrind = 0x0001,
         GrindBeforeWeld = 0x0002,
+        // DEPRECATED: removed from the BaR UI in v2.5.4. Migrated to WeldBeforeGrind on the mod side.
+        // Value preserved so existing programmable-block scripts that reference it still compile.
+        // Do not reuse 0x0004.
         GrindIfWeldGetStuck = 0x0004,
         WeldOnly = 0x0008,
         GrindOnly = 0x0010

@@ -1,5 +1,6 @@
 using Sandbox.Definitions;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Localization;
 using SKONanobotBuildAndRepairSystem.Models;
@@ -35,8 +36,11 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 finally
                 {
-                    MethodProfiler.StopAndLog("UpdateCustomInfo", profilerTs, () =>
-                        string.Format("entityId={0}", _Welder.EntityId));
+                    if (profilerTs != 0L)
+                    {
+                        MethodProfiler.StopAndLog("UpdateCustomInfo", profilerTs, () =>
+                            string.Format("entityId={0}", _Welder.EntityId));
+                    }
                 }
 
                 _UpdateCustomInfoLast = playTime;
@@ -96,6 +100,34 @@ namespace SKONanobotBuildAndRepairSystem
 
             customInfo.Append($"State: {GetStateString()}{Environment.NewLine}");
 
+            // Show scan info when idle so players know the BaR is waiting, not stuck.
+            if (GetWorkingState() == WorkingState.Idle)
+            {
+                if (MyAPIGateway.Session.IsServer)
+                {
+                    // Server: show countdown (we have the scan timer data)
+                    var cluster = AssignedCluster;
+                    var coord = cluster != null ? cluster.Coordinator : null;
+                    if (coord != null)
+                    {
+                        var playTime = MyAPIGateway.Session.ElapsedPlayTime;
+                        var idleCount = coord._consecutiveEmptyScans;
+                        var interval = idleCount >= IdleScansBeforeBackoff
+                            ? IdleScanInterval
+                            : Mod.Settings.TargetsUpdateInterval;
+                        var elapsed = playTime.Subtract(coord._LastTargetsUpdate);
+                        var remaining = interval.Subtract(elapsed);
+                        if (remaining.TotalSeconds < 0) remaining = TimeSpan.Zero;
+                        customInfo.Append(string.Format("Next target scan: {0:F0}s{1}", remaining.TotalSeconds, Environment.NewLine));
+                    }
+                }
+                else
+                {
+                    // Client: no scan timer data available, show generic message
+                    customInfo.Append(string.Format("Scanning for targets...{0}", Environment.NewLine));
+                }
+            }
+
             var resourceSink = _Welder.ResourceSink as Sandbox.Game.EntityComponents.MyResourceSinkComponent;
             if (resourceSink != null)
             {
@@ -117,6 +149,22 @@ namespace SKONanobotBuildAndRepairSystem
                 lock (_PossiblePushTargets) { pushTargetCount = _PossiblePushTargets.Count; }
                 customInfo.Append(string.Format("Sources: {0} | Push Targets: {1}{2}", sourceCount, pushTargetCount, Environment.NewLine));
 
+                // BUG-160 diagnostics: live BaR-on-grid counts for the current weld/grind grids.
+                var weldGridId = (State.CurrentWeldingBlock != null && State.CurrentWeldingBlock.CubeGrid != null)
+                    ? State.CurrentWeldingBlock.CubeGrid.EntityId : 0L;
+                var grindGridId = (State.CurrentGrindingBlock != null && State.CurrentGrindingBlock.CubeGrid != null)
+                    ? State.CurrentGrindingBlock.CubeGrid.EntityId : 0L;
+                int weldGridCount = 0, grindGridCount = 0;
+                if (weldGridId != 0L) Mod.GridSystemCount.TryGetValue(weldGridId, out weldGridCount);
+                if (grindGridId != 0L) Mod.GridSystemCount.TryGetValue(grindGridId, out grindGridCount);
+                var maxPerGrid = Mod.Settings.MaxSystemsPerTargetGrid;
+                customInfo.Append(string.Format("OnGrid: W={0}/{1} G={2}/{3}{4}",
+                    weldGridId != 0L ? weldGridCount.ToString() : "-",
+                    maxPerGrid,
+                    grindGridId != 0L ? grindGridCount.ToString() : "-",
+                    maxPerGrid,
+                    Environment.NewLine));
+
                 var cluster = AssignedCluster;
                 if (cluster != null)
                 {
@@ -129,6 +177,32 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                     customInfo.Append(string.Format("Cluster: {0} | Members: {1}{2}", cluster.ClusterKey.GetHashCode(), cluster.Members.Count, Environment.NewLine));
                     customInfo.Append(string.Format("Coordinator: {0}{1}{2}", coordName, isCoord ? " (self)" : "", Environment.NewLine));
+
+                    // Scan countdown: show when the next scan will fire.
+                    if (coord != null)
+                    {
+                        var playTime = MyAPIGateway.Session.ElapsedPlayTime;
+                        var idleCount = coord._consecutiveEmptyScans;
+                        var scanMode = "normal";
+                        var interval = Mod.Settings.TargetsUpdateInterval;
+                        if (idleCount >= IdleScansBeforeBackoff)
+                        {
+                            interval = IdleScanInterval;
+                            scanMode = "idle";
+                        }
+                        if (coord._scanSkippedSaturated)
+                        {
+                            scanMode = "saturated (skip)";
+                        }
+                        var elapsed = playTime.Subtract(coord._LastTargetsUpdate);
+                        var remaining = interval.Subtract(elapsed);
+                        if (remaining.TotalSeconds < 0) remaining = TimeSpan.Zero;
+                        customInfo.Append(string.Format("Scan: {0} | Next: {1:F0}s | Idle: {2}{3}",
+                            scanMode, remaining.TotalSeconds, idleCount, Environment.NewLine));
+                        customInfo.Append(string.Format("LastScan: W={0} G={1} | Forced: {2}{3}",
+                            coord._lastScanWeldCandidateCount, coord._lastScanGrindCandidateCount,
+                            coord._rescanForced, Environment.NewLine));
+                    }
                 }
                 else
                 {

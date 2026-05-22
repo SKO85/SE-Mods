@@ -1,5 +1,6 @@
 ﻿using ProtoBuf;
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Xml.Serialization;
@@ -9,10 +10,21 @@ namespace SKONanobotBuildAndRepairSystem.Models
     /// <summary>
     /// The settings for Mod
     /// </summary>
+    public enum SettingsLoadSource
+    {
+        None,
+        WorldStorage,
+        LocalStorage
+    }
+
     [ProtoContract(SkipConstructor = true, UseProtoMembersOnly = true)]
     public class SyncModSettings
     {
         private const int CurrentSettingsVersion = 7;
+
+        // Set by Load() to record which storage path the settings were read from.
+        // Reset to None when no file was found and defaults were used.
+        public static SettingsLoadSource LastLoadSource = SettingsLoadSource.None;
 
         [ProtoMember(2000), XmlElement]
         public int Version { get; set; }
@@ -136,6 +148,45 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(39), XmlElement]
         public int AssignmentTtlSeconds { get; set; }
 
+        /// <summary>
+        /// Global cap on ServerDoWeld calls per tick across all BaRs.
+        /// 0 = auto (scales with total BaR count). Range: 0-100.
+        /// Higher values allow faster welding but risk frame spikes when the engine
+        /// welder.Weld() call is heavy on a tick (5-11 ms per call observed under load).
+        /// </summary>
+        [ProtoMember(40), XmlElement]
+        public int MaxWeldsPerTick { get; set; }
+
+        /// <summary>
+        /// How long (seconds) a block stays on the global fail-cooldown after a
+        /// failed weld attempt (no components, projector NRE, etc.). Other BaRs
+        /// (and this BaR's later ticks) skip the block during the cooldown so N
+        /// BaRs don't all bounce off the same un-weldable target each tick.
+        /// 0 disables the feature. Range: 0-30. Default: 4.
+        /// </summary>
+        [ProtoMember(41), XmlElement]
+        public int BlockFailureCooldownSeconds { get; set; }
+
+        /// <summary>
+        /// Per-gameplay-frame wall-clock budget (ms) for grind work across all BaRs.
+        /// Caps total ServerDoGrind time per tick so engine spikes can't push a
+        /// frame past the sim budget. With many BaRs the time cap typically wins
+        /// over MaxGrindsPerTick — raise this to allow more BaRs to grind in
+        /// parallel each tick. Range: 1-100. Default: 8.
+        /// </summary>
+        [ProtoMember(42), XmlElement]
+        public int MaxGrindMsPerTick { get; set; }
+
+        /// <summary>
+        /// Per-gameplay-frame wall-clock budget (ms) for weld work across all BaRs.
+        /// Same role as MaxGrindMsPerTick for the weld path. Engine welder.Weld()
+        /// calls can spike 5-30 ms on complex blocks, so raising this can let more
+        /// BaRs weld in parallel at the cost of occasional larger tick spikes.
+        /// Range: 1-100. Default: 8.
+        /// </summary>
+        [ProtoMember(43), XmlElement]
+        public int MaxWeldMsPerTick { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
@@ -161,11 +212,16 @@ namespace SKONanobotBuildAndRepairSystem.Models
             StaggerGroupCount = 0;
             MaxGrindsPerTick = 0;
             AssignmentTtlSeconds = 8;
+            MaxWeldsPerTick = 0;
+            BlockFailureCooldownSeconds = BlockFailureCooldownHandler.CooldownSecondsDefault;
+            MaxGrindMsPerTick = (int)Mod.MaxGrindMsPerTickDefault;
+            MaxWeldMsPerTick = (int)Mod.MaxWeldMsPerTickDefault;
         }
 
         public static SyncModSettings Load()
         {
             SyncModSettings settings = null;
+            LastLoadSource = SettingsLoadSource.None;
             try
             {
                 if (MyAPIGateway.Utilities.FileExistsInWorldStorage("ModSettings.xml", typeof(SyncModSettings)))
@@ -174,6 +230,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     {
                         settings = MyAPIGateway.Utilities.SerializeFromXML<SyncModSettings>(reader.ReadToEnd());
                     }
+                    if (settings != null) LastLoadSource = SettingsLoadSource.WorldStorage;
                 }
                 else if (MyAPIGateway.Utilities.FileExistsInLocalStorage("ModSettings.xml", typeof(SyncModSettings)))
                 {
@@ -181,6 +238,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     {
                         settings = MyAPIGateway.Utilities.SerializeFromXML<SyncModSettings>(reader.ReadToEnd());
                     }
+                    if (settings != null) LastLoadSource = SettingsLoadSource.LocalStorage;
                 }
 
                 Mod.CustomSettingsLoaded = settings != null;
@@ -330,6 +388,39 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 adjusted = true;
             }
 
+            if (settings.MaxWeldsPerTick < 0)
+            {
+                settings.MaxWeldsPerTick = 0;
+                adjusted = true;
+            }
+            else if (settings.MaxWeldsPerTick > 100)
+            {
+                settings.MaxWeldsPerTick = 100;
+                adjusted = true;
+            }
+
+            if (settings.MaxGrindMsPerTick < 1)
+            {
+                settings.MaxGrindMsPerTick = (int)Mod.MaxGrindMsPerTickDefault;
+                adjusted = true;
+            }
+            else if (settings.MaxGrindMsPerTick > 100)
+            {
+                settings.MaxGrindMsPerTick = 100;
+                adjusted = true;
+            }
+
+            if (settings.MaxWeldMsPerTick < 1)
+            {
+                settings.MaxWeldMsPerTick = (int)Mod.MaxWeldMsPerTickDefault;
+                adjusted = true;
+            }
+            else if (settings.MaxWeldMsPerTick > 100)
+            {
+                settings.MaxWeldMsPerTick = 100;
+                adjusted = true;
+            }
+
             if (settings.AssignmentTtlSeconds < 2)
             {
                 settings.AssignmentTtlSeconds = 2;
@@ -338,6 +429,17 @@ namespace SKONanobotBuildAndRepairSystem.Models
             else if (settings.AssignmentTtlSeconds > 30)
             {
                 settings.AssignmentTtlSeconds = 30;
+                adjusted = true;
+            }
+
+            if (settings.BlockFailureCooldownSeconds < BlockFailureCooldownHandler.CooldownSecondsMin)
+            {
+                settings.BlockFailureCooldownSeconds = BlockFailureCooldownHandler.CooldownSecondsMin;
+                adjusted = true;
+            }
+            else if (settings.BlockFailureCooldownSeconds > BlockFailureCooldownHandler.CooldownSecondsMax)
+            {
+                settings.BlockFailureCooldownSeconds = BlockFailureCooldownHandler.CooldownSecondsMax;
                 adjusted = true;
             }
 
@@ -352,15 +454,38 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 adjusted = true;
             }
 
-            // BUG-093: An empty AllowedGrindJanitorRelations silently breaks grinding
-            // on every BaR in the world — SyncBlockSettings masks each block's
-            // UseGrindJanitorOn against this value, so 0 here clobbers the per-block
-            // janitor setting. Apply the default unconditionally whenever the value
-            // is empty — there's no legitimate "all janitor relations disabled" state;
-            // users should disable the feature via UseGrindJanitorFixed instead.
+            // BUG-093: empty AllowedGrindJanitorRelations breaks grinding world-wide;
+            // there's no valid "all disabled" state — restore default.
             if (settings.Welder.AllowedGrindJanitorRelations == 0)
             {
                 settings.Welder.AllowedGrindJanitorRelations = AutoGrindRelation.NoOwnership | AutoGrindRelation.Enemies | AutoGrindRelation.Neutral;
+                adjusted = true;
+            }
+
+            // BUG-260511.12: GrindIfWeldGetStuck is deprecated; the WorkMode setter
+            // migrates the field, but legacy worlds (or hand-edited ModSettings.xml)
+            // can still have the bit set in AllowedWorkModes. Combobox rendering
+            // and the per-block clamp don't know how to handle it, so a mask
+            // containing only this bit leaves the terminal empty and per-block
+            // WorkMode outside the allow-mask. Fold the bit into WeldBeforeGrind
+            // (its canonical migration target) and clear the deprecated flag.
+            if ((settings.Welder.AllowedWorkModes & WorkModes.GrindIfWeldGetStuck) != 0)
+            {
+                settings.Welder.AllowedWorkModes =
+                    (settings.Welder.AllowedWorkModes & ~WorkModes.GrindIfWeldGetStuck) | WorkModes.WeldBeforeGrind;
+                adjusted = true;
+            }
+            if (settings.Welder.WorkModeDefault == WorkModes.GrindIfWeldGetStuck)
+            {
+                settings.Welder.WorkModeDefault = WorkModes.WeldBeforeGrind;
+                adjusted = true;
+            }
+            // Empty AllowedWorkModes leaves every per-block clamp falling through
+            // to nothing — restore the full default so the terminal isn't empty.
+            if (settings.Welder.AllowedWorkModes == 0)
+            {
+                settings.Welder.AllowedWorkModes =
+                    WorkModes.WeldBeforeGrind | WorkModes.GrindBeforeWeld | WorkModes.WeldOnly | WorkModes.GrindOnly;
                 adjusted = true;
             }
 
@@ -375,7 +500,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
             if (settings.Version <= 0) settings.LogLevel = Logging.Level.Error;
             if (settings.Version <= 4 && settings.Welder.AllowedSearchModes == 0) settings.Welder.AllowedSearchModes = SearchModes.Grids | SearchModes.BoundingBox;
-            if (settings.Version <= 4 && settings.Welder.AllowedWorkModes == 0) settings.Welder.AllowedWorkModes = WorkModes.WeldBeforeGrind | WorkModes.GrindBeforeWeld | WorkModes.GrindIfWeldGetStuck | WorkModes.WeldOnly | WorkModes.GrindOnly;
+            if (settings.Version <= 4 && settings.Welder.AllowedWorkModes == 0) settings.Welder.AllowedWorkModes = WorkModes.WeldBeforeGrind | WorkModes.GrindBeforeWeld | WorkModes.WeldOnly | WorkModes.GrindOnly;
             if (settings.Version <= 4 && settings.Welder.WeldingMultiplier == 0) settings.Welder.WeldingMultiplier = 1;
             if (settings.Version <= 4 && settings.Welder.GrindingMultiplier == 0) settings.Welder.GrindingMultiplier = 1;
             if (settings.Version <= 5 && settings.Welder.AllowedGrindJanitorRelations == 0) settings.Welder.AllowedGrindJanitorRelations = AutoGrindRelation.NoOwnership | AutoGrindRelation.Enemies | AutoGrindRelation.Neutral;

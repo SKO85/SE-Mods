@@ -7,11 +7,10 @@ using VRageMath;
 namespace SKONanobotBuildAndRepairSystem.Cluster
 {
     /// <summary>
-    /// A block candidate that passed all position-INDEPENDENT checks
-    /// (ownership, color, safe zone, shield, priority enabled, needs repair, etc.)
-    /// but NOT IsInRange — each cluster member applies its own range filter.
+    /// Block candidate that passed position-independent checks but not IsInRange
+    /// (members apply their own range filter). BUG-111: struct, not class (heap pressure).
     /// </summary>
-    public class ClusterTargetCandidate
+    public struct ClusterTargetCandidate
     {
         public IMySlimBlock Block;
         public Models.TargetBlockData.AttributeFlags Attributes;
@@ -24,9 +23,9 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
     }
 
     /// <summary>
-    /// A floating object / character / inventory bag candidate for cluster sharing.
+    /// Floating object / character / inventory bag candidate. BUG-111: struct, not class.
     /// </summary>
-    public class ClusterFloatingCandidate
+    public struct ClusterFloatingCandidate
     {
         public IMyEntity Entity;
         public Vector3D WorldPosition;

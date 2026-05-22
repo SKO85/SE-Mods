@@ -4,22 +4,94 @@ using SKONanobotBuildAndRepairSystem.Profiling;
 using System;
 using System.Collections.Generic;
 using VRage;
+using VRage.Game;
 using VRage.Game.ModAPI;
+using VRage.ModAPI;
 
 namespace SKONanobotBuildAndRepairSystem.Helpers
 {
     public static class InventoryHelper
     {
+        // BUG-119: 60s TTL — stale entries are harmless (transfer fails later, refresh picks up new).
         private static readonly TtlCache<MyTuple<long, long>, bool> ConnectionCache = new TtlCache<MyTuple<long, long>, bool>(
-            defaultTtl: TimeSpan.FromSeconds(15),
+            defaultTtl: TimeSpan.FromSeconds(60),
             comparer: new MyTupleComparer<long, long>(),
             concurrencyLevel: 4,
             capacity: 2048);
 
-        public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources)
+        // BUG-142: cache for CanTransferItemTo (key includes component for sorter filters).
+        public struct TransferKey : IEquatable<TransferKey>
+        {
+            public readonly long SrcEntityId;
+            public readonly long DstEntityId;
+            public readonly int ComponentHash;
+
+            public TransferKey(long srcEntityId, long dstEntityId, int componentHash)
+            {
+                SrcEntityId = srcEntityId;
+                DstEntityId = dstEntityId;
+                ComponentHash = componentHash;
+            }
+
+            public bool Equals(TransferKey other)
+            {
+                return SrcEntityId == other.SrcEntityId
+                    && DstEntityId == other.DstEntityId
+                    && ComponentHash == other.ComponentHash;
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (!(obj is TransferKey)) return false;
+                return Equals((TransferKey)obj);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    var hash = 17;
+                    hash = hash * 31 + SrcEntityId.GetHashCode();
+                    hash = hash * 31 + DstEntityId.GetHashCode();
+                    hash = hash * 31 + ComponentHash;
+                    return hash;
+                }
+            }
+        }
+
+        private static readonly TtlCache<TransferKey, bool> TransferCache = new TtlCache<TransferKey, bool>(
+            defaultTtl: TimeSpan.FromSeconds(60),
+            comparer: null,
+            concurrencyLevel: 4,
+            capacity: 4096);
+
+        public static int TransferCacheCount { get { return TransferCache.Count; } }
+
+        /// <summary>BUG-142: cached wrapper around IMyInventory.CanTransferItemTo.</summary>
+        public static bool CanTransferItemToCached(this IMyInventory srcInventory, IMyInventory dstInventory, MyDefinitionId componentId)
+        {
+            if (srcInventory == null || dstInventory == null) return false;
+            var srcOwner = srcInventory.Owner as IMyEntity;
+            var dstOwner = dstInventory.Owner as IMyEntity;
+            if (srcOwner == null || dstOwner == null)
+                return srcInventory.CanTransferItemTo(dstInventory, componentId);
+
+            var key = new TransferKey(srcOwner.EntityId, dstOwner.EntityId, componentId.SubtypeId.GetHashCode());
+            bool cached;
+            if (TransferCache.TryGet(key, out cached))
+                return cached;
+
+            var result = srcInventory.CanTransferItemTo(dstInventory, componentId);
+            TransferCache.Set(key, result);
+            return result;
+        }
+
+        // BUG-133: SourceHasComponentCache retired (PullFromSourcesOnePass made FindItem unused).
+
+        public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources, HashSet<IMyInventory> possibleSourcesSet)
         {
             var profilerTs = MethodProfiler.Start();
-            if (terminalBlock == null || welder == null || possibleSources == null) return false;
+            if (terminalBlock == null || welder == null || possibleSources == null || possibleSourcesSet == null) return false;
             if (terminalBlock.EntityId == welder.EntityId) return false;
 
             // Only the following types for containers/inventories as valid external sources or push targets to reduce scanning of all types.
@@ -46,8 +118,9 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
                     var maxInvCached = terminalBlock.InventoryCount;
                     for (var i = 0; i < maxInvCached; i++)
                     {
+                        // BUG-119: HashSet.Add for O(1) dedup (was O(n) Contains scan).
                         var inventory = terminalBlock.GetInventory(i);
-                        if (!possibleSources.Contains(inventory))
+                        if (possibleSourcesSet.Add(inventory))
                         {
                             possibleSources.Add(inventory);
                         }
@@ -62,18 +135,32 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
                 return cachedConnected;
             }
 
+            // Cache miss: probe each inventory until one is connected. In vanilla SE all
+            // inventories on a block share the conveyor endpoint, but modded blocks can
+            // expose the port on a non-zero slot — checking only slot 0 would memoize a
+            // false negative for the whole block.
             var welderInventory = welder.GetInventory(0);
             var maxInvCross = terminalBlock.InventoryCount;
             var isConnected = false;
-
             for (var i = 0; i < maxInvCross; i++)
             {
                 var inventory = terminalBlock.GetInventory(i);
-
-                if (!possibleSources.Contains(inventory) && inventory.IsConnectedTo(welderInventory))
+                if (inventory != null && inventory.IsConnectedTo(welderInventory))
                 {
                     isConnected = true;
-                    possibleSources.Add(inventory);
+                    break;
+                }
+            }
+
+            if (isConnected)
+            {
+                for (var i = 0; i < maxInvCross; i++)
+                {
+                    var inventory = terminalBlock.GetInventory(i);
+                    if (possibleSourcesSet.Add(inventory))
+                    {
+                        possibleSources.Add(inventory);
+                    }
                 }
             }
 
@@ -90,6 +177,7 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
         public static void Cleanup()
         {
             ConnectionCache.CleanupExpired();
+            TransferCache.CleanupExpired();
         }
     }
 }

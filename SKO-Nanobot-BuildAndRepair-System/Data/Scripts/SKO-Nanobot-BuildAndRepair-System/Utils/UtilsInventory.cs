@@ -1,8 +1,6 @@
-using Sandbox.Definitions;
-using Sandbox.ModAPI;
+using Sandbox.Game;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -14,6 +12,14 @@ namespace SKONanobotBuildAndRepairSystem.Utils
     public static class UtilsInventory
     {
         public delegate bool ExcludeInventory(IMyInventory destInventory, IMyInventory srcInventory, ref MyInventoryItem srcItem);
+
+        /// <summary>
+        /// Inventory fill ratio as a value in [0,1] — the higher of volume- and mass-based ratios.
+        /// </summary>
+        public static float IsFilledToPercent(this IMyInventory inventory)
+        {
+            return Math.Max((float)inventory.CurrentVolume / (float)inventory.MaxVolume, (float)inventory.CurrentMass / (float)((MyInventory)inventory).MaxMass);
+        }
 
         /// <summary>
         /// Check if all inventories are empty
@@ -104,19 +110,14 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
             int maxPossible = 0;
             int currentStep = Math.Max((int)maxNeeded / 2, 1);
-            int currentTry = 0;
             while (currentStep > 0)
             {
-                currentTry = maxPossible + currentStep;
+                int currentTry = maxPossible + currentStep;
                 if (destInventory.CanItemsBeAdded(currentTry, itemType))
                 {
                     maxPossible = currentTry;
                 }
-                else
-                {
-                    if (currentStep <= 1) break;
-                }
-                if (currentStep > 1) currentStep = currentStep / 2;
+                currentStep = currentStep / 2;
             }
             return maxPossible;
         }
@@ -179,7 +180,6 @@ namespace SKONanobotBuildAndRepairSystem.Utils
                     if (amount > 0)
                     {
                         moved = srcInventory.TransferItemTo(destInventory, srcItemIndex, null, true, amount, true) || moved;
-                        if (srcItem.Amount <= 0) break;
                     }
                 }
             }
@@ -188,7 +188,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
 
         /// <summary>
         /// Add maxNeeded amount of items into inventory.
-        /// -If not maxNeeded could be added as amany as possible is added and the added amout is returned
+        /// -If maxNeeded cannot be added, as many as possible are added and the added amount is returned
         /// -If maxNeeded is less than MyFixedPoint can handle 0 is returned
         /// </summary>
         public static float AddMaxItems(this IMyInventory destInventory, float maxNeeded, MyObjectBuilder_PhysicalObject objectBuilder)
@@ -202,7 +202,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var contentId = objectBuilder.GetObjectId();
             if (maxNeededFP <= 0)
             {
-                return 0; //Amount to small
+                return 0; //Amount too small
             }
 
             var maxPossible = destInventory.MaxFractionItemsAddable(maxNeededFP, contentId);
@@ -222,7 +222,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             var contentId = objectBuilder.GetObjectId();
             if (maxNeededFP <= 0)
             {
-                return 0; //Amount to small
+                return 0; //Amount too small
             }
 
             var maxPossible = destInventory.MaxFractionItemsAddable(maxNeededFP, contentId);
@@ -256,106 +256,5 @@ namespace SKONanobotBuildAndRepairSystem.Utils
             return removedAmount;
         }
 
-        /// <summary>
-        /// Retrieve the total amount of componets to build a blueprint
-        /// (blueprint loaded inside projector)
-        /// </summary>
-        /// <param name="projector"></param>
-        /// <param name="componentList"></param>
-        public static int NeededComponents4Blueprint(Sandbox.ModAPI.Ingame.IMyProjector srcProjector, Dictionary<MyDefinitionId, VRage.MyFixedPoint> componentList)
-        {
-            var projector = srcProjector as IMyProjector;
-            if (componentList == null || projector == null || !projector.IsProjecting) return -1;
-
-            //Add buildable blocks
-            var projectedCubeGrid = projector.ProjectedGrid;
-            if (projectedCubeGrid != null)
-            {
-                var projectedBlocks = new List<IMySlimBlock>();
-                projectedCubeGrid.GetBlocks(projectedBlocks);
-                foreach (IMySlimBlock block in projectedBlocks)
-                {
-                    var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
-                    foreach (var component in blockDefinition.Components)
-                    {
-                        if (componentList.ContainsKey(component.Definition.Id)) componentList[component.Definition.Id] += component.Count;
-                        else componentList[component.Definition.Id] = component.Count;
-                    }
-                }
-            }
-            return componentList.Count;
-        }
-
-        public enum IntegrityLevel
-        {
-            Create,
-            Functional,
-            Complete
-        }
-
-        /// <summary>
-        /// Retrieve the amount of components to build the block to the given index
-        /// </summary>
-        /// <param name="block"></param>
-        /// <param name="componentList"></param>
-        /// <param name="level">integrity level </param>
-        public static void GetMissingComponents(this IMySlimBlock block, Dictionary<string, int> componentList, IntegrityLevel level)
-        {
-            var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
-
-            if (blockDefinition.Components == null || blockDefinition.Components.Length == 0) return;
-
-            if (level == IntegrityLevel.Create)
-            {
-                var component = blockDefinition.Components[0];
-                componentList.Add(component.Definition.Id.SubtypeName, 1);
-            }
-            else
-            {
-                if (block.IsProjected())
-                {
-                    int maxIdx = level == IntegrityLevel.Functional ? blockDefinition.CriticalGroup + 1 : blockDefinition.Components.Length;
-
-                    for (var idx = 0; idx < maxIdx; idx++)
-                    {
-                        var component = blockDefinition.Components[idx];
-
-                        if (componentList.ContainsKey(component.Definition.Id.SubtypeName))
-                        {
-                            componentList[component.Definition.Id.SubtypeName] += component.Count;
-                        }
-                        else
-                        {
-                            componentList.Add(component.Definition.Id.SubtypeName, component.Count);
-                        }
-                    }
-                }
-                else
-                {
-                    block.GetMissingComponents(componentList);
-
-                    if (level == IntegrityLevel.Functional)
-                    {
-                        for (var idx = blockDefinition.CriticalGroup + 1; idx < blockDefinition.Components.Length; idx++)
-                        {
-                            var component = blockDefinition.Components[idx];
-                            if (componentList.ContainsKey(component.Definition.Id.SubtypeName))
-                            {
-                                var amount = componentList[component.Definition.Id.SubtypeName];
-
-                                if (amount <= component.Count)
-                                {
-                                    componentList.Remove(component.Definition.Id.SubtypeName);
-                                }
-                                else
-                                {
-                                    componentList[component.Definition.Id.SubtypeName] -= component.Count;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }

@@ -28,7 +28,7 @@ namespace SKONanobotBuildAndRepairSystem.Collections
             {
                 foreach (var entry in this)
                 {
-                    hash ^= UtilsSynchronization.RotateLeft((uint)entry.GetHashCode(), idx + 1);
+                    hash ^= UtilsHash.RotateLeft((uint)entry.GetHashCode(), idx + 1);
                     idx++;
                     if (idx >= SyncBlockState.MaxSyncItems) break;
                 }

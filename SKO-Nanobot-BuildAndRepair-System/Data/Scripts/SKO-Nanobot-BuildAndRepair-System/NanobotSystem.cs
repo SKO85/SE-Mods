@@ -9,6 +9,7 @@ using System.Diagnostics;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
+using VRage.ModAPI;
 using VRage.Utils;
 using VRageMath;
 using IMyShipWelder = Sandbox.ModAPI.IMyShipWelder;
@@ -38,12 +39,12 @@ namespace SKONanobotBuildAndRepairSystem
         public const float WELDER_REQUIRED_ELECTRIC_POWER_WELDING_DEFAULT = 200.0f / 1000; // 200 kW
         public const float WELDER_REQUIRED_ELECTRIC_POWER_GRINDING_DEFAULT = 200.0f / 1000; // 200 kW
         public const float WELDER_REQUIRED_ELECTRIC_POWER_TRANSPORT_DEFAULT = 100.0f / 1000; // 100 kW
-        public const float WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT = 40f;
+        public const float WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT = 50f;
         public const float WELDER_TRANSPORTVOLUME_DIVISOR = 10f;
         public const float WELDER_TRANSPORTVOLUME_MAX_MULTIPLIER = 8f;
-        public const float WELDER_AMOUNT_PER_SECOND = 2f;
+        public const float WELDER_AMOUNT_PER_SECOND = 4f;
         public const float WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED = 0.2f;
-        public const float GRINDER_AMOUNT_PER_SECOND = 4f;
+        public const float GRINDER_AMOUNT_PER_SECOND = 6f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
         private const int MaxPossibleWeldTargets = 256;
@@ -51,7 +52,7 @@ namespace SKONanobotBuildAndRepairSystem
         private const int MaxPossibleFloatingTargets = 16;
 
         private const int TransmitStateMinIntervalSeconds = 1;
-        private const int TransmitStateMaxIntervalSeconds = 2;
+        private const int TransmitStateMaxIntervalSeconds = 4;
         private const int TransmitSettingsIntervalSeconds = 1;
 
         public const int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
@@ -60,7 +61,14 @@ namespace SKONanobotBuildAndRepairSystem
         internal bool CreativeModeActive = false;
 
         private static readonly MyStringId RangeGridResourceId = MyStringId.GetOrCompute("WelderGrid");
-        private static readonly Random _RandomDelay = new Random();
+
+        // PERF-10: per-instance Random seeded from the welder's EntityId. Random is not
+        // thread-safe; the static instance previously shared across all BaRs assumed all
+        // call sites stayed on the main thread. A per-instance Random eliminates that
+        // implicit constraint and decorrelates the jitter so two BaRs with identical
+        // call patterns don't draw identical sequences. EntityId is set by the engine
+        // before Init runs, so the seed is stable per BaR for the session lifetime.
+        private Random _RandomDelay;
 
         private Stopwatch _DelayWatch = new Stopwatch();
         private int _Delay = 0;
@@ -71,6 +79,9 @@ namespace SKONanobotBuildAndRepairSystem
         private long _PushTargetsFullSignature;
         private TimeSpan _PushTargetsFullSince;
 
+        // BUG-162: round-robin cursor for ServerTryPushInventory chunking across ticks.
+        private int _PushItemCursor = 0;
+
         /// <summary>
         /// When true, the welding loop found nothing on its last full iteration
         /// (all targets grid-limited or assigned to other systems). The loop is
@@ -78,6 +89,85 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private bool _weldLoopExhausted = false;
         private long _weldExhaustedAtHash;
+        private TimeSpan _weldExhaustedAtTime;
+
+        /// <summary>FEAT-076: same as _weldLoopExhausted, for the grind loop.</summary>
+        private bool _grindLoopExhausted = false;
+        private long _grindExhaustedAtHash;
+        private int _grindExhaustedSaturatedCount;
+        private TimeSpan _grindExhaustedAtTime;
+
+        /// <summary>
+        /// BUG-260511.16: how long an exhausted BaR may fast-skip before re-iterating.
+        /// FEAT-076 invalidates on target-list hash change or saturation count change,
+        /// but BlockSystemAssigningHandler TTL claim expiry is invisible to both —
+        /// without a time-based retry, BaRs that exhausted while many blocks were
+        /// claimed stay exhausted long after those claims drain (until the next
+        /// cluster scan bumps the hash, ~5–10 s). The retry interval is a fraction
+        /// of AssignmentTtlSeconds so a BaR re-checks at least once per claim
+        /// lifetime.
+        /// </summary>
+        private static TimeSpan ExhaustedRetryInterval
+        {
+            get { return TimeSpan.FromSeconds(Math.Max(1, Mod.Settings.AssignmentTtlSeconds / 3.0)); }
+        }
+
+        /// <summary>
+        /// BUG-260511.15: timestamp of the cluster result this BaR has actually
+        /// applied (not the same as `_LastTargetsUpdate`, which is bumped even
+        /// when the apply was skipped). Members compare against
+        /// `cluster.GetResult().Timestamp` to detect a freshly-published result
+        /// and fire `AsyncApplyClusterResults` immediately, instead of waiting
+        /// up to `effectiveTargetInterval` for their own poll interval.
+        /// </summary>
+        internal TimeSpan _lastAppliedResultTimestamp = TimeSpan.Zero;
+
+        /// <summary>
+        /// BUG-260511.14: reset both loop-exhausted flags so the next picker tick
+        /// performs a full iteration. Called from Mod.SettingsChanged when
+        /// MaxSystemsPerTargetGrid changes in either direction — the
+        /// FEAT-076 fast-skip's saturated-count guard can match a stale
+        /// exhausted state when the limit comes back up, leaving the BaR
+        /// permanently fast-skipping until some other trigger invalidates it.
+        /// </summary>
+        internal void ResetLoopExhaustedFlags()
+        {
+            _weldLoopExhausted = false;
+            _grindLoopExhausted = false;
+        }
+
+        /// <summary>
+        /// BUG-260511.19: removes the block (matched by grid id + Position, NOT
+        /// reference) from this BaR's grind target list. Called by a cluster
+        /// member that just ground a block to completion so OTHER members in the
+        /// cluster don't walk past it as a closed-FatBlock entry. Reference
+        /// equality is unreliable across BaRs because each BaR's
+        /// ApplyClusterResultToSelf wraps shared cluster candidates in fresh
+        /// TargetBlockData instances; only grid+position is stable.
+        /// </summary>
+        internal void RemoveGrindTargetByPosition(long gridEntityId, VRageMath.Vector3I position)
+        {
+            lock (State.PossibleGrindTargets)
+            {
+                for (int i = State.PossibleGrindTargets.Count - 1; i >= 0; i--)
+                {
+                    var t = State.PossibleGrindTargets[i];
+                    if (t == null || t.Block == null || t.Block.CubeGrid == null) continue;
+                    if (t.Block.CubeGrid.EntityId == gridEntityId
+                        && t.Block.Position.X == position.X
+                        && t.Block.Position.Y == position.Y
+                        && t.Block.Position.Z == position.Z)
+                    {
+                        State.PossibleGrindTargets.RemoveAt(i);
+                        State.PossibleGrindTargets.ChangeHash();
+                        return;
+                    }
+                }
+            }
+        }
+        // Background-scan-thread-only staging lists; swapped into the published State.*
+        // / _PossibleSources / _PossiblePushTargets under their locks. Don't touch from
+        // the main thread — read consumers go through the published collections.
         private List<TargetBlockData> _TempPossibleWeldTargets = new List<TargetBlockData>();
         private List<TargetBlockData> _TempPossibleGrindTargets = new List<TargetBlockData>();
         private List<TargetEntityData> _TempPossibleFloatingTargets = new List<TargetEntityData>();
@@ -89,18 +179,25 @@ namespace SKONanobotBuildAndRepairSystem
         internal Vector3D _LastGrindWorldPosition;
         internal bool _HasLastGrindPosition;
 
-        // Snapshot of cluster member area box centers, populated by the coordinator at
-        // scan start for multi-member clusters. Used by collect/sort comparators to score
-        // candidates by proximity to ANY member instead of just the coordinator, so distant
-        // members on the same grid aren't starved of targets. Null on solo scans.
+        // Snapshot of cluster member area centers; null on solo scans.
         private List<Vector3D> _ClusterMemberAreaCenters;
 
-        // BUG-096: Snapshot of each cluster member's full working-area OBB. Captured in
-        // parallel with _ClusterMemberAreaCenters so SortAndCapGridCandidates can drop
-        // candidates that no member can actually reach before it applies farthest-first
-        // sorting — without this, farthest-first on a grid extending beyond the cluster's
-        // reach deliberately kept the blocks nobody could weld/grind and starved the members.
+        // BUG-096: snapshot of each member's working-area OBB so SortAndCapGridCandidates
+        // can drop unreachable candidates before farthest-first sorting.
         private List<MyOrientedBoundingBoxD> _ClusterMemberAreaBoxes;
+
+        // BUG-110: reusable scan-thread pools (eliminate per-scan allocations).
+        private List<IMyCubeGrid> _ScanGridsBuffer;
+        private List<IMyInventory> _ScanSourcesBuffer;
+        private Dictionary<IMySlimBlock, double> _ScanPreSortDistances;
+        // AsyncScanForSources reusable traversal state.
+        private HashSet<long> _ScanSourceVisitedGridIds;
+        private Queue<IMyCubeGrid> _ScanSourceGridQueue;
+        // BUG-119: O(1) dedup set for AddIfConnectedToInventory.
+        private HashSet<IMyInventory> _ScanSourceDedupSet;
+        // AsyncAddBlocksOfBox reusable sort buffers (only used when GrindSmallestGridFirst flag is set).
+        private List<IMyEntity> _ScanSortedGrids;
+        private List<IMyEntity> _ScanNonGridEntities;
 
         // Reusable pools for TruncateGridAware — avoids 8 allocations per ApplyClusterResultToSelf call.
         private HashSet<long> _truncateGridIds = new HashSet<long>();
@@ -108,34 +205,28 @@ namespace SKONanobotBuildAndRepairSystem
         private List<TargetBlockData> _truncateKept = new List<TargetBlockData>();
         private List<TargetBlockData> _truncateOverflow = new List<TargetBlockData>();
 
-        // BUG-091: Per-grid minimum distance used by GrindSmallestGridFirst sorts so
-        // same-size grids are ordered by their closest block (spatial), not by arbitrary
-        // EntityId. Pooled dict cleared and refilled by each sort pre-pass.
+        // BUG-091: per-grid min-distance for GrindSmallestGridFirst spatial tiebreak.
         private Dictionary<long, double> _gridMinDistLookup = new Dictionary<long, double>();
 
-        // BUG-099: Per-candidate min-squared-distance-to-any-cluster-member cache used by
-        // SortAndCapGridCandidates. Populated once during the BUG-096 partition loop (while
-        // we already have the block world position for the OBB test) so the sort comparator
-        // can do a dict lookup instead of recomputing 2 * memberCount squared distances per
-        // comparison. Profiling on a 58-member cluster showed the inline recompute dominated
-        // sort cost (~70-125 ms per call on 11k candidates); cached lookup drops it to ~6-10 ms.
-        // Pooled field: cleared and reused between calls; one background scan per BaR runs
-        // at a time so no concurrent access within one instance.
+        // BUG-099/100: per-candidate distance and priority caches populated during the
+        // partition pass and read by the sort comparator (saves recomputing per compare).
         private Dictionary<IMySlimBlock, double> _sortCandidateDistances = new Dictionary<IMySlimBlock, double>();
-
-        // BUG-100: Per-candidate priority cache used by SortAndCapGridCandidates. After
-        // BUG-099 eliminated the distance recompute, profile session 20260413220505 showed
-        // the sort was bounded by the comparator's per-call BlockGrindPriority.GetPriority
-        // (BlockWeldPriority for the weld branch) — 2 blocks × ~132k comparisons × ~130 ns
-        // per GetPriority call = ~34 ms of priority lookup cost per 9.9k-candidate sort.
-        // Populated once per candidate during the partition loop (same pattern as distance
-        // cache), the sort comparator reads cached priorities in ~40 ns per lookup. Expected
-        // drop from ~37 ms to ~12 ms per big sort call on the 58-member cluster workload.
         private Dictionary<IMySlimBlock, int> _sortCandidatePriorities = new Dictionary<IMySlimBlock, int>();
 
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
-        // Rebuilt by RebuildSaturatedGrids(), used as fast-path in IsGridOverSystemLimit().
-        private HashSet<long> _saturatedGridIds = new HashSet<long>();
+        // Rebuilt by _gridSaturation.Rebuild(), used as fast-path in IsGridOverSystemLimit().
+        private readonly GridSaturationTracker _gridSaturation = new GridSaturationTracker();
+
+        // BUG-115: persistent skip set for projected blocks that threw NRE in proj.Build.
+        private readonly HashSet<string> _BrokenProjBuildKeys = new HashSet<string>();
+
+        // BUG-120: silent proj.Build failure counter; promoted to _BrokenProjBuildKeys
+        // after PROJ_BUILD_MAX_SILENT_FAILS consecutive failures.
+        private readonly Dictionary<string, int> _ProjBuildSilentFailCount = new Dictionary<string, int>();
+        private const int PROJ_BUILD_MAX_SILENT_FAILS = 3;
+
+        // BUG-120: owner the broken-block caches are scoped to; cleared on owner change.
+        private long _BrokenCacheOwnerId = long.MinValue;
 
         /// <summary>
         /// Tracks grids that were scanned and had no weld/grind targets.
@@ -144,7 +235,20 @@ namespace SKONanobotBuildAndRepairSystem
         private ConcurrentDictionary<long, TimeSpan> _EmptyGridCache = new ConcurrentDictionary<long, TimeSpan>();
         public int EmptyGridCacheCount { get { return _EmptyGridCache.Count; } }
 
+        // REF-2: pooled scratch for CleanupEmptyGridCache. Per-BaR scan dispatch is
+        // serialised, so a single instance field is safe from concurrent access.
+        private List<long> _emptyGridExpiredKeys;
+
+        /// <summary>FEAT-073: filter predicate for fat-block-only lists.</summary>
+        private static readonly Func<IMySlimBlock, bool> _fatBlockFilter = block => block.FatBlock != null;
+
         private IMyShipWelder _Welder;
+
+        public bool IsEnabled
+        {
+            get { return _Welder != null && _Welder.Enabled; }
+        }
+
         public IMyInventory _TransportInventory;
         private Effects _Effects = new Effects();
 
@@ -154,6 +258,14 @@ namespace SKONanobotBuildAndRepairSystem
         private Dictionary<string, int> _TempMissingComponents = new Dictionary<string, int>();
         private List<MyInventoryItem> _TempInventoryItems = new List<MyInventoryItem>();
         private List<MyInventoryItem> _TempPullInventoryItems = new List<MyInventoryItem>();
+        // BUG-133: source-walk inversion buffers (one pass over sources, dict lookup against needs).
+        private Dictionary<string, int> _TempPullRemaining = new Dictionary<string, int>();
+        private Dictionary<string, Sandbox.Definitions.MyPhysicalItemDefinition> _TempPullDefs =
+            new Dictionary<string, Sandbox.Definitions.MyPhysicalItemDefinition>();
+        // BUG-134: last successful source; tried first next call (temporal locality).
+        private VRage.Game.ModAPI.IMyInventory _LastSuccessfulSource;
+        // BUG-136: round-robin cursor for the capped source walk.
+        private int _NextPullSourceIdx;
 
         private int _UpdateEffectsInterval;
         private bool _UpdateCustomInfoNeeded;
@@ -163,7 +275,6 @@ namespace SKONanobotBuildAndRepairSystem
         private float _MaxGrindTransportVolume;
 
 
-        private TimeSpan _LastFriendlyDamageCleanup;
         private TimeSpan _LastSourceUpdate = -Mod.Settings.SourcesUpdateInterval;
         private TimeSpan _LastTargetsUpdate;
         public TimeSpan LastTargetsUpdate { get { return _LastTargetsUpdate; } }
@@ -173,8 +284,8 @@ namespace SKONanobotBuildAndRepairSystem
         private TimeSpan _UpdateStateTransmitLast;
         private int _UpdateStateTransmitInterval;
 
-        // FEAT-038: Progressive backoff for unchanged state transmits.
-        private int _lastTransmittedFingerprint;
+        // FEAT-038/BUG-150: progressive backoff fingerprint (long, content-aware).
+        private long _lastTransmittedFingerprint;
         private int _transmitBackoffMultiplier = 1;
 
         private TimeSpan _PeriodicExtraChecksLast;
@@ -250,11 +361,6 @@ namespace SKONanobotBuildAndRepairSystem
         { get { return _State; } }
 
         /// <summary>
-        /// Currently friendly damaged blocks
-        /// </summary>
-        public readonly ConcurrentDictionary<IMySlimBlock, TimeSpan> FriendlyDamage = new ConcurrentDictionary<IMySlimBlock, TimeSpan>();
-
-        /// <summary>
         /// Cluster assignment for shared scanning. Null means solo (legacy path).
         /// Set by ScanClusterCoordinator.RebuildClusters() on main thread, read on background thread.
         /// </summary>
@@ -267,6 +373,38 @@ namespace SKONanobotBuildAndRepairSystem
         internal int MissedResultCycles;
 
         /// <summary>
+        /// FEAT-071: Counts consecutive cluster scans that produced zero targets.
+        /// After IdleScansBeforeBackoff consecutive empty scans, the coordinator
+        /// extends its scan interval to reduce background work.
+        /// </summary>
+        internal int _consecutiveEmptyScans;
+        internal const int IdleScansBeforeBackoff = 3;
+        internal static readonly TimeSpan IdleScanInterval = TimeSpan.FromSeconds(20);
+
+        /// <summary>
+        /// FEAT-075: Set by the coordinator when it skips a scan because the
+        /// target list is still saturated (plenty of live targets remain).
+        /// Members check this flag to also skip their apply-result cycle.
+        /// </summary>
+        internal volatile bool _scanSkippedSaturated;
+        /// <summary>
+        /// FEAT-075: When a member signals the coordinator to rescan (e.g., member ran
+        /// out of weld targets), this flag bypasses the saturated skip so the coordinator
+        /// actually performs the scan instead of checking its own (still-full) target lists.
+        /// </summary>
+        internal volatile bool _rescanForced;
+        /// <summary>
+        /// FEAT-075: Timestamp of the last full scan that actually ran.
+        /// Used to enforce a maximum skip duration (force rescan every 60s).
+        /// </summary>
+        internal TimeSpan _lastFullScanTime;
+        internal const int SaturatedRescanThreshold = 64;
+        internal static readonly TimeSpan MaxScanSkipDuration = TimeSpan.FromSeconds(60);
+        /// <summary>FEAT-075: per-type scan counts to distinguish "depleted" from "never existed".</summary>
+        internal int _lastScanWeldCandidateCount;
+        internal int _lastScanGrindCandidateCount;
+
+        /// <summary>
         /// Stagger slot (0..StaggerGroupCount-1) assigned at init. Only BaRs whose slot
         /// matches the current cycle run ServerTryWeldingGrindingCollecting(), spreading
         /// the per-tick main-thread load across multiple ticks.
@@ -274,9 +412,25 @@ namespace SKONanobotBuildAndRepairSystem
         internal int _staggerSlot = -1;
 
         /// <summary>
-        /// Last computed cluster key. Used by RebuildClusters to detect
-        /// settings changes and skip the full rebuild when nothing changed.
+        /// FEAT-072: Cached numeric hash of cluster-relevant fields.
+        /// Compared in the RebuildClusters fast path instead of recomputing
+        /// the full cluster key string every second.
         /// </summary>
-        internal string _lastClusterKey;
+        internal int _lastClusterKeyHash;
+
+        // Shared release helper for the weld/grind loops; second overload preserves
+        // tsAssignOps profiler timing at call sites that aggregate it.
+        private static void ReleaseAssignmentIfEnabled(IMySlimBlock block)
+        {
+            if (Mod.Settings.AssignToSystemEnabled) block.ReleaseFromSystem();
+        }
+
+        private static void ReleaseAssignmentIfEnabled(IMySlimBlock block, bool profilerEnabled, ref long tsAssignOps)
+        {
+            if (!Mod.Settings.AssignToSystemEnabled) return;
+            var ts = profilerEnabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+            block.ReleaseFromSystem();
+            if (ts != 0L) tsAssignOps += System.Diagnostics.Stopwatch.GetTimestamp() - ts;
+        }
     }
 }

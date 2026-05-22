@@ -26,6 +26,13 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static HudAPIv2.BillBoardHUDMessage _background;
         private static StringBuilder _labelText = new StringBuilder(512);
         private static StringBuilder _valueText = new StringBuilder(512);
+
+        // BUG-260502.7: pooled scratch reused by BuildStats just to read PlayerCount.
+        // Previously a fresh List<IMyPlayer> was allocated on every call. BuildStats
+        // runs only while DebugMode/profiling is active, so impact is bounded, but
+        // matching the existing `_adminCheckPlayers` / `_adminBroadcastPlayers`
+        // pooling pattern keeps allocations consistent across the file.
+        private static readonly List<IMyPlayer> _playerCountScratch = new List<IMyPlayer>();
         private static bool _registered;
         private static TimeSpan _lastUpdate;
         private static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(2);
@@ -44,6 +51,34 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             _localDebugVisible = visible;
             if (!visible) SetVisible(false);
+        }
+
+        /// <summary>
+        /// Local-only visualization of the per-cluster union AABB. Drawn each frame
+        /// by NanobotSystem.UpdateBeforeSimulation when enabled. Off by default;
+        /// toggled via /nanobars debug cluster-area. Never set on dedicated servers
+        /// because the draw call is client-side only.
+        /// </summary>
+        private static bool _localClusterAreaVisible;
+        public static bool LocalClusterAreaVisible { get { return _localClusterAreaVisible; } }
+
+        public static void SetLocalClusterAreaVisible(bool visible)
+        {
+            _localClusterAreaVisible = visible;
+        }
+
+        /// <summary>
+        /// Local-only visualization of every BaR's current weld/grind target blocks
+        /// in red, drawn through walls so the admin can see what each BaR is about
+        /// to do. Toggled via /nanobars debug targets. Off by default; never set on
+        /// dedicated servers because the draw is client-side only.
+        /// </summary>
+        private static bool _localTargetsVisible;
+        public static bool LocalTargetsVisible { get { return _localTargetsVisible; } }
+
+        public static void SetLocalTargetsVisible(bool visible)
+        {
+            _localTargetsVisible = visible;
         }
 
         // TextHudAPI coords: X [-1..1] left-right, Y [1..-1] top-bottom.
@@ -522,9 +557,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     case WorkModes.WeldBeforeGrind: s.ModeWeldBefore++; break;
                     case WorkModes.GrindBeforeWeld: s.ModeGrindBefore++; break;
-                    case WorkModes.GrindIfWeldGetStuck: s.ModeStuck++; break;
                     case WorkModes.WeldOnly: s.ModeWeldOnly++; break;
                     case WorkModes.GrindOnly: s.ModeGrindOnly++; break;
+                    // GrindIfWeldGetStuck is migrated to WeldBeforeGrind by SyncBlockSettings;
+                    // no live BaR can carry this value at read time. ModeStuck stays on the
+                    // wire message for protobuf back-compat with older clients.
                 }
                 if (sys.Settings.SearchMode == SearchModes.Grids) s.SearchGrids++;
                 else if (sys.Settings.SearchMode == SearchModes.BoundingBox) s.SearchBBox++;
@@ -559,11 +596,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             s.GrindBudgetMax = Mod.GetEffectiveMaxGrindsPerTick();
             s.GrindBudgetPeak = Mod.GrindBudgetPeakUsed;
             Mod.ResetGrindBudgetStats();
+            s.WeldBudgetMax = Mod.GetEffectiveMaxWeldsPerTick();
+            s.WeldBudgetPeak = Mod.WeldBudgetPeakUsed;
+            Mod.ResetWeldBudgetStats();
             s.SimSpeed = Mod.GetEffectiveSimSpeed();
             s.BgTasksEnqueued = Mod.BackgroundTasksEnqueued;
             s.BgTasksPeakRunning = Mod.BackgroundPeakRunning;
             Mod.ResetBackgroundTaskStats();
             s.BlockAssignments = BlockSystemAssigningHandler.AssignmentCount;
+            s.BlockFailCooldowns = BlockFailureCooldownHandler.CooldownCount;
             s.MaxSysPerGrid = Mod.Settings.MaxSystemsPerTargetGrid;
 
             s.SafeZoneCount = SafeZoneHandler.Zones.Count;
@@ -574,9 +615,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             s.BlockPriorityCache = BlockPriorityHandling.GetItemKeyCache.Count;
             s.CustomSettingsLoaded = Mod.CustomSettingsLoaded;
 
-            var playerList = new List<IMyPlayer>();
-            MyAPIGateway.Players.GetPlayers(playerList);
-            s.PlayerCount = playerList.Count;
+            _playerCountScratch.Clear();
+            MyAPIGateway.Players.GetPlayers(_playerCountScratch);
+            s.PlayerCount = _playerCountScratch.Count;
+            _playerCountScratch.Clear();
 
             s.TickCostAvgMs = (float)Mod.TickCostAvgMs;
             s.TickCostPeakMs = (float)Mod.TickCostPeakMs;
@@ -594,8 +636,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 s.ProfilingMinDuration = MethodProfiler.MinDurationMs;
             }
 
-            MethodProfiler.StopAndLog("HudHandler.BuildStats", profilerTs, () =>
-                string.Format("systems={0};active={1}", s.TotalSystems, s.Active));
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("HudHandler.BuildStats", profilerTs, () =>
+                    string.Format("systems={0};active={1}", s.TotalSystems, s.Active));
+            }
             return s;
         }
 
@@ -655,8 +700,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             var player = MyAPIGateway.Session.Player;
             if (player == null) return true;
-            var level = player.PromoteLevel.ToString();
-            return level == "Admin" || level == "SpaceMaster" || level == "Owner";
+            return SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel);
         }
 
         private static void SetVisible(bool visible)
@@ -694,7 +738,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             var scanAgeColor = s.OldestScanAgeSec > 15 ? "<color=255,180,100>" : "<color=200,255,200>";
 
             // --- Systems ---
-            AddRow("<color=130,180,230>--- BAR SYSTEMS ---", string.Format("<color=130,180,230>---  <color=160,160,160>v{0}  |  {1} players online", Constants.ModVersion, s.PlayerCount));
+            AddRow("<color=130,180,230>--- BAR SYSTEMS ---", string.Format("<color=130,180,230>---  <color=160,160,160>v{0} ({1})  |  {2} players online", Constants.ModVersion, Constants.BuildId, s.PlayerCount));
             AddRow("<color=white>Systems", string.Format("<color=200,255,200>{0}<color=white> / {1}  (<color=200,255,200>{2}%<color=white>  working)", s.Active, s.TotalSystems, workPct));
             AddRow("<color=white>Activity",
                 string.Format("<color=100,220,100>{0}<color=white> weld  <color=255,160,80>{1}<color=white> grind  <color=100,180,255>{2}<color=white> collect  <color=160,160,160>{3}<color=white> idle  <color=255,80,80>{4}<color=white> off",
@@ -716,7 +760,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             AddRow("<color=130,180,230>--- WORK MODES ---", "<color=130,180,230>---");
             AddRow("<color=white>Weld > Grind", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.ModeWeldBefore, s.Active > 0 ? s.ModeWeldBefore * 100 / s.Active : 0));
             AddRow("<color=white>Grind > Weld", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.ModeGrindBefore, s.Active > 0 ? s.ModeGrindBefore * 100 / s.Active : 0));
-            AddRow("<color=white>Grind If Stuck", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.ModeStuck, s.Active > 0 ? s.ModeStuck * 100 / s.Active : 0));
             AddRow("<color=white>Weld Only", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.ModeWeldOnly, s.Active > 0 ? s.ModeWeldOnly * 100 / s.Active : 0));
             AddRow("<color=white>Grind Only", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.ModeGrindOnly, s.Active > 0 ? s.ModeGrindOnly * 100 / s.Active : 0));
             AddRow("<color=white>Search Grids", string.Format("<color=200,255,200>{0}<color=white> ({1}%)", s.SearchGrids, s.Active > 0 ? s.SearchGrids * 100 / s.Active : 0));
@@ -750,6 +793,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     grindSaturated ? "<color=255,180,100>" : "<color=200,255,200>",
                     s.GrindBudgetPeak, s.GrindBudgetMax,
                     grindSaturated ? "  <color=255,180,100>CAPPED" : ""));
+            var weldSaturated = s.WeldBudgetPeak >= s.WeldBudgetMax;
+            AddRow("<color=white>Weld Budget",
+                string.Format("{0}{1}<color=white> / {2} per tick{3}",
+                    weldSaturated ? "<color=255,180,100>" : "<color=200,255,200>",
+                    s.WeldBudgetPeak, s.WeldBudgetMax,
+                    weldSaturated ? "  <color=255,180,100>CAPPED" : ""));
             AddRow("<color=white>Sim Speed", string.Format("{0}{1:0.00}", simColor, s.SimSpeed));
             AddRow("<color=white>Bg Tasks",
                 string.Format("<color=200,255,200>{0}<color=white> enq  <color=200,255,200>{1}<color=white> peak",
@@ -761,6 +810,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             AddSpacer();
             AddRow("<color=130,180,230>--- ASSIGNMENTS ---", "<color=130,180,230>---");
             AddRow("<color=white>Block Assigns", string.Format("<color=200,255,200>{0}", s.BlockAssignments));
+            AddRow("<color=white>Fail Cooldowns", string.Format("<color=200,255,200>{0}", s.BlockFailCooldowns));
             if (s.MaxSysPerGrid > 0)
                 AddRow("<color=white>Max Sys/Grid", string.Format("<color=200,255,200>{0}", s.MaxSysPerGrid));
 

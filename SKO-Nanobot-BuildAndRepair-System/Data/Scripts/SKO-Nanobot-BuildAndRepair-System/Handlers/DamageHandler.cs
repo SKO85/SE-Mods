@@ -1,7 +1,8 @@
-﻿using Sandbox.ModAPI;
+using Sandbox.ModAPI;
 using Sandbox.ModAPI.Weapons;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Collections.Generic;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -10,6 +11,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 {
     public static class DamageHandler
     {
+        // Reused dedup buffer for OnAfterDamage's NanobotSystems walk. Damage
+        // handlers fire on the main simulation thread, so a single static set
+        // is safe — clear, fill, done. Replaces a per-event HashSet allocation
+        // that fired on every friendly grind-damage event.
+        private static readonly HashSet<long> _seenOwnersBuffer = new HashSet<long>();
+
         #region Registration
 
         private static bool _registered = false;
@@ -60,7 +67,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         Mod.NanobotSystems.TryGetValue(info.AttackerId, out logicalComponent);
                         if (logicalComponent != null)
                         {
-                            var terminalBlock = logicalComponent.Entity as IMyTerminalBlock;
                             info.Amount = 0;
                         }
                     }
@@ -105,14 +111,21 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                         if (attackerId != 0)
                         {
+                            // BUG-130: write to the shared owner-keyed map (one write per distinct owner).
+                            var deadline = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                            _seenOwnersBuffer.Clear();
                             foreach (var entry in Mod.NanobotSystems)
                             {
-                                var relation = entry.Value.Welder.GetUserRelationToOwner(attackerId);
-
+                                var welder = entry.Value != null ? entry.Value.Welder : null;
+                                if (welder == null) continue;
+                                var welderOwner = welder.OwnerId;
+                                if (welderOwner == 0) continue;
+                                if (!_seenOwnersBuffer.Add(welderOwner)) continue;
+                                var relation = welder.GetUserRelationToOwner(attackerId);
                                 if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
                                 {
                                     // A 'friendly' damage from grinder -> do not repair (for a while)
-                                    entry.Value.FriendlyDamage[targetBlock] = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                                    Mod.MarkFriendlyDamage(welderOwner, targetBlock, deadline);
                                 }
                             }
                         }
@@ -121,7 +134,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
             catch (Exception e)
             {
-                Logging.Instance.Error("BuildAndRepairSystemMod: Exception in BeforeDamageHandlerNoDamageByBuildAndRepairSystem: Source={0}, Message={1}", e.Source, e.Message);
+                Logging.Instance.Error("BuildAndRepairSystemMod: Exception in AfterDamageHandlerFriendlyGrind: Source={0}, Message={1}", e.Source, e.Message);
             }
         }
     }

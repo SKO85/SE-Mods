@@ -171,28 +171,32 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 if (value != _CurrentWeldingBlock)
                 {
+                    // BUG-097: detect same-physical-block lock-on refresh (new IMySlimBlock
+                    // ref but same grid+position) so we skip Dec/Inc and avoid the count dip.
+                    var oldGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
+                        ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
+                    var newGridId = (value != null && value.CubeGrid != null)
+                        ? value.CubeGrid.EntityId : 0L;
+                    var oldPos = _CurrentWeldingBlock != null ? _CurrentWeldingBlock.Position : default(Vector3I);
+                    var newPos = value != null ? value.Position : default(Vector3I);
+                    var samePhysicalBlock = oldGridId != 0L && oldGridId == newGridId && oldPos == newPos;
+
+                    // BUG-160: count-once-per-grid (skip Inc/Dec when the other lock already
+                    // pins this grid so weld+grind on the same grid contributes +1, not +2).
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
-                        // BUG-097: When the welding loop refreshes the lock-on reference for
-                        // the SAME physical block (background scan produces new IMySlimBlock
-                        // instances every cycle — IsSameBlock matches on grid+position), the
-                        // old and new references share a CubeGrid EntityId. Skip the Dec/Inc
-                        // pair in that case — otherwise GridSystemCount briefly dips by 1
-                        // between the two AddOrUpdate calls and a concurrent
-                        // GetCachedSystemCountOnGrid call from another BaR could pass the
-                        // MaxSystemsPerTargetGrid check during the dip.
-                        var oldGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
-                            ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
-                        var newGridId = (value != null && value.CubeGrid != null)
-                            ? value.CubeGrid.EntityId : 0L;
                         if (oldGridId != newGridId)
                         {
-                            if (oldGridId != 0L) Mod.DecrementGridCount(oldGridId);
-                            if (newGridId != 0L) Mod.IncrementGridCount(newGridId);
+                            var otherGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
+                                ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
+                            if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
+                            if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
                         }
                     }
                     _CurrentWeldingBlock = value;
-                    Changed = true;
+                    // Same-physical-block reference refresh produces an identical SyncEntityId,
+                    // so the network sync is redundant. Skip Changed=true in that case.
+                    if (!samePhysicalBlock) Changed = true;
                 }
             }
         }
@@ -217,23 +221,28 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 if (value != _CurrentGrindingBlock)
                 {
+                    // BUG-097: see CurrentWeldingBlock above (same-grid lock-on refresh).
+                    var oldGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
+                        ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
+                    var newGridId = (value != null && value.CubeGrid != null)
+                        ? value.CubeGrid.EntityId : 0L;
+                    var oldPos = _CurrentGrindingBlock != null ? _CurrentGrindingBlock.Position : default(Vector3I);
+                    var newPos = value != null ? value.Position : default(Vector3I);
+                    var samePhysicalBlock = oldGridId != 0L && oldGridId == newGridId && oldPos == newPos;
+
+                    // BUG-160: count-once-per-grid (see CurrentWeldingBlock above).
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
-                        // BUG-097: see CurrentWeldingBlock comment above — same-grid
-                        // reference swap must skip the Dec/Inc pair to avoid the count-dip
-                        // race against concurrent GetCachedSystemCountOnGrid callers.
-                        var oldGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
-                            ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
-                        var newGridId = (value != null && value.CubeGrid != null)
-                            ? value.CubeGrid.EntityId : 0L;
                         if (oldGridId != newGridId)
                         {
-                            if (oldGridId != 0L) Mod.DecrementGridCount(oldGridId);
-                            if (newGridId != 0L) Mod.IncrementGridCount(newGridId);
+                            var otherGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
+                                ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
+                            if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
+                            if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
                         }
                     }
                     _CurrentGrindingBlock = value;
-                    Changed = true;
+                    if (!samePhysicalBlock) Changed = true;
                 }
             }
         }

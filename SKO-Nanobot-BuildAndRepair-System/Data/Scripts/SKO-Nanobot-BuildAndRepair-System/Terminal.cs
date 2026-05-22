@@ -38,8 +38,10 @@ namespace SKONanobotBuildAndRepairSystem
         GrindBeforeWeld = 0x0002,
 
         /// <summary>
-        /// Grind only if nothing to weld or
-        /// build waiting for missing items
+        /// DEPRECATED: removed from the UI. Migrated to WeldBeforeGrind on load
+        /// (see SyncBlockSettings.WorkMode setter and the merge path).
+        /// Value preserved so saved worlds and old network payloads deserialize.
+        /// Do not reuse 0x0004.
         /// </summary>
         GrindIfWeldGetStuck = 0x0004,
 
@@ -161,8 +163,8 @@ namespace SKONanobotBuildAndRepairSystem
                     IMyTerminalControlOnOffSwitch onoffSwitch;
                     IMyTerminalControlButton button;
 
-                    var weldingAllowed = (Mod.Settings.Welder.AllowedWorkModes & (WorkModes.WeldBeforeGrind | WorkModes.GrindBeforeWeld | WorkModes.GrindIfWeldGetStuck | WorkModes.WeldOnly)) != 0;
-                    var grindingAllowed = (Mod.Settings.Welder.AllowedWorkModes & (WorkModes.WeldBeforeGrind | WorkModes.GrindBeforeWeld | WorkModes.GrindIfWeldGetStuck | WorkModes.GrindOnly)) != 0;
+                    var weldingAllowed = (Mod.Settings.Welder.AllowedWorkModes & (WorkModes.WeldBeforeGrind | WorkModes.GrindBeforeWeld | WorkModes.WeldOnly)) != 0;
+                    var grindingAllowed = (Mod.Settings.Welder.AllowedWorkModes & (WorkModes.WeldBeforeGrind | WorkModes.GrindBeforeWeld | WorkModes.GrindOnly)) != 0;
                     var janitorAllowed = grindingAllowed && (Mod.Settings.Welder.AllowedGrindJanitorRelations != 0);
                     var janitorAllowedNoOwnership = janitorAllowed && ((Mod.Settings.Welder.AllowedGrindJanitorRelations & AutoGrindRelation.NoOwnership) != 0);
                     var janitorAllowedOwner = janitorAllowed && ((Mod.Settings.Welder.AllowedGrindJanitorRelations & AutoGrindRelation.Owner) != 0);

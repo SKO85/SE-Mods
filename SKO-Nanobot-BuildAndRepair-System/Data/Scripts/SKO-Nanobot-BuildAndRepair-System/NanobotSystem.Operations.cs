@@ -50,9 +50,8 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (ready)
             {
-                // BUG-014: On first ready tick (or after re-enable), trigger an immediate
-                // scan WITH sources so the BaR doesn't operate with empty source/push lists.
-                // Skip operations this tick — they'll start once the scan completes.
+                // BUG-014: trigger immediate scan on first ready tick so we don't operate
+                // with empty source/push lists. Skip operations until the scan completes.
                 if (!_InitialScanCompleted)
                 {
                     _LastSourceUpdate = -Mod.Settings.SourcesUpdateInterval;
@@ -61,10 +60,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
-                    // FEAT-039: Skip all sub-method dispatch for idle BaRs.
-                    // When there are no targets, no transport, and inventory isn't full,
-                    // calling ServerTryWelding/Grinding/Collecting would each just exit
-                    // immediately but incur profiler + method-call overhead (~0.15ms per BaR).
+                    // FEAT-039: skip sub-method dispatch for idle BaRs.
                     var isIdleNoWork = State.PossibleWeldTargets.CurrentCount == 0
                         && State.PossibleGrindTargets.CurrentCount == 0
                         && State.PossibleFloatingTargets.CurrentCount == 0
@@ -72,11 +68,7 @@ namespace SKONanobotBuildAndRepairSystem
                         && _TransportInventory.CurrentVolume == 0
                         && !State.InventoryFull;
 
-                    // BUG-089: Don't take the idle fast-path when auto-push is enabled and
-                    // the welder still has leftover items — otherwise ServerTryPushInventory
-                    // never runs and items from the last grind cycle pile up indefinitely.
-                    // GetInventory is only called in the idle corner case with push enabled,
-                    // so the hot path pays nothing extra.
+                    // BUG-089: don't take idle fast-path when auto-push is on and welder has items.
                     if (isIdleNoWork
                         && (Settings.Flags & (SyncBlockSettings.Settings.PushIngotOreImmediately | SyncBlockSettings.Settings.PushComponentImmediately | SyncBlockSettings.Settings.PushItemsImmediately)) != 0)
                     {
@@ -89,10 +81,14 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                     ServerTryPushInventory();
 
-                    // BUG-015: Proactively detect full welder inventory after push attempt.
-                    // If welder is full and we couldn't push, mark inventory full early
-                    // so grinding/collecting are blocked before wasting a cycle.
+                    // BUG-015: detect full welder inventory after push so grind/collect skip early.
+                    var diagTs = MethodProfiler.Start();
                     CheckAndUpdateInventoryFull();
+                    if (diagTs != 0L)
+                    {
+                        MethodProfiler.StopAndLog("CheckAndUpdateInventoryFull", diagTs, () =>
+                            string.Format("entityId={0}", _Welder.EntityId));
+                    }
 
                     if (isFullInventoryAndPicking)
                     {
@@ -116,64 +112,52 @@ namespace SKONanobotBuildAndRepairSystem
                         ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);
 
                     transportBlocked = transporting;
-                    if (!transporting)
+                    // BUG-103: don't gate work dispatch on the cosmetic transport timer.
+                    State.MissingComponents.Clear();
+                    State.LimitsExceeded = false;
+
+                    diagTs = MethodProfiler.Start();
+                    if (!Mod.Settings.DisableLimitSystemsPerTargetGrid
+                        && (State.PossibleWeldTargets.CurrentCount > 0 || State.PossibleGrindTargets.CurrentCount > 0))
                     {
-                        State.MissingComponents.Clear();
-                        State.LimitsExceeded = false;
-
-                        if (!Mod.Settings.DisableLimitSystemsPerTargetGrid
-                            && (State.PossibleWeldTargets.CurrentCount > 0 || State.PossibleGrindTargets.CurrentCount > 0))
-                        {
-                            RebuildSaturatedGrids();
-                        }
-
-                        switch (Settings.WorkMode)
-                        {
-                            case WorkModes.WeldBeforeGrind:
-                                ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
-                                if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
-                                {
-                                    primaryStuck = needWelding && !welding;
-                                    ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
-                                }
-                                break;
-
-                            case WorkModes.GrindBeforeWeld:
-                                ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
-                                if (!(grinding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
-                                {
-                                    primaryStuck = needGrinding && !grinding;
-                                    ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
-                                }
-                                break;
-
-                            case WorkModes.GrindIfWeldGetStuck:
-                                ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
-                                // BUG-097: This mode means "grind ONLY if welding is actively stuck"
-                                // (has targets but cannot proceed — e.g. missing components, safe zone,
-                                // priority-starved). WeldBeforeGrind's looser "nothing welding right now"
-                                // condition made this mode functionally identical to WeldBeforeGrind.
-                                // Require needWelding=true && !welding && !transporting so grinding
-                                // only kicks in when weld is truly blocked; if there's nothing to weld
-                                // the BaR stays idle instead of falling through to grind.
-                                var weldStuck = needWelding && !welding && !transporting;
-                                if (weldStuck || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
-                                {
-                                    primaryStuck = true;
-                                    ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
-                                }
-                                break;
-
-                            case WorkModes.WeldOnly:
-                                ServerTryWelding(out welding, out needWelding, out transporting, out currentWeldingBlock);
-                                break;
-
-                            case WorkModes.GrindOnly:
-                                ServerTryGrinding(out grinding, out needGrinding, out transporting, out currentGrindingBlock);
-                                break;
-                        }
-                        State.MissingComponents.RebuildHash();
+                        _gridSaturation.Rebuild();
                     }
+                    if (diagTs != 0L)
+                    {
+                        MethodProfiler.StopAndLog("RebuildSaturatedGrids", diagTs, () =>
+                            string.Format("entityId={0};saturated={1}", _Welder.EntityId, _gridSaturation.Count));
+                    }
+
+                    switch (Settings.WorkMode)
+                    {
+                        case WorkModes.WeldBeforeGrind:
+                        case WorkModes.GrindIfWeldGetStuck: // deprecated; treated as WeldBeforeGrind (defense; setter migrates on entry)
+                            MultiWeld(ref welding, ref needWelding, ref transporting, ref currentWeldingBlock);
+                            if (!(welding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedGrindingBlock != null))
+                            {
+                                primaryStuck = needWelding && !welding;
+                                MultiGrind(ref grinding, ref needGrinding, ref transporting, ref currentGrindingBlock);
+                            }
+                            break;
+
+                        case WorkModes.GrindBeforeWeld:
+                            MultiGrind(ref grinding, ref needGrinding, ref transporting, ref currentGrindingBlock);
+                            if (!(grinding || transporting) || (((Settings.Flags & SyncBlockSettings.Settings.ScriptControlled) != 0) && Settings.CurrentPickedWeldingBlock != null))
+                            {
+                                primaryStuck = needGrinding && !grinding;
+                                MultiWeld(ref welding, ref needWelding, ref transporting, ref currentWeldingBlock);
+                            }
+                            break;
+
+                        case WorkModes.WeldOnly:
+                            MultiWeld(ref welding, ref needWelding, ref transporting, ref currentWeldingBlock);
+                            break;
+
+                        case WorkModes.GrindOnly:
+                            MultiGrind(ref grinding, ref needGrinding, ref transporting, ref currentGrindingBlock);
+                            break;
+                    }
+                    State.MissingComponents.RebuildHash();
 
                     if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding)
                         ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);
@@ -219,8 +203,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (!isFullInventoryAndPicking && ready)
                 {
-                    _LastTargetsUpdate = TimeSpan.Zero;
-                    UpdateSourcesAndTargetsTimer(); //Scan immediately once for new targets
+                    TriggerImmediateRescan(State.Welding ? "weldComplete" : "grindComplete");
                 }
             }
 
@@ -309,6 +292,79 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
+        // Cap on multi-action iterations per cycle per BaR.
+        //
+        // Set to 1 so each BaR claims exactly one grid slot per cycle. Higher
+        // values let one BaR work blocks on multiple grids within a single cycle,
+        // which silently bypasses MaxSystemsPerTargetGrid: iter 1 puts the BaR on
+        // grid G (count += 1), iter 2 moves it to grid H (count[G] -= 1, count[H]
+        // += 1) — so by end of cycle grid G is undercounted and another BaR can
+        // sneak in. Throughput is paced by the per-tick budgets (MaxGrindsPerTick
+        // + MaxGrindMsPerTick) which are now both configurable, so keeping this
+        // at 1 doesn't reduce total work — it just distributes the budget more
+        // evenly across BaRs.
+        private const int MaxActionsPerCycle = 1;
+
+        /// <summary>
+        /// Calls ServerTryWelding repeatedly within a single cycle so the BaR can
+        /// consume the full PerTickBudget instead of doing one weld per Update10.
+        /// Stops when no further welding fires (no target, budget exhausted, or
+        /// transport gate). The internal lock-on logic re-picks the same block
+        /// each call until it completes, then moves to the next eligible block.
+        ///
+        /// State.CurrentWeldingBlock is committed between iterations so the next
+        /// iteration's IsGridOverSystemLimit check sees the updated GridSystemCount
+        /// — otherwise a BaR that touched grid G in iter 1 and grid H in iter 2
+        /// looks "still on its previous grid" to the limit check inside iter 3,
+        /// effectively bypassing MaxSystemsPerTargetGrid.
+        /// </summary>
+        private void MultiWeld(ref bool welding, ref bool needWelding, ref bool transporting, ref IMySlimBlock currentWeldingBlock)
+        {
+            for (int i = 0; i < MaxActionsPerCycle; i++)
+            {
+                bool w, nw, t;
+                IMySlimBlock cwb;
+                ServerTryWelding(out w, out nw, out t, out cwb);
+                if (w) welding = true;
+                if (nw) needWelding = true;
+                if (t) transporting = true;
+                if (cwb != null)
+                {
+                    currentWeldingBlock = cwb;
+                    // Commit the lock-on/grid-count change immediately so subsequent
+                    // iterations see the updated Mod.GridSystemCount.
+                    State.CurrentWeldingBlock = cwb;
+                }
+                if (!w) break;
+            }
+        }
+
+        /// <summary>
+        /// Calls ServerTryGrinding repeatedly within a single cycle so the BaR can
+        /// consume the full PerTickBudget instead of doing one grind per Update10.
+        /// Stops when no further grinding fires (no target left, or budget exhausted).
+        /// State.CurrentGrindingBlock is committed between iterations for the same
+        /// MaxSystemsPerTargetGrid-correctness reason as MultiWeld above.
+        /// </summary>
+        private void MultiGrind(ref bool grinding, ref bool needGrinding, ref bool transporting, ref IMySlimBlock currentGrindingBlock)
+        {
+            for (int i = 0; i < MaxActionsPerCycle; i++)
+            {
+                bool g, ng, t;
+                IMySlimBlock cgb;
+                ServerTryGrinding(out g, out ng, out t, out cgb);
+                if (g) grinding = true;
+                if (ng) needGrinding = true;
+                if (t) transporting = true;
+                if (cgb != null)
+                {
+                    currentGrindingBlock = cgb;
+                    State.CurrentGrindingBlock = cgb;
+                }
+                if (!g) break;
+            }
+        }
+
         /// <summary>
         /// Returns the cached count of OTHER systems targeting the given grid.
         /// Reads from the live Mod.GridSystemCount counter and subtracts this BaR's own
@@ -320,20 +376,19 @@ namespace SKONanobotBuildAndRepairSystem
             if (!Mod.GridSystemCount.TryGetValue(gridEntityId, out count))
                 return 0;
 
-            // Subtract this system's contribution (mirrors the old "if (system == this) continue" logic).
-            long myWeldGridId = 0;
-            long myGrindGridId = 0;
+            // BUG-160: each BaR contributes +1 per grid; subtract at most 1 here.
             var myWeldBlock = State.CurrentWeldingBlock;
-            if (myWeldBlock != null && myWeldBlock.CubeGrid != null)
-                myWeldGridId = myWeldBlock.CubeGrid.EntityId;
-            var myGrindBlock = State.CurrentGrindingBlock;
-            if (myGrindBlock != null && myGrindBlock.CubeGrid != null)
-                myGrindGridId = myGrindBlock.CubeGrid.EntityId;
-
+            var myWeldGridId = (myWeldBlock != null && myWeldBlock.CubeGrid != null) ? myWeldBlock.CubeGrid.EntityId : 0L;
             if (myWeldGridId == gridEntityId)
+            {
                 count--;
-            if (myGrindGridId == gridEntityId && myGrindGridId != myWeldGridId)
-                count--;
+            }
+            else
+            {
+                var myGrindBlock = State.CurrentGrindingBlock;
+                var myGrindGridId = (myGrindBlock != null && myGrindBlock.CubeGrid != null) ? myGrindBlock.CubeGrid.EntityId : 0L;
+                if (myGrindGridId == gridEntityId) count--;
+            }
 
             return count;
         }
@@ -362,7 +417,7 @@ namespace SKONanobotBuildAndRepairSystem
         private bool IsGridOverSystemLimit(long gridId, ref long lastRejectedGridId)
         {
             if (Mod.Settings.DisableLimitSystemsPerTargetGrid) return false;
-            if (_saturatedGridIds.Contains(gridId)
+            if (_gridSaturation.Contains(gridId)
                 || gridId == lastRejectedGridId
                 || GetCachedSystemCountOnGrid(gridId) >= Mod.Settings.MaxSystemsPerTargetGrid)
             {
@@ -373,27 +428,21 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Precomputes the set of grids that are definitely over MaxSystemsPerTargetGrid.
-        /// Uses strictly-greater-than (>) because the cache includes this BaR's own count
-        /// and GetCachedSystemCountOnGrid subtracts at most 1 for self.
-        /// Called once per tick before weld/grind loops.
+        /// BUG-164: resolve to the projector's parent grid for projected blocks so the
+        /// limit check uses the same grid the post-materialization Inc fires on.
         /// </summary>
-        private void RebuildSaturatedGrids()
+        private static long GetEffectiveGridId(IMySlimBlock block)
         {
-            _saturatedGridIds.Clear();
-            var limit = Mod.Settings.MaxSystemsPerTargetGrid;
-            foreach (var kvp in Mod.GridSystemCount)
-            {
-                if (kvp.Value > limit)
-                    _saturatedGridIds.Add(kvp.Key);
-            }
+            if (block == null || block.CubeGrid == null) return 0L;
+            var myCubeGrid = block.CubeGrid as Sandbox.Game.Entities.MyCubeGrid;
+            if (myCubeGrid != null && myCubeGrid.Projector != null && myCubeGrid.Projector.CubeGrid != null)
+                return myCubeGrid.Projector.CubeGrid.EntityId;
+            return block.CubeGrid.EntityId;
         }
 
         /// <summary>
-        /// FEAT-038: Transmit state with progressive backoff for unchanged state.
-        /// Compares a lightweight fingerprint of key state fields against last transmit.
-        /// When unchanged, progressively extends the interval (1-2s → 2-4s → 4-8s).
-        /// Resets to base interval on any visible state change.
+        /// FEAT-038/BUG-150: fingerprint-gated state transmit with progressive backoff
+        /// (skip the send entirely when nothing visible changed).
         /// </summary>
         private void TryTransmitState()
         {
@@ -422,11 +471,28 @@ namespace SKONanobotBuildAndRepairSystem
 
             var fingerprint = ComputeStateFingerprint();
             var fingerprintChanged = fingerprint != _lastTransmittedFingerprint;
-            if (fingerprintChanged)
+
+            // BUG-150: skip the send when fingerprint matches; extend backoff.
+            if (!fingerprintChanged)
             {
-                _transmitBackoffMultiplier = 1;
-                _lastTransmittedFingerprint = fingerprint;
+                State.ResetChanged();
+                _UpdateStateTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
+                var baseIntervalSkip = _RandomDelay.Next(TransmitStateMinIntervalSeconds, TransmitStateMaxIntervalSeconds + 1);
+                _UpdateStateTransmitInterval = baseIntervalSkip * _transmitBackoffMultiplier;
+                _transmitBackoffMultiplier = Math.Min(_transmitBackoffMultiplier * 2, 4);
+                Mod.ReportSyncSkipped();
+                if (profilerTs != 0L)
+                {
+                    var _backoffSkip = _transmitBackoffMultiplier;
+                    MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
+                        string.Format("entityId={0};action=skip;reason=fpUnchanged;backoff={1}", _Welder.EntityId, _backoffSkip));
+                }
+                return;
             }
+
+            // Fingerprint changed → real send.
+            _transmitBackoffMultiplier = 1;
+            _lastTransmittedFingerprint = fingerprint;
 
             _UpdateStateTransmitLast = MyAPIGateway.Session.ElapsedPlayTime;
             var baseInterval = _RandomDelay.Next(TransmitStateMinIntervalSeconds, TransmitStateMaxIntervalSeconds + 1);
@@ -440,19 +506,19 @@ namespace SKONanobotBuildAndRepairSystem
             if (profilerTs != 0L)
             {
                 MethodProfiler.StopAndLog("TryTransmitState", profilerTs, () =>
-                    string.Format("entityId={0};action=send;fpChanged={1};backoff={2};excluded={3}",
-                        _Welder.EntityId, fingerprintChanged, _transmitBackoffMultiplier, excludedBefore));
+                    string.Format("entityId={0};action=send;fpChanged=True;backoff={1};excluded={2}",
+                        _Welder.EntityId, _transmitBackoffMultiplier, excludedBefore));
             }
         }
 
         /// <summary>
-        /// Lightweight hash of key visible state fields for transmit backoff comparison.
-        /// Captures working state + target counts — enough to detect meaningful changes
-        /// without comparing full serialized payloads.
+        /// BUG-150: fingerprint of working state + target list CurrentHash; content-aware
+        /// so a fingerprint match safely indicates "nothing visible changed".
         /// </summary>
-        private int ComputeStateFingerprint()
+        private long ComputeStateFingerprint()
         {
-            var hash = 17;
+            // Mix bool flags into the high bits, list hashes into the low bits.
+            long hash = 17;
             hash = hash * 31 + (State.Ready ? 1 : 0);
             hash = hash * 31 + (State.Welding ? 1 : 0);
             hash = hash * 31 + (State.NeedWelding ? 1 : 0);
@@ -462,10 +528,63 @@ namespace SKONanobotBuildAndRepairSystem
             hash = hash * 31 + (State.Transporting ? 1 : 0);
             hash = hash * 31 + (State.InventoryFull ? 1 : 0);
             hash = hash * 31 + (State.LimitsExceeded ? 1 : 0);
-            hash = hash * 31 + State.PossibleWeldTargets.CurrentCount;
-            hash = hash * 31 + State.PossibleGrindTargets.CurrentCount;
-            hash = hash * 31 + State.PossibleFloatingTargets.CurrentCount;
+            hash = hash * 31 + State.PossibleWeldTargets.CurrentHash;
+            hash = hash * 31 + State.PossibleGrindTargets.CurrentHash;
+            hash = hash * 31 + State.PossibleFloatingTargets.CurrentHash;
+            hash = hash * 31 + State.MissingComponents.CurrentHash;
+            // BUG-155: include transport target (quantized to int metres) so block-to-block
+            // transitions trigger a transmit; otherwise client beam endpoint sticks.
+            if (State.CurrentTransportTarget.HasValue)
+            {
+                var t = State.CurrentTransportTarget.Value;
+                hash = hash * 31 + (long)t.X;
+                hash = hash * 31 + (long)t.Y;
+                hash = hash * 31 + (long)t.Z;
+            }
+            // BUG-260511.8: include lock-on targets (welding + grinding). Their setters
+            // flip State.Changed when the physical block changes, but the fingerprint
+            // didn't hash them — so the BUG-150 fpUnchanged early-return swallowed
+            // lock-on changes and clients kept stale beam/effect targets.
+            hash = hash * 31 + ComputeBlockKey(State.CurrentWeldingBlock);
+            hash = hash * 31 + ComputeBlockKey(State.CurrentGrindingBlock);
+
+            // BUG-260511.9: every SyncBlockState setter that flips Changed=true must
+            // be reflected in the fingerprint, or the BUG-150 fpUnchanged path will
+            // swallow the change. The audit caught two more groups:
+            //   * Safe-zone / shield visibility — flips when entering/leaving a zone.
+            //   * Transport metadata (LastTransportTarget, IsPick, Time, StartTime) —
+            //     seeded once per transport (BUG-260511.1 gate), not per tick, so
+            //     hashing them does not churn the fingerprint.
+            hash = hash * 31 + (State.SafeZoneAllowsWelding ? 1 : 0);
+            hash = hash * 31 + (State.SafeZoneAllowsGrinding ? 1 : 0);
+            hash = hash * 31 + (State.SafeZoneAllowsBuildingProjections ? 1 : 0);
+            hash = hash * 31 + (State.IsShielded ? 1 : 0);
+            hash = hash * 31 + (State.CurrentTransportIsPick ? 1 : 0);
+            hash = hash * 31 + State.CurrentTransportTime.Ticks;
+            hash = hash * 31 + State.CurrentTransportStartTime.Ticks;
+            if (State.LastTransportTarget.HasValue)
+            {
+                var lt = State.LastTransportTarget.Value;
+                hash = hash * 31 + (long)lt.X;
+                hash = hash * 31 + (long)lt.Y;
+                hash = hash * 31 + (long)lt.Z;
+            }
             return hash;
+        }
+
+        private static long ComputeBlockKey(IMySlimBlock block)
+        {
+            if (block == null) return 0L;
+            var gridId = block.CubeGrid != null ? block.CubeGrid.EntityId : 0L;
+            var pos = block.Position;
+            // Mix grid id with the 3 int coords. Position values are small (block
+            // coords on a grid), so a simple 31-multiplier mix is enough to avoid
+            // collisions between different blocks on the same grid.
+            long key = gridId;
+            key = key * 31 + pos.X;
+            key = key * 31 + pos.Y;
+            key = key * 31 + pos.Z;
+            return key;
         }
     }
 }

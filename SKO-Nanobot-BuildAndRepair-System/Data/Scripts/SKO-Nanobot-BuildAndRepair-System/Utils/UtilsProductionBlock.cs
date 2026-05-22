@@ -3,6 +3,8 @@ using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using VRage.Game;
+using VRage.Game.ModAPI;
 using VRage.ModAPI;
 
 namespace SKONanobotBuildAndRepairSystem.Utils
@@ -10,7 +12,43 @@ namespace SKONanobotBuildAndRepairSystem.Utils
     public static class UtilsProductionBlock
     {
         /// <summary>
-        /// Ensure that the requested amout of material is available inside production block.
+        /// Sum the components required to fully build the projector's loaded blueprint into
+        /// `componentList` (definitionId -> count). Returns the number of distinct components,
+        /// or -1 if the projector has no blueprint loaded.
+        /// </summary>
+        public static int NeededComponentsForBlueprint(Sandbox.ModAPI.Ingame.IMyProjector srcProjector, Dictionary<MyDefinitionId, VRage.MyFixedPoint> componentList)
+        {
+            var projector = srcProjector as IMyProjector;
+            if (componentList == null || projector == null || !projector.IsProjecting) return -1;
+
+            var projectedCubeGrid = projector.ProjectedGrid;
+            if (projectedCubeGrid != null)
+            {
+                var projectedBlocks = new List<IMySlimBlock>();
+                projectedCubeGrid.GetBlocks(projectedBlocks);
+                foreach (IMySlimBlock block in projectedBlocks)
+                {
+                    // BUG-260522.4: guard against unusual block definitions
+                    // returning null/empty Components. The sibling code path
+                    // SlimBlockExtensions.GetMissingComponents already does
+                    // this; without it a single bad definition NREs out of
+                    // the entire scripting-API call.
+                    var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
+                    if (blockDefinition == null) continue;
+                    var components = blockDefinition.Components;
+                    if (components == null || components.Length == 0) continue;
+                    foreach (var component in components)
+                    {
+                        if (componentList.ContainsKey(component.Definition.Id)) componentList[component.Definition.Id] += component.Count;
+                        else componentList[component.Definition.Id] = component.Count;
+                    }
+                }
+            }
+            return componentList.Count;
+        }
+
+        /// <summary>
+        /// Ensure that the requested amount of material is available inside production block.
         /// Available means already in inventory or in production queue.
         /// </summary>
         /// <param name="entityId"></param>

@@ -10,7 +10,7 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
         /// </summary>
         public static ChatCommandResult Execute()
         {
-            return ChatCommandResult.Success(string.Format("BaR Mod Server: v{0}", Constants.ModVersion));
+            return ChatCommandResult.Success(string.Format("Server: v{0} (build {1})", Constants.ModVersion, Constants.BuildId));
         }
     }
 }

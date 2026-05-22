@@ -118,14 +118,16 @@
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Cluster\GridScanCache.cs" />
     <Compile Include="Cluster\ScanCluster.cs" />
     <Compile Include="Cluster\ScanClusterCoordinator.cs" />
     <Compile Include="Cluster\ScanClusterResult.cs" />
+    <Compile Include="Handlers\BlockFailureCooldownHandler.cs" />
     <Compile Include="Handlers\BlockSystemAssigningHandler.cs" />
+    <Compile Include="Handlers\GridSaturationHandler.cs" />
     <Compile Include="Handlers\HudHandler.cs" />
     <Compile Include="Handlers\SafeZoneHandler.cs" />
     <Compile Include="Mods\HudAPIv2.cs" />
-    <Compile Include="Helpers\DlcCheckHelper.cs" />
     <Compile Include="Helpers\InventoryHelper.cs" />
     <Compile Include="Localization\TextsPolish.cs" />
     <Compile Include="Localization\TextsRussian.cs" />
@@ -144,10 +146,12 @@
     <Compile Include="Chat\Commands\VersionCommand.cs" />
     <Compile Include="Handlers\ComponentPriorityHandling.cs" />
     <Compile Include="Handlers\DamageHandler.cs" />
+    <Compile Include="Handlers\FriendlyRelationsHandler.cs" />
     <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />
     <Compile Include="Handlers\NetworkMessagingHandler.cs" />
+    <Compile Include="Handlers\RazeQueueHandler.cs" />
     <Compile Include="Helpers\PowerHelper.cs" />
-    <Compile Include="Helpers\SlimBlockHelper.cs" />
+    <Compile Include="Extensions\SlimBlockExtensions.cs" />
     <Compile Include="Localization\LocalizationHelper.cs" />
     <Compile Include="Collections\DefinitionIdHashDictionary.cs" />
     <Compile Include="Collections\TargetBlockDataHashList.cs" />
@@ -193,6 +197,7 @@
     <Compile Include="NanobotSystem.Collecting.cs" />
     <Compile Include="NanobotSystem.Inventory.cs" />
     <Compile Include="NanobotSystem.Scanning.cs" />
+    <Compile Include="NanobotSystem.Scanning.Block.cs" />
     <Compile Include="NanobotSystem.State.cs" />
     <Compile Include="NanobotSystem.CustomInfo.cs" />
     <Compile Include="NanobotSystem.Scripting.cs" />
@@ -201,18 +206,18 @@
     <Compile Include="Handlers\BlockPriorityHandling.cs" />
     <Compile Include="Terminal.cs" />
     <Compile Include="Handlers\PriorityHandling.cs" />
-    <Compile Include="Utils\Utils.cs" />
     <Compile Include="Utils\UtilsFaction.cs" />
+    <Compile Include="Utils\UtilsHash.cs" />
     <Compile Include="Utils\UtilsInventory.cs" />
+    <Compile Include="Utils\UtilsMath.cs" />
     <Compile Include="Utils\UtilsPlayer.cs" />
     <Compile Include="Utils\UtilsProductionBlock.cs" />
-    <Compile Include="Utils\UtilsSynchronization.cs" />
     <Compile Include="Utils\UtilsText.cs" />
     <Compile Include="Caches\SharedGridBlockCache.cs" />
     <Compile Include="Caches\SharedEntityCache.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Managers\" />
+    <Compile Include="Managers\BackgroundTaskQueue.cs" />
+    <Compile Include="Managers\PerTickBudget.cs" />
+    <Compile Include="Managers\PeriodicMaintenanceScheduler.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

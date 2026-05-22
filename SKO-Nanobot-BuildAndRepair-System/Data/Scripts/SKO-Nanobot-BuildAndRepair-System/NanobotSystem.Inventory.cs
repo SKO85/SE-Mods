@@ -4,13 +4,12 @@ using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using VRage;
 using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using static SKONanobotBuildAndRepairSystem.Utils.UtilsInventory;
-using MyInventoryItem = VRage.Game.ModAPI.Ingame.MyInventoryItem;
 
 namespace SKONanobotBuildAndRepairSystem
 {
@@ -42,13 +41,12 @@ namespace SKONanobotBuildAndRepairSystem
             if ((Settings.Flags & (SyncBlockSettings.Settings.PushIngotOreImmediately | SyncBlockSettings.Settings.PushComponentImmediately | SyncBlockSettings.Settings.PushItemsImmediately)) == 0)
                 return;
 
-            // FEAT-037: Compute time since last push once for adaptive interval check.
+            // FEAT-037: time since last push for the adaptive interval check.
             var secondsSinceLastPush = MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryAutoPushInventoryLast).TotalSeconds;
             if (secondsSinceLastPush <= 5)
                 return;
 
-            // BUG-016: Skip push if all push targets are known to be full.
-            // The flag is reset when push targets are rescanned.
+            // BUG-016: skip push when all targets are known full (cleared on rescan).
             if (_PushTargetsFull)
                 return;
 
@@ -57,10 +55,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (welderInventory.Empty()) return;
 
-                // FEAT-037: Extended push interval when welder has space.
-                // During grinding, items accumulate slowly. Batch transfers by waiting
-                // 10s instead of 5s when inventory is < 75% full. Cuts push frequency
-                // ~50% without risking overflow (CheckAndUpdateInventoryFull catches it).
+                // FEAT-037: 10s interval when welder is < 75% full (5s otherwise).
                 if (secondsSinceLastPush < 10
                     && (float)welderInventory.CurrentVolume < (float)welderInventory.MaxVolume * 0.75f)
                     return;
@@ -70,43 +65,59 @@ namespace SKONanobotBuildAndRepairSystem
 
                 _TempInventoryItems.Clear();
                 welderInventory.GetItems(_TempInventoryItems);
-                for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                var itemCount = _TempInventoryItems.Count;
+
+                // BUG-162: chunked push (max 4 items / ~5 ms per call); cursor wraps between calls.
+                const int MaxPushItemsPerCall = 4;
+                var budgetTicks = Stopwatch.Frequency / 200; // 5 ms in Stopwatch ticks.
+                var startTs = Stopwatch.GetTimestamp();
+                var processed = 0;
+
+                if (itemCount > 0)
                 {
-                    var srcItem = _TempInventoryItems[srcItemIndex];
-                    if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Ore).Name || srcItem.Type.TypeId == typeof(MyObjectBuilder_Ingot).Name)
+                    // Clamp cursor; items can be removed externally between calls.
+                    if (_PushItemCursor < 0 || _PushItemCursor >= itemCount) _PushItemCursor = itemCount - 1;
+
+                    var srcItemIndex = _PushItemCursor;
+                    while (srcItemIndex >= 0)
                     {
-                        if ((Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0)
+                        if (processed >= MaxPushItemsPerCall) break;
+                        if (Stopwatch.GetTimestamp() - startTs >= budgetTicks) break;
+
+                        var srcItem = _TempInventoryItems[srcItemIndex];
+                        bool eligible;
+                        if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Ore).Name || srcItem.Type.TypeId == typeof(MyObjectBuilder_Ingot).Name)
+                            eligible = (Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0;
+                        else if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Component).Name)
+                            eligible = (Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0;
+                        else
+                            eligible = (Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0;
+
+                        if (eligible)
                         {
                             anyAttempted = true;
                             anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
                             _TryAutoPushInventoryLast = lastPush;
+                            processed++;
                         }
+                        srcItemIndex--;
                     }
-                    else if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Component).Name)
+
+                    if (srcItemIndex < 0)
                     {
-                        if ((Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0)
-                        {
-                            anyAttempted = true;
-                            anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
-                            _TryAutoPushInventoryLast = lastPush;
-                        }
+                        // Walked to the bottom: wrap cursor to the top for the next call so
+                        // older items at higher indices get their turn.
+                        _PushItemCursor = itemCount - 1;
                     }
                     else
                     {
-                        //Any kind of items (Tools, Weapons, Ammo, Bottles, ..)
-                        if ((Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0)
-                        {
-                            anyAttempted = true;
-                            anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
-                            _TryAutoPushInventoryLast = lastPush;
-                        }
+                        _PushItemCursor = srcItemIndex;
                     }
                 }
                 _TempInventoryItems.Clear();
 
-                // BUG-016: If we attempted to push but nothing moved, mark push targets as full.
-                // This prevents constant iteration over full containers every tick.
-                // The flag is reset when push targets change or after a safety backoff.
+                // BUG-016: mark targets full when an attempt moved nothing
+                // (cleared on successful push or push-target signature change).
                 if (anyAttempted && !anyPushed)
                 {
                     _PushTargetsFull = true;
@@ -149,7 +160,12 @@ namespace SKONanobotBuildAndRepairSystem
                     var welderInventory = _Welder.GetInventory(0);
                     if (welderInventory != null)
                     {
-                        if (push && !welderInventory.Empty() && !_PushTargetsFull)
+                        // BUG-114: gate overflow push on the same Push* flags as ServerTryPushInventory.
+                        var pushFlagsActive = (Settings.Flags & (
+                            SyncBlockSettings.Settings.PushIngotOreImmediately |
+                            SyncBlockSettings.Settings.PushComponentImmediately |
+                            SyncBlockSettings.Settings.PushItemsImmediately)) != 0;
+                        if (push && pushFlagsActive && !welderInventory.Empty() && !_PushTargetsFull)
                         {
                             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryPushInventoryLast).TotalSeconds > 5 && welderInventory.MaxVolume - welderInventory.CurrentVolume < _TransportInventory.CurrentVolume * 1.5f)
                             {
@@ -211,130 +227,107 @@ namespace SKONanobotBuildAndRepairSystem
             return empty;
         }
 
+        // BUG-146: per-call profiling with sub-timers (GetItems / GetItemByID / TransferItemFrom).
         private bool EmptyBlockInventories(IMyEntity entity, IMyInventory dstInventory, out bool isEmpty)
         {
+            var profilerTs = MethodProfiler.Start();
             var running = false;
             var remainingVolume = _MaxTransportVolume - (float)dstInventory.CurrentVolume;
             isEmpty = true;
+            var inventoriesScanned = 0;
+            var inventoriesEmpty = 0;
+            var itemsExamined = 0;
+            var transferAttempts = 0;
+            var transfersSucceeded = 0;
+            var tsGetItems = 0L;
+            var tsGetItemById = 0L;
+            var tsTransfer = 0L;
+            long tsMark;
+            var entityId = entity != null ? entity.EntityId : 0L;
+            var inventoryCount = entity != null ? entity.InventoryCount : 0;
 
-            for (int i1 = 0; i1 < entity.InventoryCount; i1++)
+            try
             {
-                var srcInventory = entity.GetInventory(i1);
-                if (srcInventory.Empty()) continue;
-
-                if (remainingVolume <= 0) return true; //No more transport volume
-
-                _TempInventoryItems.Clear();
-                srcInventory.GetItems(_TempInventoryItems);
-                for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                for (int i1 = 0; i1 < inventoryCount; i1++)
                 {
-                    var srcItem = srcInventory.GetItemByID(_TempInventoryItems[srcItemIndex].ItemId);
-                    if (srcItem == null) continue;
+                    var srcInventory = entity.GetInventory(i1);
+                    inventoriesScanned++;
+                    if (srcInventory.Empty()) { inventoriesEmpty++; continue; }
 
-                    var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(srcItem.Content.GetId());
-                    if (definition == null) continue;
+                    if (remainingVolume <= 0) return true; //No more transport volume
 
-                    var maxpossibleAmountFP = Math.Min((float)srcItem.Amount, (remainingVolume / definition.Volume));
-                    //Real Transport Volume is always bigger than logical _MaxTransportVolume so ceiling is no problem
-                    var maxpossibleAmount = (MyFixedPoint)(definition.HasIntegralAmounts ? Math.Ceiling(maxpossibleAmountFP) : maxpossibleAmountFP);
-                    if (dstInventory.TransferItemFrom(srcInventory, srcItemIndex, null, true, maxpossibleAmount, false))
+                    _TempInventoryItems.Clear();
+                    // BUG-146: gate Stopwatch on profilerTs so it's zero-cost when off.
+                    tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                    srcInventory.GetItems(_TempInventoryItems);
+                    if (tsMark != 0L) tsGetItems += Stopwatch.GetTimestamp() - tsMark;
+
+                    for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
                     {
-                        remainingVolume -= (float)maxpossibleAmount * definition.Volume;
-                        running = true;
+                        itemsExamined++;
+                        tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                        var srcItem = srcInventory.GetItemByID(_TempInventoryItems[srcItemIndex].ItemId);
+                        if (tsMark != 0L) tsGetItemById += Stopwatch.GetTimestamp() - tsMark;
+                        if (srcItem == null) continue;
 
-                        if (remainingVolume <= 0)
+                        var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(srcItem.Content.GetId());
+                        if (definition == null) continue;
+
+                        var maxpossibleAmountFP = Math.Min((float)srcItem.Amount, (remainingVolume / definition.Volume));
+                        //Real Transport Volume is always bigger than logical _MaxTransportVolume so ceiling is no problem
+                        var maxpossibleAmount = (MyFixedPoint)(definition.HasIntegralAmounts ? Math.Ceiling(maxpossibleAmountFP) : maxpossibleAmountFP);
+                        transferAttempts++;
+                        tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                        var transferred = dstInventory.TransferItemFrom(srcInventory, srcItemIndex, null, true, maxpossibleAmount, false);
+                        if (tsMark != 0L) tsTransfer += Stopwatch.GetTimestamp() - tsMark;
+                        if (transferred)
+                        {
+                            transfersSucceeded++;
+                            remainingVolume -= (float)maxpossibleAmount * definition.Volume;
+                            running = true;
+
+                            if (remainingVolume <= 0)
+                            {
+                                isEmpty = false;
+                                return true; //No more transport volume
+                            }
+                        }
+                        else
                         {
                             isEmpty = false;
-                            return true; //No more transport volume
+                            return running; //No more space
                         }
                     }
-                    else
-                    {
-                        isEmpty = false;
-                        return running; //No more space
-                    }
+                    _TempInventoryItems.Clear();
                 }
-                _TempInventoryItems.Clear();
+                return running;
             }
-            return running;
-        }
-
-        /// <summary>
-        /// Pull components into welder
-        /// </summary>
-        private bool PullComponents(MyDefinitionId componentId, float volume, ref int neededAmount, ref float remainingVolume)
-        {
-            var profilerTs = MethodProfiler.Start();
-            var startNeeded = neededAmount;
-            int availAmount = 0;
-            var welderInventory = _Welder.GetInventory(0);
-            var maxpossibleAmount = Math.Min(neededAmount, (int)Math.Ceiling(remainingVolume / volume));
-
-            if (maxpossibleAmount <= 0) return false;
-
-            var picked = false;
-
-            // BUG-057: Reuse pooled list across source iterations to avoid per-call allocation.
-            _TempPullInventoryItems.Clear();
-
-            lock (_PossibleSources)
+            finally
             {
-                foreach (var srcInventory in _PossibleSources)
+                if (profilerTs != 0L)
                 {
-                    var srcOwner = srcInventory.Owner as IMyEntity;
-                    if (srcOwner == null || srcOwner.MarkedForClose) continue;
-
-                    //Pre Test is 10 timers faster then get the whole list (as copy!) and iterate for nothing
-                    if (srcInventory.FindItem(componentId) != null && srcInventory.CanTransferItemTo(welderInventory, componentId))
-                    {
-                        _TempPullInventoryItems.Clear();
-                        srcInventory.GetItems(_TempPullInventoryItems);
-                        for (int srcItemIndex = _TempPullInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
-                        {
-                            var srcItem = _TempPullInventoryItems[srcItemIndex];
-                            if (srcItem != null && (MyDefinitionId)srcItem.Type == componentId && srcItem.Amount > 0)
-                            {
-                                var moved = false;
-                                var amountMoveable = 0;
-                                var amountPossible = Math.Min(maxpossibleAmount, (int)srcItem.Amount);
-
-                                if (amountPossible > 0)
-                                {
-                                    amountMoveable = (int)welderInventory.MaxItemsAddable(amountPossible, componentId);
-                                    if (amountMoveable > 0)
-                                    {
-                                        moved = welderInventory.TransferItemFrom(srcInventory, srcItemIndex, null, true, amountMoveable);
-                                        if (moved)
-                                        {
-                                            maxpossibleAmount -= amountMoveable;
-                                            availAmount += amountMoveable;
-                                            picked = ServerPickFromWelder(componentId, volume, ref neededAmount, ref remainingVolume) || picked;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        //No (more) space in welder
-                                        neededAmount -= availAmount;
-                                        remainingVolume -= availAmount * volume;
-                                        return picked;
-                                    }
-                                }
-                            }
-                            if (maxpossibleAmount <= 0) return picked;
-                        }
-                    }
-                    if (maxpossibleAmount <= 0) return picked;
+                    var tsFreq = Stopwatch.Frequency;
+                    var _getItemsMs = tsGetItems * 1000.0 / tsFreq;
+                    var _getItemByIdMs = tsGetItemById * 1000.0 / tsFreq;
+                    var _transferMs = tsTransfer * 1000.0 / tsFreq;
+                    var _entityId = entityId;
+                    var _inventoryCount = inventoryCount;
+                    var _inventoriesScanned = inventoriesScanned;
+                    var _inventoriesEmpty = inventoriesEmpty;
+                    var _itemsExamined = itemsExamined;
+                    var _transferAttempts = transferAttempts;
+                    var _transfersSucceeded = transfersSucceeded;
+                    var _isEmptyResult = isEmpty;
+                    var _running = running;
+                    MethodProfiler.StopAndLog("EmptyBlockInventories", profilerTs, () =>
+                        string.Format("entityId={0};inventoryCount={1};invScanned={2};invEmpty={3};itemsExamined={4};transferAttempts={5};transferSucceeded={6};isEmpty={7};running={8};getItemsMs={9:F3};getItemByIdMs={10:F3};transferMs={11:F3}",
+                            _entityId, _inventoryCount, _inventoriesScanned, _inventoriesEmpty, _itemsExamined, _transferAttempts, _transfersSucceeded, _isEmptyResult, _running,
+                            _getItemsMs, _getItemByIdMs, _transferMs));
                 }
             }
-
-            if (profilerTs != 0L)
-            {
-                MethodProfiler.StopAndLog("PullComponents", profilerTs, () =>
-                    string.Format("entityId={0};component={1};startNeeded={2};picked={3};sources={4}",
-                        _Welder.EntityId, componentId.SubtypeName, startNeeded, picked, _PossibleSources.Count));
-            }
-            return picked;
         }
+
+        // BUG-133: PullComponents retired; see PullFromSourcesOnePass in Welding.cs.
 
         private bool IsTransportRunning(TimeSpan playTime)
         {

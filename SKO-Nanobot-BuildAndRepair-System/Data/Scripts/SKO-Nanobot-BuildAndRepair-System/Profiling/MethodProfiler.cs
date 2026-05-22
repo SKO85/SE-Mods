@@ -567,6 +567,7 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             {
                 writer = MyAPIGateway.Utilities.WriteFileInLocalStorage((_sessionPrefix ?? "") + "NanobotProfiler.Summary.log", typeof(Mod));
                 writer.WriteLine("# Nanobot method profiler summary");
+                writer.WriteLine(string.Format("# modVersion={0};buildId={1}", Constants.ModVersion, Constants.BuildId));
                 writer.WriteLine(string.Format("# session={0};sessionSeconds={1:F1};warmupCallsPerMethod={2};generatedUtc={3:u}", _sessionName, sessionDuration.TotalSeconds, WarmupCallsPerMethod, DateTime.UtcNow));
                 writer.WriteLine(string.Format("# simSpeed: min={0:F2};max={1:F2};avg={2:F2};samples={3}",
                     _minSimSpeed == float.MaxValue ? 0f : _minSimSpeed,
@@ -713,12 +714,25 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 lock (_syncRoot)
                 {
                     writer.WriteLine(line.ToString());
-                    writer.Flush();
+                    // BUG-125: no per-line Flush; periodic FlushAll bounds data loss.
                 }
             }
             catch (Exception ex)
             {
                 MyLog.Default.WriteLineAndConsole("MethodProfiler write failed: " + ex.Message);
+            }
+        }
+
+        // BUG-125: periodic flush (called every 5s) bounds data loss on hard crash.
+        public static void FlushAll()
+        {
+            if (!IsEnabled) return;
+            lock (_syncRoot)
+            {
+                foreach (var entry in _writers)
+                {
+                    try { if (entry.Value != null) entry.Value.Flush(); } catch { }
+                }
             }
         }
 

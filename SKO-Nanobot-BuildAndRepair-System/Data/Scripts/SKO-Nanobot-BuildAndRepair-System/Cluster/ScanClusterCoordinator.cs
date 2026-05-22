@@ -29,6 +29,23 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             SyncBlockSettings.Settings.GrindIgnorePriorityOrder;
 
         /// <summary>
+        /// True when this NanobotSystem should participate in a cluster — i.e. the
+        /// block is functional, terminal-enabled, ready, and has a valid welder/grid.
+        /// Disabled or broken BaRs are excluded from cluster membership so the
+        /// coordinator's scan range and the discovery union AABB only reflect BaRs
+        /// that can actually do work.
+        /// </summary>
+        public static bool IsClusterEligible(NanobotSystem system)
+        {
+            return system != null
+                && system.Welder != null
+                && system.Welder.CubeGrid != null
+                && system.Welder.IsFunctional
+                && system.Welder.Enabled
+                && system.State.Ready;
+        }
+
+        /// <summary>
         /// Rebuilds clusters from all active NanobotSystems. O(N) on main thread.
         /// All systems (including solo BaRs) get assigned to a cluster.
         /// </summary>
@@ -45,6 +62,7 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                 var systemCount = Mod.NanobotSystems.Count;
                 if (systemCount == _lastSystemCount && _clusters.Count > 0)
                 {
+                    // FEAT-072: numeric hash comparison (no string allocation per BaR per second).
                     var anyChanged = false;
                     foreach (var system in Mod.NanobotSystems.Values)
                     {
@@ -54,8 +72,8 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                             if (system.AssignedCluster != null) { anyChanged = true; break; }
                             continue;
                         }
-                        var key = ComputeClusterKey(system);
-                        if (key != system._lastClusterKey) { anyChanged = true; break; }
+                        var hash = ComputeClusterKeyHash(system);
+                        if (hash != system._lastClusterKeyHash) { anyChanged = true; break; }
                     }
                     if (!anyChanged)
                     {
@@ -75,15 +93,15 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                 foreach (var system in Mod.NanobotSystems.Values)
                 {
                     // Skip systems that aren't ready for scanning
-                    if (system.Welder == null || !system.Welder.IsFunctional || !system.Welder.Enabled || !system.State.Ready)
+                    if (!IsClusterEligible(system))
                     {
                         system.AssignedCluster = null;
-                        system._lastClusterKey = null;
+                        system._lastClusterKeyHash = 0;
                         continue;
                     }
 
                     var key = ComputeClusterKey(system);
-                    system._lastClusterKey = key;
+                    system._lastClusterKeyHash = ComputeClusterKeyHash(system);
 
                     ScanCluster cluster;
                     if (!_clusters.TryGetValue(key, out cluster))
@@ -112,6 +130,28 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                     }
                     clusterCount++;
                     clusteredSystems += cluster.Members.Count;
+
+                    // BUG-260501.1: propagate _rescanForced to the (possibly new) coordinator
+                    // after a cluster reshuffle so the saturated-skip gate doesn't suppress it.
+                    var coord = cluster.Coordinator;
+                    if (coord != null)
+                    {
+                        var hasPendingTrigger = false;
+                        for (int i = 0; i < cluster.Members.Count; i++)
+                        {
+                            var m = cluster.Members[i];
+                            if (m == coord) continue;
+                            if (m._rescanForced)
+                            {
+                                hasPendingTrigger = true;
+                                m._rescanForced = false;
+                            }
+                        }
+                        if (hasPendingTrigger)
+                        {
+                            coord.InheritForcedRescan();
+                        }
+                    }
                 }
 
                 // Clean up empty clusters
@@ -122,13 +162,63 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             }
             finally
             {
-                var _clusterCount = clusterCount;
-                var _clusteredSystems = clusteredSystems;
-                var _totalSystems = Mod.NanobotSystems.Count;
-                var _skipped = skipped;
-                MethodProfiler.StopAndLog("ScanClusterCoordinator.RebuildClusters", profilerTs, () =>
-                    string.Format("clusters={0};clusteredSystems={1};totalSystems={2};skipped={3}",
-                        _clusterCount, _clusteredSystems, _totalSystems, _skipped));
+                if (profilerTs != 0L)
+                {
+                    var _clusterCount = clusterCount;
+                    var _clusteredSystems = clusteredSystems;
+                    var _totalSystems = Mod.NanobotSystems.Count;
+                    var _skipped = skipped;
+                    MethodProfiler.StopAndLog("ScanClusterCoordinator.RebuildClusters", profilerTs, () =>
+                        string.Format("clusters={0};clusteredSystems={1};totalSystems={2};skipped={3}",
+                            _clusterCount, _clusteredSystems, _totalSystems, _skipped));
+                }
+            }
+        }
+
+        /// <summary>FEAT-072: numeric hash of cluster-relevant fields (no string allocation).</summary>
+        public static int ComputeClusterKeyHash(NanobotSystem system)
+        {
+            var s = system.Settings;
+            var flags = (int)(s.Flags & ClusterRelevantFlags);
+
+            // FNV-1a style hash combining — fast, no allocation, good distribution.
+            unchecked
+            {
+                int hash = (int)2166136261;
+                hash = (hash ^ (int)(system.Welder.CubeGrid.EntityId >> 32)) * 16777619;
+                hash = (hash ^ (int)(system.Welder.CubeGrid.EntityId)) * 16777619;
+                hash = (hash ^ (int)s.WorkMode) * 16777619;
+                hash = (hash ^ (int)s.SearchMode) * 16777619;
+                hash = (hash ^ flags) * 16777619;
+
+                // Priority strings — hash their .NET hash codes (stable within a session)
+                hash = (hash ^ (s.WeldPriority != null ? s.WeldPriority.GetHashCode() : 0)) * 16777619;
+                hash = (hash ^ (s.GrindPriority != null ? s.GrindPriority.GetHashCode() : 0)) * 16777619;
+                hash = (hash ^ (s.ComponentCollectPriority != null ? s.ComponentCollectPriority.GetHashCode() : 0)) * 16777619;
+
+                // Color settings (only relevant if flag is set)
+                if ((flags & (int)SyncBlockSettings.Settings.UseIgnoreColor) != 0)
+                    hash = (hash ^ (int)s.IgnoreColorPacked) * 16777619;
+                if ((flags & (int)SyncBlockSettings.Settings.UseGrindColor) != 0)
+                    hash = (hash ^ (int)s.GrindColorPacked) * 16777619;
+
+                // Grind janitor settings
+                hash = (hash ^ (int)s.UseGrindJanitorOn) * 16777619;
+                hash = (hash ^ (int)s.GrindJanitorOptions) * 16777619;
+
+                // Weld options
+                hash = (hash ^ (int)s.WeldOptions) * 16777619;
+
+                // Ownership settings
+                hash = (hash ^ (int)(system.Welder.OwnerId >> 32)) * 16777619;
+                hash = (hash ^ (int)(system.Welder.OwnerId)) * 16777619;
+                hash = (hash ^ (system.Welder.UseConveyorSystem ? 1 : 0)) * 16777619;
+
+                // Safe zone state
+                hash = (hash ^ (system.State.SafeZoneAllowsWelding ? 1 : 0)) * 16777619;
+                hash = (hash ^ (system.State.SafeZoneAllowsGrinding ? 1 : 0)) * 16777619;
+
+                return hash;
             }
         }
 
@@ -174,10 +264,7 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             key += "|" + system.Welder.OwnerId;
             key += "|" + (system.Welder.UseConveyorSystem ? "1" : "0");
 
-            // Safe zone state — BaRs inside vs outside safe zones need separate clusters
-            // so the coordinator's scan gates match all members' capabilities.
-            // BUG-053: Timing fix ensures safe zone state is refreshed for all BaRs
-            // immediately before RebuildClusters() (see Mod.RebuildSourcesAndTargetsTimer).
+            // BUG-053: safe-zone state in the cluster key (refreshed before RebuildClusters).
             key += "|SZ" + (system.State.SafeZoneAllowsWelding ? "1" : "0")
                  + (system.State.SafeZoneAllowsGrinding ? "1" : "0");
 

@@ -1,4 +1,4 @@
-﻿namespace SKONanobotBuildAndRepairSystem.Caches
+namespace SKONanobotBuildAndRepairSystem.Caches
 {
     using Sandbox.ModAPI;
     using System;
@@ -7,10 +7,16 @@
 
     public class TtlCache<TKey, TValue>
     {
-        public class CacheItem
+        /// <summary>
+        /// Stored entry. Struct to avoid the per-Set heap allocation that the
+        /// previous class-typed CacheItem incurred — assignment caches see
+        /// thousands of writes per tick under load. Fields are readonly so the
+        /// struct is effectively immutable.
+        /// </summary>
+        public struct CacheItem
         {
-            public TValue Value { get; private set; }
-            public TimeSpan Expiration { get; private set; }
+            public readonly TValue Value;
+            public readonly TimeSpan Expiration;
 
             public CacheItem(TValue value, TimeSpan expiration)
             {
@@ -44,44 +50,56 @@
         public int Count
         { get { return Entries.Count; } }
 
-        /// <summary>Adds or updates a value with the default TTL.</summary>
-        public void Set(TKey key, TValue value)
+        /// <summary>
+        /// Read the tick-cached play time, falling back to the live session
+        /// accessor only on the very first ticks before Mod.UpdateBeforeSimulation
+        /// has had a chance to publish a value. Returns false (with a zero
+        /// fallback) when no session exists at all.
+        /// </summary>
+        private static bool TryGetNow(out TimeSpan now)
         {
-            Set(key, value, _defaultTtl);
+            now = Mod.NowPlayTime;
+            if (now != TimeSpan.Zero) return true;
+
+            var session = MyAPIGateway.Session;
+            if (session == null) { now = TimeSpan.Zero; return false; }
+            now = session.ElapsedPlayTime;
+            return true;
         }
 
-        /// <summary>Adds or updates a value with a specific TTL.</summary>
-        public void Set(TKey key, TValue value, TimeSpan ttl)
+        /// <summary>Adds or updates a value with the default TTL.</summary>
+        public bool Set(TKey key, TValue value)
+        {
+            return Set(key, value, _defaultTtl);
+        }
+
+        /// <summary>Adds or updates a value with a specific TTL. Returns false if no session is available.</summary>
+        public bool Set(TKey key, TValue value, TimeSpan ttl)
         {
             if (ttl <= TimeSpan.Zero)
                 throw new Exception("TTL must be positive.");
 
-            var session = MyAPIGateway.Session;
-            if (session == null) return;
-            var now = session.ElapsedPlayTime;
-            var expiration = now.Add(ttl);
-            var item = new CacheItem(value, expiration);
-            Entries[key] = item;
+            TimeSpan now;
+            if (!TryGetNow(out now)) return false;
+            Entries[key] = new CacheItem(value, now.Add(ttl));
+            return true;
         }
 
         /// <summary>
         /// Attempts to get the value if it exists and is not expired.
-        /// Expired items are removed.
         /// </summary>
         public bool TryGet(TKey key, out TValue value)
         {
             CacheItem item;
             if (Entries.TryGetValue(key, out item))
             {
-                var session = MyAPIGateway.Session;
-                if (session == null) { value = default(TValue); return false; }
-                var now = session.ElapsedPlayTime;
+                TimeSpan now;
+                if (!TryGetNow(out now)) { value = default(TValue); return false; }
                 if (!item.IsExpired(now))
                 {
                     value = item.Value;
                     return true;
                 }
-
             }
 
             value = default(TValue);
@@ -104,21 +122,29 @@
         /// <summary>Optional: remove all expired entries (call periodically if you skip purge-on-read).</summary>
         public void CleanupExpired()
         {
-            var session = MyAPIGateway.Session;
-            if (session == null) return;
-            var now = session.ElapsedPlayTime;
-            var expiredKeys = new List<TKey>();
+            TimeSpan now;
+            if (!TryGetNow(out now)) return;
+            // BUG-260522.3: use a method-local list. The previous version reused a
+            // per-instance `_expiredKeysBuffer` field on the assumption that all
+            // CleanupExpired call sites ran on the main thread — that's no longer
+            // true after BUG-260511.7/18 left several caches' cleanup paths on the
+            // background pool (no in-flight guard in PeriodicMaintenanceScheduler).
+            // The allocation cost is negligible — cleanups fire every 5 s to 2 min
+            // and the list is small.
+            List<TKey> expiredKeys = null;
             foreach (var pair in Entries)
             {
                 if (pair.Value.IsExpired(now))
                 {
+                    if (expiredKeys == null) expiredKeys = new List<TKey>();
                     expiredKeys.Add(pair.Key);
                 }
             }
+            if (expiredKeys == null) return;
             CacheItem removed;
-            foreach (var key in expiredKeys)
+            for (int i = 0; i < expiredKeys.Count; i++)
             {
-                Entries.TryRemove(key, out removed);
+                Entries.TryRemove(expiredKeys[i], out removed);
             }
         }
     }

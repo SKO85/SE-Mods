@@ -149,19 +149,33 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
         }
 
+        // PERF-8: pooled scratch for IsRemoteAdmin. Server-only, main-thread call site,
+        // never recurses into SendToAdmins, so a dedicated pool is safest (avoids any
+        // risk of clobbering _adminBroadcastPlayers mid-iteration).
+        private static readonly List<IMyPlayer> _adminCheckPlayers = new List<IMyPlayer>();
+
         private static bool IsRemoteAdmin(ulong steamId)
         {
-            var players = new List<IMyPlayer>();
-            MyAPIGateway.Players.GetPlayers(players);
-            foreach (var player in players)
+            _adminCheckPlayers.Clear();
+            MyAPIGateway.Players.GetPlayers(_adminCheckPlayers);
+            try
             {
-                if (player.SteamUserId == steamId)
+                for (var i = 0; i < _adminCheckPlayers.Count; i++)
                 {
-                    var promoteLevel = player.PromoteLevel.ToString();
-                    return promoteLevel == "Admin" || promoteLevel == "SpaceMaster" || promoteLevel == "Owner";
+                    var player = _adminCheckPlayers[i];
+                    if (player.SteamUserId == steamId)
+                    {
+                        // BUG-260502.3: use the shared canonical helper instead of an
+                        // inline copy of the REF-4 pattern.
+                        return SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel);
+                    }
                 }
+                return false;
             }
-            return false;
+            finally
+            {
+                _adminCheckPlayers.Clear();
+            }
         }
 
         #endregion Server Message Received Handlers
@@ -174,9 +188,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             {
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModSettings>(data);
                 SyncModSettings.AdjustSettings(msgRcv.Settings);
-                // Clamp + BUG-093 janitor defense. Must run on the broadcast path too —
-                // a server that mutated runtime settings (chat command, script, etc.)
-                // can otherwise hand clients values that bypassed Load()'s clamps.
+                // BUG-093: clamp on the broadcast path too (server-mutated settings may bypass Load).
                 SyncModSettings.ValidateAndClamp(msgRcv.Settings);
 
                 Mod.Settings = msgRcv.Settings;
@@ -345,8 +357,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             foreach (var player in _adminBroadcastPlayers)
             {
                 if (player.SteamUserId == 0) continue;
-                var level = player.PromoteLevel.ToString();
-                if (level == "Admin" || level == "SpaceMaster" || level == "Owner")
+                if (SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel))
                 {
                     MyAPIGateway.Multiplayer.SendMessageTo(msgId, bytes, player.SteamUserId, true);
                 }
@@ -488,13 +499,19 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 }
 
                 var payloadBytes = bytes.Length;
-                MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs, () =>
-                    string.Format("entityId={0};steamId={1};bytes={2}",
-                        system.Entity.EntityId, steamId, payloadBytes));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs, () =>
+                        string.Format("entityId={0};steamId={1};bytes={2}",
+                            system.Entity.EntityId, steamId, payloadBytes));
+                }
             }
             catch
             {
-                MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs);
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs);
+                }
             }
         }
 

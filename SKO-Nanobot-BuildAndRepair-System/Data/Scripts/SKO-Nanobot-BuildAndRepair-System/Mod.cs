@@ -1,12 +1,11 @@
 namespace SKONanobotBuildAndRepairSystem
 {
     using DefenseShields;
-    using Sandbox.Game.EntityComponents;
     using Sandbox.ModAPI;
     using SKONanobotBuildAndRepairSystem.Cluster;
     using SKONanobotBuildAndRepairSystem.Chat;
     using SKONanobotBuildAndRepairSystem.Handlers;
-    using SKONanobotBuildAndRepairSystem.Helpers;
+    using SKONanobotBuildAndRepairSystem.Managers;
     using SKONanobotBuildAndRepairSystem.Caches;
     using SKONanobotBuildAndRepairSystem.Models;
     using SKONanobotBuildAndRepairSystem.Profiling;
@@ -14,7 +13,6 @@ namespace SKONanobotBuildAndRepairSystem
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
-    using System.Text;
     using VRage.Game.Components;
     using VRage.Game.ModAPI;
 
@@ -26,6 +24,13 @@ namespace SKONanobotBuildAndRepairSystem
         public static bool SettingsValid = false;
         public static bool CustomSettingsLoaded = false;
         public static SyncModSettings Settings = new SyncModSettings();
+
+        // Tick-cached MyAPIGateway.Session.ElapsedPlayTime. Refreshed once per
+        // UpdateBeforeSimulation; consumed by TtlCache and any other hot-path
+        // code that would otherwise pay for a Session+ElapsedPlayTime accessor
+        // chain on every call. TimeSpan reads/writes are atomic on x64 so
+        // background-thread readers (TTL cleanup) see a stable value.
+        public static TimeSpan NowPlayTime;
         public static readonly ConcurrentDictionary<long, NanobotSystem> NanobotSystems = new ConcurrentDictionary<long, NanobotSystem>();
         public static ShieldApi Shield; // Centralized DefenseShields API instance
 
@@ -42,45 +47,41 @@ namespace SKONanobotBuildAndRepairSystem
 
         public static void DecrementGridCount(long gridId)
         {
-            // CAS loop: retry if the value changed between read and update.
+            // Both Inc and Dec are only called from SyncBlockState property setters,
+            // which fire from server-side weld/grind logic and from network-state-received
+            // handlers — both run on the main thread. The dictionary stays concurrent so
+            // background readers (RebuildSaturatedGrids / IsGridOverSystemLimit are main
+            // thread today, but the type leaves the door open) are safe, but writers don't
+            // need a CAS retry loop.
             int current;
-            while (GridSystemCount.TryGetValue(gridId, out current))
+            if (!GridSystemCount.TryGetValue(gridId, out current)) return;
+            if (current <= 1)
             {
-                var newVal = current - 1;
-                if (newVal <= 0)
-                {
-                    // Try to remove; if it fails (value changed), loop retries.
-                    int removed;
-                    if (GridSystemCount.TryRemove(gridId, out removed))
-                        break;
-                }
-                else
-                {
-                    if (GridSystemCount.TryUpdate(gridId, newVal, current))
-                        break;
-                }
-                // TryUpdate/TryRemove failed — value was modified concurrently; retry.
+                int removed;
+                GridSystemCount.TryRemove(gridId, out removed);
+            }
+            else
+            {
+                GridSystemCount[gridId] = current - 1;
             }
         }
 
-        // --- OPT 1: Mechanical block grind throttle ---
-        // Caps mechanical connection block destructions to 1 per tick globally,
-        // preventing 100-380ms spikes when multiple BaRs destroy pistons/rotors/hinges simultaneously.
-        private static int _mechanicalGrindsThisTick;
-        private static int _lastMechanicalTick = -1;
+        // OPT 1: Mechanical block grind throttle. Caps mechanical connection block
+        // destructions to 1 per tick globally, preventing 100-380ms spikes when multiple
+        // BaRs destroy pistons/rotors/hinges simultaneously.
+        private static readonly PerTickBudget _mechanicalGrindBudget = new PerTickBudget(1);
 
-        public static bool TryClaimMechanicalGrindSlot()
-        {
-            var tick = MyAPIGateway.Session.GameplayFrameCounter;
-            if (tick != _lastMechanicalTick)
-            {
-                _lastMechanicalTick = tick;
-                _mechanicalGrindsThisTick = 0;
-            }
-            if (_mechanicalGrindsThisTick >= 1) return false;
-            _mechanicalGrindsThisTick++;
-            return true;
-        }
+        // BUG-106: full-dismount throttle (3/tick); mech-block cap (1/tick) applies first.
+        public const int MaxDismountsPerTickDefault = 3;
+        private static readonly PerTickBudget _dismountBudget = new PerTickBudget(MaxDismountsPerTickDefault);
+
+        // BUG-107: proj.Build throttle for projected-block materialization spikes.
+        public const int MaxProjBuildsPerTickDefault = 3;
+        private static readonly PerTickBudget _projBuildBudget = new PerTickBudget(MaxProjBuildsPerTickDefault);
+
+        public static bool TryClaimMechanicalGrindSlot() { return _mechanicalGrindBudget.TryClaim(); }
+        public static bool TryClaimDismountSlot() { return _dismountBudget.TryClaim(); }
+        public static bool TryClaimProjBuildSlot() { return _projBuildBudget.TryClaim(); }
 
         // --- OPT 2: BaR update staggering ---
         // Distributes ServerTryWeldingGrindingCollecting() calls across StaggerGroupCount groups
@@ -89,20 +90,39 @@ namespace SKONanobotBuildAndRepairSystem
         public const int StaggerGroupCountDefault = 3;
         private static int _nextStaggerSlot;
 
+        // Cache for the enabled-BaR count → mod-wide stagger. Refreshed lazily every
+        // ~60 frames (~1 s @ 60Hz) so the per-tick call from each BaR's Update10
+        // doesn't re-enumerate NanobotSystems every fire.
+        private const int StaggerAutoCacheFrames = 60;
+        private static int _cachedAutoStagger = -1;
+        private static int _cachedAutoStaggerFrame = int.MinValue;
+
         public static int GetEffectiveStaggerGroupCount()
         {
             var configured = Settings.StaggerGroupCount;
             if (configured > 0) return configured;
-            // Auto: scale with active (enabled + working) BaR count, not total placed blocks.
-            var active = 0;
-            foreach (var sys in NanobotSystems.Values)
+
+            var frame = MyAPIGateway.Session != null ? MyAPIGateway.Session.GameplayFrameCounter : 0;
+            if (_cachedAutoStagger > 0 && frame - _cachedAutoStaggerFrame < StaggerAutoCacheFrames)
+                return _cachedAutoStagger;
+
+            // Auto-scale by ENABLED BaR count only. Disabled BaRs short-circuit before
+            // ServerTryWeldingGrindingCollecting, so they shouldn't punish staggering math
+            // for the active population.
+            var enabled = 0;
+            foreach (var kvp in NanobotSystems)
             {
-                if (sys.Welder != null && sys.Welder.IsWorking)
-                    active++;
+                if (kvp.Value != null && kvp.Value.IsEnabled) enabled++;
             }
-            if (active <= 5) return 1;
-            if (active <= 10) return 2;
-            return StaggerGroupCountDefault;
+
+            int value;
+            if (enabled <= 5) value = 1;
+            else if (enabled <= 10) value = 2;
+            else value = StaggerGroupCountDefault;
+
+            _cachedAutoStagger = value;
+            _cachedAutoStaggerFrame = frame;
+            return value;
         }
 
         public static int ClaimStaggerSlot()
@@ -124,20 +144,16 @@ namespace SKONanobotBuildAndRepairSystem
             return MyAPIGateway.Physics != null ? MyAPIGateway.Physics.ServerSimulationRatio : 1.0f;
         }
 
-        // --- OPT 3: Global grind budget per tick ---
-        // Caps total ServerDoGrind calls per tick across all BaRs.
-        // Two budgets: count-based (MaxGrindsPerTick) and time-based (MaxGrindMsPerTick).
-        // The time budget prevents multiple expensive grinds from stacking in one frame.
+        // OPT 3 / BUG-154: global weld + grind budgets per tick (count + ms cap).
         public const int MaxGrindsPerTickDefault = 10;
         public const double MaxGrindMsPerTickDefault = 8.0;
-        private static int _grindsThisTick;
-        private static double _grindMsThisTick;
-        private static int _lastGrindBudgetTick = -1;
+        public const int MaxWeldsPerTickDefault = 10;
+        public const double MaxWeldMsPerTickDefault = 8.0;
 
-        // Peak grind usage tracking for HUD debug
-        private static int _grindPeakUsed;
-        public static int GrindBudgetPeakUsed { get { return _grindPeakUsed; } }
-        public static void ResetGrindBudgetStats() { _grindPeakUsed = 0; }
+        private static readonly PerTickBudget _grindBudget =
+            new PerTickBudget(GetEffectiveMaxGrindsPerTick, GetEffectiveMaxGrindMsPerTick);
+        private static readonly PerTickBudget _weldBudget =
+            new PerTickBudget(GetEffectiveMaxWeldsPerTick, GetEffectiveMaxWeldMsPerTick);
 
         public static int GetEffectiveMaxGrindsPerTick()
         {
@@ -148,29 +164,40 @@ namespace SKONanobotBuildAndRepairSystem
             return Math.Max(5, Math.Min(MaxGrindsPerTickDefault, total));
         }
 
-        public static bool TryClaimGrindSlot()
+        public static int GetEffectiveMaxWeldsPerTick()
         {
-            var tick = MyAPIGateway.Session.GameplayFrameCounter;
-            if (tick != _lastGrindBudgetTick)
-            {
-                _lastGrindBudgetTick = tick;
-                _grindsThisTick = 0;
-                _grindMsThisTick = 0.0;
-            }
-            if (_grindsThisTick >= GetEffectiveMaxGrindsPerTick()) return false;
-            if (_grindMsThisTick >= MaxGrindMsPerTickDefault) return false;
-            _grindsThisTick++;
-            if (_grindsThisTick > _grindPeakUsed) _grindPeakUsed = _grindsThisTick;
-            return true;
+            var configured = Settings.MaxWeldsPerTick;
+            if (configured > 0) return configured;
+            // Auto: scale with BaR count, minimum 5.
+            var total = NanobotSystems.Count;
+            return Math.Max(5, Math.Min(MaxWeldsPerTickDefault, total));
         }
 
-        /// <summary>
-        /// Called after each ServerDoGrind to accumulate time spent grinding this tick.
-        /// </summary>
-        public static void ReportGrindTime(double ms)
+        public static double GetEffectiveMaxGrindMsPerTick()
         {
-            _grindMsThisTick += ms;
+            var configured = Settings.MaxGrindMsPerTick;
+            return configured > 0 ? configured : MaxGrindMsPerTickDefault;
         }
+
+        public static double GetEffectiveMaxWeldMsPerTick()
+        {
+            var configured = Settings.MaxWeldMsPerTick;
+            return configured > 0 ? configured : MaxWeldMsPerTickDefault;
+        }
+
+        public static bool TryClaimGrindSlot() { return _grindBudget.TryClaim(); }
+        public static bool TryClaimWeldSlot() { return _weldBudget.TryClaim(); }
+
+        /// <summary>Called after each ServerDoGrind to accumulate time spent grinding this tick.</summary>
+        public static void ReportGrindTime(double ms) { _grindBudget.ReportTime(ms); }
+
+        /// <summary>Called after each ServerDoWeld to accumulate time spent welding this tick.</summary>
+        public static void ReportWeldTime(double ms) { _weldBudget.ReportTime(ms); }
+
+        public static int GrindBudgetPeakUsed { get { return _grindBudget.PeakUsed; } }
+        public static int WeldBudgetPeakUsed { get { return _weldBudget.PeakUsed; } }
+        public static void ResetGrindBudgetStats() { _grindBudget.ResetStats(); }
+        public static void ResetWeldBudgetStats() { _weldBudget.ResetStats(); }
 
         // --- Lightweight tick cost tracking (always-on, for debug HUD) ---
         private static double _tickCostAccumMs;
@@ -211,30 +238,51 @@ namespace SKONanobotBuildAndRepairSystem
         private bool _initialized = false;
         private bool _welcomeShown = false;
         private static TimeSpan _LastSourcesAndTargetsUpdateTimer;
-        private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(1);
+        private static TimeSpan SourcesAndTargetsUpdateTimerInterval = TimeSpan.FromSeconds(2);
         private static TimeSpan _LastSyncModDataRequestSend;
-        private static TimeSpan _LastGeneralPeriodicCheck;
-        private static TimeSpan _LastTtlCacheCleanerCheck;
-        private static TimeSpan _LastSafeZoneUpdateCheck;
 
-        public const int MaxBackgroundTasks_Default = 4;
-        public const int MaxBackgroundTasks_Max = 10;
-        public const int MaxBackgroundTasks_Min = 1;
-        public static Queue<Action> AsynActions = new Queue<Action>();
-        private static int ActualBackgroundTaskCount = 0;
+        // Background task queue forwarders — implementation lives in
+        // Managers/BackgroundTaskQueue.cs. Kept on Mod for source compatibility
+        // with existing call sites (HudHandler, NanobotSystem.Scanning, SyncModSettings).
+        public const int MaxBackgroundTasks_Default = BackgroundTaskQueue.MaxBackgroundTasks_Default;
+        public const int MaxBackgroundTasks_Max = BackgroundTaskQueue.MaxBackgroundTasks_Max;
+        public const int MaxBackgroundTasks_Min = BackgroundTaskQueue.MaxBackgroundTasks_Min;
 
-        // Cumulative stats for HUD — reset by ResetBackgroundTaskStats()
-        private static int _bgTasksEnqueued;
-        private static int _bgTasksCompleted;
-        private static int _bgPeakRunning;
-
-        public static int BackgroundTasksEnqueued { get { lock (AsynActions) { return _bgTasksEnqueued; } } }
-        public static int BackgroundTasksCompleted { get { lock (AsynActions) { return _bgTasksCompleted; } } }
-        public static int BackgroundPeakRunning { get { lock (AsynActions) { return _bgPeakRunning; } } }
+        public static int BackgroundTasksEnqueued { get { return BackgroundTaskQueue.Enqueued; } }
+        public static int BackgroundTasksCompleted { get { return BackgroundTaskQueue.Completed; } }
+        public static int BackgroundPeakRunning { get { return BackgroundTaskQueue.PeakRunning; } }
 
         public static void ResetBackgroundTaskStats()
         {
-            lock (AsynActions) { _bgTasksEnqueued = 0; _bgTasksCompleted = 0; _bgPeakRunning = ActualBackgroundTaskCount; }
+            BackgroundTaskQueue.ResetStats();
+        }
+
+        // FriendlyRelationsHandler forwarders — implementation lives in
+        // Handlers/FriendlyRelationsHandler.cs. Kept on Mod for source compatibility
+        // with existing call sites (Grinding, Welding, DamageHandler, State).
+        public static bool TryGetFriendlyBaRsForOwner(long ownerId, out List<NanobotSystem> friendlies)
+        {
+            return FriendlyRelationsHandler.TryGetBaRsForOwner(ownerId, out friendlies);
+        }
+
+        public static bool TryGetFriendlyOwnersForOwner(long ownerId, out List<long> owners)
+        {
+            return FriendlyRelationsHandler.TryGetOwnersForOwner(ownerId, out owners);
+        }
+
+        public static void MarkFriendlyDamage(long welderOwnerId, IMySlimBlock block, TimeSpan deadline)
+        {
+            FriendlyRelationsHandler.MarkDamage(welderOwnerId, block, deadline);
+        }
+
+        public static bool IsFriendlyDamage(long welderOwnerId, IMySlimBlock block)
+        {
+            return FriendlyRelationsHandler.IsDamage(welderOwnerId, block);
+        }
+
+        public static void CleanupFriendlyDamage()
+        {
+            FriendlyRelationsHandler.CleanupDamage();
         }
 
         public void Init()
@@ -277,10 +325,45 @@ namespace SKONanobotBuildAndRepairSystem
             Logging.Instance.Write("BuildAndRepairSystemMod: Initialized.");
         }
 
+        // BUG-260511.13: tracks the last applied MaxSystemsPerTargetGrid so a
+        // lowered limit can pre-release surplus BaR lock-ons before the per-BaR
+        // SettingsChanged fan-out. Without this, every grid stays over the new
+        // limit (count is held by existing CurrentWelding/CurrentGrindingBlock
+        // references) and no BaR can pick a new target — the fleet deadlocks
+        // and sim drops.
+        private static int _lastMaxSystemsPerTargetGrid = -1;
+
         public static void SettingsChanged()
         {
             if (SettingsValid)
             {
+                // BUG-260511.21: simpler, more robust recovery on ANY mod-level
+                // settings change — clear the assignment cache and reset the
+                // per-BaR loop-exhausted flags on every BaR. Previously these
+                // ran only on detected MaxSystemsPerTargetGrid changes, but any
+                // setting that influences picker decisions (priority list,
+                // safe-zone flag, weld-options, etc.) can leave stale state
+                // that causes the picker fast-skip to fire on BaRs we want
+                // working. The cost is microseconds; the picker repopulates
+                // claims organically within a tick or two.
+                var currentLimit = Settings.MaxSystemsPerTargetGrid;
+                if (_lastMaxSystemsPerTargetGrid > 0 && currentLimit > 0 && currentLimit < _lastMaxSystemsPerTargetGrid)
+                {
+                    // Still need the lock-on release on a LOWERED limit so
+                    // GridSystemCount drops below the new ceiling — the
+                    // setters Dec when CurrentGrindingBlock is cleared. The
+                    // generic clear+reset below doesn't touch
+                    // State.CurrentGrindingBlock.
+                    ReleaseSurplusLockOnsForLoweredLimit(currentLimit);
+                }
+                _lastMaxSystemsPerTargetGrid = currentLimit;
+
+                foreach (var pair in NanobotSystems)
+                {
+                    if (pair.Value != null) pair.Value.ResetLoopExhaustedFlags();
+                }
+                BlockSystemAssigningHandler.Clear();
+
                 // Trigger settings changed for all nanobots first.
                 foreach (var entry in NanobotSystems)
                 {
@@ -289,6 +372,60 @@ namespace SKONanobotBuildAndRepairSystem
 
                 // Init terminal controls after settings have changed for all nanobots.
                 InitControls();
+            }
+        }
+
+        /// <summary>
+        /// BUG-260511.13: when the admin lowers MaxSystemsPerTargetGrid below the
+        /// existing per-grid system count, release the lock-ons of every BaR
+        /// currently working a now-over-limit grid. GridSystemCount drops as
+        /// the setters fire, the BaRs' next-cycle pickers see a clean saturation
+        /// state, and the first `newLimit` BaRs per grid re-acquire targets.
+        /// </summary>
+        private static void ReleaseSurplusLockOnsForLoweredLimit(int newLimit)
+        {
+            // Identify grids over the new limit BEFORE releasing anything — the
+            // setters mutate GridSystemCount while we iterate.
+            var overLimitGrids = new HashSet<long>();
+            foreach (var kvp in GridSystemCount)
+            {
+                if (kvp.Value > newLimit) overLimitGrids.Add(kvp.Key);
+            }
+            if (overLimitGrids.Count == 0) return;
+
+            var released = 0;
+            foreach (var pair in NanobotSystems)
+            {
+                var bar = pair.Value;
+                if (bar == null || bar.State == null) continue;
+
+                var weldBlock = bar.State.CurrentWeldingBlock;
+                var grindBlock = bar.State.CurrentGrindingBlock;
+
+                var weldGridId = (weldBlock != null && weldBlock.CubeGrid != null) ? weldBlock.CubeGrid.EntityId : 0L;
+                var grindGridId = (grindBlock != null && grindBlock.CubeGrid != null) ? grindBlock.CubeGrid.EntityId : 0L;
+
+                var weldOver = weldGridId != 0L && overLimitGrids.Contains(weldGridId);
+                var grindOver = grindGridId != 0L && overLimitGrids.Contains(grindGridId);
+                if (!weldOver && !grindOver) continue;
+
+                // Setters Dec GridSystemCount; subsequent ticks rebuild saturation
+                // and only `newLimit` BaRs per grid re-acquire.
+                if (weldOver) bar.State.CurrentWeldingBlock = null;
+                if (grindOver) bar.State.CurrentGrindingBlock = null;
+
+                if (Settings.AssignToSystemEnabled && bar.Welder != null)
+                {
+                    BlockSystemAssigningHandler.ReleaseAllForSystem(bar.Welder.EntityId);
+                }
+                released++;
+            }
+
+            if (released > 0)
+            {
+                Logging.Instance.Write(Logging.Level.Info,
+                    "MaxSystemsPerTargetGrid lowered to {0}; released {1} BaR lock-on(s) across {2} over-limit grid(s).",
+                    newLimit, released, overLimitGrids.Count);
             }
         }
 
@@ -304,15 +441,18 @@ namespace SKONanobotBuildAndRepairSystem
         protected override void UnloadData()
         {
             // Wait until background tasks finish (with timeout to prevent game freeze).
-            var deadline = DateTime.UtcNow.AddSeconds(5);
+            // Stopwatch-based ~1 ms spin between checks: System.Threading.Sleep is
+            // prohibited by the SE sandbox, but the previous lock+poll loop ran with no
+            // delay and pegged a main-thread core during the wait. The 1 s ceiling is
+            // a safety net — scan workers normally drain in well under 100 ms.
+            var deadline = DateTime.UtcNow.AddSeconds(1);
+            var pollSpacingTicks = System.Diagnostics.Stopwatch.Frequency / 1000;
+            var spin = new System.Diagnostics.Stopwatch();
             while (DateTime.UtcNow < deadline)
             {
-                int actualBackgroundTaskCount;
-                lock (AsynActions)
-                {
-                    actualBackgroundTaskCount = ActualBackgroundTaskCount;
-                }
-                if (actualBackgroundTaskCount <= 0) break;
+                if (BackgroundTaskQueue.RunningWorkers <= 0) break;
+                spin.Restart();
+                while (spin.ElapsedTicks < pollSpacingTicks) { }
             }
 
             // Unregister terminal controls.
@@ -339,6 +479,9 @@ namespace SKONanobotBuildAndRepairSystem
 
             // Clear block assigned handler.
             try { BlockSystemAssigningHandler.Clear(); } catch { }
+
+            // Clear block failure cooldown handler.
+            try { BlockFailureCooldownHandler.Clear(); } catch { }
 
             // Clear cluster coordinator.
             try { ScanClusterCoordinator.Clear(); } catch { }
@@ -383,6 +526,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (MyAPIGateway.Session == null)
                         return;
 
+                    NowPlayTime = MyAPIGateway.Session.ElapsedPlayTime;
                     Init();
                 }
 
@@ -390,6 +534,7 @@ namespace SKONanobotBuildAndRepairSystem
                 else
                 {
                     var now = MyAPIGateway.Session.ElapsedPlayTime;
+                    NowPlayTime = now;
 
                     // Start processing.
                     if (MyAPIGateway.Session.IsServer)
@@ -404,40 +549,15 @@ namespace SKONanobotBuildAndRepairSystem
                                 MyAPIGateway.Utilities.ShowMessage("Nanobars", autoStopMsg);
                         }
 
-                        // Periodic ownership cache refresh
-                        if (now.Subtract(_LastGeneralPeriodicCheck) >= TimeSpan.FromSeconds(10))
-                        {
-                            _LastGeneralPeriodicCheck = now;
-                            MyAPIGateway.Parallel.StartBackground(() =>
-                            {
-                                try { GridOwnershipCacheHandler.Update(); } catch { }
-                            });
-                        }
-
-                        if (now.Subtract(_LastSafeZoneUpdateCheck) >= TimeSpan.FromSeconds(6))
-                        {
-                            _LastSafeZoneUpdateCheck = now;
-                            MyAPIGateway.Parallel.StartBackground(() =>
-                            {
-                                try { SafeZoneHandler.GetSafeZones(); } catch { }
-                            });
-                        }
-
-                        if (now.Subtract(_LastTtlCacheCleanerCheck) >= TimeSpan.FromMinutes(2))
-                        {
-                            _LastTtlCacheCleanerCheck = now;
-                            MyAPIGateway.Parallel.StartBackground(() =>
-                            {
-                                try { InventoryHelper.Cleanup(); } catch { }
-                                try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
-                                try { BlockSystemAssigningHandler.Cleanup(); } catch { }
-                                try { DlcCheckHelper.CleanupOwnerCache(); } catch { }
-                                try { SharedGridBlockCache.Cleanup(); } catch { }
-                                try { SharedEntityCache.Cleanup(); } catch { }
-                            });
-                        }
+                        PeriodicMaintenanceScheduler.Tick(now);
 
                         RebuildSourcesAndTargetsTimer();
+
+                        // BUG-127: tick the deferred raze handler (internally throttled).
+                        RazeQueueHandler.Process();
+
+                        // BUG-130: shared friendly-damage map cleanup (internally throttled).
+                        CleanupFriendlyDamage();
                     }
 
                     // If the Settings is not yet valid, sync the settings between clients and server.
@@ -461,8 +581,12 @@ namespace SKONanobotBuildAndRepairSystem
                         if (player != null)
                         {
                             _welcomeShown = true;
-                            var level = player.PromoteLevel.ToString();
-                            if (level == "Admin" || level == "SpaceMaster" || level == "Owner")
+                            // REF-4: compare MyPromoteLevel enum directly. Avoids the
+                            // .ToString() allocation and is rename-proof.
+                            var level = player.PromoteLevel;
+                            if (level == MyPromoteLevel.Admin
+                                || level == MyPromoteLevel.SpaceMaster
+                                || level == MyPromoteLevel.Owner)
                             {
                                 MyAPIGateway.Utilities.ShowMessage("Nanobars",
                                     string.Format("Hi admin! Build and Repair System v{0} loaded. Type /nanobars -help for available commands.", Constants.ModVersion));
@@ -478,8 +602,11 @@ namespace SKONanobotBuildAndRepairSystem
             finally
             {
                 RecordTickCost(tickStart);
-                MethodProfiler.StopAndLog("Mod.UpdateBeforeSimulation", profilerTs, () =>
-                    string.Format("bars={0}", NanobotSystems.Count));
+                if (profilerTs != 0L)
+                {
+                    MethodProfiler.StopAndLog("Mod.UpdateBeforeSimulation", profilerTs, () =>
+                        string.Format("bars={0}", NanobotSystems.Count));
+                }
             }
         }
 
@@ -493,10 +620,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var profilerTs = MethodProfiler.Start();
                 try
                 {
-                    // BUG-053: Refresh safe zone state for all BaRs before cluster rebuild
-                    // so cluster keys always reflect current safe zone permissions.
-                    // This eliminates the timing gap where per-BaR timers (2s, unsynchronized)
-                    // could leave stale state when RebuildClusters computes keys.
+                    // BUG-053: refresh safe zone state before cluster rebuild so keys are current.
                     if (SafeZoneHandler.Zones.Count > 0)
                     {
                         foreach (var system in NanobotSystems.Values)
@@ -517,87 +641,18 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 finally
                 {
-                    MethodProfiler.StopAndLog("Mod.RebuildSourcesAndTargetsTimer", profilerTs, () =>
-                        string.Format("systemCount={0}", NanobotSystems.Count));
-                }
-            }
-        }
-
-        private void BlockDebugInfo()
-        {
-            try
-            {
-                var tool = MyAPIGateway.Session.Player.Character.EquippedTool;
-                if (tool != null)
-                {
-                    var target = tool.Components.Get<MyCasterComponent>()?.HitBlock as IMySlimBlock;
-                    if (target != null)
+                    if (profilerTs != 0L)
                     {
-                        var sb = new StringBuilder();
-                        sb.AppendLine($"Target: {target.BlockName()}");
-                        sb.AppendLine($"Integrity: {target.Integrity}/{target.MaxIntegrity}");
-                        sb.AppendLine($"MaxDeformation: {target.MaxDeformation}");
-                        sb.AppendLine($"HasDeformation: {target.HasDeformation}");
-                        sb.AppendLine($"MinDeformation: {Utils.Utils.MinDeformation}");
-                        MyAPIGateway.Utilities.ShowNotification(sb.ToString(), 5000);
+                        MethodProfiler.StopAndLog("Mod.RebuildSourcesAndTargetsTimer", profilerTs, () =>
+                            string.Format("systemCount={0}", NanobotSystems.Count));
                     }
                 }
-            }
-            catch
-            {
             }
         }
 
         public static void AddAsyncAction(Action newAction)
         {
-            lock (AsynActions)
-            {
-                AsynActions.Enqueue(newAction);
-                _bgTasksEnqueued++;
-                if (ActualBackgroundTaskCount < Settings.MaxBackgroundTasks)
-                {
-                    ActualBackgroundTaskCount++;
-                    if (ActualBackgroundTaskCount > _bgPeakRunning) _bgPeakRunning = ActualBackgroundTaskCount;
-                    MyAPIGateway.Parallel.StartBackground(() =>
-                    {
-                        try
-                        {
-                            while (true)
-                            {
-                                Action pendingAction = null;
-                                lock (AsynActions)
-                                {
-                                    if (AsynActions.Count > 0)
-                                    {
-                                        pendingAction = AsynActions.Dequeue();
-                                    }
-                                    if (pendingAction == null)
-                                    {
-                                        ActualBackgroundTaskCount--;
-                                        break;
-                                    }
-                                }
-                                if (pendingAction != null)
-                                {
-                                    try
-                                    {
-                                        pendingAction();
-                                    }
-                                    catch { }
-                                    lock (AsynActions) { _bgTasksCompleted++; }
-                                }
-                            }
-                        }
-                        catch
-                        {
-                            lock (AsynActions)
-                            {
-                                ActualBackgroundTaskCount--;
-                            }
-                        }
-                    });
-                }
-            }
+            BackgroundTaskQueue.Enqueue(newAction);
         }
     }
 }

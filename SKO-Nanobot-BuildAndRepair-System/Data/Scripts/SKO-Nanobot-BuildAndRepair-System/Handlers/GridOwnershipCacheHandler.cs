@@ -31,14 +31,25 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(5); // how often we check for expired entries
         private static readonly TimeSpan AllowUnusedGridsForInterval = TimeSpan.FromMinutes(5);
 
+        // PERF-3: prefer the tick-cached play-time published once per Mod.UpdateBeforeSimulation
+        // (TimeSpan reads/writes are atomic on x64). Falls back to the live session accessor
+        // only on the very first ticks before the cache is populated, mirroring TtlCache.TryGetNow.
+        private static long GetNowTicks()
+        {
+            var now = Mod.NowPlayTime;
+            if (now != TimeSpan.Zero) return now.Ticks;
+            var session = MyAPIGateway.Session;
+            if (session != null) return session.ElapsedPlayTime.Ticks;
+            return DateTime.UtcNow.Ticks;
+        }
+
         private static void SetCache(IMyCubeGrid grid, long playerId, MyRelationsBetweenPlayerAndBlock relation)
         {
-            var nowTicks = MyAPIGateway.Session != null ? MyAPIGateway.Session.ElapsedPlayTime.Ticks : DateTime.UtcNow.Ticks;
             var key = new MyTuple<long, long>(grid.EntityId, playerId);
             Cache.Set(key, relation);
 
             // Record access for this grid to avoid unnecessary refreshes when idle
-            try { GridLastAccess[grid.EntityId] = nowTicks; } catch { }
+            try { GridLastAccess[grid.EntityId] = GetNowTicks(); } catch { }
         }
 
         private static MyRelationsBetweenPlayerAndBlock? GetFromCache(long cubeGridEntityId, long playerid)
@@ -65,12 +76,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     return MyRelationsBetweenPlayerAndBlock.NoOwnership;
                 }
 
-                // Touch grid on every query to mark it as active
-                try
-                {
-                    var nowTicksTouch = MyAPIGateway.Session.ElapsedPlayTime.Ticks;
-                    GridLastAccess[cubeGrid.EntityId] = nowTicksTouch;
-                }
+                // Touch grid on every query to mark it as active.
+                // PERF-3: read tick-cached Mod.NowPlayTime; the original used the
+                // Session+ElapsedPlayTime accessor chain on every call.
+                try { GridLastAccess[cubeGrid.EntityId] = GetNowTicks(); }
                 catch { }
 
                 // Try get the relation from our cache first.
@@ -173,17 +182,22 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             var profilerTs = MethodProfiler.Start();
             RefreshExpiredEntries();
             Cache.CleanupExpired();
-            MethodProfiler.StopAndLog("GridOwnershipCacheHandler.Update", profilerTs, () =>
-                string.Format("cacheCount={0}", Cache.Count));
+            if (profilerTs != 0L)
+            {
+                MethodProfiler.StopAndLog("GridOwnershipCacheHandler.Update", profilerTs, () =>
+                    string.Format("cacheCount={0}", Cache.Count));
+            }
         }
 
         private static void RefreshExpiredEntries()
         {
             try
             {
-                var session = MyAPIGateway.Session;
-                var nowTicks = session != null ? session.ElapsedPlayTime.Ticks : DateTime.UtcNow.Ticks;
+                var nowTicks = GetNowTicks();
 
+                // PERF-4: take the keys snapshot once and reuse for all InvalidateGrid
+                // calls below. The pre-fix path called Cache.Entries.Keys.ToArray() inside
+                // InvalidateGrid for every stale grid, allocating one array per invalidation.
                 var keys = Cache.Entries.Keys.ToArray();
                 int refreshed = 0;
                 var invalidatedGrids = new HashSet<long>();
@@ -201,7 +215,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     {
                         if (invalidatedGrids.Add(key.Item1))
                         {
-                            InvalidateGrid(key.Item1);
+                            InvalidateGridUsingSnapshot(key.Item1, keys);
                         }
                         continue;
                     }
@@ -212,15 +226,20 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     IMyEntity ent;
                     if (!MyAPIGateway.Entities.TryGetEntityById(key.Item1, out ent) || ent == null)
                     {
-                        // Grid gone: remove all cached pairs for this grid
-                        InvalidateGrid(key.Item1);
+                        if (invalidatedGrids.Add(key.Item1))
+                        {
+                            InvalidateGridUsingSnapshot(key.Item1, keys);
+                        }
                         continue;
                     }
 
                     var grid = ent as IMyCubeGrid;
                     if (grid == null || grid.Closed)
                     {
-                        InvalidateGrid(key.Item1);
+                        if (invalidatedGrids.Add(key.Item1))
+                        {
+                            InvalidateGridUsingSnapshot(key.Item1, keys);
+                        }
                         continue;
                     }
 
@@ -239,16 +258,21 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
-                var toRemove = new List<MyTuple<long, long>>();
-                var keys = Cache.Entries.Keys.ToArray();
-                for (int i = 0; i < keys.Length; i++)
-                {
-                    if (keys[i].Item1 == gridId) toRemove.Add(keys[i]);
-                }
+                InvalidateGridUsingSnapshot(gridId, Cache.Entries.Keys.ToArray());
+            }
+            catch { }
+        }
 
-                for (int i = 0; i < toRemove.Count; i++)
+        // PERF-4: shared invalidation core. Walks the caller-supplied keys snapshot in-place
+        // (no per-call allocation). Called from RefreshExpiredEntries with the already-taken
+        // outer snapshot, and from InvalidateGrid with a fresh snapshot for external callers.
+        private static void InvalidateGridUsingSnapshot(long gridId, MyTuple<long, long>[] keysSnapshot)
+        {
+            try
+            {
+                for (int i = 0; i < keysSnapshot.Length; i++)
                 {
-                    Cache.Remove(toRemove[i]);
+                    if (keysSnapshot[i].Item1 == gridId) Cache.Remove(keysSnapshot[i]);
                 }
 
                 long last;

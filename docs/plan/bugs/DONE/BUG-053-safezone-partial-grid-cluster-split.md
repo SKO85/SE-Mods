@@ -1,5 +1,5 @@
 # BUG-053: BaRs on partially safe-zone-covered grids don't split into separate clusters
-## Status: Done
+## Status: Fixed
 ## Severity: High
 ## Version: v2.5.0
 ## Found In: In-game testing — dedicated server
