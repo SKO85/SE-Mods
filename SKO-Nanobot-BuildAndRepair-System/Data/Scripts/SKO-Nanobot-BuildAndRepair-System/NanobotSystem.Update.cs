@@ -306,7 +306,7 @@ namespace SKONanobotBuildAndRepairSystem
                     // echo back, so the network-receive path's SettingsChanged() never fires for
                     // us — and TriggerImmediateRescan never gets called, leaving the BaR working
                     // the OLD sorted target list until the next scheduled scan (up to
-                    // TargetsUpdateInterval = 10 s). Calling SettingsChanged() here closes the
+                    // TargetsUpdateInterval = 5 s). Calling SettingsChanged() here closes the
                     // gap so a near/far toggle takes effect within 1-2 s.
                     if (MyAPIGateway.Session.IsServer)
                     {
@@ -617,7 +617,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _cachedTargetDrawList.Clear();
                 _cachedTargetBorderColor = ClusterColorFromHash(ScanClusterCoordinator.ComputeClusterKeyHash(this));
 
-                // Target lists are refreshed every TargetsUpdateInterval (~10s), not per
+                // Target lists are refreshed every TargetsUpdateInterval (~5s), not per
                 // weld/grind operation. Between scans they contain blocks that have
                 // already been completed: welded blocks at full integrity, grinded
                 // blocks already destroyed, blocks whose fat-block has closed. Filter

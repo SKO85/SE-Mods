@@ -9,7 +9,7 @@ nav_order: 0
 # Release Notes – v2.5.5
 
 - Status: **Released** — May 2026
-- Notes: Bug fix release. Resolves two scenarios where a Build and Repair system could go silently idle — once after the welder briefly hit capacity, and once after downstream cargo briefly filled up. Also lightens the **Show Area** overlay box so you can see through it.
+- Notes: Bug fix release. Resolves two scenarios where a Build and Repair system could go silently idle — once after the welder briefly hit capacity, and once after downstream cargo briefly filled up. Also halves the default target-scan interval (10 s → 5 s) so new work is picked up twice as fast, and lightens the **Show Area** overlay box so you can see through it.
 
 ---
 
@@ -38,6 +38,22 @@ When all downstream cargo containers were full and a Build and Repair system's p
 If you instead made room **inside an existing container** (manually moved items, an Assembler consumed components, a refinery output was hauled away), neither condition fired and the BaR sat with a full welder for up to a full minute before trying to push again.
 
 **Fix:** the safety backoff is shortened from 60 seconds to 15 seconds. The signature-based fast path (container added/removed) is unchanged — that still triggers an immediate retry. Combined with the inventory-full fix above, a BaR now recovers in seconds instead of minutes after you clear downstream cargo.
+
+### Faster Target-Scan Cadence
+
+The default target-scan interval — how often a Build and Repair system rebuilds its list of weld / grind targets — has been halved from **10 seconds to 5 seconds**. The idle-backoff interval (used after several consecutive empty scans) has been shortened from **20 seconds to 15 seconds**.
+
+**What changes for players:**
+
+- A newly-pasted, newly-projected, or newly-damaged grid is picked up in roughly half the time.
+- The lag between toggling a terminal setting (priority, work mode, area size) and the next scan-driven rebuild is shorter — though most of those toggles already trigger an immediate rescan via FEAT-080 (v2.5.4), so the visible improvement here is mostly for cases where the rescan trigger doesn't apply.
+- Idle BaRs cost slightly more CPU than before — but only marginally, because the saturated-skip (FEAT-075), idle-backoff (FEAT-071), and dirty-cluster-key (FEAT-072) optimisations short-circuit most of the scan work when nothing has changed.
+
+**What stays the same:**
+
+- Source/push-target rescans still run on their own 30 s schedule (`SourcesUpdateInterval`).
+- The immediate-rescan path (member sees a fresher coordinator result, settings change, weld/grind completes) is unchanged.
+- The interval is internally tunable via `Mod.Settings.TargetsUpdateInterval` if a server admin wants to revert to the old behaviour — it's not exposed in `ModSettings.xml` because it has rarely needed adjustment in practice.
 
 ### Show Area Overlay Lighter and More Transparent
 
