@@ -82,13 +82,8 @@ namespace SKONanobotBuildAndRepairSystem
                     ServerTryPushInventory();
 
                     // BUG-015: detect full welder inventory after push so grind/collect skip early.
-                    var diagTs = MethodProfiler.Start();
+                    // BUG-260526.1: also clears the flag once the welder drains.
                     CheckAndUpdateInventoryFull();
-                    if (diagTs != 0L)
-                    {
-                        MethodProfiler.StopAndLog("CheckAndUpdateInventoryFull", diagTs, () =>
-                            string.Format("entityId={0}", _Welder.EntityId));
-                    }
 
                     if (isFullInventoryAndPicking)
                     {
@@ -116,7 +111,7 @@ namespace SKONanobotBuildAndRepairSystem
                     State.MissingComponents.Clear();
                     State.LimitsExceeded = false;
 
-                    diagTs = MethodProfiler.Start();
+                    var diagTs = MethodProfiler.Start();
                     if (!Mod.Settings.DisableLimitSystemsPerTargetGrid
                         && (State.PossibleWeldTargets.CurrentCount > 0 || State.PossibleGrindTargets.CurrentCount > 0))
                     {
@@ -394,17 +389,73 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Checks the welder inventory and sets State.InventoryFull if at capacity.
+        /// Checks the welder inventory and updates State.InventoryFull.
+        /// Bidirectional with hysteresis: sets true at >=100% capacity, clears at &lt;90%.
         /// Shared by Operations (pre-weld/grind) and Collecting (pre-collect).
         /// </summary>
         private void CheckAndUpdateInventoryFull()
         {
-            if (!State.InventoryFull && !CreativeModeActive)
+            var profilerTs = MethodProfiler.Start();
+            var wasFull = State.InventoryFull;
+            var nowFull = wasFull;
+            float currentVolume = 0f;
+            float maxVolume = 0f;
+            try
             {
-                var welderInventory = _Welder.GetInventory(0);
-                if (welderInventory != null && (float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
+                if (CreativeModeActive)
                 {
-                    State.InventoryFull = true;
+                    // Inventory limits are irrelevant in creative. Clear any sticky flag
+                    // a prior survival-mode tick (or Init seeding on a save loaded in
+                    // survival then flipped to creative) may have set, otherwise it
+                    // would gate weld/grind/collect forever in creative.
+                    if (wasFull)
+                    {
+                        State.InventoryFull = false;
+                        nowFull = false;
+                    }
+                    return;
+                }
+
+                var welderInventory = _Welder.GetInventory(0);
+                if (welderInventory == null) return;
+
+                currentVolume = (float)welderInventory.CurrentVolume;
+                maxVolume = (float)welderInventory.MaxVolume;
+
+                if (!wasFull)
+                {
+                    if (currentVolume >= maxVolume)
+                    {
+                        State.InventoryFull = true;
+                        nowFull = true;
+                    }
+                }
+                else
+                {
+                    // BUG-260526.1: clear the sticky InventoryFull flag once the welder
+                    // has drained (e.g. ServerTryPushInventory moved items into a container).
+                    // Without this, the flag stayed true forever because the only other
+                    // clear path (ServerEmptyTransportInventory) requires an active transport.
+                    // 90% hysteresis avoids flicker when a partial weld nudges it just under max.
+                    if (currentVolume < maxVolume * 0.9f)
+                    {
+                        State.InventoryFull = false;
+                        nowFull = false;
+                    }
+                }
+            }
+            finally
+            {
+                if (profilerTs != 0L)
+                {
+                    var _wasFull = wasFull;
+                    var _nowFull = nowFull;
+                    var _currentVolume = currentVolume;
+                    var _maxVolume = maxVolume;
+                    MethodProfiler.StopAndLog("CheckAndUpdateInventoryFull", profilerTs, () =>
+                        string.Format("entityId={0};wasFull={1};nowFull={2};currentVolume={3:F3};maxVolume={4:F3};fillPct={5:F1}",
+                            _Welder.EntityId, _wasFull, _nowFull, _currentVolume, _maxVolume,
+                            _maxVolume > 0f ? (_currentVolume / _maxVolume * 100f) : 0f));
                 }
             }
         }
