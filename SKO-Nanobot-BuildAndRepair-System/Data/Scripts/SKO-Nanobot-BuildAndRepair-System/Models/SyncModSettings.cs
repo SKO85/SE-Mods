@@ -192,7 +192,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             DisableLocalization = false;
             LogLevel = Logging.Level.Error; //Default
             MaxBackgroundTasks = Mod.MaxBackgroundTasks_Default;
-            TargetsUpdateInterval = TimeSpan.FromSeconds(10);
+            TargetsUpdateInterval = TimeSpan.FromSeconds(5);
             SourcesUpdateInterval = TimeSpan.FromSeconds(30);
             FriendlyDamageTimeout = TimeSpan.FromSeconds(60);
             FriendlyDamageCleanup = TimeSpan.FromSeconds(10);
