@@ -41,7 +41,7 @@ If you instead made room **inside an existing container** (manually moved items,
 
 ### Faster Target-Scan Cadence
 
-The default target-scan interval — how often a Build and Repair system rebuilds its list of weld / grind targets — has been halved from **10 seconds to 5 seconds**. The idle-backoff interval (used after several consecutive empty scans) has been shortened from **20 seconds to 15 seconds**.
+The default target-scan interval — how often a Build and Repair system rebuilds its list of weld / grind targets — has been halved from **10 seconds to 5 seconds**. The idle-backoff interval (used after several consecutive empty scans) has been halved from **20 seconds to 10 seconds**.
 
 **What changes for players:**
 

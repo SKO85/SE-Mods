@@ -379,7 +379,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         internal int _consecutiveEmptyScans;
         internal const int IdleScansBeforeBackoff = 3;
-        internal static readonly TimeSpan IdleScanInterval = TimeSpan.FromSeconds(15);
+        internal static readonly TimeSpan IdleScanInterval = TimeSpan.FromSeconds(10);
 
         /// <summary>
         /// FEAT-075: Set by the coordinator when it skips a scan because the
