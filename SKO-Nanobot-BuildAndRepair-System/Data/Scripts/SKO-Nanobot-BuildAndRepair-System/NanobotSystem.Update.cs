@@ -48,7 +48,7 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         // BUG-260526.3: lighter and more transparent — old Color.Black was
                         // too dark and the default opaque alpha obscured what's inside the box.
-                        // Color * float scales all channels (R,G,B,A); 0.4f → alpha ~102/255.
+                        // Color * float scales all channels (R,G,B,A); 0.3f → alpha ~76/255.
                         var color = Color.Gray * 0.3f;
                         var areaBoundingBox = Settings.CorrectedAreaBoundingBox;
                         var emitterMatrix = _Welder.WorldMatrix;
