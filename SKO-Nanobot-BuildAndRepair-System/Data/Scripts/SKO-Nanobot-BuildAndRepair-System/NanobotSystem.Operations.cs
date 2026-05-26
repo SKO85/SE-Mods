@@ -402,7 +402,19 @@ namespace SKONanobotBuildAndRepairSystem
             float maxVolume = 0f;
             try
             {
-                if (CreativeModeActive) return;
+                if (CreativeModeActive)
+                {
+                    // Inventory limits are irrelevant in creative. Clear any sticky flag
+                    // a prior survival-mode tick (or Init seeding on a save loaded in
+                    // survival then flipped to creative) may have set, otherwise it
+                    // would gate weld/grind/collect forever in creative.
+                    if (wasFull)
+                    {
+                        State.InventoryFull = false;
+                        nowFull = false;
+                    }
+                    return;
+                }
 
                 var welderInventory = _Welder.GetInventory(0);
                 if (welderInventory == null) return;
