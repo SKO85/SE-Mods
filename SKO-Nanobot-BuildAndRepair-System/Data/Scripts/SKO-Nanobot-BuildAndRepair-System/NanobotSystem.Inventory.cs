@@ -47,8 +47,18 @@ namespace SKONanobotBuildAndRepairSystem
                 return;
 
             // BUG-016: skip push when all targets are known full (cleared on rescan).
+            // BUG-260526.2: the scan-apply reset path (NanobotSystem.Scanning.cs) only runs
+            // on a source rescan (SourcesUpdateInterval, ~30s), so the time-based backoff there
+            // can't expire sooner than the next source scan. Apply the 15s safety backoff here,
+            // on the main-thread consumer, so a player freeing space in an existing container is
+            // retried without waiting for a full source refresh. PushComponents below re-marks
+            // _PushTargetsFull if the containers are still full.
             if (_PushTargetsFull)
-                return;
+            {
+                if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PushTargetsFullSince).TotalSeconds < 15)
+                    return;
+                _PushTargetsFull = false;
+            }
 
             var welderInventory = _Welder.GetInventory(0);
             if (welderInventory != null)

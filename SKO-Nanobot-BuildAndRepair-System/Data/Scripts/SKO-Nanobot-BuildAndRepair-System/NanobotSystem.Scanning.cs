@@ -1248,19 +1248,15 @@ namespace SKONanobotBuildAndRepairSystem
                     _TempPossibleSources.Clear();
                     _TempPossiblePushTargets.Clear();
 
-                    // Only reset _PushTargetsFull when push targets actually changed
-                    // (container added/removed) or after a 15s safety backoff.
-                    // BUG-260526.2: shortened from 60s — long backoff left BaRs idle
-                    // for a full minute after the player freed space in an existing
-                    // container (no add/remove → no signature change → no retry).
-                    if (_PushTargetsFull)
+                    // Reset _PushTargetsFull when the freshly-scanned push-target list
+                    // actually changed (container added/removed). The time-based safety
+                    // backoff is NOT applied here: this block only runs on a source rescan
+                    // (~SourcesUpdateInterval, 30s), so a wall-clock backoff would be
+                    // quantized to the source cadence. ServerTryPushInventory clears the
+                    // flag on the 15s backoff instead (BUG-260526.2).
+                    if (_PushTargetsFull && ComputePushTargetsSignature() != _PushTargetsFullSignature)
                     {
-                        var pushTargetsChanged = ComputePushTargetsSignature() != _PushTargetsFullSignature;
-                        var backoffExpired = MyAPIGateway.Session.ElapsedPlayTime.Subtract(_PushTargetsFullSince).TotalSeconds >= 15;
-                        if (pushTargetsChanged || backoffExpired)
-                        {
-                            _PushTargetsFull = false;
-                        }
+                        _PushTargetsFull = false;
                     }
                 }
             }

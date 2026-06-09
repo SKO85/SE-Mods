@@ -131,7 +131,7 @@ In Creative mode the BaR welds and builds without consuming components, matching
 Welding includes several safeguards to keep BaRs from compounding into frame spikes:
 
 - **Component starvation early-exit** — the welding loop breaks after 3 consecutive blocks that cannot be welded due to missing components, so when the world is component-starved BaRs do not iterate every target every tick.
-- **Block fail cooldown** — when a block fails to weld (no components, projector exception, etc.) it is placed on a global cooldown. Other BaRs and this BaR's later ticks skip the cooldowned block. Tuned via `BlockFailureCooldownSeconds` (default `4` seconds, `0` disables).
+- **Block fail cooldown** — when a block fails to weld (no components, projector exception, etc.) it is placed on a global cooldown. Other BaRs and this BaR's later ticks skip the cooldowned block. Tuned via `BlockFailureCooldownSeconds` (default `15` seconds, `0` disables).
 - **Per-tick weld budget** — `MaxWeldsPerTick` caps the global number of weld operations per tick. `0` (auto) scales with BaR count.
 - **Per-grid system limit** — `MaxSystemsPerTargetGrid` caps how many BaRs may weld the same target grid simultaneously. Prevents many BaRs piling onto one grid while neighbours are ignored.
 - **Cluster scan coordinator** — co-located BaRs share a single scan cycle, eliminating redundant scanning across the cluster.
