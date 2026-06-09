@@ -85,7 +85,11 @@ namespace SKONanobotBuildAndRepairSystem
                     // BUG-260526.1: also clears the flag once the welder drains.
                     CheckAndUpdateInventoryFull();
 
-                    if (isFullInventoryAndPicking)
+                    // BUG: re-read current state. ServerTryPushInventory above may have drained
+                    // the welder and CheckAndUpdateInventoryFull cleared InventoryFull this tick.
+                    // The entry snapshot (isFullInventoryAndPicking) is stale here and would abort
+                    // an active pickup that now has room to resume.
+                    if (State.InventoryFull && State.CurrentTransportIsPick)
                     {
                         State.LastTransportTarget = State.CurrentTransportTarget;
                         State.CurrentTransportTarget = null;
