@@ -25,10 +25,18 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
     /// </summary>
     public static class BlockFailureCooldownHandler
     {
-        // Default 4s — long enough to cover one scan cycle (~2s) plus the
-        // cluster apply-result swap, short enough that components arriving
-        // mid-cooldown only delay welding by a few seconds.
-        public const int CooldownSecondsDefault = 4;
+        // Default 15s. This branch only fires on genuine starvation — a block
+        // whose missing components are unavailable from every source (partial
+        // pulls start a transport and never reach the failure path). The loop
+        // welds one block per tick and re-iterates the priority list from the
+        // top each tick, so the cooldown must outlast a full traversal; with a
+        // short 4s park a large set of same-component-starved high-priority
+        // blocks (e.g. armour all needing one exhausted component) expires
+        // faster than the BaR can pass them, re-failing the top every tick and
+        // never reaching lower-priority blocks that do have components. 15s
+        // covers a traversal plus the inter-scan window while staying well
+        // short of the player noticing a stall once components arrive.
+        public const int CooldownSecondsDefault = 15;
         public const int CooldownSecondsMin = 0;     // 0 disables the feature
         public const int CooldownSecondsMax = 30;
 

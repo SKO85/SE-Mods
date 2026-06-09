@@ -47,7 +47,7 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 6f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
-        private const int MaxPossibleWeldTargets = 256;
+        private const int MaxPossibleWeldTargets = 512;
         private const int MaxPossibleGrindTargets = 256;
         private const int MaxPossibleFloatingTargets = 16;
 
@@ -379,7 +379,7 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         internal int _consecutiveEmptyScans;
         internal const int IdleScansBeforeBackoff = 3;
-        internal static readonly TimeSpan IdleScanInterval = TimeSpan.FromSeconds(20);
+        internal static readonly TimeSpan IdleScanInterval = TimeSpan.FromSeconds(10);
 
         /// <summary>
         /// FEAT-075: Set by the coordinator when it skips a scan because the
