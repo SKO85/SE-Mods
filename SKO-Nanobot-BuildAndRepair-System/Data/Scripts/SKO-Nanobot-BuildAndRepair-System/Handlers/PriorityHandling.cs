@@ -131,15 +131,23 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
         }
 
+        // BUG-260610.16: every mutator below takes _hashLock — UpdateHash enumerates
+        // this list under that lock from background scan threads, and an unguarded
+        // main-thread Move/Sort/toggle mid-enumeration throws (swallowed by the
+        // worker → silently lost scan) or produces a torn priority hash. Mutations
+        // are rare (terminal UI / settings receive), so the lock cost is irrelevant.
         internal void MoveSelectedUp()
         {
             if (Selected != null)
             {
-                var currentPrio = FindIndex((kv) => kv.PrioItem.Equals(Selected));
-                if (currentPrio > 0)
+                lock (_hashLock)
                 {
-                    this.Move(currentPrio, currentPrio - 1);
-                    _HashDirty = true;
+                    var currentPrio = FindIndex((kv) => kv.PrioItem.Equals(Selected));
+                    if (currentPrio > 0)
+                    {
+                        this.Move(currentPrio, currentPrio - 1);
+                        _HashDirty = true;
+                    }
                 }
             }
         }
@@ -148,11 +156,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             if (Selected != null)
             {
-                var currentPrio = FindIndex((kv) => kv.PrioItem.Equals(Selected));
-                if (currentPrio >= 0 && currentPrio < Count - 1)
+                lock (_hashLock)
                 {
-                    this.Move(currentPrio, currentPrio + 1);
-                    _HashDirty = true;
+                    var currentPrio = FindIndex((kv) => kv.PrioItem.Equals(Selected));
+                    if (currentPrio >= 0 && currentPrio < Count - 1)
+                    {
+                        this.Move(currentPrio, currentPrio + 1);
+                        _HashDirty = true;
+                    }
                 }
             }
         }
@@ -161,11 +172,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             if (Selected != null)
             {
-                var keyValue = this.FirstOrDefault((kv) => kv.PrioItem.Equals(Selected));
-                if (keyValue != null)
+                lock (_hashLock)
                 {
-                    keyValue.Enabled = !keyValue.Enabled;
-                    _HashDirty = true;
+                    var keyValue = this.FirstOrDefault((kv) => kv.PrioItem.Equals(Selected));
+                    if (keyValue != null)
+                    {
+                        keyValue.Enabled = !keyValue.Enabled;
+                        _HashDirty = true;
+                    }
                 }
             }
         }
@@ -177,13 +191,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         internal void SetPriority(int itemKey, int prio)
         {
-            if (prio >= 0 && prio < Count)
+            lock (_hashLock)
             {
-                var currentPrio = FindIndex((kv) => kv.PrioItem.Key == itemKey);
-                if (currentPrio >= 0)
+                if (prio >= 0 && prio < Count)
                 {
-                    this.Move(currentPrio, prio);
-                    _HashDirty = true;
+                    var currentPrio = FindIndex((kv) => kv.PrioItem.Key == itemKey);
+                    if (currentPrio >= 0)
+                    {
+                        this.Move(currentPrio, prio);
+                        _HashDirty = true;
+                    }
                 }
             }
         }
@@ -196,30 +213,39 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         internal void SetEnabled(int itemKey, bool enabled)
         {
-            var keyValue = this.FirstOrDefault((kv) => kv.PrioItem.Key == itemKey);
-            if (keyValue != null)
+            lock (_hashLock)
             {
-                if (keyValue.Enabled != enabled)
+                var keyValue = this.FirstOrDefault((kv) => kv.PrioItem.Key == itemKey);
+                if (keyValue != null)
                 {
-                    keyValue.Enabled = enabled;
-                    _HashDirty = true;
+                    if (keyValue.Enabled != enabled)
+                    {
+                        keyValue.Enabled = enabled;
+                        _HashDirty = true;
+                    }
                 }
             }
         }
 
         internal void SetAllEnabled(bool enabled)
         {
-            foreach (var entry in this)
+            lock (_hashLock)
             {
-                entry.Enabled = enabled;
+                foreach (var entry in this)
+                {
+                    entry.Enabled = enabled;
+                }
+                _HashDirty = true;
             }
-            _HashDirty = true;
         }
 
         internal void ResetToDefaultOrder()
         {
-            Sort((a, b) => a.PrioItem.Key.CompareTo(b.PrioItem.Key));
-            _HashDirty = true;
+            lock (_hashLock)
+            {
+                Sort((a, b) => a.PrioItem.Key.CompareTo(b.PrioItem.Key));
+                _HashDirty = true;
+            }
         }
 
         public bool AnyEnabled
@@ -249,27 +275,30 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             if (value == null) return;
             var entries = value.Split('|');
-            var prio = 0;
-            foreach (var val in entries)
+            lock (_hashLock)
             {
-                var prioItemKey = 0;
-                var enabled = true;
-                var values = val.Split(';');
-                if (values.Length >= 2 &&
-                   int.TryParse(values[0], out prioItemKey) &&
-                   bool.TryParse(values[1], out enabled))
+                var prio = 0;
+                foreach (var val in entries)
                 {
-                    var keyValue = this.FirstOrDefault((kv) => kv.PrioItem.Key == prioItemKey);
-                    if (keyValue != null)
+                    var prioItemKey = 0;
+                    var enabled = true;
+                    var values = val.Split(';');
+                    if (values.Length >= 2 &&
+                       int.TryParse(values[0], out prioItemKey) &&
+                       bool.TryParse(values[1], out enabled))
                     {
-                        keyValue.Enabled = enabled;
-                        var currentPrio = IndexOf(keyValue);
-                        this.Move(currentPrio, prio);
-                        prio++;
+                        var keyValue = this.FirstOrDefault((kv) => kv.PrioItem.Key == prioItemKey);
+                        if (keyValue != null)
+                        {
+                            keyValue.Enabled = enabled;
+                            var currentPrio = IndexOf(keyValue);
+                            this.Move(currentPrio, prio);
+                            prio++;
+                        }
                     }
                 }
+                _HashDirty = true;
             }
-            _HashDirty = true;
         }
 
         internal MemorySafeList<string> GetList()
