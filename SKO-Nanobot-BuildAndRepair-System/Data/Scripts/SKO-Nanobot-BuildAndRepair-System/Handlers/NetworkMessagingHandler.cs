@@ -186,6 +186,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
+                // BUG-260610.3: mod messages can be relayed client->client; only the
+                // server may push mod settings.
+                if (!fromServer) return;
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModSettings>(data);
                 SyncModSettings.AdjustSettings(msgRcv.Settings);
                 // BUG-093: clamp on the broadcast path too (server-mutated settings may bypass Load).
@@ -205,6 +208,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
+                // BUG-260610.3: only the server may push block state.
+                if (!fromServer) return;
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgBlockState>(data);
 
                 NanobotSystem system;
@@ -230,6 +235,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
+                // BUG-260610.3: only the server may push command responses
+                // (chat lines / mission screens).
+                if (!fromServer) return;
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModCommandResponse>(data);
 
                 if (msgRcv.UseMissionScreen)
@@ -259,6 +267,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
+                // BUG-260610.3: on clients, only accept settings pushed by the server.
+                // The server branch below must keep accepting client messages
+                // (fromServer is false for those).
+                if (!fromServer && !MyAPIGateway.Session.IsServer) return;
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgBlockSettings>(data);
 
                 NanobotSystem system;
