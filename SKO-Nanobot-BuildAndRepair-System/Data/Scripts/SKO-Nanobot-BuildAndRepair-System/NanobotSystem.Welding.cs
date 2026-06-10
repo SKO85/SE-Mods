@@ -337,7 +337,13 @@ namespace SKONanobotBuildAndRepairSystem
                     // BUG-053: only release assignment when the block was successfully welded.
                     // Failed projected builds keep the assignment; the TTL releases it naturally.
                     if (welding) ReleaseAssignmentIfEnabled(chosenTarget.Block, profilerTs != 0L, ref tsAssignOps);
-                    State.PossibleWeldTargets.ChangeHash();
+                    // BUG-260610.23: ChangeHash is a non-atomic increment — take the list
+                    // lock so it can't race the scan's RebuildHash (lost update = stale
+                    // exhausted-skip / missed client sync).
+                    lock (State.PossibleWeldTargets)
+                    {
+                        State.PossibleWeldTargets.ChangeHash();
+                    }
                     // BUG-163: surface one-shot weld grid contribution to GridSystemCount so
                     // MaxSystemsPerTargetGrid is enforced for projected blocks finalized in one tick.
                     if (welding)
