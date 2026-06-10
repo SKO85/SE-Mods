@@ -209,13 +209,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         /// Uses a fast radius-distance precheck before the precise sphere vs AABB test.
         /// </summary>
 
-        public static List<MySafeZone> GetSafeZonesInRange(IMyCubeGrid targetGrid, int range, int take = 2)
+        public static List<MySafeZone> GetSafeZonesInRange(IMyCubeGrid targetGrid, int range)
         {
             if (Zones.Count == 0) return EmptyZoneList;
 
             List<MySafeZone> result = null;
-            var gridCenter = targetGrid.WorldAABB.Center;
-            var count = 0;
+            var gridAabb = targetGrid.WorldAABB;
+            var gridCenter = gridAabb.Center;
+            // BUG-260610.4: include the grid's half-diagonal so a large grid can't
+            // out-range the precheck either.
+            var gridRadius = gridAabb.HalfExtents.Length();
 
             foreach (var kvp in Zones)
             {
@@ -223,18 +226,20 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 if (z == null || z.Closed || z.MarkedForClose || !z.Enabled)
                     continue;
 
+                // BUG-260610.4: the precheck must include the zone's own radius
+                // (vanilla zones reach 500 m). Comparing center distance against the
+                // flat range filtered out large zones that fully engulf the grid, so
+                // the precise sphere-vs-AABB test never ran and BaRs could grind
+                // inside active safe zones. Same reason there is no result cap: the
+                // intersecting zone may not be among the first few enumerated.
                 var distance = Vector3D.Distance(gridCenter, z.PositionComp.WorldAABB.Center);
-                if (distance > range)
+                if (distance > range + z.Radius + gridRadius)
                     continue;
 
                 if (result == null)
-                    result = new List<MySafeZone>(take);
+                    result = new List<MySafeZone>(4);
 
                 result.Add(z);
-                count++;
-
-                if (count >= take)
-                    break;
             }
 
             return result ?? EmptyZoneList;
