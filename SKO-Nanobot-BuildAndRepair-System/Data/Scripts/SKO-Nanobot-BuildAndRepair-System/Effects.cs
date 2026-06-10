@@ -159,10 +159,16 @@ namespace SKONanobotBuildAndRepairSystem
                         ((workingState == WorkingState.Welding && ((Mod.Settings.Welder.AllowedEffects & VisualAndSoundEffects.WeldingVisualEffect) != 0)) ||
                          (workingState == WorkingState.Grinding && ((Mod.Settings.Welder.AllowedEffects & VisualAndSoundEffects.GrindingVisualEffect) != 0))))
                     {
-                        _ActiveWorkingEffects++;
-
                         MyParticlesManager.TryCreateParticleEffect(workingState == WorkingState.Welding ? PARTICLE_EFFECT_WELDING1 : PARTICLE_EFFECT_GRINDING1, ref MatrixD.Identity, ref Vector3D.Zero, uint.MaxValue, out _ParticleEffectWorking1);
-                        if (_ParticleEffectWorking1 != null) _ParticleEffectWorking1.UserRadiusMultiplier = workingState == WorkingState.Welding ? 4f : 2f;// 0.5f;
+                        // BUG-260610.9: count only on success — every decrement is gated
+                        // on _ParticleEffectWorking1 != null, so incrementing before a
+                        // failed create drifts the static counter up to MaxWorkingEffects
+                        // and permanently disables effects for the session.
+                        if (_ParticleEffectWorking1 != null)
+                        {
+                            _ActiveWorkingEffects++;
+                            _ParticleEffectWorking1.UserRadiusMultiplier = workingState == WorkingState.Welding ? 4f : 2f;// 0.5f;
+                        }
 
                         if (workingState == WorkingState.Welding && _LightEffectFlareWelding == null)
                         {
