@@ -124,6 +124,17 @@ namespace SKONanobotBuildAndRepairSystem
                 // free-floating grids share no terminal system, so we still need an entity walk.
                 if (Settings.SearchMode == SearchModes.BoundingBox)
                 {
+                    // BUG-260610.29: this walk (entity query + terminal enumeration per
+                    // grid in range) is MAIN-thread work that used to run every second
+                    // per idle coordinator. Throttle it and serve the cached verdict in
+                    // between. Own-grid projectors are still caught by Phase 1 above at
+                    // the full 1 s cadence.
+                    var now = Mod.NowPlayTime;
+                    if (now.Subtract(_lastProjectorPhase2Check) < ProjectorPhase2CheckInterval)
+                        return _lastProjectorPhase2Result;
+                    _lastProjectorPhase2Check = now;
+                    _lastProjectorPhase2Result = false;
+
                     var ownGroupGridIds = new HashSet<long>();
                     if (helper != null && _Welder.CubeGrid != null)
                     {
@@ -144,11 +155,9 @@ namespace SKONanobotBuildAndRepairSystem
                     var areaBox = new MyOrientedBoundingBoxD(Settings.CorrectedAreaBoundingBox, emitterMatrix);
                     var aabb = areaBox.GetAABB();
 
-                    List<IMyEntity> entities;
-                    lock (MyAPIGateway.Entities)
-                    {
-                        entities = MyAPIGateway.Entities.GetTopMostEntitiesInBox(ref aabb);
-                    }
+                    // BUG-260610.29: shared 4 s entity cache instead of a direct
+                    // GetTopMostEntitiesInBox under the global entities lock.
+                    var entities = SharedEntityCache.GetEntitiesInBox(ref aabb);
                     if (entities != null)
                     {
                         foreach (var entity in entities)
@@ -165,14 +174,22 @@ namespace SKONanobotBuildAndRepairSystem
                                     nearbyTerminal.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, _buildableProjectorFilter);
                                     var found = _projectorScratch.Count > 0;
                                     _projectorScratch.Clear();
-                                    if (found) return true;
+                                    if (found)
+                                    {
+                                        _lastProjectorPhase2Result = true;
+                                        return true;
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // BUG-260610.29: was a silent catch — recurring failures here were invisible.
+                Logging.Instance.Write(Logging.Level.Error, "HasBuildableProjectorOnGrid: {0}", ex.Message);
+            }
             return false;
         }
 

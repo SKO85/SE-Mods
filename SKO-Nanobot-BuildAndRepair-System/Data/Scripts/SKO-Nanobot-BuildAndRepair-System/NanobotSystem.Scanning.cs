@@ -110,8 +110,23 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (HasBuildableProjectorOnGrid())
                 {
-                    _consecutiveEmptyScans = 0;
-                    _rescanForced = true;
+                    // BUG-260610.29: one-shot. A projector that stays buildable but can
+                    // never be worked (out of range, relation-blocked) used to reset the
+                    // idle backoff every second, defeating FEAT-071 forever. Fire one
+                    // forced rescan per not-buildable→buildable transition; re-arm only
+                    // when the projector reads non-buildable again. A genuinely workable
+                    // projector doesn't need more: its scan finds targets and the BaR
+                    // leaves the idle state anyway.
+                    if (_projectorColdStartArmed)
+                    {
+                        _projectorColdStartArmed = false;
+                        _consecutiveEmptyScans = 0;
+                        _rescanForced = true;
+                    }
+                }
+                else
+                {
+                    _projectorColdStartArmed = true;
                 }
             }
 
@@ -161,16 +176,31 @@ namespace SKONanobotBuildAndRepairSystem
                         return;
                     }
                     _scanSkippedSaturated = false;
-                    _rescanForced = false;
-                    StartAsyncClusterScan(cluster, updateSources);
+                    // BUG-260610.28: consume the forced-rescan flag only when a scan was
+                    // actually enqueued — the re-entry guard can reject while a previous
+                    // scan is still in flight, and that scan may predate the change that
+                    // forced this one (settings toggle, member starvation signal).
+                    if (StartAsyncClusterScan(cluster, updateSources))
+                    {
+                        _rescanForced = false;
+                    }
                 }
                 else
                 {
                     // FEAT-075: members skip when the coordinator skipped (saturated).
                     if (coordinator != null && coordinator._scanSkippedSaturated)
                     {
-                        _LastTargetsUpdate = playTime;
-                        return;
+                        // BUG-260610.14: don't skip when the coordinator has already
+                        // published a result newer than what this member applied — a
+                        // newly placed or re-enabled member joining a saturated cluster
+                        // would otherwise idle until the coordinator's next real scan
+                        // (up to MaxScanSkipDuration, 60 s).
+                        var published = cluster.GetResult();
+                        if (published == null || published.Timestamp <= _lastAppliedResultTimestamp)
+                        {
+                            _LastTargetsUpdate = playTime;
+                            return;
+                        }
                     }
                     StartAsyncApplyClusterResults(cluster, updateSources);
                 }
@@ -377,8 +407,10 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// Starts the async cluster scan for the coordinator BaR.
         /// Guards against re-entry with _AsyncUpdateSourcesAndTargetsRunning flag.
+        /// BUG-260610.28: returns true only when a scan was actually enqueued so the
+        /// caller can decide whether to consume one-shot triggers (_rescanForced).
         /// </summary>
-        private void StartAsyncClusterScan(ScanCluster cluster, bool updateSource)
+        private bool StartAsyncClusterScan(ScanCluster cluster, bool updateSource)
         {
             if (!_Welder.UseConveyorSystem)
             {
@@ -391,7 +423,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // BUG-095: defer cleanup while a prior scan is still running.
                 lock (_Welder)
                 {
-                    if (_AsyncUpdateSourcesAndTargetsRunning) return;
+                    if (_AsyncUpdateSourcesAndTargetsRunning) return false;
                 }
                 lock (State.PossibleWeldTargets) { State.PossibleWeldTargets.Clear(); State.PossibleWeldTargets.RebuildHash(); }
                 lock (State.PossibleGrindTargets) { State.PossibleGrindTargets.Clear(); State.PossibleGrindTargets.RebuildHash(); }
@@ -399,15 +431,32 @@ namespace SKONanobotBuildAndRepairSystem
                 _InitialScanCompleted = false;
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 _LastSourceUpdate = _LastTargetsUpdate;
-                return;
+                return false;
             }
 
             lock (_Welder)
             {
-                if (_AsyncUpdateSourcesAndTargetsRunning) return;
+                if (_AsyncUpdateSourcesAndTargetsRunning) return false;
                 _AsyncUpdateSourcesAndTargetsRunning = true;
+
+                // BUG-260610.13: snapshot cluster membership before handing off to the
+                // background pool. RebuildClusters reuses cluster objects and mutates
+                // Members on the main thread (~2 s cadence) — the scan must never
+                // iterate the live list (index-out-of-range swallowed by the worker,
+                // or inconsistent member counts within one scan).
+                lock (cluster.Members)
+                {
+                    _ScanMemberSnapshot.Clear();
+                    for (int i = 0; i < cluster.Members.Count; i++)
+                    {
+                        var member = cluster.Members[i];
+                        if (member != null) _ScanMemberSnapshot.Add(member);
+                    }
+                }
+
                 Mod.AddAsyncAction(() => AsyncClusterScan(cluster, updateSource));
             }
+            return true;
         }
 
         /// <summary>
@@ -434,7 +483,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                 // Collection budget: 4x-16x cap so SortAndCapGridCandidates can pick
                 // the best 256 per grid; multiplier scales with cluster member count.
-                var memberCount = cluster.Members.Count;
+                // BUG-260610.13: all member reads in this method use the snapshot taken
+                // on the main thread at enqueue time — never the live cluster.Members.
+                var memberCount = _ScanMemberSnapshot.Count;
                 var capMultiplier = Math.Max(4, Math.Min(memberCount * 4, 16));
                 var maxWeld = MaxPossibleWeldTargets * capMultiplier;
                 var maxGrind = MaxPossibleGrindTargets * capMultiplier;
@@ -460,7 +511,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                     // Solo coordinators scan with range checks (same as legacy behavior).
                     // Multi-member coordinators skip range checks — members apply their own filtering.
-                    var skipRangeCheck = cluster.Members.Count > 1;
+                    var skipRangeCheck = memberCount > 1;
 
                     // Snapshot each member's working-area so sort can score by min-distance
                     // to ANY member, preventing starvation of far-from-coordinator BaRs.
@@ -476,9 +527,9 @@ namespace SKONanobotBuildAndRepairSystem
                         else
                             _ClusterMemberAreaBoxes.Clear();
 
-                        for (int i = 0; i < cluster.Members.Count; i++)
+                        for (int i = 0; i < _ScanMemberSnapshot.Count; i++)
                         {
-                            var member = cluster.Members[i];
+                            var member = _ScanMemberSnapshot[i];
                             if (member == null || member.Welder == null) continue;
                             var memberMatrix = member.Welder.WorldMatrix;
                             memberMatrix.Translation = Vector3D.Transform(member.Settings.CorrectedAreaOffset, memberMatrix);
@@ -626,7 +677,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     MethodProfiler.StopAndLog("AsyncClusterScan", profilerTs, () =>
                         string.Format("entityId={0};updateSource={1};clusterMembers={2}",
-                            _Welder.EntityId, updateSource, cluster.Members.Count));
+                            _Welder.EntityId, updateSource, _ScanMemberSnapshot.Count));
                 }
             }
         }

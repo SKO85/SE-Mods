@@ -83,10 +83,16 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                 }
                 _lastSystemCount = systemCount;
 
-                // Clear previous clusters
+                // Clear previous clusters.
+                // BUG-260610.13: cluster objects are reused across rebuilds while the
+                // background scan path snapshots Members under this same lock — guard
+                // every mutation so a snapshot never reads a list mid-clear/refill.
                 foreach (var cluster in _clusters.Values)
                 {
-                    cluster.Members.Clear();
+                    lock (cluster.Members)
+                    {
+                        cluster.Members.Clear();
+                    }
                 }
 
                 // Group systems by cluster key
@@ -109,7 +115,11 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                         cluster = new ScanCluster(key);
                         _clusters[key] = cluster;
                     }
-                    cluster.Members.Add(system);
+                    // BUG-260610.13: see the clear loop above.
+                    lock (cluster.Members)
+                    {
+                        cluster.Members.Add(system);
+                    }
                 }
 
                 // Assign clusters (including single-member clusters)

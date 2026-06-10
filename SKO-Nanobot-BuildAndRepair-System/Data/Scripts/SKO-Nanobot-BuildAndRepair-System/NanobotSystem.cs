@@ -199,6 +199,24 @@ namespace SKONanobotBuildAndRepairSystem
         // can drop unreachable candidates before farthest-first sorting.
         private List<MyOrientedBoundingBoxD> _ClusterMemberAreaBoxes;
 
+        // BUG-260610.13: cluster-membership snapshot taken on the MAIN thread in
+        // StartAsyncClusterScan and read by the background AsyncClusterScan.
+        // RebuildClusters mutates cluster.Members (~2 s cadence) on the main thread,
+        // so the background scan must never iterate the live list. Single scan in
+        // flight per BaR (re-entry guard), so reuse is safe.
+        private readonly List<NanobotSystem> _ScanMemberSnapshot = new List<NanobotSystem>();
+
+        // BUG-260610.29: projector cold-start tuning. The buildable-projector check's
+        // BoundingBox phase does an entity query + per-grid terminal enumeration on
+        // the MAIN thread, so it is throttled (cached verdict in between), and the
+        // idle-backoff reset is one-shot per buildable observation so a projector
+        // that stays buildable-but-unworkable can't defeat the FEAT-071 backoff
+        // forever. Re-armed when the projector reads non-buildable again.
+        private bool _projectorColdStartArmed = true;
+        private TimeSpan _lastProjectorPhase2Check;
+        private bool _lastProjectorPhase2Result;
+        private static readonly TimeSpan ProjectorPhase2CheckInterval = TimeSpan.FromSeconds(5);
+
         // BUG-110: reusable scan-thread pools (eliminate per-scan allocations).
         private List<IMyCubeGrid> _ScanGridsBuffer;
         private List<IMyInventory> _ScanSourcesBuffer;
