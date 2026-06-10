@@ -3,6 +3,7 @@ using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 namespace SKONanobotBuildAndRepairSystem.Chat.Commands
@@ -412,11 +413,13 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             {
                 Name = name,
                 TypeLabel = label,
-                Get = () => getter().ToString("F2"),
+                Get = () => getter().ToString("F2", CultureInfo.InvariantCulture),
                 Set = s =>
                 {
                     float v;
-                    if (!float.TryParse(s, out v)) return "Expected a number";
+                    // BUG-260610.20: default-culture parse treats "2.5" as 25 on
+                    // comma-decimal server locales (de-DE etc.) — silently in-range.
+                    if (!float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v)) return "Expected a number";
                     if (v < min || v > max) return string.Format("Value must be between {0} and {1}", min, max);
                     setter(v);
                     return null;
