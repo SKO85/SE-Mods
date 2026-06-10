@@ -124,6 +124,14 @@ namespace SKONanobotBuildAndRepairSystem
                 return;
             }
 
+            // BUG-260610.6: validate everything that can early-return BEFORE the block
+            // is registered or events are subscribed. Update10_100 retries Init() until
+            // _IsInit is true; registering/subscribing first meant each retry stacked
+            // another handler and left a half-initialized entry (no _TransportInventory)
+            // visible to Mod.SettingsChanged's fan-out.
+            var welderInventory = _Welder.GetInventory(0);
+            if (welderInventory == null) return;
+
             // Register this block to the nanobot systems.
             Mod.NanobotSystems.TryAdd(Entity.EntityId, this);
 
@@ -140,26 +148,35 @@ namespace SKONanobotBuildAndRepairSystem
             // Initialize controls.
             Mod.InitControls();
 
-            _onEnabledChanged += (block) =>
+            // BUG-260610.6: create the handlers once (=, not +=) and make the event
+            // subscription idempotent (unsubscribe-then-subscribe is a no-op when not
+            // subscribed), so a retried Init() can never stack duplicate invocations.
+            if (_onEnabledChanged == null)
             {
-                // BUG-120: power-cycle resets the broken-block caches (player's retry path).
-                _BrokenProjBuildKeys.Clear();
-                _ProjBuildSilentFailCount.Clear();
-                _BrokenCacheOwnerId = _Welder != null ? _Welder.OwnerId : long.MinValue;
-                UpdateCustomInfo(true);
-            };
+                _onEnabledChanged = (block) =>
+                {
+                    // BUG-120: power-cycle resets the broken-block caches (player's retry path).
+                    _BrokenProjBuildKeys.Clear();
+                    _ProjBuildSilentFailCount.Clear();
+                    _BrokenCacheOwnerId = _Welder != null ? _Welder.OwnerId : long.MinValue;
+                    UpdateCustomInfo(true);
+                };
+            }
 
-            _onIsWorkingChanged += (block) =>
+            if (_onIsWorkingChanged == null)
             {
-                UpdateCustomInfo(true);
-            };
+                _onIsWorkingChanged = (block) =>
+                {
+                    UpdateCustomInfo(true);
+                };
+            }
 
+            _Welder.EnabledChanged -= _onEnabledChanged;
             _Welder.EnabledChanged += _onEnabledChanged;
+            _Welder.IsWorkingChanged -= _onIsWorkingChanged;
             _Welder.IsWorkingChanged += _onIsWorkingChanged;
 
             // Set transport Inventory.
-            var welderInventory = _Welder.GetInventory(0);
-            if (welderInventory == null) return;
             _TransportInventory = new Sandbox.Game.MyInventory((float)welderInventory.MaxVolume / MyAPIGateway.Session.BlocksInventorySizeMultiplier, Vector3.MaxValue, MyInventoryFlags.CanSend);
 
             // BUG-018: seed InventoryFull from current welder volume on world reload.
@@ -214,13 +231,6 @@ namespace SKONanobotBuildAndRepairSystem
                     while (spin.ElapsedTicks < pollSpacingTicks) { }
                 }
 
-                if (_Welder != null)
-                {
-                    _Welder.AppendingCustomInfo -= AppendingCustomInfo;
-                    if (_onEnabledChanged != null) _Welder.EnabledChanged -= _onEnabledChanged;
-                    if (_onIsWorkingChanged != null) _Welder.IsWorkingChanged -= _onIsWorkingChanged;
-                }
-
                 // Stop effects
                 State.CurrentTransportTarget = null;
                 State.Ready = false;
@@ -262,13 +272,28 @@ namespace SKONanobotBuildAndRepairSystem
 
                 _DelayWatch?.Stop();
 
-                // Remove system from list.
-                NanobotSystem removed;
-                Mod.NanobotSystems.TryRemove(Entity.EntityId, out removed);
-
                 // Save settings.
                 Settings.Save(Entity, Mod.ModGuid);
             }
+
+            // BUG-260610.6: must run even when Init() never completed —
+            // AppendingCustomInfo is subscribed in the public Init(), and a private
+            // Init() that early-returned may already have registered the block and
+            // subscribed the enabled/working handlers.
+            if (_Welder != null)
+            {
+                _Welder.AppendingCustomInfo -= AppendingCustomInfo;
+                if (_onEnabledChanged != null) _Welder.EnabledChanged -= _onEnabledChanged;
+                if (_onIsWorkingChanged != null) _Welder.IsWorkingChanged -= _onIsWorkingChanged;
+            }
+
+            // Remove system from list.
+            if (Entity != null)
+            {
+                NanobotSystem removed;
+                Mod.NanobotSystems.TryRemove(Entity.EntityId, out removed);
+            }
+
             base.Close();
         }
 
