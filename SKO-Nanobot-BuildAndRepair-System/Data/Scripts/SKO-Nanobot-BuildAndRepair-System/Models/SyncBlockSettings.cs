@@ -693,9 +693,31 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
         }
 
+        // BUG-260610.18: NaN/Infinity guard for float fields received from the network.
+        private static float SanitizeFinite(float value, float fallback)
+        {
+            return (float.IsNaN(value) || float.IsInfinity(value)) ? fallback : value;
+        }
+
         public void CheckLimits(NanobotSystem system, bool init)
         {
             var scale = (system != null && system.Welder != null ? (system.Welder.BlockDefinition.SubtypeName.Contains("Large") ? 1f : 2f) : 1f);
+
+            // BUG-260610.18: these values arrive from clients over the network. NaN
+            // compares false against every bound (slipping through all clamps below)
+            // and a negative AreaSize passes the upper-bound-only checks — either
+            // poisons RecalcAreaBoundigBox and scanning. Sanitize before clamping:
+            // non-finite offsets fall back to 0; non-finite sizes fall back to
+            // float.MaxValue (clamped to MaximumRange below) and sizes are floored
+            // at 1 m so the box can never invert.
+            AreaOffset = new Vector3(
+                SanitizeFinite(AreaOffset.X, 0f),
+                SanitizeFinite(AreaOffset.Y, 0f),
+                SanitizeFinite(AreaOffset.Z, 0f));
+            AreaSize = new Vector3(
+                Math.Max(1f, SanitizeFinite(AreaSize.X, float.MaxValue)),
+                Math.Max(1f, SanitizeFinite(AreaSize.Y, float.MaxValue)),
+                Math.Max(1f, SanitizeFinite(AreaSize.Z, float.MaxValue)));
 
             if (Mod.Settings.Welder.AreaOffsetFixed || init)
             {
