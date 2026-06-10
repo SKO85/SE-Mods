@@ -198,7 +198,8 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 if (State.PossibleGrindTargets.Remove(chosenGrindTarget))
                                 {
-                                    State.PossibleGrindTargets.ChangeHash();
+                                    // BUG-260610.33: RebuildHash so CurrentCount tracks the removal.
+                                    State.PossibleGrindTargets.RebuildHash();
                                 }
                             }
 

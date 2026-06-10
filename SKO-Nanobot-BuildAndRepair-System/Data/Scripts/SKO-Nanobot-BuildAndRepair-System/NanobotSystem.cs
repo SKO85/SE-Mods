@@ -168,7 +168,11 @@ namespace SKONanobotBuildAndRepairSystem
                         && t.Block.Position.Z == position.Z)
                     {
                         State.PossibleGrindTargets.RemoveAt(i);
-                        State.PossibleGrindTargets.ChangeHash();
+                        // BUG-260610.33: RebuildHash (not ChangeHash) so CurrentCount is
+                        // refreshed too — a stale too-high count costs the idle fast-path
+                        // and saturation gates until the next scan. Already under the lock,
+                        // low rate, so the rebuild is cheap.
+                        State.PossibleGrindTargets.RebuildHash();
                         return;
                     }
                 }
