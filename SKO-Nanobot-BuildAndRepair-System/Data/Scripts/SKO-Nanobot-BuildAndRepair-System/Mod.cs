@@ -464,6 +464,11 @@ namespace SKONanobotBuildAndRepairSystem
 
         protected override void UnloadData()
         {
+            // BUG-260610.15: stop the background queue first — purge pending actions
+            // (they must not run against a world being torn down, nor survive into the
+            // next world) and make workers exit instead of picking up more work.
+            try { BackgroundTaskQueue.BeginShutdown(); } catch { }
+
             // Wait until background tasks finish (with timeout to prevent game freeze).
             // Stopwatch-based ~1 ms spin between checks: System.Threading.Sleep is
             // prohibited by the SE sandbox, but the previous lock+poll loop ran with no
@@ -527,6 +532,9 @@ namespace SKONanobotBuildAndRepairSystem
 
             // BUG-260610.1: reset session-relative static timers/overrides.
             try { ResetSessionState(); } catch { }
+
+            // BUG-260610.15: re-arm the background queue for the next session.
+            try { BackgroundTaskQueue.Reset(); } catch { }
 
             // Close the profiler to release any open log files.
             try { MethodProfiler.Close(); } catch { }

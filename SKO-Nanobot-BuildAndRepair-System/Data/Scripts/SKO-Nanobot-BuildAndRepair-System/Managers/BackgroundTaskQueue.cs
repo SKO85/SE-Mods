@@ -1,4 +1,5 @@
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
 
@@ -21,6 +22,12 @@ namespace SKONanobotBuildAndRepairSystem.Managers
         private static readonly Queue<Action> _queue = new Queue<Action>();
         private static int _runningWorkers;
 
+        // BUG-260610.15: set at the start of world unload. Stops new enqueues and
+        // makes workers drop remaining actions, so stale scan work never runs
+        // against a world being torn down (or against the NEXT world via leftover
+        // queue entries — statics survive unload).
+        private static volatile bool _shuttingDown;
+
         // Cumulative stats for HUD — reset by ResetStats().
         private static int _enqueued;
         private static int _completed;
@@ -41,10 +48,35 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             }
         }
 
+        /// <summary>
+        /// BUG-260610.15: called first thing in Mod.UnloadData, before the drain wait.
+        /// </summary>
+        public static void BeginShutdown()
+        {
+            lock (_lock)
+            {
+                _shuttingDown = true;
+                _queue.Clear();
+            }
+        }
+
+        /// <summary>
+        /// BUG-260610.15: re-arms the queue for the next session (end of UnloadData).
+        /// </summary>
+        public static void Reset()
+        {
+            lock (_lock)
+            {
+                _queue.Clear();
+                _shuttingDown = false;
+            }
+        }
+
         public static void Enqueue(Action action)
         {
             lock (_lock)
             {
+                if (_shuttingDown) return;
                 _queue.Enqueue(action);
                 _enqueued++;
                 if (_runningWorkers < Mod.Settings.MaxBackgroundTasks)
@@ -65,7 +97,8 @@ namespace SKONanobotBuildAndRepairSystem.Managers
                     Action pendingAction = null;
                     lock (_lock)
                     {
-                        if (_queue.Count > 0)
+                        // BUG-260610.15: stop picking up work once unload began.
+                        if (!_shuttingDown && _queue.Count > 0)
                         {
                             pendingAction = _queue.Dequeue();
                         }
@@ -81,7 +114,14 @@ namespace SKONanobotBuildAndRepairSystem.Managers
                         {
                             pendingAction();
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            // BUG-260610.15: was a bare catch — recurring task failures
+                            // (e.g. a scan aborting on a systematically bad candidate)
+                            // were completely invisible while target lists silently
+                            // stayed stale.
+                            try { Logging.Instance.Write(Logging.Level.Error, "BackgroundTaskQueue: task failed: {0}", ex); } catch { }
+                        }
                         lock (_lock) { _completed++; }
                     }
                 }
