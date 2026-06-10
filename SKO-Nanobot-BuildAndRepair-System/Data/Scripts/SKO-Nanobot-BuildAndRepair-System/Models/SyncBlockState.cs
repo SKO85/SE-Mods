@@ -595,6 +595,26 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _fullSyncCounter = FullSyncInterval; // Next transmit will be full
         }
 
+        /// <summary>
+        /// BUG-260610.17: full snapshot for targeted (request-reply) sends. Must NOT
+        /// consume the delta-sync bookkeeping (Changed, list hashes, full-sync
+        /// counter) — that state tracks the broadcast stream to ALL clients; a
+        /// per-client reply consuming it suppressed a pending broadcast and made the
+        /// next broadcast skip lists the other clients never received.
+        /// </summary>
+        internal SyncBlockState GetTransmitFull()
+        {
+            _MissingComponentsSync = null;
+            _PossibleWeldTargetsSync = null;
+            _PossibleGrindTargetsSync = null;
+            _PossibleFloatingTargetsSync = null;
+            ExcludedLists = 0;
+            // Time anchor for the receiver's transport math; only side effect on the
+            // broadcast stream is delaying the next periodic send by < 1 s.
+            LastTransmitted = MyAPIGateway.Session.ElapsedPlayTime;
+            return this;
+        }
+
         internal void AssignReceived(SyncBlockState newState)
         {
             _Ready = newState.Ready;

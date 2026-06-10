@@ -103,7 +103,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 if (Mod.NanobotSystems.TryGetValue(msgRcv.EntityId, out system))
                 {
                     MsgBlockSettingsSend(msgRcv.SteamId, system);
-                    system.State.ForceFullTransmit();
+                    // BUG-260610.17: no ForceFullTransmit here — the targeted send below
+                    // is intrinsically full (GetTransmitFull) and must not touch the
+                    // broadcast delta-sync state.
                     MsgBlockStateSend(msgRcv.SteamId, system);
                 }
                 else
@@ -491,7 +493,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 var msgSnd = new MsgBlockState();
                 msgSnd.EntityId = system.Entity.EntityId;
-                msgSnd.State = system.State.GetTransmit();
+                // BUG-260610.17: targeted sends use the non-consuming full snapshot so a
+                // single client's request can't eat the dirty flag / delta hashes that
+                // gate the broadcast to everyone else.
+                msgSnd.State = steamId == 0 ? system.State.GetTransmit() : system.State.GetTransmitFull();
 
                 var bytes = MyAPIGateway.Utilities.SerializeToBinary(msgSnd);
 
