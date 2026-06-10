@@ -87,8 +87,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
-                var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModDataRequest>(data);
-                MsgModSettingsSend(msgRcv.SteamId);
+                // BUG-260610.19: reply to the tamper-proof transport sender, not the
+                // client-controlled payload SteamId — a forged payload could direct
+                // unsolicited traffic at arbitrary players.
+                MsgModSettingsSend(sender);
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "ServerMsgDataRequestReceived: {0}", ex.Message); }
         }
@@ -102,15 +104,17 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 NanobotSystem system;
                 if (Mod.NanobotSystems.TryGetValue(msgRcv.EntityId, out system))
                 {
-                    MsgBlockSettingsSend(msgRcv.SteamId, system);
+                    // BUG-260610.19: reply to the tamper-proof transport sender, not the
+                    // client-controlled payload SteamId.
+                    MsgBlockSettingsSend(sender, system);
                     // BUG-260610.17: no ForceFullTransmit here — the targeted send below
                     // is intrinsically full (GetTransmitFull) and must not touch the
                     // broadcast delta-sync state.
-                    MsgBlockStateSend(msgRcv.SteamId, system);
+                    MsgBlockStateSend(sender, system);
                 }
                 else
                 {
-                    if (Logging.Instance.ShouldLog(Logging.Level.Error)) Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockDataRequestReceived for unknown system SteamId{0} EntityId={1}", msgRcv.SteamId, msgRcv.EntityId);
+                    if (Logging.Instance.ShouldLog(Logging.Level.Error)) Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockDataRequestReceived for unknown system SteamId{0} EntityId={1}", sender, msgRcv.EntityId);
                 }
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "ServerMsgBlockDataRequestReceived: {0}", ex.Message); }
