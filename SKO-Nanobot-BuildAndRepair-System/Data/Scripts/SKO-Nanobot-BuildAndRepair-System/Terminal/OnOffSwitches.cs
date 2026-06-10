@@ -5,6 +5,7 @@ using SKONanobotBuildAndRepairSystem.Localization;
 using SKONanobotBuildAndRepairSystem.Models;
 using System;
 using System.Text;
+using VRage;
 using VRage.Utils;
 
 namespace SKONanobotBuildAndRepairSystem.Terminal
@@ -45,8 +46,15 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
 
         private static void CreateOnOffSwitchAction(string name, IMyTerminalControlOnOffSwitch onoffSwitch)
         {
+            // BUG-260610.37: resolve the MyStringId through MyTexts — formatting the id
+            // directly prints the raw key for vanilla ids (e.g. "SwitchText_On"). For
+            // mod-local GetOrCompute ids MyTexts falls back to the id string, which is
+            // already the localized text, so both kinds render correctly.
+            var onText = MyTexts.GetString(onoffSwitch.OnText);
+            var offText = MyTexts.GetString(onoffSwitch.OffText);
+
             var action = MyAPIGateway.TerminalControls.CreateAction<IMyShipWelder>(string.Format("{0}_OnOff", name));
-            action.Name = new StringBuilder(string.Format("{0} {1}/{2}", name, onoffSwitch.OnText, onoffSwitch.OffText));
+            action.Name = new StringBuilder(string.Format("{0} {1}/{2}", name, onText, offText));
             action.Icon = @"Textures\GUI\Icons\Actions\Toggle.dds";
             action.Enabled = onoffSwitch.Enabled;
             action.Action = (block) =>
@@ -57,7 +65,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
 
             action = MyAPIGateway.TerminalControls.CreateAction<IMyShipWelder>(string.Format("{0}_On", name));
-            action.Name = new StringBuilder(string.Format("{0} {1}", name, onoffSwitch.OnText));
+            action.Name = new StringBuilder(string.Format("{0} {1}", name, onText));
             action.Icon = @"Textures\GUI\Icons\Actions\SwitchOn.dds";
             action.Enabled = onoffSwitch.Enabled;
             action.Action = (block) =>
@@ -68,7 +76,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
 
             action = MyAPIGateway.TerminalControls.CreateAction<IMyShipWelder>(string.Format("{0}_Off", name));
-            action.Name = new StringBuilder(string.Format("{0} {1}", name, onoffSwitch.OffText));
+            action.Name = new StringBuilder(string.Format("{0} {1}", name, offText));
             action.Icon = @"Textures\GUI\Icons\Actions\SwitchOff.dds";
             action.Enabled = onoffSwitch.Enabled;
             action.Action = (block) =>
