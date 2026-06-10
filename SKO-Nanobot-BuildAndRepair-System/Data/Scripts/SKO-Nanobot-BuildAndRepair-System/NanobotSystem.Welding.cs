@@ -362,6 +362,8 @@ namespace SKONanobotBuildAndRepairSystem
                     // buildable block in the 15 s global cooldown for every BaR.
                     needWelding = true;
                     currentWeldingBlock = chosenTarget.Block;
+                    // BUG-260610.35: no weld/build ran — return the weld slot claimed above.
+                    Mod.RefundWeldSlot();
                 }
                 else
                 {

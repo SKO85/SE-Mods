@@ -188,6 +188,10 @@ namespace SKONanobotBuildAndRepairSystem
         public static bool TryClaimGrindSlot() { return _grindBudget.TryClaim(); }
         public static bool TryClaimWeldSlot() { return _weldBudget.TryClaim(); }
 
+        // BUG-260610.35: refund when the proj-build gate rejects after the weld slot
+        // was already claimed — no weld/build ran, so the budget shouldn't be debited.
+        public static void RefundWeldSlot() { _weldBudget.Refund(); }
+
         /// <summary>Called after each ServerDoGrind to accumulate time spent grinding this tick.</summary>
         public static void ReportGrindTime(double ms) { _grindBudget.ReportTime(ms); }
 
