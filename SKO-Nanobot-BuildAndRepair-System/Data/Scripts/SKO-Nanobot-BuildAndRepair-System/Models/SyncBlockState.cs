@@ -39,6 +39,12 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private IMySlimBlock _CurrentWeldingBlock;
         private IMySlimBlock _CurrentGrindingBlock;
 
+        // BUG-260610.21: effective grid id currently counted in Mod.GridSystemCount
+        // for each lock-on (0 = none). Cached so the decrement key always matches the
+        // increment key, even if the block's projector resolution changes meanwhile.
+        private long _weldCountedGridId;
+        private long _grindCountedGridId;
+
         private Vector3D? _CurrentTransportTarget;
         private Vector3D? _LastTransportTarget;
         private bool _CurrentTransportIsPick;
@@ -183,14 +189,20 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
                     // BUG-160: count-once-per-grid (skip Inc/Dec when the other lock already
                     // pins this grid so weld+grind on the same grid contributes +1, not +2).
+                    // BUG-260610.21: count by the EFFECTIVE grid id (projector parent for
+                    // projected blocks) — the id the MaxSystemsPerTargetGrid checks query;
+                    // counting the projected grid id let unlimited BaRs lock onto one
+                    // projection during component transport. The counted id is cached so
+                    // the decrement always matches the increment even if the projector
+                    // closes while locked on.
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
-                        if (oldGridId != newGridId)
+                        var newCountedId = NanobotSystem.GetEffectiveGridId(value);
+                        if (_weldCountedGridId != newCountedId)
                         {
-                            var otherGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
-                                ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
-                            if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
-                            if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
+                            if (_weldCountedGridId != 0L && _weldCountedGridId != _grindCountedGridId) Mod.DecrementGridCount(_weldCountedGridId);
+                            if (newCountedId != 0L && newCountedId != _grindCountedGridId) Mod.IncrementGridCount(newCountedId);
+                            _weldCountedGridId = newCountedId;
                         }
                     }
                     _CurrentWeldingBlock = value;
@@ -230,15 +242,16 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     var newPos = value != null ? value.Position : default(Vector3I);
                     var samePhysicalBlock = oldGridId != 0L && oldGridId == newGridId && oldPos == newPos;
 
-                    // BUG-160: count-once-per-grid (see CurrentWeldingBlock above).
+                    // BUG-160: count-once-per-grid; BUG-260610.21: effective-id counting
+                    // with cached counted id (see CurrentWeldingBlock above).
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
-                        if (oldGridId != newGridId)
+                        var newCountedId = NanobotSystem.GetEffectiveGridId(value);
+                        if (_grindCountedGridId != newCountedId)
                         {
-                            var otherGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
-                                ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
-                            if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
-                            if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
+                            if (_grindCountedGridId != 0L && _grindCountedGridId != _weldCountedGridId) Mod.DecrementGridCount(_grindCountedGridId);
+                            if (newCountedId != 0L && newCountedId != _weldCountedGridId) Mod.IncrementGridCount(newCountedId);
+                            _grindCountedGridId = newCountedId;
                         }
                     }
                     _CurrentGrindingBlock = value;

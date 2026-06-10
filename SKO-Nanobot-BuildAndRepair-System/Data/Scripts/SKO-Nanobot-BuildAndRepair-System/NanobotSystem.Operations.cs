@@ -485,8 +485,10 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// BUG-164: resolve to the projector's parent grid for projected blocks so the
         /// limit check uses the same grid the post-materialization Inc fires on.
+        /// BUG-260610.21: internal — SyncBlockState's lock-on setters count
+        /// Mod.GridSystemCount by the same effective id the limit checks query.
         /// </summary>
-        private static long GetEffectiveGridId(IMySlimBlock block)
+        internal static long GetEffectiveGridId(IMySlimBlock block)
         {
             if (block == null || block.CubeGrid == null) return 0L;
             var myCubeGrid = block.CubeGrid as Sandbox.Game.Entities.MyCubeGrid;
