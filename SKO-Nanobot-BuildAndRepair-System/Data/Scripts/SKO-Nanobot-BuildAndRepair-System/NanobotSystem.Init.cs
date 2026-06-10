@@ -241,6 +241,14 @@ namespace SKONanobotBuildAndRepairSystem
                 State.CurrentWeldingBlock = null;
                 State.CurrentGrindingBlock = null;
 
+                // BUG-260610.12: release every TTL block claim held by this BaR (the
+                // multi-action wrapper can hold several) so other BaRs aren't blocked
+                // for up to AssignmentTtlSeconds after this system is destroyed.
+                if (Mod.Settings.AssignToSystemEnabled && _Welder != null)
+                {
+                    BlockSystemAssigningHandler.ReleaseAllForSystem(_Welder.EntityId);
+                }
+
                 _Effects.UpdateEffects(this);
                 _Effects.Close(this);
 
