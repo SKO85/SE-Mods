@@ -11,12 +11,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 {
     public static class DamageHandler
     {
-        // Reused dedup buffer for OnAfterDamage's NanobotSystems walk. Damage
-        // handlers fire on the main simulation thread, so a single static set
-        // is safe — clear, fill, done. Replaces a per-event HashSet allocation
-        // that fired on every friendly grind-damage event.
-        private static readonly HashSet<long> _seenOwnersBuffer = new HashSet<long>();
-
         #region Registration
 
         private static bool _registered = false;
@@ -112,20 +106,18 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                         if (attackerId != 0)
                         {
                             // BUG-130: write to the shared owner-keyed map (one write per distinct owner).
-                            var deadline = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
-                            _seenOwnersBuffer.Clear();
-                            foreach (var entry in Mod.NanobotSystems)
+                            // BUG-260610.24: consume FriendlyRelationsHandler's 15 s rebuilt
+                            // cache instead of walking every BaR and querying engine faction
+                            // relations on each damage event — grinders emit many per second,
+                            // making the old walk hundreds of relation calls/s on busy servers.
+                            List<long> friendlyOwners;
+                            if (FriendlyRelationsHandler.TryGetOwnersForOwner(attackerId, out friendlyOwners))
                             {
-                                var welder = entry.Value != null ? entry.Value.Welder : null;
-                                if (welder == null) continue;
-                                var welderOwner = welder.OwnerId;
-                                if (welderOwner == 0) continue;
-                                if (!_seenOwnersBuffer.Add(welderOwner)) continue;
-                                var relation = welder.GetUserRelationToOwner(attackerId);
-                                if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
+                                // A 'friendly' damage from grinder -> do not repair (for a while)
+                                var deadline = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;
+                                for (var i = 0; i < friendlyOwners.Count; i++)
                                 {
-                                    // A 'friendly' damage from grinder -> do not repair (for a while)
-                                    Mod.MarkFriendlyDamage(welderOwner, targetBlock, deadline);
+                                    Mod.MarkFriendlyDamage(friendlyOwners[i], targetBlock, deadline);
                                 }
                             }
                         }
