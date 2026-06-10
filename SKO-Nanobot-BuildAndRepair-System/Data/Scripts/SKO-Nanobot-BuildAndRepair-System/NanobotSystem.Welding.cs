@@ -1054,6 +1054,14 @@ namespace SKONanobotBuildAndRepairSystem
                             break;
                         }
                     }
+
+                    // BUG-260610.34: the reference is gone from the rebuilt source list
+                    // (scan swap or owner closed) — drop it so every future pass stops
+                    // paying this walk and the closed inventory graph isn't pinned.
+                    if (lastSuccessfulIdx < 0)
+                    {
+                        _LastSuccessfulSource = null;
+                    }
                 }
 
                 bool abort = false;
