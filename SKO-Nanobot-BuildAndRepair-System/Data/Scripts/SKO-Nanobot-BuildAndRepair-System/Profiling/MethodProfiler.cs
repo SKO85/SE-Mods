@@ -743,6 +743,12 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
 
             lock (_syncRoot)
             {
+                // BUG-260610.26: an in-flight StopAndLog can get here after
+                // StopSession/CloseInternal cleared _writers — creating a writer now
+                // would truncate the just-finalized session log and leak the writer.
+                if (!_isRunning)
+                    return null;
+
                 TextWriter writer;
                 if (_writers.TryGetValue(methodName, out writer))
                     return writer;
