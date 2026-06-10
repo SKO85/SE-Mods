@@ -11,11 +11,15 @@ namespace SKONanobotBuildAndRepairSystem.Collections
         {
             var result = new List<SyncComponents>();
             var idx = 0;
-            foreach (var item in this)
+            // BUG-260610.7: enumerate under the lock — see TargetBlockDataHashList.
+            lock (this)
             {
-                result.Add(new SyncComponents() { Component = item.Key, Amount = item.Value });
-                idx++;
-                if (idx >= SyncBlockState.MaxSyncItems) break;
+                foreach (var item in this)
+                {
+                    result.Add(new SyncComponents() { Component = item.Key, Amount = item.Value });
+                    idx++;
+                    if (idx >= SyncBlockState.MaxSyncItems) break;
+                }
             }
             return result;
         }

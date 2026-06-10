@@ -13,11 +13,15 @@ namespace SKONanobotBuildAndRepairSystem.Collections
         {
             var result = new List<SyncTargetEntityData>();
             var idx = 0;
-            foreach (var item in this)
+            // BUG-260610.7: enumerate under the list lock — see TargetBlockDataHashList.
+            lock (this)
             {
-                result.Add(new SyncTargetEntityData() { Entity = SyncEntityId.GetSyncId(item.Entity), Distance = item.Distance });
-                idx++;
-                if (idx >= SyncBlockState.MaxSyncItems) break;
+                foreach (var item in this)
+                {
+                    result.Add(new SyncTargetEntityData() { Entity = SyncEntityId.GetSyncId(item.Entity), Distance = item.Distance });
+                    idx++;
+                    if (idx >= SyncBlockState.MaxSyncItems) break;
+                }
             }
             return result;
         }
