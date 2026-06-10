@@ -607,6 +607,14 @@ namespace SKONanobotBuildAndRepairSystem
                 if (_ClusterMemberAreaBoxes != null)
                     _ClusterMemberAreaBoxes.Clear();
 
+                // BUG-260610.40: drop the block-keyed sort caches too — they were only
+                // cleared at the start of the NEXT use, so an idle/solo BaR pinned the
+                // last scan's IMySlimBlock keys (possibly on deleted grids) indefinitely.
+                if (_ScanPreSortDistances != null)
+                    _ScanPreSortDistances.Clear();
+                _sortCandidateDistances.Clear();
+                _sortCandidatePriorities.Clear();
+
                 _LastTargetsUpdate = MyAPIGateway.Session.ElapsedPlayTime;
                 _lastFullScanTime = _LastTargetsUpdate;
                 if (updateSource) _LastSourceUpdate = _LastTargetsUpdate;
