@@ -135,10 +135,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static void Unregister()
         {
-            if (!_registered || MyAPIGateway.Session == null)
+            if (!_registered)
                 return;
 
-            if (MyAPIGateway.Session.IsServer)
+            // BUG-260610.27: Session can already be null during UnloadData (ordering
+            // is engine-version dependent). Skipping only the unsubscribe is fine —
+            // the entity list dies with the session — but the flag reset and the
+            // collection clears must always run, or the next world's Register()
+            // no-ops and Zones keeps dead-world MySafeZone references.
+            if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
             {
                 MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd;
                 MyAPIGateway.Entities.OnEntityRemove -= OnEntityRemove;
