@@ -221,8 +221,20 @@ namespace SKONanobotBuildAndRepairSystem
                             if (Mod.Settings.AssignToSystemEnabled && _Welder.IsWorking && _Welder.Enabled)
                             {
                                 _opTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                                targetData.Block.AssignToSystem(_Welder.EntityId);
+                                var refreshed = targetData.Block.AssignToSystem(_Welder.EntityId);
                                 if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
+                                if (!refreshed)
+                                {
+                                    // BUG-260610.32: TTL expired and another BaR claimed the
+                                    // block earlier this tick — drop the lock-on and keep
+                                    // looking instead of double-welding the same block
+                                    // (mirrors the grind path's claim-race handling). The
+                                    // claim belongs to the other BaR, so no release here.
+                                    State.CurrentWeldingBlock = null;
+                                    lookingForNext = true;
+                                    skippedByAssign++;
+                                    continue;
+                                }
                             }
                         }
 
