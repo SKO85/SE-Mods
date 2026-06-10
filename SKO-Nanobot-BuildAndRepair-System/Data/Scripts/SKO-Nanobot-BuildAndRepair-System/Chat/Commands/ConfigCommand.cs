@@ -37,9 +37,12 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                         catch { return string.Format("Expected one of: {0}", string.Join(", ", Enum.GetNames(typeof(Logging.Level)))); }
                     },
                     string.Join("|", Enum.GetNames(typeof(Logging.Level)))),
+                // BUG-260610.30: bounds must match the model clamps (ValidateAndClamp) —
+                // a looser command min let the server keep a value every client clamps
+                // away on receive, permanently diverging server and client settings.
                 IntSetting("Range",
                     () => Mod.Settings.Range,
-                    v => { Mod.Settings.Range = v; }, 1, 1000),
+                    v => { Mod.Settings.Range = v; }, NanobotSystem.WELDER_RANGE_MIN_IN_M, NanobotSystem.WELDER_RANGE_MAX_IN_M),
                 IntSetting("MaximumOffset",
                     () => Mod.Settings.MaximumOffset,
                     v => { Mod.Settings.MaximumOffset = v; }, 0, 1000),
