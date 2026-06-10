@@ -443,8 +443,11 @@ namespace SKONanobotBuildAndRepairSystem
             // Turn off light and remove reference
             if (_LightEffect != null)
             {
-                _LightEffect.Clear();
-                _LightEffect.LightOn = false;
+                // BUG-260610.25: return the pooled light to the engine like
+                // SetWorkingEffects does — Clear() alone left the slot registered
+                // in MyLights forever (one leaked render light per BaR closed
+                // while actively welding/grinding).
+                MyLights.RemoveLight(_LightEffect);
                 _LightEffect = null;
             }
 
