@@ -313,6 +313,7 @@ namespace SKONanobotBuildAndRepairSystem
                         totalComponentChecks++;
                     }
 
+                    _projBuildSlotDeferred = false;
                     welding = ServerDoWeld(chosenTarget);
 
                     Mod.ReportWeldTime((Stopwatch.GetTimestamp() - weldTs) * 1000.0 / Stopwatch.Frequency);
@@ -338,6 +339,16 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else if (welding || transporting)
                 {
+                    currentWeldingBlock = chosenTarget.Block;
+                }
+                else if (_projBuildSlotDeferred)
+                {
+                    // BUG-260610.10: the global proj-build budget (3/tick) blocked the
+                    // build — the block is buildable, just not this tick. Keep lock-on
+                    // and assignment and retry next tick (same handling as the weld-slot
+                    // budget above). Falling through to the failure branch would park a
+                    // buildable block in the 15 s global cooldown for every BaR.
+                    needWelding = true;
                     currentWeldingBlock = chosenTarget.Block;
                 }
                 else
@@ -541,6 +552,9 @@ namespace SKONanobotBuildAndRepairSystem
                             // when exhausted (resolving a not-yet-built block would null the target).
                             if (!Mod.TryClaimProjBuildSlot())
                             {
+                                // BUG-260610.10: signal the caller this is a budget
+                                // deferral, not a weld failure.
+                                _projBuildSlotDeferred = true;
                                 EmitServerDoWeldProfile(profilerTs,
                                     targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
                                     true, false, false, false,

@@ -91,6 +91,15 @@ namespace SKONanobotBuildAndRepairSystem
         private long _weldExhaustedAtHash;
         private TimeSpan _weldExhaustedAtTime;
 
+        /// <summary>
+        /// BUG-260610.10: set by ServerDoWeld when the proj-build budget gate
+        /// (Mod.TryClaimProjBuildSlot) rejected the build this tick. Lets the weld
+        /// loop distinguish "budget-deferred" from "can't weld" so a buildable
+        /// projected block is retried next tick instead of being parked in the
+        /// 15 s global failure cooldown. Main-thread only.
+        /// </summary>
+        private bool _projBuildSlotDeferred = false;
+
         /// <summary>FEAT-076: same as _weldLoopExhausted, for the grind loop.</summary>
         private bool _grindLoopExhausted = false;
         private long _grindExhaustedAtHash;
