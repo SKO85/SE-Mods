@@ -534,8 +534,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                             system.Entity.EntityId, steamId, payloadBytes));
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                // BUG-260610.41: this was a silent catch — serialization/send failures
+                // (clients quietly stop receiving state) left no trace while every other
+                // send helper logs.
+                Logging.Instance.Write(Logging.Level.Error, "MsgBlockStateSend: {0}", ex.Message);
                 if (profilerTs != 0L)
                 {
                     MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs);
