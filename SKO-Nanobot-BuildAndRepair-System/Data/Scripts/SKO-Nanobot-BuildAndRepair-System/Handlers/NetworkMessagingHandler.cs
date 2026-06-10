@@ -284,6 +284,13 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     if (MyAPIGateway.Session.IsServer)
                     {
+                        // BUG-260610.31: per-block rate limit. Legit clients send at most
+                        // once per second (IsTransmitNeeded gate); each accepted message
+                        // costs a synchronous XML save + broadcast, so drop floods.
+                        var now = MyAPIGateway.Session.ElapsedPlayTime;
+                        if ((now - system._lastClientSettingsAppliedAt).TotalMilliseconds < 500) return;
+                        system._lastClientSettingsAppliedAt = now;
+
                         system.Settings.AssignReceived(msgRcv.Settings, system.BlockWeldPriority, system.BlockGrindPriority, system.ComponentCollectPriority);
                         system.SettingsChanged();
                         system.Settings.Save(system.Entity, Mod.ModGuid);

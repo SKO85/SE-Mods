@@ -222,6 +222,12 @@ namespace SKONanobotBuildAndRepairSystem
         private Dictionary<IMySlimBlock, double> _sortCandidateDistances = new Dictionary<IMySlimBlock, double>();
         private Dictionary<IMySlimBlock, int> _sortCandidatePriorities = new Dictionary<IMySlimBlock, int>();
 
+        // BUG-260610.31: server-side rate limit for MSGID_BLOCK_SETTINGS_FROM_CLIENT.
+        // Legit clients gate sends on a 1 s transmit timer; anything faster is dropped
+        // by NetworkMessagingHandler to stop spam from costing an XML save + broadcast
+        // per message. Server main thread only.
+        internal TimeSpan _lastClientSettingsAppliedAt;
+
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
         // Rebuilt by _gridSaturation.Rebuild(), used as fast-path in IsGridOverSystemLimit().
         private readonly GridSaturationTracker _gridSaturation = new GridSaturationTracker();
