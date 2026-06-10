@@ -61,6 +61,19 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         }
 
         /// <summary>
+        /// BUG-260610.11: purge queued blocks on world unload — leftover entries
+        /// would raze dead-world blocks (or, with EntityId reuse, the wrong grid)
+        /// in the next session. Called from Mod.UnloadData (main thread).
+        /// </summary>
+        public static void Clear()
+        {
+            _queue.Clear();
+            _pendingKeys.Clear();
+            _batchByGrid.Clear();
+            _tickCounter = 0;
+        }
+
+        /// <summary>
         /// Tick-gated batched drain (call once per main-thread tick).
         /// BUG-145: per-call profiling for the engine RazeBlocks cost.
         /// </summary>

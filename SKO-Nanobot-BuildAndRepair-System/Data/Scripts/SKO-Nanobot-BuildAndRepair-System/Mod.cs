@@ -510,6 +510,17 @@ namespace SKONanobotBuildAndRepairSystem
             try { SharedGridBlockCache.Clear(); } catch { }
             try { SharedEntityCache.Clear(); } catch { }
 
+            // BUG-260610.11: clear remaining static handler state holding game-object
+            // references or session-clock TTL entries — statics survive into the next
+            // world (stale raze targets, wrong ownership on EntityId collision,
+            // phantom grid saturation, pinned object graphs).
+            try { FriendlyRelationsHandler.Clear(); } catch { }
+            try { RazeQueueHandler.Clear(); } catch { }
+            try { GridOwnershipCacheHandler.Clear(); } catch { }
+            try { GridSystemCount.Clear(); } catch { }
+            try { BlockPriorityHandling.GetItemKeyCache.Clear(); } catch { }
+            try { GridScanCache.Clear(); } catch { }
+
             // BUG-260610.1: reset session-relative static timers/overrides.
             try { ResetSessionState(); } catch { }
 

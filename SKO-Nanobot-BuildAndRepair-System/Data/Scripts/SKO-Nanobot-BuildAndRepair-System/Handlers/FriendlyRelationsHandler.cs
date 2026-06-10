@@ -166,5 +166,20 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             _BaRsByOwner = newCache;
             _OwnersByOwner = newOwnerCache;
         }
+
+        /// <summary>
+        /// BUG-260610.11: drop all NanobotSystem/IMySlimBlock references on world
+        /// unload — statics survive into the next session. Called from Mod.UnloadData.
+        /// </summary>
+        public static void Clear()
+        {
+            _BaRsByOwner = new Dictionary<long, List<NanobotSystem>>();
+            _OwnersByOwner = new Dictionary<long, List<long>>();
+            lock (_DamageLock)
+            {
+                _DamageByOwner.Clear();
+                _DamageReapBuffer.Clear();
+            }
+        }
     }
 }
