@@ -125,6 +125,22 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             TryFire(ref _profilerFlush, now);
         }
 
+        /// <summary>
+        /// BUG-260610.1: LastRun holds session play-time; statics survive world
+        /// unload, so a world with lower play time than the previous one would
+        /// never satisfy now.Subtract(LastRun) >= Interval and no task would fire.
+        /// Called from Mod.UnloadData.
+        /// </summary>
+        public static void ResetSessionState()
+        {
+            _ownership.LastRun = TimeSpan.Zero;
+            _safeZone.LastRun = TimeSpan.Zero;
+            _ttlCleanup.LastRun = TimeSpan.Zero;
+            _assignmentCleanup.LastRun = TimeSpan.Zero;
+            _friendlyRebuild.LastRun = TimeSpan.Zero;
+            _profilerFlush.LastRun = TimeSpan.Zero;
+        }
+
         private static void TryFire(ref PeriodicTask task, TimeSpan now)
         {
             if (now.Subtract(task.LastRun) < task.Interval) return;

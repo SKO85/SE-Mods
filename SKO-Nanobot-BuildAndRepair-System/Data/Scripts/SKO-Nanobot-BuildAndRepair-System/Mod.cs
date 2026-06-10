@@ -438,6 +438,26 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
+        /// <summary>
+        /// BUG-260610.1: statics survive world unload, but session play-time restarts
+        /// per world. Any static holding an ElapsedPlayTime/frame value from the old
+        /// world keeps every "now - last >= interval" gate false in the next world
+        /// (until its play time catches up): no scans, no periodic maintenance,
+        /// frozen auto-stagger, leaked sim-speed override. Reset them all here.
+        /// </summary>
+        private static void ResetSessionState()
+        {
+            NowPlayTime = TimeSpan.Zero;
+            _LastSourcesAndTargetsUpdateTimer = TimeSpan.Zero;
+            _LastSyncModDataRequestSend = TimeSpan.Zero;
+            _cachedAutoStagger = -1;
+            _cachedAutoStaggerFrame = int.MinValue;
+            SimSpeedOverride = null;
+            PeriodicMaintenanceScheduler.ResetSessionState();
+            GridOwnershipCacheHandler.ResetSessionState();
+            FriendlyRelationsHandler.ResetSessionState();
+        }
+
         protected override void UnloadData()
         {
             // Wait until background tasks finish (with timeout to prevent game freeze).
@@ -489,6 +509,9 @@ namespace SKONanobotBuildAndRepairSystem
             // Clear shared caches.
             try { SharedGridBlockCache.Clear(); } catch { }
             try { SharedEntityCache.Clear(); } catch { }
+
+            // BUG-260610.1: reset session-relative static timers/overrides.
+            try { ResetSessionState(); } catch { }
 
             // Close the profiler to release any open log files.
             try { MethodProfiler.Close(); } catch { }

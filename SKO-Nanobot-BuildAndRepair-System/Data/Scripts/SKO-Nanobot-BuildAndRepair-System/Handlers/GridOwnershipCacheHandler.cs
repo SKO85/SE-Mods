@@ -28,6 +28,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private const int MaxRefreshItems = 100;
         private static TimeSpan LastCheckTime;
+
+        /// <summary>
+        /// BUG-260610.1: LastCheckTime holds session play-time and survives world
+        /// unload — reset so the refresh timer works in the next session.
+        /// Called from Mod.UnloadData.
+        /// </summary>
+        public static void ResetSessionState()
+        {
+            LastCheckTime = TimeSpan.Zero;
+        }
         private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(5); // how often we check for expired entries
         private static readonly TimeSpan AllowUnusedGridsForInterval = TimeSpan.FromMinutes(5);
 

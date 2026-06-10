@@ -38,6 +38,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static TimeSpan _LastDamageCleanup = TimeSpan.Zero;
 
         /// <summary>
+        /// BUG-260610.1: _LastDamageCleanup holds session play-time and survives
+        /// world unload — reset so the reap timer works in the next session.
+        /// Called from Mod.UnloadData.
+        /// </summary>
+        public static void ResetSessionState()
+        {
+            _LastDamageCleanup = TimeSpan.Zero;
+        }
+
+        /// <summary>
         /// Snapshot list of BaRs whose welder considers `ownerId` friendly. Returns false
         /// (and a null `friendlies`) if the cache hasn't yet been built for this owner.
         /// </summary>
