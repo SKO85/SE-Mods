@@ -27,27 +27,49 @@ namespace SKONanobotBuildAndRepairSystem
             CheckAndUpdateInventoryFull();
             if (State.InventoryFull) return;
 
+            // BUG-260610.22: pick targets under the lock, run the engine work
+            // (inventory transfers, entity deletion — ms-scale) OUTSIDE it. The
+            // background scan publish blocks on this lock, so a slow collect tick
+            // used to stall a scan worker — the same contention BUG-135/BUG-137
+            // removed for the weld and grind loops.
+            _TempCollectTargets.Clear();
             lock (State.PossibleFloatingTargets)
             {
-                TargetEntityData collectingFirstTarget = null;
-                var collectingCount = 0;
                 foreach (var targetData in State.PossibleFloatingTargets)
                 {
                     if (targetData.Entity != null && !targetData.Ignore)
                     {
-                        needCollecting = true;
-                        var added = ServerDoCollectFloating(targetData, out transporting, ref collectingFirstTarget);
-                        if (targetData.Ignore) State.PossibleFloatingTargets.ChangeHash();
-                        collecting |= added;
-                        if (added) collectingCount++;
-                        if (transporting || collectingCount >= COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY)
-                        {
-                            break; //Max Inventorysize reached or max simultaneously floating object reached
-                        }
+                        _TempCollectTargets.Add(targetData);
                     }
                 }
-                if (collecting && !transporting) ServerDoCollectFloating(null, out transporting, ref collectingFirstTarget); //Starttransport if pending
             }
+
+            var anyIgnored = false;
+            TargetEntityData collectingFirstTarget = null;
+            var collectingCount = 0;
+            for (var i = 0; i < _TempCollectTargets.Count; i++)
+            {
+                var targetData = _TempCollectTargets[i];
+                needCollecting = true;
+                var added = ServerDoCollectFloating(targetData, out transporting, ref collectingFirstTarget);
+                if (targetData.Ignore) anyIgnored = true;
+                collecting |= added;
+                if (added) collectingCount++;
+                if (transporting || collectingCount >= COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY)
+                {
+                    break; //Max Inventorysize reached or max simultaneously floating object reached
+                }
+            }
+            if (collecting && !transporting) ServerDoCollectFloating(null, out transporting, ref collectingFirstTarget); //Starttransport if pending
+
+            if (anyIgnored)
+            {
+                lock (State.PossibleFloatingTargets)
+                {
+                    State.PossibleFloatingTargets.ChangeHash();
+                }
+            }
+            _TempCollectTargets.Clear();
 
             }
             finally

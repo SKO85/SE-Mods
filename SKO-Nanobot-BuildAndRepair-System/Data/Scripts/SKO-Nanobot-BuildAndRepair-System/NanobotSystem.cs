@@ -187,6 +187,12 @@ namespace SKONanobotBuildAndRepairSystem
         private List<IMyInventory> _TempPossibleSources = new List<IMyInventory>();
         private List<IMyInventory> _TempPossiblePushTargets = new List<IMyInventory>();
 
+        // BUG-260610.22: main-thread pick buffer for the collect loop — targets are
+        // selected under the State.PossibleFloatingTargets lock, the engine work
+        // (inventory transfers, entity deletion) then runs outside it. Cleared after
+        // each pass so entity references aren't pinned between ticks.
+        private readonly List<TargetEntityData> _TempCollectTargets = new List<TargetEntityData>();
+
         // Locality-aware grind sorting: after destroying a block, prefer nearby blocks
         // within the same distance band. Set on main thread, read on background scan thread.
         internal Vector3D _LastGrindWorldPosition;
