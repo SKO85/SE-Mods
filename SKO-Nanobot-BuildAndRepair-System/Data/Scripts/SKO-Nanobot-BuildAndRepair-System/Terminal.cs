@@ -583,6 +583,15 @@ namespace SKONanobotBuildAndRepairSystem
                 catch (Exception ex)
                 {
                     Logging.Instance.Write(Logging.Level.Error, "NanobotBuildAndRepairSystemTerminal: InitializeControls exception: {0}", ex);
+                    // BUG-260610.38: the init flag was set before the work — leaving it
+                    // latched after a mid-init exception meant a permanently half-built
+                    // terminal with no retry. Roll our state back so the next
+                    // InitializeControls call starts clean. (Controls/actions already
+                    // handed to the engine before the exception can't be withdrawn —
+                    // they are simply re-used on the retry.)
+                    try { MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter; } catch { }
+                    CustomControls.Clear();
+                    CustomControlsInit = false;
                 }
             }
         }
