@@ -459,7 +459,9 @@ namespace SKONanobotBuildAndRepairSystem
                     return false;
                 }
 
-                var weld = (!IsWeldIntegrityReached(target) || target.NeedRepair(Settings.WeldOptions)) && !IsFriendlyDamage(target);
+                // BUG-260610.5: allowMutate=true — main thread; this is the only place
+                // the deformation skeleton reset runs now.
+                var weld = (!IsWeldIntegrityReached(target) || target.NeedRepair(Settings.WeldOptions, true)) && !IsFriendlyDamage(target);
 
                 targetData.Ignore = !weld;
                 result = weld;

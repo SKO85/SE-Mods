@@ -235,7 +235,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                 // BUG-112: NeedRepair first short-circuits for full-integrity blocks
                 // before the more expensive IsRelationAllowed4Welding engine call.
-                if (block.NeedRepair(Settings.WeldOptions) &&
+                // BUG-260610.5: allowMutate=false — background thread, pure read only.
+                if (block.NeedRepair(Settings.WeldOptions, false) &&
                    (!useIgnoreColor || !IsColorNearlyEquals(ignoreColor, colorMask)) && (!useGrindColor || !IsColorNearlyEquals(grindColor, colorMask)) &&
                    BlockWeldPriority.GetEnabled(block) &&
                    IsRelationAllowed4Welding(block))
