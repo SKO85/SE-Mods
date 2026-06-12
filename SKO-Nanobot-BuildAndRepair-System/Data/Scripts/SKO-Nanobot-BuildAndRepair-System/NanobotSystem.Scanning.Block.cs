@@ -599,6 +599,17 @@ namespace SKONanobotBuildAndRepairSystem
             if (cacheEligible)
             {
                 paramsHash = ComputeScanParamsHash(useIgnoreColor, ignoreColor, useGrindColor, grindColor, autoGrindRelation, autoGrindOptions);
+                // BUG-260612.7: grind filtering is home-grid-dependent (own-grid blocks
+                // skip the shield checks and the off-grid autogrind gate), so a scan of
+                // the scanner's OWN grid must never share cache entries with off-grid
+                // scanners of the same grid — that inverted shield protection in both
+                // directions. Fold the own/other bit into the hash; same-grid cluster
+                // members keep sharing (identical exemptions), off-grid scanners keep
+                // sharing with each other.
+                if (_Welder != null && _Welder.CubeGrid != null && _Welder.CubeGrid.EntityId == gridEntityId)
+                {
+                    unchecked { paramsHash = (paramsHash ^ 0x5A17) * 16777619; }
+                }
                 var cached = GridScanCache.TryGet(gridEntityId, paramsHash);
                 if (cached != null)
                 {
