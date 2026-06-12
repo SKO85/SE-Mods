@@ -1,4 +1,4 @@
-﻿// Version: v2.5.4 - 22.05.2026
+﻿// Version: v2.5.5 - 12.06.2026
 // Compatible with: SKO Nanobot Build and Repair System (Maintained) v2.5.0+
 // This script only works with SKO's maintained versions of the mod.
 // It will NOT work with the original mod by Dummy08.
@@ -1036,7 +1036,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.AllowBuild", value);
+            SetValueBoolSafe("BuildAndRepair.AllowBuild", value);
         }
     }
 
@@ -1048,7 +1048,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue<long>("BuildAndRepair.Mode", (long)value);
+            SetValueSafe<long>("BuildAndRepair.Mode", (long)value);
         }
     }
 
@@ -1060,7 +1060,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue<long>("BuildAndRepair.WorkMode", (long)value);
+            SetValueSafe<long>("BuildAndRepair.WorkMode", (long)value);
         }
     }
 
@@ -1072,7 +1072,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.UseIgnoreColor", value);
+            SetValueBoolSafe("BuildAndRepair.UseIgnoreColor", value);
         }
     }
 
@@ -1084,7 +1084,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue<Vector3>("BuildAndRepair.IgnoreColor", value);
+            SetValueSafe<Vector3>("BuildAndRepair.IgnoreColor", value);
         }
     }
 
@@ -1096,7 +1096,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.UseGrindColor", value);
+            SetValueBoolSafe("BuildAndRepair.UseGrindColor", value);
         }
     }
 
@@ -1108,7 +1108,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue<Vector3>("BuildAndRepair.GrindColor", value);
+            SetValueSafe<Vector3>("BuildAndRepair.GrindColor", value);
         }
     }
 
@@ -1120,7 +1120,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.GrindJanitorEnemies", value);
+            SetValueBoolSafe("BuildAndRepair.GrindJanitorEnemies", value);
         }
     }
 
@@ -1132,7 +1132,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.GrindJanitorNotOwned", value);
+            SetValueBoolSafe("BuildAndRepair.GrindJanitorNotOwned", value);
         }
     }
 
@@ -1144,7 +1144,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.GrindJanitorNeutrals", value);
+            SetValueBoolSafe("BuildAndRepair.GrindJanitorNeutrals", value);
         }
     }
 
@@ -1156,7 +1156,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.GrindJanitorOptionDisableOnly", value);
+            SetValueBoolSafe("BuildAndRepair.GrindJanitorOptionDisableOnly", value);
         }
     }
 
@@ -1168,7 +1168,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.GrindJanitorOptionHackOnly", value);
+            SetValueBoolSafe("BuildAndRepair.GrindJanitorOptionHackOnly", value);
         }
     }
 
@@ -1181,7 +1181,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue<long>("BuildAndRepair.WeldMode", value);
+            SetValueSafe<long>("BuildAndRepair.WeldMode", value);
         }
     }
 
@@ -1194,7 +1194,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaWidth", value);
+            SetValueFloatSafe("BuildAndRepair.AreaWidth", value);
         }
     }
 
@@ -1206,7 +1206,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaOffsetLeftRight", value);
+            SetValueFloatSafe("BuildAndRepair.AreaOffsetLeftRight", value);
         }
     }
 
@@ -1218,7 +1218,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaHeight", value);
+            SetValueFloatSafe("BuildAndRepair.AreaHeight", value);
         }
     }
 
@@ -1230,7 +1230,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaOffsetUpDown", value);
+            SetValueFloatSafe("BuildAndRepair.AreaOffsetUpDown", value);
         }
     }
 
@@ -1242,7 +1242,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaDepth", value);
+            SetValueFloatSafe("BuildAndRepair.AreaDepth", value);
         }
     }
 
@@ -1254,7 +1254,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaOffsetFrontBack", value);
+            SetValueFloatSafe("BuildAndRepair.AreaOffsetFrontBack", value);
         }
     }
 
@@ -1263,6 +1263,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var list = GetValue<MemorySafeList<string>>("BuildAndRepair.WeldPriorityList");
+            if (list == null) return null;
             var blockList = new MemorySafeList<ClassState<BlockClass>>();
             foreach (var item in list)
             {
@@ -1286,7 +1287,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetWeldPriority");
-            return getPriority((int)blockClass);
+            return getPriority != null ? getPriority((int)blockClass) : int.MaxValue;
         }
         else return int.MaxValue;
     }
@@ -1295,8 +1296,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetWeldPriority");
-            setPriority((int)blockClass, prio);
+            try
+            {
+                var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetWeldPriority");
+                if (setPriority != null) setPriority((int)blockClass, prio);
+            }
+            catch { }
         }
     }
 
@@ -1305,7 +1310,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetWeldEnabled");
-            return getEnabled((int)blockClass);
+            return getEnabled != null ? getEnabled((int)blockClass) : false;
         }
         else return false;
     }
@@ -1314,8 +1319,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetWeldEnabled");
-            setEnabled((int)blockClass, enabled);
+            try
+            {
+                var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetWeldEnabled");
+                if (setEnabled != null) setEnabled((int)blockClass, enabled);
+            }
+            catch { }
         }
     }
 
@@ -1324,6 +1333,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var list = GetValue<MemorySafeList<string>>("BuildAndRepair.GrindPriorityList");
+            if (list == null) return null;
             var blockList = new MemorySafeList<ClassState<BlockClass>>();
             foreach (var item in list)
             {
@@ -1347,7 +1357,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetGrindPriority");
-            return getPriority((int)blockClass);
+            return getPriority != null ? getPriority((int)blockClass) : int.MaxValue;
         }
         else return int.MaxValue;
     }
@@ -1356,8 +1366,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetGrindPriority");
-            setPriority((int)blockClass, prio);
+            try
+            {
+                var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetGrindPriority");
+                if (setPriority != null) setPriority((int)blockClass, prio);
+            }
+            catch { }
         }
     }
 
@@ -1366,7 +1380,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetGrindEnabled");
-            return getEnabled((int)blockClass);
+            return getEnabled != null ? getEnabled((int)blockClass) : false;
         }
         else return false;
     }
@@ -1375,8 +1389,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetGrindEnabled");
-            setEnabled((int)blockClass, enabled);
+            try
+            {
+                var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetGrindEnabled");
+                if (setEnabled != null) setEnabled((int)blockClass, enabled);
+            }
+            catch { }
         }
     }
 
@@ -1385,6 +1403,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var list = GetValue<MemorySafeList<string>>("BuildAndRepair.ComponentClassList");
+            if (list == null) return null;
             var compList = new MemorySafeList<ClassState<ComponentClass>>();
             foreach (var item in list)
             {
@@ -1408,7 +1427,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetCollectPriority");
-            return getPriority((int)compClass);
+            return getPriority != null ? getPriority((int)compClass) : int.MaxValue;
         }
         else return int.MaxValue;
     }
@@ -1417,8 +1436,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetCollectPriority");
-            setPriority((int)compClass, prio);
+            try
+            {
+                var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetCollectPriority");
+                if (setPriority != null) setPriority((int)compClass, prio);
+            }
+            catch { }
         }
     }
 
@@ -1427,7 +1450,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetCollectEnabled");
-            return getEnabled((int)compClass);
+            return getEnabled != null ? getEnabled((int)compClass) : false;
         }
         else return false;
     }
@@ -1436,8 +1459,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetCollectEnabled");
-            setEnabled((int)compClass, enabled);
+            try
+            {
+                var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetCollectEnabled");
+                if (setEnabled != null) setEnabled((int)compClass, enabled);
+            }
+            catch { }
         }
     }
 
@@ -1449,7 +1476,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.CollectIfIdle", value);
+            SetValueBoolSafe("BuildAndRepair.CollectIfIdle", value);
         }
     }
 
@@ -1461,7 +1488,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.PushIngotOreImmediately", value);
+            SetValueBoolSafe("BuildAndRepair.PushIngotOreImmediately", value);
         }
     }
 
@@ -1485,11 +1512,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         get
         {
-            return _Entities.Count > 0 ? _Entities[0].GetValueBool("BuildAndRepair.ScriptControlled") : false;
+            // Property is not registered on servers with ScriptControllFixed — safe read.
+            return _Entities.Count > 0 ? GetValue<bool>("BuildAndRepair.ScriptControlled") : false;
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.ScriptControlled", value);
+            SetValueBoolSafe("BuildAndRepair.ScriptControlled", value);
         }
     }
 
@@ -1498,7 +1526,9 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         var missingItems = new MemorySafeDictionary<VRage.Game.MyDefinitionId, int>();
         foreach (var entity in _Entities)
         {
-            var dict = entity.GetValue<MemorySafeDictionary<VRage.Game.MyDefinitionId, int>>("BuildAndRepair.MissingComponents");
+            MemorySafeDictionary<VRage.Game.MyDefinitionId, int> dict = null;
+            try { dict = entity.GetValue<MemorySafeDictionary<VRage.Game.MyDefinitionId, int>>("BuildAndRepair.MissingComponents"); }
+            catch { }
             // Take max across overlapping systems, don't sum (they report the same items).
             if (dict != null && dict.Count > 0)
             {
@@ -1538,6 +1568,32 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return default(T);
     }
 
+    // Safe setters: properties the mod publishes read-only (fixed server settings,
+    // ScriptControllFixed) throw on SetValue — treat as no-op per entity.
+    private void SetValueSafe<T>(string propertyName, T value)
+    {
+        foreach (var entity in _Entities)
+        {
+            try { entity.SetValue<T>(propertyName, value); } catch { }
+        }
+    }
+
+    private void SetValueBoolSafe(string propertyName, bool value)
+    {
+        foreach (var entity in _Entities)
+        {
+            try { entity.SetValueBool(propertyName, value); } catch { }
+        }
+    }
+
+    private void SetValueFloatSafe(string propertyName, float value)
+    {
+        foreach (var entity in _Entities)
+        {
+            try { entity.SetValueFloat(propertyName, value); } catch { }
+        }
+    }
+
     public IMySlimBlock CurrentPickedTarget
     {
         get
@@ -1546,7 +1602,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue("BuildAndRepair.CurrentPickedTarget", value);
+            SetValueSafe("BuildAndRepair.CurrentPickedTarget", value);
         }
     }
 
@@ -1567,7 +1623,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue("BuildAndRepair.CurrentPickedGrindTarget", value);
+            SetValueSafe("BuildAndRepair.CurrentPickedGrindTarget", value);
         }
     }
 

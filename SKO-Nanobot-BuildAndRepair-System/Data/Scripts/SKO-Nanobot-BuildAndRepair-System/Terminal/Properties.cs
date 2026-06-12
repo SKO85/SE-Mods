@@ -332,7 +332,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPossibleCollectTargetsList);
         }
 
-        public static void CurrentPickedTarget()
+        public static void CurrentPickedTarget(bool readOnly = false)
         {
             var propertyCPT = MyAPIGateway.TerminalControls.CreateProperty<VRage.Game.ModAPI.Ingame.IMySlimBlock, IMyShipWelder>("BuildAndRepair.CurrentPickedTarget");
             propertyCPT.SupportsMultipleBlocks = false;
@@ -341,14 +341,18 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system != null ? system.Settings.CurrentPickedWeldingBlock : null;
             };
-            propertyCPT.Setter = (block, value) =>
+            // BUG-260612.38: no setter when ScriptControllFixed — scripts may read but not pick.
+            if (!readOnly)
             {
-                var system = NanobotTerminal.GetSystem(block);
-                if (system != null)
+                propertyCPT.Setter = (block, value) =>
                 {
-                    system.Settings.CurrentPickedWeldingBlock = value;
-                }
-            };
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null)
+                    {
+                        system.Settings.CurrentPickedWeldingBlock = value;
+                    }
+                };
+            }
             MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyCPT);
         }
 
@@ -364,7 +368,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyCT);
         }
 
-        public static void CurrentPickedGrindTarget()
+        public static void CurrentPickedGrindTarget(bool readOnly = false)
         {
             var propertyCPGT = MyAPIGateway.TerminalControls.CreateProperty<VRage.Game.ModAPI.Ingame.IMySlimBlock, IMyShipWelder>("BuildAndRepair.CurrentPickedGrindTarget");
             propertyCPGT.SupportsMultipleBlocks = false;
@@ -373,14 +377,18 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system != null ? system.Settings.CurrentPickedGrindingBlock : null;
             };
-            propertyCPGT.Setter = (block, value) =>
+            // BUG-260612.38: no setter when ScriptControllFixed — scripts may read but not pick.
+            if (!readOnly)
             {
-                var system = NanobotTerminal.GetSystem(block);
-                if (system != null)
+                propertyCPGT.Setter = (block, value) =>
                 {
-                    system.Settings.CurrentPickedGrindingBlock = value;
-                }
-            };
+                    var system = NanobotTerminal.GetSystem(block);
+                    if (system != null)
+                    {
+                        system.Settings.CurrentPickedGrindingBlock = value;
+                    }
+                };
+            }
             MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyCPGT);
         }
 

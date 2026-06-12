@@ -537,48 +537,62 @@ namespace SKONanobotBuildAndRepairSystem
                         // --- Reset All Settings ---
                         separateArea = Separators.Create("SeparateReset", (_) => true);
                         button = Buttons.CreateResetAllSettings(isBaRSystem);
-
-                        // =========== Properties ============
-
-                        // --- Scripting support for Priority and enabling Weld BlockClasses
-                        Properties.WeldPriorityList();
-                        Properties.SetWeldPriority();
-                        Properties.GetWeldPriority();
-                        Properties.SetWeldEnabled();
-                        Properties.GetWeldEnabled();
-
-                        // --- Scripting support for Priority and enabling GrindWeld BlockClasses
-                        Properties.GrindPriorityList();
-                        Properties.SetGrindPriority();
-                        Properties.GetGrindPriority();
-                        Properties.SetGrindEnabled();
-                        Properties.GetGrindEnabled();
-
-                        // --- Scripting support for Priority and enabling ComponentClasses
-                        Properties.ComponentClassList();
-                        Properties.SetCollectPriority();
-                        Properties.GetCollectPriority();
-                        Properties.SetCollectEnabled();
-                        Properties.GetCollectEnabled();
-
-                        // --- Working Lists
-                        Properties.MissingComponents();
-                        Properties.PossibleTargets();
-                        Properties.PossibleGrindTargets();
-                        Properties.PossibleCollectTargets();
-
-                        // --- Control welding
-                        Properties.CurrentPickedTarget();
-                        Properties.CurrentTarget();
-
-                        // --- Control grinding
-                        Properties.CurrentPickedGrindTarget();
-                        Properties.CurrentGrindTarget();
-
-                        // --- Publish functions to scripting
-                        Properties.ProductionBlockEnsureQueued();
-                        Properties.InventoryNeededComponents4Blueprint();
                     }
+
+                    // =========== Properties ============
+                    // BUG-260612.38: read-only scripting properties are always registered so
+                    // informational LCD scripts keep working when ScriptControllFixed locks
+                    // out script *control*. Mutating properties (Set* delegates, picked-target
+                    // setters) are only published when script control is allowed.
+                    var scriptControlAllowed = !Mod.Settings.Welder.ScriptControllFixed;
+
+                    // --- Scripting support for Priority and enabling Weld BlockClasses
+                    Properties.WeldPriorityList();
+                    Properties.GetWeldPriority();
+                    Properties.GetWeldEnabled();
+                    if (scriptControlAllowed)
+                    {
+                        Properties.SetWeldPriority();
+                        Properties.SetWeldEnabled();
+                    }
+
+                    // --- Scripting support for Priority and enabling GrindWeld BlockClasses
+                    Properties.GrindPriorityList();
+                    Properties.GetGrindPriority();
+                    Properties.GetGrindEnabled();
+                    if (scriptControlAllowed)
+                    {
+                        Properties.SetGrindPriority();
+                        Properties.SetGrindEnabled();
+                    }
+
+                    // --- Scripting support for Priority and enabling ComponentClasses
+                    Properties.ComponentClassList();
+                    Properties.GetCollectPriority();
+                    Properties.GetCollectEnabled();
+                    if (scriptControlAllowed)
+                    {
+                        Properties.SetCollectPriority();
+                        Properties.SetCollectEnabled();
+                    }
+
+                    // --- Working Lists
+                    Properties.MissingComponents();
+                    Properties.PossibleTargets();
+                    Properties.PossibleGrindTargets();
+                    Properties.PossibleCollectTargets();
+
+                    // --- Control welding
+                    Properties.CurrentPickedTarget(!scriptControlAllowed);
+                    Properties.CurrentTarget();
+
+                    // --- Control grinding
+                    Properties.CurrentPickedGrindTarget(!scriptControlAllowed);
+                    Properties.CurrentGrindTarget();
+
+                    // --- Publish functions to scripting
+                    Properties.ProductionBlockEnsureQueued();
+                    Properties.InventoryNeededComponents4Blueprint();
                 }
                 catch (Exception ex)
                 {
