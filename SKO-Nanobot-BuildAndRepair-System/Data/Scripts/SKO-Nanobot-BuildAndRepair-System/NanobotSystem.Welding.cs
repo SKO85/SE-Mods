@@ -146,9 +146,12 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
 
-                    // Skip blocks that recently failed for any BaR. Lock-on and
-                    // lookingForNext are exempt.
-                    if (!isLockOnBlock && !lookingForNext
+                    // Skip blocks that recently failed for any BaR. Lock-on stays exempt
+                    // (lock-on preservation must resume the block when components arrive).
+                    // BUG-260612.18: lookingForNext is no longer exempt — the reroute
+                    // could lock onto a globally starved block and burn a guaranteed
+                    // weld-slot claim + pull walk on it next tick.
+                    if (!isLockOnBlock
                         && BlockFailureCooldownHandler.IsOnCooldown(targetData.Block))
                     {
                         skippedByFailCooldown++;
@@ -166,6 +169,15 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         if (targetData.Block != null && targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed)
                         {
+                            // BUG-260612.19: a closed lock-on used to be skipped without
+                            // clearing — every later target was then lock-on-filtered and
+                            // the whole tick was wasted (assignment left to TTL). Mirror
+                            // the not-weldable drop: release, clear, keep iterating.
+                            if (isLockOnBlock)
+                            {
+                                ReleaseAssignmentIfEnabled(targetData.Block, profilerTs != 0L, ref tsAssignOps);
+                                State.CurrentWeldingBlock = null;
+                            }
                             continue;
                         }
 
@@ -291,7 +303,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                 // OPT: Mark exhausted when the full iteration found nothing claimable.
                 // Hash write under lock so it stays consistent with background scan updates.
-                if (!welding && !needWelding && totalComponentChecks == 0 && !hadLockOn)
+                // BUG-260612.35: dropped the constant terms (welding/totalComponentChecks
+                // are only mutated after this lock section since BUG-135).
+                if (!needWelding && !hadLockOn)
                 {
                     _weldLoopExhausted = true;
                     _weldExhaustedAtHash = State.PossibleWeldTargets.CurrentHash;

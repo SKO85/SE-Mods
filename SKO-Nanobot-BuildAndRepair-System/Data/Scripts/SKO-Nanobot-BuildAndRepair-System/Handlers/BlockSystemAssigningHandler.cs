@@ -101,9 +101,22 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             return Cache.Set(key, systemId, TimeSpan.FromSeconds(Mod.Settings.AssignmentTtlSeconds));
         }
 
-        public static void ReleaseFromSystem(this IMySlimBlock block)
+        /// <summary>
+        /// BUG-260612.17: owner-checked release — removes the claim only when it is
+        /// held by the given system, so a caller with a stale lock-on (TTL expired,
+        /// block re-claimed by another BaR) can't delete the other BaR's claim.
+        /// All assignment ops are main-thread, so get+remove can't interleave.
+        /// (The old unconditional overload is gone — every release is an "I'm done
+        /// with MY claim" operation.)
+        /// </summary>
+        public static void ReleaseFromSystem(this IMySlimBlock block, long systemId)
         {
-            Cache.Remove(GetBlockKey(block));
+            var key = GetBlockKey(block);
+            long assignedSystemId;
+            if (Cache.TryGet(key, out assignedSystemId) && assignedSystemId == systemId)
+            {
+                Cache.Remove(key);
+            }
         }
 
         /// <summary>

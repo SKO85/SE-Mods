@@ -356,7 +356,7 @@ namespace SKONanobotBuildAndRepairSystem
                 hash = (hash ^ (State.SafeZoneAllowsGrinding ? 1 : 0)) * 16777619;
                 hash = (hash ^ (State.SafeZoneAllowsBuildingProjections ? 1 : 0)) * 16777619;
                 // BUG-260511.11: shield state — AsyncAddBlockIfGrindTarget rejects
-                // off-grid autogrind when shielded (line 260), so a shield toggle
+                // off-grid autogrind when shielded, so a shield toggle
                 // within the GridScanCache TTL would otherwise leave the cached
                 // candidate list reflecting the old shield state.
                 hash = (hash ^ (State.IsShielded ? 1 : 0)) * 16777619;

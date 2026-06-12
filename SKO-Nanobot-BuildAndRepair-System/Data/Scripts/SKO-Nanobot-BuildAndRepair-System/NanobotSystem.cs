@@ -463,16 +463,18 @@ namespace SKONanobotBuildAndRepairSystem
 
         // Shared release helper for the weld/grind loops; second overload preserves
         // tsAssignOps profiler timing at call sites that aggregate it.
-        private static void ReleaseAssignmentIfEnabled(IMySlimBlock block)
+        // BUG-260612.17: owner-checked — a stale lock-on (TTL expired, block claimed
+        // by another BaR) must not delete the other BaR's claim.
+        private void ReleaseAssignmentIfEnabled(IMySlimBlock block)
         {
-            if (Mod.Settings.AssignToSystemEnabled) block.ReleaseFromSystem();
+            if (Mod.Settings.AssignToSystemEnabled) block.ReleaseFromSystem(_Welder.EntityId);
         }
 
-        private static void ReleaseAssignmentIfEnabled(IMySlimBlock block, bool profilerEnabled, ref long tsAssignOps)
+        private void ReleaseAssignmentIfEnabled(IMySlimBlock block, bool profilerEnabled, ref long tsAssignOps)
         {
             if (!Mod.Settings.AssignToSystemEnabled) return;
             var ts = profilerEnabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
-            block.ReleaseFromSystem();
+            block.ReleaseFromSystem(_Welder.EntityId);
             if (ts != 0L) tsAssignOps += System.Diagnostics.Stopwatch.GetTimestamp() - ts;
         }
     }
