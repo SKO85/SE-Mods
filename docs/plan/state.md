@@ -18,6 +18,7 @@ Items in `TODO/` are pending. Items in `DONE/` are completed.
 | REVIEW-260501.1 | Structure / cleanup / consolidation / reusable refactor / performance (35 findings, 27 implemented + 8 deferred) | 2026-05-01 | v2.5.4 | Done |
 | REVIEW-260502.1 | Full Codex code review (8 findings — 7 triaged into BUG tickets, 1 dismissed as theoretical) | 2026-05-02 | v2.5.4 | Done |
 | REVIEW-260610.1 | Full codebase review — correctness, thread safety, network security, lifecycle (41 findings, all triaged into BUG-260610.1..41) | 2026-06-10 | v2.5.5 | Done |
+| REVIEW-260612.1 | Flow-based review — welding, grinding, collecting, transport/inventory, safe zones, shields (7 high, 9 medium, 19 low findings; untriaged) | 2026-06-12 | v2.5.6 | Open |
 
 ## Bugs
 
