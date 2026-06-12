@@ -319,6 +319,11 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void MultiWeld(ref bool welding, ref bool needWelding, ref bool transporting, ref IMySlimBlock currentWeldingBlock)
         {
+            // BUG-260612.13: execution-time gate — zone protection was scan-time only,
+            // so a zone activating around the BaR kept it welding off the stale target
+            // list for up to a scan cycle. Flag refreshes every ~2 s.
+            if (!State.SafeZoneAllowsWelding) return;
+
             for (int i = 0; i < MaxActionsPerCycle; i++)
             {
                 bool w, nw, t;
@@ -347,6 +352,9 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void MultiGrind(ref bool grinding, ref bool needGrinding, ref bool transporting, ref IMySlimBlock currentGrindingBlock)
         {
+            // BUG-260612.13: execution-time gate (see MultiWeld).
+            if (!State.SafeZoneAllowsGrinding) return;
+
             for (int i = 0; i < MaxActionsPerCycle; i++)
             {
                 bool g, ng, t;

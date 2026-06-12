@@ -335,15 +335,19 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 }
 
                 // Cache for the whole mechanical group (zone reach is group-wide).
+                // BUG-260612.13: "no zone" entries are blind to newly created/enabled
+                // zones (positive hits self-correct via the per-zone liveness checks),
+                // so cache negatives shorter — a zone activation is honored in ~5 s.
                 var cacheList = intersecting ?? EmptyZoneIdList;
-                GridIntersectingZones.Set(targetGrid.EntityId, cacheList);
+                var ttl = intersecting != null ? TimeSpan.FromSeconds(15) : TimeSpan.FromSeconds(5);
+                GridIntersectingZones.Set(targetGrid.EntityId, cacheList, ttl);
                 if (groups != null)
                 {
                     for (int i = 0; i < groups.Count; i++)
                     {
                         if (groups[i].EntityId == targetGrid.EntityId)
                             continue;
-                        GridIntersectingZones.Set(groups[i].EntityId, cacheList);
+                        GridIntersectingZones.Set(groups[i].EntityId, cacheList, ttl);
                     }
                 }
 

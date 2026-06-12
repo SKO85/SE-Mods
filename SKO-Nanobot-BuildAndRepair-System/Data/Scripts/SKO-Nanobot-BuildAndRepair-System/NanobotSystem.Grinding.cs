@@ -164,6 +164,18 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
+            // BUG-260612.13: zones/shields are otherwise enforced only at scan time —
+            // a shield raised or zone enabled around the target mid-operation kept it
+            // being ground off the stale list for up to a scan cycle. Both checks are
+            // cheap here (DS dictionary lookup; zone verdict cached 15 s per block).
+            if (chosenGrindTarget != null
+                && (IsShieldProtected(chosenGrindTarget.Block)
+                    || SafeZoneHandler.IsProtectedFromGrinding(chosenGrindTarget.Block, _Welder)))
+            {
+                ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
+                chosenGrindTarget = null;
+            }
+
             if (chosenGrindTarget != null)
             {
                 // OPT 3: Global grind budget — cap ServerDoGrind calls per tick (count + time).
