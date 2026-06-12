@@ -45,7 +45,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"GrindJanitorHackOnly",            "Janitor grind to hack only"},
             {"GrindJanitorHackOnly_Tooltip",    "When checked, only functional blocks are grinded and these only until they could be hacked."},
             {"GrindPriority",                   "Grind Priority"},
-            {"GrindPriority_Tooltip",           "Enable/Disable grinding of selected items kinds and set the priority while grinding\n(If grinded by grind color the priority and release status is ignored)"},
+            {"GrindPriority_Tooltip",           "Enable/Disable grinding of selected block kinds and set the priority while grinding\n(Disabled kinds are never ground, even when marked with the grind color)"},
             {"GrindOrderNearest",               "Nearest First"},
             {"GrindOrderNearest_Tooltip",       "When checked, if blocks have the same priority, the nearest is grinded first."},
             {"GrindOrderFarthest",              "Farthest first"},
