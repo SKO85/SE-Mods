@@ -62,17 +62,31 @@ namespace DefenseShields
 
         private const long Channel = 1365616918;
 
-        public bool IsReady { get; private set; }
+        private bool _isReady;
+
+        // BUG-260612.32: a "Compromised" broadcast from DefenseShields (API integrity
+        // failure) now disables the API instead of being recorded and ignored.
+        public bool IsReady
+        {
+            get { return _isReady && !Compromised; }
+            private set { _isReady = value; }
+        }
+
         public bool Compromised { get; private set; }
 
         private void HandleMessage(object o)
         {
+            var message = o as string;
+            // BUG-260612.32: honor Compromised even after init (the old _apiInit
+            // early-return swallowed it).
+            if (message != null && message == "Compromised")
+            {
+                Compromised = true;
+                return;
+            }
+
             if (_apiInit) return;
             var dict = o as IReadOnlyDictionary<string, Delegate>;
-            var message = o as string;
-
-            if (message != null && message == "Compromised")
-                Compromised = true;
 
             if (dict == null || dict is ImmutableDictionary<string, Delegate>)
                 return;
@@ -84,7 +98,9 @@ namespace DefenseShields
             MyAPIGateway.Utilities.SendModMessage(Channel, builder.ToImmutable());
 
             ApiLoad(dict);
-            IsReady = true;
+            // BUG-260612.31: ready only when the delegates this mod actually calls
+            // resolved — optional ones may be missing on older/forked DS versions.
+            IsReady = _isBlockProtected != null && _protectedByShield != null;
         }
 
         private bool _isRegistered;
@@ -111,54 +127,65 @@ namespace DefenseShields
             IsReady = false;
         }
 
+        // BUG-260612.31: tolerant lookup — the indexer threw on the first key missing
+        // from an older/forked DefenseShields, leaving the API permanently bricked and
+        // bubbling the exception into SE's mod-message dispatch.
+        private static T Get<T>(IReadOnlyDictionary<string, Delegate> delegates, string name) where T : class
+        {
+            Delegate del;
+            return delegates.TryGetValue(name, out del) ? del as T : null;
+        }
+
         public void ApiLoad(IReadOnlyDictionary<string, Delegate> delegates)
         {
+            _rayAttackShield = Get<Func<IMyTerminalBlock, RayD, long, float, bool, bool, Vector3D?>>(delegates, "RayAttackShield");
+            _lineAttackShield = Get<Func<IMyTerminalBlock, LineD, long, float, bool, bool, Vector3D?>>(delegates, "LineAttackShield");
+            _intersectEntToShieldFast = Get<Func<List<MyEntity>, RayD, bool, bool, long, float, MyTuple<bool, float>>>(delegates, "IntersectEntToShieldFast");
+            _pointAttackShield = Get<Func<IMyTerminalBlock, Vector3D, long, float, bool, bool, bool, bool>>(delegates, "PointAttackShield");
+            _pointAttackShieldExt = Get<Func<IMyTerminalBlock, Vector3D, long, float, bool, bool, bool, float?>>(delegates, "PointAttackShieldExt");
+            _pointAttackShieldCon = Get<Func<IMyTerminalBlock, Vector3D, long, float, float, bool, bool, bool, float?>>(delegates, "PointAttackShieldCon");
+            _pointAttackShieldHeat = Get<Func<IMyTerminalBlock, Vector3D, long, float, float, bool, bool, bool, float, float?>>(delegates, "PointAttackShieldHeat");
+            _setShieldHeat = Get<Action<IMyTerminalBlock, int>>(delegates, "SetShieldHeat");
+            _overLoad = Get<Action<IMyTerminalBlock>>(delegates, "OverLoadShield");
+            _setCharge = Get<Action<IMyTerminalBlock, float>>(delegates, "SetCharge");
+            _rayIntersectShield = Get<Func<IMyTerminalBlock, RayD, Vector3D?>>(delegates, "RayIntersectShield");
+            _lineIntersectShield = Get<Func<IMyTerminalBlock, LineD, Vector3D?>>(delegates, "LineIntersectShield");
+            _pointInShield = Get<Func<IMyTerminalBlock, Vector3D, bool>>(delegates, "PointInShield");
+            _getShieldPercent = Get<Func<IMyTerminalBlock, float>>(delegates, "GetShieldPercent");
+            _getShieldHeat = Get<Func<IMyTerminalBlock, int>>(delegates, "GetShieldHeat");
+            _getChargeRate = Get<Func<IMyTerminalBlock, float>>(delegates, "GetChargeRate");
+            _hpToChargeRatio = Get<Func<IMyTerminalBlock, int>>(delegates, "HpToChargeRatio");
+            _getMaxCharge = Get<Func<IMyTerminalBlock, float>>(delegates, "GetMaxCharge");
+            _getCharge = Get<Func<IMyTerminalBlock, float>>(delegates, "GetCharge");
+            _getPowerUsed = Get<Func<IMyTerminalBlock, float>>(delegates, "GetPowerUsed");
+            _getPowerCap = Get<Func<IMyTerminalBlock, float>>(delegates, "GetPowerCap");
+            _getMaxHpCap = Get<Func<IMyTerminalBlock, float>>(delegates, "GetMaxHpCap");
+            _isShieldUp = Get<Func<IMyTerminalBlock, bool>>(delegates, "IsShieldUp");
+            _shieldStatus = Get<Func<IMyTerminalBlock, string>>(delegates, "ShieldStatus");
+            _entityBypass = Get<Func<IMyTerminalBlock, IMyEntity, bool, bool>>(delegates, "EntityBypass");
+            _gridHasShield = Get<Func<IMyCubeGrid, bool>>(delegates, "GridHasShield");
+            _gridShieldOnline = Get<Func<IMyCubeGrid, bool>>(delegates, "GridShieldOnline");
+            _protectedByShield = Get<Func<IMyEntity, bool>>(delegates, "ProtectedByShield");
+            _getShieldBlock = Get<Func<IMyEntity, IMyTerminalBlock>>(delegates, "GetShieldBlock");
+            _matchEntToShieldFast = Get<Func<IMyEntity, bool, IMyTerminalBlock>>(delegates, "MatchEntToShieldFast");
+            _matchEntToShieldFastExt = Get<Func<MyEntity, bool, MyTuple<IMyTerminalBlock, MyTuple<bool, bool, float, float, float, int>, MyTuple<MatrixD, MatrixD>>?>>(delegates, "MatchEntToShieldFastExt");
+            _matchEntToShieldFastDetails = Get<Func<MyEntity, bool, MyTuple<IMyTerminalBlock, MyTuple<bool, bool, float, float, float, int>, MyTuple<MatrixD, MatrixD>, MyTuple<bool, bool, float, float>>?>>(delegates, "MatchEntToShieldFastDetails");
+            _isShieldBlock = Get<Func<IMyTerminalBlock, bool>>(delegates, "IsShieldBlock");
+            _getClosestShield = Get<Func<Vector3D, IMyTerminalBlock>>(delegates, "GetClosestShield");
+            _getDistanceToShield = Get<Func<IMyTerminalBlock, Vector3D, double>>(delegates, "GetDistanceToShield");
+            _getClosestShieldPoint = Get<Func<IMyTerminalBlock, Vector3D, Vector3D?>>(delegates, "GetClosestShieldPoint");
+            _getShieldInfo = Get<Func<MyEntity, MyTuple<bool, bool, float, float, float, int>>>(delegates, "GetShieldInfo");
+            _getModulationInfo = Get<Func<MyEntity, MyTuple<bool, bool, float, float>>>(delegates, "GetModulationInfo");
+            _getFaceInfo = Get<Func<IMyTerminalBlock, Vector3D, bool, MyTuple<bool, int, int, float, float>>>(delegates, "GetFaceInfo");
+            _getFaceInfoAndPenChance = Get<Func<IMyTerminalBlock, Vector3D, bool, MyTuple<bool, int, int, float, float, float>>>(delegates, "GetFaceInfoAndPenChance");
+            _addAtacker = Get<Action<long>>(delegates, "AddAttacker");
+            _isBlockProtected = Get<Func<IMySlimBlock, bool>>(delegates, "IsBlockProtected");
+            _getFacesFast = Get<Func<MyEntity, MyTuple<bool, Vector3I>>>(delegates, "GetFacesFast");
+            _getLastAttackers = Get<Action<MyEntity, ICollection<MyTuple<long, float, uint>>>>(delegates, "GetLastAttackers");
+            _isFortified = Get<Func<IMyTerminalBlock, bool>>(delegates, "IsFortified");
+
+            // BUG-260612.31: set only after the (no longer throwing) load completed.
             _apiInit = true;
-            _rayAttackShield = (Func<IMyTerminalBlock, RayD, long, float, bool, bool, Vector3D?>)delegates["RayAttackShield"];
-            _lineAttackShield = (Func<IMyTerminalBlock, LineD, long, float, bool, bool, Vector3D?>)delegates["LineAttackShield"];
-            _intersectEntToShieldFast = (Func<List<MyEntity>, RayD, bool, bool, long, float, MyTuple<bool, float>>)delegates["IntersectEntToShieldFast"];
-            _pointAttackShield = (Func<IMyTerminalBlock, Vector3D, long, float, bool, bool, bool, bool>)delegates["PointAttackShield"];
-            _pointAttackShieldExt = (Func<IMyTerminalBlock, Vector3D, long, float, bool, bool, bool, float?>)delegates["PointAttackShieldExt"];
-            _pointAttackShieldCon = (Func<IMyTerminalBlock, Vector3D, long, float, float, bool, bool, bool, float?>)delegates["PointAttackShieldCon"];
-            _pointAttackShieldHeat = (Func<IMyTerminalBlock, Vector3D, long, float, float, bool, bool, bool, float, float?>)delegates["PointAttackShieldHeat"];
-            _setShieldHeat = (Action<IMyTerminalBlock, int>)delegates["SetShieldHeat"];
-            _overLoad = (Action<IMyTerminalBlock>)delegates["OverLoadShield"];
-            _setCharge = (Action<IMyTerminalBlock, float>)delegates["SetCharge"];
-            _rayIntersectShield = (Func<IMyTerminalBlock, RayD, Vector3D?>)delegates["RayIntersectShield"];
-            _lineIntersectShield = (Func<IMyTerminalBlock, LineD, Vector3D?>)delegates["LineIntersectShield"];
-            _pointInShield = (Func<IMyTerminalBlock, Vector3D, bool>)delegates["PointInShield"];
-            _getShieldPercent = (Func<IMyTerminalBlock, float>)delegates["GetShieldPercent"];
-            _getShieldHeat = (Func<IMyTerminalBlock, int>)delegates["GetShieldHeat"];
-            _getChargeRate = (Func<IMyTerminalBlock, float>)delegates["GetChargeRate"];
-            _hpToChargeRatio = (Func<IMyTerminalBlock, int>)delegates["HpToChargeRatio"];
-            _getMaxCharge = (Func<IMyTerminalBlock, float>)delegates["GetMaxCharge"];
-            _getCharge = (Func<IMyTerminalBlock, float>)delegates["GetCharge"];
-            _getPowerUsed = (Func<IMyTerminalBlock, float>)delegates["GetPowerUsed"];
-            _getPowerCap = (Func<IMyTerminalBlock, float>)delegates["GetPowerCap"];
-            _getMaxHpCap = (Func<IMyTerminalBlock, float>)delegates["GetMaxHpCap"];
-            _isShieldUp = (Func<IMyTerminalBlock, bool>)delegates["IsShieldUp"];
-            _shieldStatus = (Func<IMyTerminalBlock, string>)delegates["ShieldStatus"];
-            _entityBypass = (Func<IMyTerminalBlock, IMyEntity, bool, bool>)delegates["EntityBypass"];
-            _gridHasShield = (Func<IMyCubeGrid, bool>)delegates["GridHasShield"];
-            _gridShieldOnline = (Func<IMyCubeGrid, bool>)delegates["GridShieldOnline"];
-            _protectedByShield = (Func<IMyEntity, bool>)delegates["ProtectedByShield"];
-            _getShieldBlock = (Func<IMyEntity, IMyTerminalBlock>)delegates["GetShieldBlock"];
-            _matchEntToShieldFast = (Func<IMyEntity, bool, IMyTerminalBlock>)delegates["MatchEntToShieldFast"];
-            _matchEntToShieldFastExt = (Func<MyEntity, bool, MyTuple<IMyTerminalBlock, MyTuple<bool, bool, float, float, float, int>, MyTuple<MatrixD, MatrixD>>?>)delegates["MatchEntToShieldFastExt"];
-            _matchEntToShieldFastDetails = (Func<MyEntity, bool, MyTuple<IMyTerminalBlock, MyTuple<bool, bool, float, float, float, int>, MyTuple<MatrixD, MatrixD>, MyTuple<bool, bool, float, float>>?>)delegates["MatchEntToShieldFastDetails"];
-            _isShieldBlock = (Func<IMyTerminalBlock, bool>)delegates["IsShieldBlock"];
-            _getClosestShield = (Func<Vector3D, IMyTerminalBlock>)delegates["GetClosestShield"];
-            _getDistanceToShield = (Func<IMyTerminalBlock, Vector3D, double>)delegates["GetDistanceToShield"];
-            _getClosestShieldPoint = (Func<IMyTerminalBlock, Vector3D, Vector3D?>)delegates["GetClosestShieldPoint"];
-            _getShieldInfo = (Func<MyEntity, MyTuple<bool, bool, float, float, float, int>>)delegates["GetShieldInfo"];
-            _getModulationInfo = (Func<MyEntity, MyTuple<bool, bool, float, float>>)delegates["GetModulationInfo"];
-            _getFaceInfo = (Func<IMyTerminalBlock, Vector3D, bool, MyTuple<bool, int, int, float, float>>)delegates["GetFaceInfo"];
-            _getFaceInfoAndPenChance = (Func<IMyTerminalBlock, Vector3D, bool, MyTuple<bool, int, int, float, float, float>>)delegates["GetFaceInfoAndPenChance"];
-            _addAtacker = (Action<long>)delegates["AddAttacker"];
-            _isBlockProtected = (Func<IMySlimBlock, bool>)delegates["IsBlockProtected"];
-            _getFacesFast = (Func<MyEntity, MyTuple<bool, Vector3I>>)delegates["GetFacesFast"];
-            _getLastAttackers = (Action<MyEntity, ICollection<MyTuple<long, float, uint>>>)delegates["GetLastAttackers"];
-            _isFortified = (Func<IMyTerminalBlock, bool>)delegates["IsFortified"];
         }
 
         public Vector3D? RayAttackShield(IMyTerminalBlock block, RayD ray, long attackerId, float damage, bool energy, bool drawParticle) =>
