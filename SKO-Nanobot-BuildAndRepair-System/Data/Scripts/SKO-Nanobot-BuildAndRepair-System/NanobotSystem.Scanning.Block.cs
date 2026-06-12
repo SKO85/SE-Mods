@@ -78,16 +78,8 @@ namespace SKONanobotBuildAndRepairSystem
             if (projectorGrid == null)
                 return false;
 
-            var zone = SafeZoneHandler.GetIntersectingSafeZone(projectorGrid);
-            if (zone != null && zone.Enabled)
-            {
-                var buildAllowed = zone.IsActionAllowed(
-                    SafeZoneHandler.CastProhibit(MySessionComponentSafeZones.AllowedActions, SafeZoneHandler.SafeZoneAction.BuildingProjections), 0L);
-                if (!buildAllowed)
-                    return true;
-            }
-
-            return false;
+            // BUG-260612.6: any intersecting zone that prohibits building blocks it.
+            return SafeZoneHandler.AnyIntersectingZoneProhibits(projectorGrid, SafeZoneHandler.SafeZoneAction.BuildingProjections);
         }
 
         /// <summary>
