@@ -43,9 +43,11 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 IntSetting("Range",
                     () => Mod.Settings.Range,
                     v => { Mod.Settings.Range = v; }, NanobotSystem.WELDER_RANGE_MIN_IN_M, NanobotSystem.WELDER_RANGE_MAX_IN_M),
+                // BUG-260610.42: max must match the model clamp (WELDER_OFFSET_MAX_IN_M);
+                // the command refused values a hand-edited ModSettings.xml legitimately holds.
                 IntSetting("MaximumOffset",
                     () => Mod.Settings.MaximumOffset,
-                    v => { Mod.Settings.MaximumOffset = v; }, 0, 1000),
+                    v => { Mod.Settings.MaximumOffset = v; }, 0, NanobotSystem.WELDER_OFFSET_MAX_IN_M),
                 IntSetting("MaxBackgroundTasks",
                     () => Mod.Settings.MaxBackgroundTasks,
                     v => { Mod.Settings.MaxBackgroundTasks = v; }, 1, 10),
