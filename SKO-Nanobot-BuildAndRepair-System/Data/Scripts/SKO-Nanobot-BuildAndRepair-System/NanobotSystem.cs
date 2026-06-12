@@ -79,6 +79,12 @@ namespace SKONanobotBuildAndRepairSystem
         private long _PushTargetsFullSignature;
         private TimeSpan _PushTargetsFullSince;
 
+        // BUG-260612.26: push attempts/successes accumulated across calls until the
+        // chunked-push cursor wraps — the "all targets full" verdict needs a FULL
+        // inventory pass, not a 4-item sample of possibly sorter-blocked head items.
+        private bool _PushAttemptedSinceWrap;
+        private bool _PushAnySinceWrap;
+
         // BUG-162: round-robin cursor for ServerTryPushInventory chunking across ticks.
         private int _PushItemCursor = 0;
 

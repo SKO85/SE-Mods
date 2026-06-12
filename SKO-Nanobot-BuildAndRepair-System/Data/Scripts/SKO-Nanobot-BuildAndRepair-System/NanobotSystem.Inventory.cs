@@ -107,17 +107,37 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             anyAttempted = true;
                             anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
-                            _TryAutoPushInventoryLast = lastPush;
                             processed++;
                         }
                         srcItemIndex--;
                     }
+
+                    // BUG-260612.28: advance the interval timestamp whenever the walk
+                    // ran — gating it on `eligible` made an all-ineligible inventory
+                    // re-walk every tick.
+                    _TryAutoPushInventoryLast = lastPush;
+
+                    if (anyAttempted) _PushAttemptedSinceWrap = true;
+                    if (anyPushed) _PushAnySinceWrap = true;
 
                     if (srcItemIndex < 0)
                     {
                         // Walked to the bottom: wrap cursor to the top for the next call so
                         // older items at higher indices get their turn.
                         _PushItemCursor = itemCount - 1;
+
+                        // BUG-016/BUG-260612.26: mark targets full only after a FULL pass
+                        // over the inventory attempted pushes and moved nothing — the old
+                        // per-call verdict (4-item sample) stalled pushing in
+                        // 4-item/15 s drips when the head items were sorter-blocked.
+                        if (_PushAttemptedSinceWrap && !_PushAnySinceWrap)
+                        {
+                            _PushTargetsFull = true;
+                            _PushTargetsFullSignature = ComputePushTargetsSignature();
+                            _PushTargetsFullSince = MyAPIGateway.Session.ElapsedPlayTime;
+                        }
+                        _PushAttemptedSinceWrap = false;
+                        _PushAnySinceWrap = false;
                     }
                     else
                     {
@@ -126,15 +146,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 _TempInventoryItems.Clear();
 
-                // BUG-016: mark targets full when an attempt moved nothing
-                // (cleared on successful push or push-target signature change).
-                if (anyAttempted && !anyPushed)
-                {
-                    _PushTargetsFull = true;
-                    _PushTargetsFullSignature = ComputePushTargetsSignature();
-                    _PushTargetsFullSince = MyAPIGateway.Session.ElapsedPlayTime;
-                }
-                else if (anyPushed)
+                if (anyPushed)
                 {
                     _PushTargetsFull = false;
                 }
@@ -179,7 +191,33 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryPushInventoryLast).TotalSeconds > 5 && welderInventory.MaxVolume - welderInventory.CurrentVolume < _TransportInventory.CurrentVolume * 1.5f)
                             {
-                                if (!welderInventory.PushComponents(_PossiblePushTargets, null))
+                                // BUG-260612.25: push only item types whose Push* flag is
+                                // enabled — the old push-everything call could push out
+                                // components the welder needs for welding when only e.g.
+                                // PushIngotOreImmediately was on. Full-inventory pass, so
+                                // the full-set verdict below stays sound.
+                                var overflowAttempted = false;
+                                var overflowPushed = false;
+                                _TempInventoryItems.Clear();
+                                welderInventory.GetItems(_TempInventoryItems);
+                                for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                                {
+                                    var srcItem = _TempInventoryItems[srcItemIndex];
+                                    bool eligible;
+                                    if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Ore).Name || srcItem.Type.TypeId == typeof(MyObjectBuilder_Ingot).Name)
+                                        eligible = (Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0;
+                                    else if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Component).Name)
+                                        eligible = (Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0;
+                                    else
+                                        eligible = (Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0;
+                                    if (!eligible) continue;
+
+                                    overflowAttempted = true;
+                                    overflowPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || overflowPushed;
+                                }
+                                _TempInventoryItems.Clear();
+
+                                if (overflowAttempted && !overflowPushed)
                                 {
                                     // BUG-016: Mark push targets as full to avoid retrying every tick.
                                     _PushTargetsFull = true;
@@ -187,7 +225,7 @@ namespace SKONanobotBuildAndRepairSystem
                                     _PushTargetsFullSince = MyAPIGateway.Session.ElapsedPlayTime;
                                     _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
                                 }
-                                else
+                                else if (overflowPushed)
                                 {
                                     _PushTargetsFull = false;
                                 }

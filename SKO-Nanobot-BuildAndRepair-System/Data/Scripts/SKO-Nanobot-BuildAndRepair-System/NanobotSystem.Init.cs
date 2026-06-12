@@ -231,6 +231,11 @@ namespace SKONanobotBuildAndRepairSystem
                     while (spin.ElapsedTicks < pollSpacingTicks) { }
                 }
 
+                // BUG-260612.27: best-effort return of in-flight transport items to the
+                // welder inventory (which the engine drops as loot on destruction) —
+                // Close used to silently delete the load of a BaR destroyed mid-grind.
+                try { ServerEmptyTransportInventory(false); } catch { }
+
                 // Stop effects
                 State.CurrentTransportTarget = null;
                 State.Ready = false;
