@@ -44,11 +44,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
            comparer: null,
            capacity: 100);
 
-        private static readonly TtlCache<long, long> BlockIntersectingZones = new TtlCache<long, long>(
-           defaultTtl: TimeSpan.FromSeconds(15),
-           concurrencyLevel: 4,
-           comparer: null,
-           capacity: 100);
+        // BUG-260612.29: the per-block zone cache (BlockIntersectingZones) was deleted —
+        // it was never populated (sole caller bypassed it) and its key carried no zone
+        // id, so it would have served cross-zone verdicts if ever enabled.
 
         private static readonly TtlCache<MyTuple<long, long>, bool> ProtectedFromGrindingCache = new TtlCache<MyTuple<long, long>, bool>(
            defaultTtl: TimeSpan.FromSeconds(15),
@@ -57,7 +55,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
            capacity: 100);
 
         public static int GridCacheCount { get { return GridIntersectingZones.Count; } }
-        public static int BlockCacheCount { get { return BlockIntersectingZones.Count; } }
         public static int GrindCacheCount { get { return ProtectedFromGrindingCache.Count; } }
 
         #region Registration
@@ -99,7 +96,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 CleanupStaleZones();
                 GridIntersectingZones.CleanupExpired();
                 ProtectedFromGrindingCache.CleanupExpired();
-                BlockIntersectingZones.CleanupExpired();
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.GetSafeZones: {0}", ex.Message); }
             finally
@@ -125,7 +121,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 CleanupStaleZones();
                 GridIntersectingZones.CleanupExpired();
                 ProtectedFromGrindingCache.CleanupExpired();
-                BlockIntersectingZones.CleanupExpired();
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SafeZoneHandler.CleanupSafeZones: {0}", ex.Message); }
             finally
@@ -158,7 +153,6 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             Zones?.Clear();
             GridIntersectingZones.Clear();
             ProtectedFromGrindingCache.Clear();
-            BlockIntersectingZones.Clear();
 
             _registered = false;
         }
@@ -403,43 +397,17 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             return ZoneIntersects(zone, ref targetBox);
         }
 
-        private static bool BlockIntersects(IMySlimBlock targetBlock, MySafeZone zone, bool cache = true)
+        // BUG-260612.29: caching removed — it was never enabled (sole caller bypassed
+        // it) and its per-block key carried no zone id.
+        private static bool BlockIntersects(IMySlimBlock targetBlock, MySafeZone zone)
         {
             if (targetBlock == null) return false;
-
-            if (targetBlock.FatBlock != null && cache)
-            {
-                long zoneId = 0;
-                if (BlockIntersectingZones.TryGet(targetBlock.FatBlock.EntityId, out zoneId))
-                {
-                    if (zoneId > 0)
-                    {
-                        return true;
-                    }
-
-                    return false;
-                }
-            }
 
             BoundingBoxD targetBox;
             targetBlock.GetWorldBoundingBox(out targetBox);
 
             // BUG-260612.3: shape-aware (box zones used to be tested as Radius spheres).
-            var targetIntersects = ZoneIntersects(zone, ref targetBox);
-
-            if (targetBlock.FatBlock != null && cache)
-            {
-                if (targetIntersects)
-                {
-                    BlockIntersectingZones.Set(targetBlock.FatBlock.EntityId, zone.EntityId);
-                }
-                else
-                {
-                    BlockIntersectingZones.Set(targetBlock.FatBlock.EntityId, 0);
-                }
-            }
-
-            return targetIntersects;
+            return ZoneIntersects(zone, ref targetBox);
         }
 
         /// <summary>
@@ -485,7 +453,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     for (int i = 0; i < safeZones.Count; i++)
                     {
                         var zone = safeZones[i];
-                        if (!BlockIntersects(system.Welder.SlimBlock, zone, false))
+                        if (!BlockIntersects(system.Welder.SlimBlock, zone))
                             continue;
 
                         response.IsGrindingAllowed &= zone.IsActionAllowed(CastProhibit(MySessionComponentSafeZones.AllowedActions, SafeZoneAction.Grinding), 0L);
@@ -638,8 +606,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 }
 
                 // Relation between target block and attacker grid.
+                // BUG-260612.30: NoOwnership added — unowned debris is grindable in a
+                // grinding-allowed admin zone, matching the player-zone branch above
+                // and the janitor NoOwnership semantics everywhere else.
                 var relationAttackerTarget = targetBlock.CubeGrid.GetRelationBetweenGridAndPlayer(attackerBlock.OwnerId);
-                if (relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare)
+                if (relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.Owner || relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.FactionShare || relationAttackerTarget == VRage.Game.MyRelationsBetweenPlayerAndBlock.NoOwnership)
                 {
                     return false;
                 }

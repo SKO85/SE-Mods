@@ -609,7 +609,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             s.SafeZoneCount = SafeZoneHandler.Zones.Count;
             s.SafeZoneGridCache = SafeZoneHandler.GridCacheCount;
-            s.SafeZoneBlockCache = SafeZoneHandler.BlockCacheCount;
+            // BUG-260612.29: SafeZoneBlockCache retired (cache deleted); proto field kept for compat.
             s.SafeZoneGrindCache = SafeZoneHandler.GrindCacheCount;
             s.OwnershipCache = GridOwnershipCacheHandler.CacheCount;
             s.BlockPriorityCache = BlockPriorityHandling.GetItemKeyCache.Count;
@@ -817,8 +817,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             // --- Caches ---
             AddSpacer();
             AddRow("<color=130,180,230>--- CACHES ---", "<color=130,180,230>---");
-            AddRow("<color=white>SafeZones", string.Format("<color=200,255,200>{0}<color=white> zones  <color=200,255,200>{1}<color=white> grid  <color=200,255,200>{2}<color=white> block  <color=200,255,200>{3}<color=white> grind",
-                s.SafeZoneCount, s.SafeZoneGridCache, s.SafeZoneBlockCache, s.SafeZoneGrindCache));
+            AddRow("<color=white>SafeZones", string.Format("<color=200,255,200>{0}<color=white> zones  <color=200,255,200>{1}<color=white> grid  <color=200,255,200>{2}<color=white> grind",
+                s.SafeZoneCount, s.SafeZoneGridCache, s.SafeZoneGrindCache));
             AddRow("<color=white>Ownership", string.Format("<color=200,255,200>{0}<color=white> entries", s.OwnershipCache));
             AddRow("<color=white>Block Priority", string.Format("<color=200,255,200>{0}<color=white> entries", s.BlockPriorityCache));
 
