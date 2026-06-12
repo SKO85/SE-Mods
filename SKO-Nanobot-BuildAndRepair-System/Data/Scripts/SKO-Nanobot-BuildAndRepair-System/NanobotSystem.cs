@@ -54,8 +54,8 @@ namespace SKONanobotBuildAndRepairSystem
         private const int TransmitStateMinIntervalSeconds = 1;
         private const int TransmitStateMaxIntervalSeconds = 4;
         private const int TransmitSettingsIntervalSeconds = 1;
-
-        public const int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
+        // BUG-260612.23: COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY (50) removed — it was
+        // unreachable (the floating list is capped at MaxPossibleFloatingTargets).
 
         public static readonly MyDefinitionId ElectricityId = new MyDefinitionId(typeof(VRage.Game.ObjectBuilders.Definitions.MyObjectBuilder_GasProperties), "Electricity");
         internal bool CreativeModeActive = false;

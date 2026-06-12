@@ -261,6 +261,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _TempPossibleWeldTargets?.Clear();
                 _TempPossibleGrindTargets?.Clear();
                 _TempPossibleFloatingTargets?.Clear();
+                _TempCollectTargets.Clear(); // BUG-260612.22
                 _TempPossibleSources?.Clear();
                 _TempPossiblePushTargets?.Clear();
                 _TempMissingComponents?.Clear();
