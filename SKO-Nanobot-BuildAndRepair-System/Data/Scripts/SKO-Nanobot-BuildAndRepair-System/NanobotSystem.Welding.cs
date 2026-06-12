@@ -830,7 +830,11 @@ namespace SKONanobotBuildAndRepairSystem
                 if (IsTransportRunning(playTime))
                     return true;
 
-                var remainingVolume = _MaxWeldTransportVolume;
+                // BUG-260612.2: account for what's already in the transport inventory —
+                // starting every pass with the full budget let stuck passes (welder
+                // block full, transport can't drain) stack leftovers toward the REAL
+                // transport cap, where the add then failed and items were destroyed.
+                var remainingVolume = Math.Max(0f, _MaxWeldTransportVolume - (float)_TransportInventory.CurrentVolume);
                 _TempMissingComponents.Clear();
                 var picked = false;
                 var cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;
@@ -1272,6 +1276,12 @@ namespace SKONanobotBuildAndRepairSystem
                     var pickedAmount = MyFixedPoint.Min(maxpossibleAmount, srcItem.Amount);
                     if (pickedAmount > 0)
                     {
+                        // BUG-260612.2: verify the transport inventory can take the stack
+                        // BEFORE removing it from the welder — AddItems silently adds
+                        // nothing when full, so the old unchecked order destroyed items.
+                        if (!_TransportInventory.CanItemsBeAdded(pickedAmount, componentId))
+                            break;
+
                         welderInventory.RemoveItems(srcItem.ItemId, pickedAmount);
                         var physicalObjBuilder = (MyObjectBuilder_PhysicalObject)MyObjectBuilderSerializer.CreateNewObject((MyDefinitionId)srcItem.Type);
                         _TransportInventory.AddItems(pickedAmount, physicalObjBuilder);
