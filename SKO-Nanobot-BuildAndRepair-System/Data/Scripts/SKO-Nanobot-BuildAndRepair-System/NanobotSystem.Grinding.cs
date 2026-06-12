@@ -378,6 +378,9 @@ namespace SKONanobotBuildAndRepairSystem
                         0.0, 0.0, 0.0, 0.0,
                         damage, targetData.Distance, 0.0,
                         "dismountSlot");
+                    // BUG-260612.11: no grind ran — return the slot claimed by the
+                    // caller so dismount-gate bounces don't drain the fleet budget.
+                    Mod.RefundGrindSlot();
                     return false;
                 }
 

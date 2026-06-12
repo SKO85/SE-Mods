@@ -192,6 +192,10 @@ namespace SKONanobotBuildAndRepairSystem
         // was already claimed — no weld/build ran, so the budget shouldn't be debited.
         public static void RefundWeldSlot() { _weldBudget.Refund(); }
 
+        // BUG-260612.11: same for grinding — the dismount gate can reject after the
+        // grind slot was claimed, before any grind work ran.
+        public static void RefundGrindSlot() { _grindBudget.Refund(); }
+
         /// <summary>Called after each ServerDoGrind to accumulate time spent grinding this tick.</summary>
         public static void ReportGrindTime(double ms) { _grindBudget.ReportTime(ms); }
 
@@ -341,6 +345,15 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (SettingsValid)
             {
+                // BUG-260612.5: the Shield API was only created at world init, so
+                // enabling ShieldCheckEnabled via config set/reload yielded zero
+                // protection until restart. Create it on demand here (mirrors Init).
+                if (Settings.ShieldCheckEnabled && Shield == null)
+                {
+                    Shield = new ShieldApi();
+                    Shield.Load();
+                }
+
                 // BUG-260511.21: simpler, more robust recovery on ANY mod-level
                 // settings change — clear the assignment cache and reset the
                 // per-BaR loop-exhausted flags on every BaR. Previously these
