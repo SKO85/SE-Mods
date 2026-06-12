@@ -19,15 +19,21 @@ namespace SKONanobotBuildAndRepairSystem
         // mixed with the count; detects container swaps that leave the count unchanged.
         private long ComputePushTargetsSignature()
         {
-            long sig = _PossiblePushTargets.Count;
-            for (int i = 0; i < _PossiblePushTargets.Count; i++)
+            // BUG-260612.9: the background scan swaps this list under its lock —
+            // iterate under the same lock (a Clear between the Count check and the
+            // indexer threw inside the main work loop).
+            lock (_PossiblePushTargets)
             {
-                var inv = _PossiblePushTargets[i];
-                if (inv == null) continue;
-                var owner = inv.Owner as IMyEntity;
-                if (owner != null) sig ^= owner.EntityId;
+                long sig = _PossiblePushTargets.Count;
+                for (int i = 0; i < _PossiblePushTargets.Count; i++)
+                {
+                    var inv = _PossiblePushTargets[i];
+                    if (inv == null) continue;
+                    var owner = inv.Owner as IMyEntity;
+                    if (owner != null) sig ^= owner.EntityId;
+                }
+                return sig;
             }
-            return sig;
         }
 
         /// <summary>
@@ -263,7 +269,11 @@ namespace SKONanobotBuildAndRepairSystem
                 empty = _TransportInventory.Empty();
             }
 
-            State.InventoryFull = !empty;
+            // BUG-260612.12: State.InventoryFull is owned by CheckAndUpdateInventoryFull
+            // (welder-block latch with 100%/90% hysteresis). The unconditional
+            // `= !empty` write here cleared that latch mid-tick — one grind op then ran
+            // against a full welder and the per-tick flag flips churned state sync.
+            // The work flows gate on transport volume directly, so no write is needed.
             if (profilerTs != 0L)
             {
                 MethodProfiler.StopAndLog("ServerEmptyTransportInventory", profilerTs, () =>
@@ -302,7 +312,11 @@ namespace SKONanobotBuildAndRepairSystem
                     inventoriesScanned++;
                     if (srcInventory.Empty()) { inventoriesEmpty++; continue; }
 
-                    if (remainingVolume <= 0) return true; //No more transport volume
+                    // BUG-260612.8: a non-empty inventory provably exists here — the old
+                    // bare return left isEmpty at its initial true, letting grind raze
+                    // loot-filled containers and collect delete looted corpses whenever
+                    // the transport inventory was full at entry.
+                    if (remainingVolume <= 0) { isEmpty = false; return true; } //No more transport volume
 
                     _TempInventoryItems.Clear();
                     // BUG-146: gate Stopwatch on profilerTs so it's zero-cost when off.

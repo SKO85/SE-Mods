@@ -106,6 +106,14 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private bool _projBuildSlotDeferred = false;
 
+        /// <summary>
+        /// BUG-260612.10: set by ServerDoGrind when a janitor DisableOnly/HackOnly
+        /// target reached its threshold — finished, not failed. The caller removes it
+        /// from the lists instead of letting the picker re-claim it (and burn a grind
+        /// slot) every tick until the next scan. Main-thread only.
+        /// </summary>
+        private bool _grindJanitorDone = false;
+
         /// <summary>FEAT-076: same as _weldLoopExhausted, for the grind loop.</summary>
         private bool _grindLoopExhausted = false;
         private long _grindExhaustedAtHash;

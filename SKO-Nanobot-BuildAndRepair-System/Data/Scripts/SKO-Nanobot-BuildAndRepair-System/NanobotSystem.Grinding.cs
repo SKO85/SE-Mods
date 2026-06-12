@@ -186,6 +186,7 @@ namespace SKONanobotBuildAndRepairSystem
                 else
                 {
                     var grindTs = Stopwatch.GetTimestamp();
+                    _grindJanitorDone = false;
                     grinding = ServerDoGrind(chosenGrindTarget, out transporting);
                     Mod.ReportGrindTime((Stopwatch.GetTimestamp() - grindTs) * 1000.0 / Stopwatch.Frequency);
 
@@ -206,41 +207,20 @@ namespace SKONanobotBuildAndRepairSystem
                         var grindBlock = chosenGrindTarget.Block;
                         if (grindBlock != null && grindBlock.IsFullyDismounted)
                         {
-                            lock (State.PossibleGrindTargets)
-                            {
-                                if (State.PossibleGrindTargets.Remove(chosenGrindTarget))
-                                {
-                                    // BUG-260610.33: RebuildHash so CurrentCount tracks the removal.
-                                    State.PossibleGrindTargets.RebuildHash();
-                                }
-                            }
-
-                            // BUG-260511.19: propagate the removal to other cluster members
-                            // so they don't walk past this block as a closed-FatBlock entry
-                            // between scans. At WorkSpeed=10 with 20 active BaRs, ~120
-                            // blocks/s are destroyed cluster-wide and the dead-entry
-                            // accumulation rate exceeds the per-BaR list size before the
-                            // next scan rebuilds — that's the "1 BaR grinding while others
-                            // sit idle" pattern.
-                            var cluster = AssignedCluster;
-                            if (cluster != null && grindBlock.CubeGrid != null)
-                            {
-                                var gid = grindBlock.CubeGrid.EntityId;
-                                var pos = grindBlock.Position;
-                                var members = cluster.Members;
-                                for (int m = 0; m < members.Count; m++)
-                                {
-                                    var other = members[m];
-                                    if (other != null && other != this)
-                                    {
-                                        other.RemoveGrindTargetByPosition(gid, pos);
-                                    }
-                                }
-                            }
+                            RemoveGrindTargetEverywhere(chosenGrindTarget);
                         }
                     }
                     else
                     {
+                        // BUG-260612.10: a janitor target ground to its Disable/Hack
+                        // threshold is FINISHED, not failed — leaving it listed made the
+                        // picker re-claim it and burn a shared grind slot every tick
+                        // until the next scan evicted it.
+                        if (_grindJanitorDone)
+                        {
+                            RemoveGrindTargetEverywhere(chosenGrindTarget);
+                        }
+
                         // Grinding failed — release assignment regardless of reason so other BaRs aren't starved.
                         ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
                     }
@@ -290,6 +270,41 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
+        /// <summary>
+        /// Drops a finished grind target from this BaR's list and, via
+        /// BUG-260511.19's removal propagation, from every cluster member's list so
+        /// pickers stop walking it between scans. Used for fully-dismounted blocks
+        /// and (BUG-260612.10) janitor targets that reached their threshold.
+        /// </summary>
+        private void RemoveGrindTargetEverywhere(TargetBlockData targetData)
+        {
+            lock (State.PossibleGrindTargets)
+            {
+                if (State.PossibleGrindTargets.Remove(targetData))
+                {
+                    // BUG-260610.33: RebuildHash so CurrentCount tracks the removal.
+                    State.PossibleGrindTargets.RebuildHash();
+                }
+            }
+
+            var grindBlock = targetData.Block;
+            var cluster = AssignedCluster;
+            if (cluster != null && grindBlock != null && grindBlock.CubeGrid != null)
+            {
+                var gid = grindBlock.CubeGrid.EntityId;
+                var pos = grindBlock.Position;
+                var members = cluster.Members;
+                for (int m = 0; m < members.Count; m++)
+                {
+                    var other = members[m];
+                    if (other != null && other != this)
+                    {
+                        other.RemoveGrindTargetByPosition(gid, pos);
+                    }
+                }
+            }
+        }
+
         private bool ServerDoGrind(TargetBlockData targetData, out bool transporting)
         {
             var profilerTs = MethodProfiler.Start();
@@ -312,11 +327,13 @@ namespace SKONanobotBuildAndRepairSystem
                 if ((Settings.GrindJanitorOptions & AutoGrindOptions.DisableOnly) != 0 && target.FatBlock != null && integrityRatio < criticalIntegrityRatio)
                 {
                     //Block allready out of order -> stop grinding and switch to next
+                    _grindJanitorDone = true; // BUG-260612.10: finished, not failed.
                     return false;
                 }
                 if ((Settings.GrindJanitorOptions & AutoGrindOptions.HackOnly) != 0 && target.FatBlock != null && integrityRatio < ownershipIntegrityRatio)
                 {
                     //Block allready hacked -> stop grinding and switch to next
+                    _grindJanitorDone = true; // BUG-260612.10: finished, not failed.
                     return false;
                 }
             }

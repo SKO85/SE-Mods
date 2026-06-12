@@ -265,13 +265,16 @@ namespace SKONanobotBuildAndRepairSystem
                 return false;
 
             var autoGrind = autoGrindRelation != 0 && BlockGrindPriority.GetEnabled(block);
+            // BUG-260612.15: the own-shield off-grid gate now covers ALL grinding —
+            // it sat inside the autogrind branch only, so color-grind escaped it
+            // while the info panel claimed grinding was disabled.
+            if (State.IsShielded && block.CubeGrid.EntityId != Welder.CubeGrid.EntityId)
+            {
+                return false;
+            }
+
             if (autoGrind)
             {
-                if (block.CubeGrid.EntityId != Welder.CubeGrid.EntityId && State.IsShielded)
-                {
-                    return false;
-                }
-
                 var relation = block.GetUserRelationToOwner(_Welder.OwnerId);
                 autoGrind =
                    (relation == MyRelationsBetweenPlayerAndBlock.NoOwnership && ((autoGrindRelation & AutoGrindRelation.NoOwnership) != 0)) ||

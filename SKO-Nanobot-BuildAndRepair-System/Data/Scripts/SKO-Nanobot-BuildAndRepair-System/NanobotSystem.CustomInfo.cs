@@ -215,7 +215,8 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (State.IsShielded)
                 {
-                    customInfo.Append($"[color=#FFFFFF00]Shields Active[/color]: Grinding disabled!");
+                    // BUG-260612.15: text matches the actual rule — own-grid grinding still works.
+                    customInfo.Append($"[color=#FFFFFF00]Shields Active[/color]: Grinding limited to own grid!");
                     customInfo.Append(Environment.NewLine);
                 }
 

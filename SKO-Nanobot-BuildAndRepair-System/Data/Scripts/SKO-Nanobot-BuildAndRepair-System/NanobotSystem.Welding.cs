@@ -872,6 +872,9 @@ namespace SKONanobotBuildAndRepairSystem
                             picked = ServerFindMissingComponents(targetData, ref remainingVolume);
                             if (tsMark != 0L) tsPullPick += Stopwatch.GetTimestamp() - tsMark;
                         }
+                        // BUG-260612.14: this mode wants ONLY the creation component —
+                        // clear so the trailing pass doesn't pull/report it a second time.
+                        _TempMissingComponents.Clear();
                     }
                     else
                     {
@@ -908,6 +911,14 @@ namespace SKONanobotBuildAndRepairSystem
                                 else
                                     _TempMissingComponents[createCompName] -= createCount;
                             }
+                        }
+                        else
+                        {
+                            // BUG-260612.14: creation component unavailable — it was
+                            // already pulled/reported above; clearing prevents the
+                            // trailing pass from reporting it a second time (terminal
+                            // showed 2x the actual need).
+                            _TempMissingComponents.Clear();
                         }
                     }
                 }
