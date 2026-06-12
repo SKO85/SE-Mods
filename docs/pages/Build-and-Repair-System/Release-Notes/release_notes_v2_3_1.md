@@ -3,16 +3,16 @@ layout: default
 title: "Release Notes – v2.3.1"
 parent: Release Notes
 grand_parent: Build and Repair System
-nav_order: 9
+nav_order: 11
 ---
 
 # Release Notes – v2.3.1
 
 - Release date: 11 December 2025
-- Notes: N/A
+- Notes: Small bug fix release.
 
 ---
 
 ## Bug Fixes
 
-- Fixed an issue with the priority lists where enabled/disabled block types were not always applied correctly.
+- Enabling or disabling block types in the priority lists didn't always take effect. It does now.

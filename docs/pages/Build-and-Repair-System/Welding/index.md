@@ -19,7 +19,7 @@ The terminal **Search Mode** dropdown offers two modes; pick the one that matche
 
 | Mode | Internal name | What gets scanned |
 |---|---|---|
-| **Walk mode** (default) | `Grids` | Only the grid the BaR is mounted on, plus any sub-grids connected via connectors, pistons, rotors, or mergers (anything in the same logical grid group). Free-floating ships nearby are ignored. |
+| **Walk mode** (default) | `Grids` | Only the grid the BaR is mounted on, plus any sub-grids connected via locked connectors, pistons, rotors, or mergers. Free-floating ships nearby are ignored. |
 | **Fly mode** | `BoundingBox` | Same as Walk mode, *plus* every other grid whose blocks fall inside the BaR's work area — even unconnected ships, enemy grids, projected grids on a separate vehicle, or NPC drops drifting past. |
 
 The default is **Walk** because it is what most players want: a base-mounted BaR that repairs *its own* base and the docked ships connected to it, but ignores hostile or unrelated grids that happen to fly through. **Fly** is for repair platforms that should weld whatever shows up in front of them — projector pads, repair docks, station-mounted welders that service ships parked nearby without a connector lock, multi-grid projector builds that span multiple unconnected vehicles.
@@ -30,19 +30,21 @@ Things to keep in mind when switching to Fly:
 - If you have ownership conflicts in range (your own ship docked next to a salvaged hostile grid), Fly mode will see *both*. Use the priority list, weld mode, or move the work area to scope what gets welded.
 - Fly mode does not bypass safety checks — Safe Zones, shields, plugin protection (`!protect`), and `MaxSystemsPerTargetGrid` still apply per scanned grid.
 
+Regardless of mode, the BaR only welds blocks it is allowed to help: your own, your faction's, and friendly players' blocks. Enemy and neutral blocks are never welded. Unowned blocks (fresh construction sites with no owner yet) are only welded if they were placed by you or a faction member — derelict and NPC wrecks are not repaired.
+
 Server admins can hide either mode globally via `AllowedSearchModes` in `ModSettings.xml`. The default for newly-placed blocks is set by `SearchModeDefault`.
 
 ---
 
 ## Weld Modes
 
-The terminal **Weld Mode** dropdown controls how far each block is welded:
+The terminal **Weld mode** dropdown controls how far each block is welded:
 
 | Mode | Behaviour |
 |---|---|
-| `Weld to Full` | Welds blocks all the way to 100% integrity. The default. |
-| `Weld to Functional` | Welds blocks until they become functional (lights on, doors work, thrusters fire). Saves components and time when full integrity is not needed. |
-| `Weld to Skeleton` | Only places projected blocks (the first component). Does not weld or repair existing blocks. Pair with **Build Projections** to rapidly stub out a projection, then switch to a full weld mode to finish. |
+| `Weld to full` | Welds blocks all the way to 100% integrity. The default. |
+| `Weld to functional` | Welds blocks until they become functional (lights on, doors work, thrusters fire). Saves components and time when full integrity is not needed. |
+| `Skeleton only` | Only places projected blocks (the first component). Never welds or repairs existing blocks. Pair with **Build Projections** to rapidly stub out a projection, then switch to a full weld mode to finish. |
 
 There is no server-side override for the Weld Mode — it is always controlled per block in the terminal.
 
@@ -60,9 +62,9 @@ Server-side, the corresponding setting is `AllowBuildDefault` (default for newly
 
 ## Sort Order
 
-Welding targets are sorted before the loop runs. Order is controlled by the **Weld Priority** list in the terminal: each block class (Armor, Thrusters, Reactors, …) is processed in list order, top to bottom. Use the `Up` / `Down` buttons to reorder, and the per-entry checkbox to enable or disable a class. The list can be locked server-wide via `PriorityFixed`.
+Welding targets are sorted before the loop runs. Order is controlled by the **Welding Priority** list in the terminal: each block class (Armor, Thrusters, Reactors, …) is processed in list order, top to bottom; blocks of equal priority are welded nearest-first. Use the `Priority Up` / `Priority Down` buttons to reorder, and the per-entry Enable/Disable buttons to enable or disable a class. The list can be locked server-wide via `PriorityFixed`.
 
-There is **no "Ignore Priority Order"** option for welding — the toggle in the terminal applies only to grinding. Welding always uses the priority list when picking the next target.
+There is **no "Ignore priority order"** option for welding — the toggle in the terminal applies only to grinding. Welding always uses the priority list when picking the next target.
 
 The native **Help Others** checkbox is hidden in the terminal and forced off internally — the option is not used by this mod. Multiple BaRs sharing one target is handled by the assignment system below, not by Help Others.
 
@@ -84,9 +86,9 @@ The companion **Use Grind Color** is the inverse direction: blocks painted with 
 
 ## Block Assignment
 
-When more than one BaR can reach the same target block, the **assignment system** stops them all converging on the same block at once. As a BaR picks a block to weld it claims a reservation through `BlockSystemAssigningHandler`, keyed by `GridEntityId:Position` and held for `AssignmentTtlSeconds` (default `8 s`). Other BaRs treat reserved blocks as if they were already being worked and pass them by, so neighbouring BaRs spread out across the available targets instead of bunching up.
+When more than one BaR can reach the same target block, the **assignment system** stops them all converging on the same block at once. As a BaR picks a block to weld it claims a short-lived reservation on that exact block, held for `AssignmentTtlSeconds` (default `8 s`). Other BaRs treat reserved blocks as if they were already being worked and pass them by, so neighbouring BaRs spread out across the available targets instead of bunching up.
 
-The reservation is released when the BaR finishes the block, when it abandons the lock-on, or when the TTL expires (whichever comes first), so a disconnected or destroyed BaR's claims free up automatically within a few seconds.
+The reservation is released when the BaR finishes the block, when it abandons the lock-on, or when the reservation times out (whichever comes first), so a disconnected or destroyed BaR's claims free up automatically within a few seconds.
 
 | Setting | Default | Effect |
 |---|---|---|
@@ -99,9 +101,9 @@ The assignment system runs alongside `MaxSystemsPerTargetGrid`, the per-grid cap
 
 ## Lock-On Behaviour
 
-When the BaR starts welding a block it "locks on" to that block until the block is welded to the chosen Weld Mode (or becomes invalid). Lock-on is identified by `CubeGrid.EntityId + Position`, so the same physical block is recognised across rescans even if its `IMySlimBlock` reference changes (which happens after every background scan).
+When the BaR starts welding a block it "locks on" to that block until the block is welded to the chosen Weld Mode (or becomes invalid). The lock-on recognises the same physical block across the periodic background rescans, so a rescan does not make the BaR drop its work.
 
-If a locked-on block becomes temporarily unweldable due to a missing component, the lock-on is preserved — the BaR resumes the same block as soon as components arrive. If the block disappears from the target list entirely (for example after a projector update reassigns grid IDs), the stale lock-on is cleared and the BaR finds a new target on the same tick.
+If a locked-on block becomes temporarily unweldable due to a missing component, the lock-on is preserved — the BaR resumes the same block as soon as components arrive. If the block disappears from the target list entirely (for example after a projector update), the stale lock-on is cleared and the BaR finds a new target on the same tick.
 
 ---
 
@@ -114,13 +116,13 @@ Welding speed is controlled by two independent settings:
 
 Effective speed is `WorkSpeed × WeldingMultiplier`. See [Welder Settings → Update Speed](../Config/welder-settings#update-speed) for the full table.
 
-The transport timer no longer gates welding (BUG-103, fixed in v2.5.4) — the previously-required cosmetic transport "trip" is decoupled from the weld loop. Welding now runs at full pace.
+Since v2.5.4 the cosmetic transport "trip" of the flying nanobots no longer gates welding — the visual is decoupled from the weld loop and welding runs at full pace.
 
 ---
 
 ## Components
 
-Components are pulled on demand from connected source inventories (Cargo Containers, Connectors, Sorters, Assemblers, Refineries, Ship Grinders, Ship Welders other than other BaRs, Cryo Chambers). Source inventories are rescanned every 30 seconds. Items are picked up synchronously when the welder needs them — no queueing or pre-staging is required.
+Components are pulled on demand from connected source inventories on the conveyor network: Cargo Containers, Connectors, Conveyor Sorters, Assemblers, Ship Grinders, other Ship Welders (including other BaR blocks), and Cryo Chambers. Refineries are *not* used as component sources — they only receive pushed ore. Only functional blocks owned by you, your faction, or friendly players count as sources. Source inventories are rescanned every 30 seconds. Items are picked up synchronously when the welder needs them — no queueing or pre-staging is required.
 
 In Creative mode the BaR welds and builds without consuming components, matching the original mod's behaviour.
 
@@ -130,11 +132,10 @@ In Creative mode the BaR welds and builds without consuming components, matching
 
 Welding includes several safeguards to keep BaRs from compounding into frame spikes:
 
-- **Component starvation early-exit** — the welding loop breaks after 3 consecutive blocks that cannot be welded due to missing components, so when the world is component-starved BaRs do not iterate every target every tick.
-- **Block fail cooldown** — when a block fails to weld (no components, projector exception, etc.) it is placed on a global cooldown. Other BaRs and this BaR's later ticks skip the cooldowned block. Tuned via `BlockFailureCooldownSeconds` (default `15` seconds, `0` disables).
-- **Per-tick weld budget** — `MaxWeldsPerTick` caps the global number of weld operations per tick. `0` (auto) scales with BaR count.
+- **Block fail cooldown** — when a block fails to weld (no components, projector error, etc.) it is placed on a global cooldown. Other BaRs and this BaR's later ticks skip the cooldowned block instead of bouncing off it every tick. Tuned via `BlockFailureCooldownSeconds` (default `15` seconds, `0` disables).
+- **Per-tick weld budget** — `MaxWeldsPerTick` caps the global number of weld operations per tick (`0` = auto, scales with BaR count). A companion time budget, `MaxWeldMsPerTick` (default `8` ms), caps how much time per tick is spent welding across all BaRs.
 - **Per-grid system limit** — `MaxSystemsPerTargetGrid` caps how many BaRs may weld the same target grid simultaneously. Prevents many BaRs piling onto one grid while neighbours are ignored.
-- **Cluster scan coordinator** — co-located BaRs share a single scan cycle, eliminating redundant scanning across the cluster.
+- **Shared scanning** — BaRs standing close together share a single scan cycle instead of each scanning the same area, so adding more BaRs to one spot does not multiply scan cost.
 
 ---
 
@@ -152,7 +153,7 @@ So a fresh projection looks like this:
 
 This stair-step pattern is how Space Engineers' projector exposes blocks to the build pipeline: a block has to be *buildable* before any tool (hand welder, ship welder, BaR) can see it, and only the first block plus the immediate neighbours of already-built blocks are buildable at any moment. The BaR cannot "look ahead" at the rest of the blueprint.
 
-As of v2.5.4 (FEAT-077), the *first* of those scans now happens within ~1–2 seconds of the projector activating instead of waiting up to 20 seconds for the empty-grid backoff (`EmptyGridRescanDelaySeconds`) to expire. After that, the cadence between scans is the normal background-scan interval.
+As of v2.5.4, the *first* of those scans happens within ~1–2 seconds of the projector activating instead of waiting up to 20 seconds for the empty-grid backoff (`EmptyGridRescanDelaySeconds`) to expire. After that, the cadence between scans is the normal background-scan interval.
 
 > **Be patient on a fresh projection.** The first block or two will look slow. Once the projection grows past a handful of blocks, the BaR has plenty to work on and welding speed catches up to what you would see on an existing damaged grid.
 
@@ -167,12 +168,13 @@ This behaviour is intentional in the current mod — improving the "look-ahead" 
 <div>
 <p>Work through this checklist:</p>
 <ul>
-<li>Is <strong>Build Projections</strong> on (for projections) and the <strong>Weld Mode</strong> set correctly?</li>
+<li>Is <strong>Build Projections</strong> on (for projections) and the <strong>Weld mode</strong> set correctly?</li>
 <li>Is the inventory full, or are required components missing? The custom info panel lists missing components.</li>
+<li>Is the target owned by an enemy or neutral player? The BaR only welds your own, faction, and friendly blocks.</li>
 <li>Is the target inside a <strong>Safe Zone</strong> that does not allow welding?</li>
 <li>Is the target protected by an active <strong>Defence Shield</strong>?</li>
-<li>Is the BaR's <strong>work area</strong> actually covering the target? Toggle <strong>Show Work Area</strong> to verify.</li>
-<li>Is the target an a grid currently at the <code>MaxSystemsPerTargetGrid</code> limit? Other nearby BaRs may already be saturating it.</li>
+<li>Is the BaR's <strong>work area</strong> actually covering the target? Toggle <strong>Show Area</strong> to verify.</li>
+<li>Is the target on a grid currently at the <code>MaxSystemsPerTargetGrid</code> limit? Other nearby BaRs may already be saturating it.</li>
 <li>Are you on a server running <strong>BuildLimiter</strong> or a similar Torch plugin? These silently block welds without an error.</li>
 </ul>
 </div>
@@ -192,15 +194,15 @@ This behaviour is intentional in the current mod — improving the "look-ahead" 
 <details>
 <summary>Welding feels slower than it used to (~15-20% duty cycle).</summary>
 <div>
-This was a real bug (BUG-103) in versions before v2.5.4 — the cosmetic transport timer was gating real weld work. Update to v2.5.4 or later for a 3–4× speedup on long-running welds.
+This was a real bug in versions before v2.5.4 — the cosmetic transport timer was gating real weld work. Update to v2.5.4 or later for a 3–4× speedup on long-running welds.
 </div>
 </details>
 
 <details>
 <summary>Welding is stuck on a single projected block in offline mode.</summary>
 <div>
-<p>In offline mode (no Steam connection), the engine's DLC entitlement table is empty and projecting certain blocks (commonly DLC armour variants) caused <code>proj.Build()</code> to throw an internal exception, leaving the BaR locked on the broken block forever (BUG-115).</p>
-<p>Fixed in v2.5.4 — the BaR now catches the engine exception, marks the block as broken (skipped permanently for this session), and keeps welding the rest. A diagnostic warning is logged once per broken block per session.</p>
+<p>In offline mode (no Steam connection), the engine's DLC entitlement table is empty and projecting certain blocks (commonly DLC armour variants) caused an internal game error, leaving the BaR locked on the broken block forever.</p>
+<p>Fixed in v2.5.4 — the BaR now catches the engine error, marks the block as broken (skipped permanently for this session), and keeps welding the rest. A diagnostic warning is logged once per broken block per session.</p>
 </div>
 </details>
 
@@ -228,6 +230,6 @@ It is intentionally hidden. The native "Help Others" option is not used by this 
 <details>
 <summary>Two BaRs in range of the same block — only one is welding it.</summary>
 <div>
-That is the assignment system at work: as soon as one BaR claims the block, others reserve it as taken for <code>AssignmentTtlSeconds</code> (default 8 s) and look for a different target. To force every BaR to focus on the same target, disable the system server-wide with <code>AssignToSystemEnabled = false</code> in <code>ModSettings.xml</code>. To loosen reservations more aggressively when BaRs come and go (without disabling the system), lower <code>AssignmentTtlSeconds</code>.
+That is the assignment system at work: as soon as one BaR claims the block, others treat it as taken for <code>AssignmentTtlSeconds</code> (default 8 s) and look for a different target. To force every BaR to focus on the same target, disable the system server-wide with <code>AssignToSystemEnabled = false</code> in <code>ModSettings.xml</code>. To loosen reservations more aggressively when BaRs come and go (without disabling the system), lower <code>AssignmentTtlSeconds</code>.
 </div>
 </details>

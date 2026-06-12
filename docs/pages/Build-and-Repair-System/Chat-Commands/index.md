@@ -35,16 +35,16 @@ Available to **all players** (not just admins). Used to diagnose version mismatc
 On a dedicated server the response is delivered as **two separate chat messages** — the client version is shown locally first, and the server version arrives as a follow-up message once the server responds:
 
 ```
-Nanobars: Client: v2.5.4 (build 260501.3)
+Nanobars: Client: v2.5.5 (build 260610.1)
 ```
 
 ```
-Nanobars: Server: v2.5.4 (build 260501.3)
+Nanobars: Server: v2.5.5 (build 260610.1)
 ```
 
 On a local (single-player or listen) game session only the client line is shown, since there is no separate server process.
 
-The trailing `(build YYMMDD.N)` is the `BuildId` — versions that share the same `2.5.4` mod version may differ by `BuildId` between dev/preview/release builds. Include it when reporting issues so the exact build can be identified.
+The trailing `(build YYMMDD.N)` is the `BuildId` — two installs that share the same mod version may differ by `BuildId` between dev/preview/release builds. Include it when reporting issues so the exact build can be identified.
 
 If the two lines differ, one side should update before reporting issues — version drift commonly causes subtle sync glitches or missing features that look like bugs.
 
@@ -91,7 +91,7 @@ Toggle debug diagnostics and the debug HUD overlay.
 | `/nanobars debug hide` | Hide the debug HUD overlay locally |
 | `/nanobars debug left` | Position the debug HUD on the left side and show it |
 | `/nanobars debug right` | Position the debug HUD on the right side and show it |
-| `/nanobars debug cluster-area` | Toggle a local wireframe overlay showing every cluster's per-member working areas plus a green pillar above the coordinator block. Up to 8 cluster colours (yellow, pink, green, purple, cyan, orange, red, white). Only enabled / functional / ready blocks count. Lists per-cluster sizes in chat when shown. Listen-server / single-player only. |
+| `/nanobars debug cluster-area` | Toggle a local wireframe overlay showing every cluster's per-member working areas plus a tall pillar (in the cluster's colour) above the coordinator block. Up to 8 cluster colours (yellow, pink, green, purple, cyan, orange, red, white). Only enabled / functional / ready blocks count. Lists per-cluster sizes in chat when shown. Listen-server / single-player only. |
 | `/nanobars debug targets` | Toggle a local wireframe overlay around every Build and Repair system's current weld and grind targets. Border = the cluster that discovered the target; solid red fill = the target is currently assigned to a system. Listen-server / single-player only. |
 
 > **Note:** The debug HUD overlay (`show/hide/left/right`) requires the [TextHudAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=758597413) (BuildInfo) mod to be installed. The `on/off` commands control the server-wide debug mode. The cluster-area and targets overlays are drawn directly through SE's transparent-box renderer and do not require TextHudAPI; they only render on the local client (not on a dedicated server).
@@ -111,7 +111,9 @@ Built-in performance profiler for diagnosing sim-speed issues. Produces per-meth
 | `/nanobars profile summary` | Toggle the live profile summary HUD (top-right) |
 | `/nanobars profile list` | List all stored profiling sessions |
 | `/nanobars profile clear <sessionName\|all>` | Delete log files for a session or all sessions |
-| `/nanobars profile minduration <ms>` | Set minimum duration threshold for log entries |
+| `/nanobars profile minduration <ms>` | Set minimum duration threshold (0–10000 ms) for log entries |
+
+> **Note:** `profile summary` is a local HUD toggle and requires the [TextHudAPI](https://steamcommunity.com/sharedfiles/filedetails/?id=758597413) (BuildInfo) mod, like the debug HUD.
 
 ### Examples
 
@@ -130,6 +132,7 @@ Override the simulation speed value used by BaR for internal calculations. Usefu
 
 | Command | Description |
 |---|---|
+| `/nanobars sim` | Show the current override (if any) and the real sim-speed |
 | `/nanobars sim <0.1-1.0>` | Override sim-speed to a fixed value |
 | `/nanobars sim reset` | Remove the override and use actual sim-speed |
 

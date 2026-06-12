@@ -51,7 +51,7 @@ Even with `DebugMode` off, the BaR's terminal custom info panel surfaces several
 - **Current weld / grind / collect target** — what the BaR is locked on to right now.
 - **Missing components** — when the BaR cannot weld a block, the missing component list is shown so you know what to bring.
 - **Idle reason** — when the BaR is not working, a short text reason ("safe zone blocks welding," "all push targets full," "no targets in range," etc.).
-- **Next target scan: Xs** — when the BaR is idle, a countdown to the next scan cycle. Helps distinguish "between scans" from "genuinely out of work" (FEAT-079).
+- **Next target scan: Xs** — when the BaR is idle, a countdown to the next scan cycle. Helps distinguish "between scans" from "genuinely out of work."
 
 Turning `DebugMode` on adds the cluster, source / push-target, and scan-timing fields on top of these basics.
 
@@ -79,7 +79,7 @@ A common point of confusion on dedicated servers: running `/nanobars debug on` (
 
 on your own client. This second step is intentional and is **per-admin**: each admin connected to the server can independently choose whether they want the HUD up. One admin can keep the HUD visible to investigate something while other connected admins see a clean screen — toggling it on the server-wide flag would force the overlay onto everyone, which is rarely what anybody wants.
 
-The split also means an admin can keep the HUD up locally even when the server-wide `DebugMode` flag is off (the HUD still renders whatever live data the server is willing to send), and conversely, an admin can leave `DebugMode` on without having any HUD visible to themselves. The two switches are independent on purpose.
+The two switches are independent on purpose: an admin can leave `DebugMode` on without having any HUD visible to themselves. Note that the HUD only has data to show while the server-wide `DebugMode` flag is on **or** a profiling session is running — with both off, the overlay stays empty even when toggled to "shown."
 
 The HUD reads live data from whatever BaRs the server reports; it does not alter mod behaviour.
 
@@ -98,13 +98,13 @@ The HUD reads live data from whatever BaRs the server reports; it does not alter
 `/nanobars debug cluster-area` toggles an in-world wireframe overlay that visualises every multi-system cluster directly in 3D space:
 
 - A **per-member working-area box** for each system in a cluster — one of 8 distinct colours (yellow, pink, green, purple, cyan, orange, red, white), assigned deterministically per cluster.
-- A **tall green pillar** above each cluster's *coordinator* block — the system that performs the scan on behalf of the cluster.
-- Drawn with `PostPP` blend so wireframes are visible **through** other blocks; you don't have to crawl into the ship's interior to spot them.
+- A **tall pillar in the cluster's colour** above each cluster's *coordinator* block — the system that performs the scan on behalf of the cluster.
+- The block markers and the coordinator pillar are visible **through** other blocks, so you don't have to crawl into the ship's interior to spot them. The larger working-area boxes are depth-tested so overlapping volumes don't clutter the view.
 
 When toggled on, a chat line summarises the cluster sizes labelled by their overlay colour:
 
 ```
-4 cluster(s) · 47 systems total · sizes: [pink=20, yellow=12, cyan=9, green=6]
+4 cluster(s) · 47 BaRs total · sizes: [pink=20, yellow=12, cyan=9, green=6]
 ```
 
 Solo clusters (single-system) aren't drawn — they're already visualised by the per-block **Show area** terminal toggle.
@@ -122,10 +122,10 @@ Client-side only. Rejected on dedicated servers — the draw runs on the local r
 `/nanobars debug targets` toggles an in-world wireframe overlay around every system's current weld and grind target blocks:
 
 - **Border colour** = the cluster colour of the system that has the target in its scan list (matches the cluster-area palette above).
-- **Solid red fill** (semi-transparent) = the target is currently **assigned** to a system — i.e., a system has claimed it via the assignment handler.
+- **Solid red fill** (semi-transparent) = the target is currently **assigned** to a system — i.e., a system has claimed it via the block assignment system.
 - **Wireframe only, no fill** = the target is **discovered** by at least one cluster but no system has claimed it yet.
 
-Same `PostPP` blend as the cluster overlay — visible through walls.
+The outlines are visible through walls, so you can locate targeted blocks from any angle.
 
 Lets you see at a glance:
 
@@ -141,14 +141,14 @@ Client-side only. Same DS rejection as the cluster-area overlay.
 
 ## BuildId
 
-Every build of the mod ships with a `BuildId` of the form `YYMMDD.N` (e.g. `260501.3`) that surfaces in:
+Every build of the mod ships with a `BuildId` of the form `YYMMDD.N` (e.g. `260610.1`) that surfaces in:
 
-- The debug HUD header — `--- BAR SYSTEMS --- v2.5.4 (260501.3)`.
+- The debug HUD header.
 - `/nanobars version` — both client and server lines include it.
 - `/nanobars -help` — the dialog header.
 - The profiler summary log header.
 
-When reporting issues, include the `BuildId` so the exact build can be identified. Two installs that share the same `2.5.4` mod version may differ by `BuildId` between dev / preview / release builds — the version number alone is not enough to tell them apart.
+When reporting issues, include the `BuildId` so the exact build can be identified. Two installs that share the same mod version may differ by `BuildId` between dev / preview / release builds — the version number alone is not enough to tell them apart.
 
 ---
 
@@ -194,7 +194,7 @@ For performance troubleshooting (low sim-speed, frame spikes, dropped ticks), th
 /nanobars profile minduration <ms>
 ```
 
-Log files are saved to the world's storage folder. Share the relevant files (and the manifest) when reporting a performance issue.
+Log files are saved to the mod's storage folder (`Storage\<mod>` under the game's data folder — on a dedicated server, under the server instance folder). Share the relevant files (and the manifest) when reporting a performance issue.
 
 See [Chat Commands → Profiling](../Chat-Commands/#profiling) for full command reference.
 
@@ -255,7 +255,7 @@ If you are not sure which to use, start in Discord — it is faster, and a maint
 <summary>The profiler runs but no log files appear.</summary>
 <div>
 <ul>
-<li>Profiler files are saved to the world's mod storage folder, not the world save folder. The path differs by environment — see <code>/nanobars profile list</code> for the resolved path.</li>
+<li>Profiler files are saved to the mod's storage folder (<code>Storage\&lt;mod&gt;</code> under the game's data folder), not the world save folder. Use <code>/nanobars profile list</code> to confirm the session was recorded.</li>
 <li>If the session was very short or the BaR did nothing during it, only methods that exceeded <code>minDurationMs</code> are logged. Lower the threshold with <code>/nanobars profile minduration 0</code> for the next run.</li>
 </ul>
 </div>
@@ -264,6 +264,6 @@ If you are not sure which to use, start in Discord — it is faster, and a maint
 <details>
 <summary>My BuildId on client and server differ.</summary>
 <div>
-<p>Mod versions are correct (<code>v2.5.4</code> on both lines) but BuildIds differ: the two installs are built from the same source-version tag but on different days or different release channels (dev / preview / release). Subscribe both client and server to the same Workshop entry and let Steam refresh — the BuildIds should match after a clean download. If they keep diverging on a Torch server, check that the workshop content directory was actually re-downloaded; a stale local copy will keep its old BuildId.</p>
+<p>Mod versions match on both lines but BuildIds differ: the two installs are built from the same source-version tag but on different days or different release channels (dev / preview / release). Subscribe both client and server to the same Workshop entry and let Steam refresh — the BuildIds should match after a clean download. If they keep diverging on a Torch server, check that the workshop content directory was actually re-downloaded; a stale local copy will keep its old BuildId.</p>
 </div>
 </details>

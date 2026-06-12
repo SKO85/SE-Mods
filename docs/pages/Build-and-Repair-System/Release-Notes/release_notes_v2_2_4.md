@@ -3,17 +3,17 @@ layout: default
 title: "Release Notes – v2.2.4"
 parent: Release Notes
 grand_parent: Build and Repair System
-nav_order: 13
+nav_order: 15
 ---
 
 # Release Notes – v2.2.4
 
-- Release date: 14 October 2025
-- Notes: N/A
+- Status: **Released** — 14 October 2025
+- Notes: Two small terminal fixes.
 
 ---
 
 ## Bug Fixes
 
-- Fixed a duplicate button that appeared in the terminal and a missing **Janitor Grind Neutrals** button.
-- Fixed the German translations for _Aktivieren_ and _Deaktivieren_ to use shorter text that fits within the button size.
+- Removed a duplicate button in the terminal and restored the missing **Janitor Grind Neutrals** button.
+- Shortened the German translations for _Aktivieren_ and _Deaktivieren_ so they fit on the buttons.

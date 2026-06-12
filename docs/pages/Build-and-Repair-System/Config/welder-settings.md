@@ -160,16 +160,16 @@ Blocks painted with this color are treated as grind targets.
 
 ## Sound
 
-| Setting              | Default | Description                                                           |
-| -------------------- | ------- | --------------------------------------------------------------------- |
-| `SoundVolumeDefault` | `1`     | Default sound volume for the block (0.0 = silent, 1.0 = full volume). |
-| `SoundVolumeFixed`   | `false` | Set to `true` to lock the sound volume setting server-wide.           |
+| Setting              | Default | Description                                                                                                          |
+| -------------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
+| `SoundVolumeDefault` | `1`     | Default sound volume for the block. Range 0 (silent) to 2 (maximum); the default of `1` shows as 50% on the terminal slider. |
+| `SoundVolumeFixed`   | `false` | Set to `true` to lock the sound volume setting server-wide.                                                            |
 
 ---
 
 ## Visual Effects
 
-`AllowedEffects` controls which effect types are available. Remove an entry to disable that effect globally — players will not be able to enable it from the terminal.
+`AllowedEffects` controls which effect types the system may produce. Remove an entry to disable that effect globally for every block.
 
 | Setting          | Default                                                                                                 | Description                                             |
 | ---------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |

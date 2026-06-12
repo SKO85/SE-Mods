@@ -11,6 +11,10 @@ The Build and Repair System exposes a set of terminal properties that can be rea
 
 All property names are prefixed with `BuildAndRepair.`.
 
+> **Note:** When the server locks script control (`ScriptControllFixed = true` in `ModSettings.xml`), the script-control toggle and the list/function properties (priority lists, targets, missing components, production helpers) are not registered and cannot be used from scripts.
+
+> Properties whose terminal option is locked server-wide via a `*Fixed` setting are read-only — writes from a script are ignored.
+
 ---
 
 ## Detecting a Build and Repair Block
@@ -40,9 +44,13 @@ bool IsBuildAndRepairBlock(IMyTerminalBlock block)
 
 | Property                          | Type   | Description                                                                                                    |
 | --------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------- |
-| `BuildAndRepair.AllowBuild`       | `bool` | Enable or disable welding of projected blocks.                                                                 |
+| `BuildAndRepair.AllowBuild`       | `bool` | Enable or disable welding of projected blocks (the **Build Projections** toggle).                              |
 | `BuildAndRepair.ScriptControlled` | `bool` | When `true`, the system does not automatically pick targets. Each weld/grind action must be chosen via script. |
 | `BuildAndRepair.CollectIfIdle`    | `bool` | When `true`, floating objects are collected even when there is nothing to weld or grind.                       |
+| `BuildAndRepair.ShowArea`         | `bool` | Show or hide the in-world work area box.                                                                       |
+| `BuildAndRepair.SoundVolume`      | `float` | Per-block sound volume as a percentage (0–100), matching the terminal slider.                                 |
+| `BuildAndRepair.DisableTickingSound` | `bool` | Silence the ticking / unable sound for this block. Only available while the server-wide `DisableTickingSound` is off. |
+| `BuildAndRepair.DisableParticleEffects` | `bool` | Disable the flying nanobot trace for this block. Only available while the server-wide `DisableParticleEffects` is off. |
 
 ### Search & Work Mode
 
@@ -71,6 +79,17 @@ bool IsBuildAndRepairBlock(IMyTerminalBlock block)
 | `BuildAndRepair.GrindJanitorOptionDisableOnly` | `bool` | Only grind functional blocks until they stop working.  |
 | `BuildAndRepair.GrindJanitorOptionHackOnly`    | `bool` | Only grind functional blocks until they can be hacked. |
 
+### Grind Order
+
+| Property                                   | Type   | Description                                                                  |
+| ------------------------------------------ | ------ | ----------------------------------------------------------------------------- |
+| `BuildAndRepair.GrindIgnorePriorityOrder`  | `bool` | Ignore the grind priority list order and target the nearest grind block.     |
+| `BuildAndRepair.GrindNearFirst`            | `bool` | Grind the nearest blocks first.                                              |
+| `BuildAndRepair.GrindFarFirst`             | `bool` | Grind the farthest blocks first.                                             |
+| `BuildAndRepair.GrindSmallestGridFirst`    | `bool` | Grind blocks on the smallest grid first.                                     |
+
+Only one of `GrindNearFirst`, `GrindFarFirst`, and `GrindSmallestGridFirst` is active at a time — setting one clears the others (farthest-first is the state where the other two are off).
+
 ### Work Area
 
 | Property                             | Type    | Description                            |
@@ -84,9 +103,11 @@ bool IsBuildAndRepairBlock(IMyTerminalBlock block)
 
 ### Push / Collect
 
-| Property                                 | Type   | Description                                               |
-| ---------------------------------------- | ------ | --------------------------------------------------------- |
-| `BuildAndRepair.PushIngotOreImmediately` | `bool` | Immediately push ingots and ore to connected inventories. |
+| Property                                  | Type   | Description                                                |
+| ----------------------------------------- | ------ | ---------------------------------------------------------- |
+| `BuildAndRepair.PushIngotOreImmediately`  | `bool` | Immediately push ingots and ore to connected inventories.  |
+| `BuildAndRepair.PushComponentImmediately` | `bool` | Immediately push components to connected inventories.      |
+| `BuildAndRepair.PushItemsImmediately`     | `bool` | Immediately push other items to connected inventories.     |
 
 ### Priority Lists
 
