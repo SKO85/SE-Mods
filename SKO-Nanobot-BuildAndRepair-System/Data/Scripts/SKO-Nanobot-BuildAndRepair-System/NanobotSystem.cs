@@ -195,8 +195,11 @@ namespace SKONanobotBuildAndRepairSystem
 
         // Locality-aware grind sorting: after destroying a block, prefer nearby blocks
         // within the same distance band. Set on main thread, read on background scan thread.
+        // BUG-260612.33: flag is volatile and always written AFTER the position, so a
+        // scan thread seeing true also sees a complete (possibly stale, never torn-
+        // and-trusted) position. Sort hint only, so stale is fine.
         internal Vector3D _LastGrindWorldPosition;
-        internal bool _HasLastGrindPosition;
+        internal volatile bool _HasLastGrindPosition;
 
         // Snapshot of cluster member area centers; null on solo scans.
         private List<Vector3D> _ClusterMemberAreaCenters;

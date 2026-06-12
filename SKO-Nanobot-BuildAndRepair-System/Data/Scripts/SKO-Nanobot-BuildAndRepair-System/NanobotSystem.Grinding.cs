@@ -248,7 +248,8 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // Faction reputation when grinding for not owned grids.
-            if (Mod.Settings.DecreaseFactionReputationOnGrinding && currentGrindingBlock != null)
+            // BUG-260612.34: CubeGrid null-guarded like the same block's check above.
+            if (Mod.Settings.DecreaseFactionReputationOnGrinding && currentGrindingBlock != null && currentGrindingBlock.CubeGrid != null)
             {
                 if (currentGrindingBlock.OwnerId != Welder.OwnerId && currentGrindingBlock.CubeGrid.EntityId != Welder.CubeGrid.EntityId)
                 {
@@ -431,36 +432,12 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (fullyDismounted)
                 {
-                    // OPT 1: Mechanical blocks (pistons, rotors, hinges) cause 100-380ms spikes
-                    // when destroyed because they detach subgrids. Cap to 1 destruction per tick globally.
-                    tsMark = Stopwatch.GetTimestamp();
-                    if (target.FatBlock is Sandbox.ModAPI.IMyMechanicalConnectionBlock || target.FatBlock is Sandbox.ModAPI.IMyAttachableTopBlock)
-                    {
-                        if (!Mod.TryClaimMechanicalGrindSlot())
-                        {
-                            tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
-                            // Log even on early-return so the cost shows up in the profile.
-                            EmitServerDoGrindProfile(profilerTs,
-                                target != null ? target.BlockDefinition.Id.SubtypeName : "null",
-                                (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
-                                false, true, 0f,
-                                tsEmpty * 1000.0 / tsFreq,
-                                tsFriendly * 1000.0 / tsFreq,
-                                friendlyIter,
-                                tsMountLevel * 1000.0 / tsFreq,
-                                tsMoveItems * 1000.0 / tsFreq,
-                                tsDismountCheck * 1000.0 / tsFreq,
-                                0.0,
-                                tsMechCheck * 1000.0 / tsFreq,
-                                0.0,
-                                0.0, 0.0, 0.0, 0.0,
-                                damage, targetData.Distance, 0.0,
-                                "mechSlot");
-                            return false;
-                        }
-                    }
-                    tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
-
+                    // BUG-260612.20: the mechanical one-per-tick cap (OPT 1) moved into
+                    // RazeQueueHandler.Process, where the expensive raze actually runs.
+                    // Failing the grind HERE — after DecreaseMountLevel already did the
+                    // work — reported a completed grind as failure: state flicker,
+                    // assignment release, and the list removal + cluster propagation
+                    // were skipped for exactly the expensive block class.
                     tsMark = Stopwatch.GetTimestamp();
                     // BUG-127: defer raze to the batched RazeQueueHandler.
                     RazeQueueHandler.Enqueue(target);

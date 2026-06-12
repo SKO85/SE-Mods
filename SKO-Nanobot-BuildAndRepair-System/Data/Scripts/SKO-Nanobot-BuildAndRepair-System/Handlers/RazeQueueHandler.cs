@@ -123,6 +123,19 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     // Slim armor: IsDestroyed flips false on re-weld; don't undo it.
                     if (!target.IsDestroyed) { skippedNotDestroyed++; continue; }
 
+                    // BUG-260612.20: mechanical blocks (pistons/rotors/hinges) detach
+                    // subgrids on raze (100-380 ms spikes) — the OPT 1 one-per-tick cap
+                    // lives here now, where the raze actually happens, instead of
+                    // failing ServerDoGrind after the grind work already ran. Deferred
+                    // items go back to the queue; the drain budget bounds the retries.
+                    if ((target.FatBlock is Sandbox.ModAPI.IMyMechanicalConnectionBlock
+                            || target.FatBlock is Sandbox.ModAPI.IMyAttachableTopBlock)
+                        && !Mod.TryClaimMechanicalGrindSlot())
+                    {
+                        Enqueue(target);
+                        continue;
+                    }
+
                     List<Vector3I> positions;
                     if (!_batchByGrid.TryGetValue(grid, out positions))
                     {
