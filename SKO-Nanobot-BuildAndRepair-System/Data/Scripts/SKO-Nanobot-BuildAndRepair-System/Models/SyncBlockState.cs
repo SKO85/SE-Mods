@@ -45,6 +45,10 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private long _weldCountedGridId;
         private long _grindCountedGridId;
 
+        // BUG-260612.1: exposed so self-subtraction uses the exact counted keys.
+        internal long WeldCountedGridId { get { return _weldCountedGridId; } }
+        internal long GrindCountedGridId { get { return _grindCountedGridId; } }
+
         private Vector3D? _CurrentTransportTarget;
         private Vector3D? _LastTransportTarget;
         private bool _CurrentTransportIsPick;

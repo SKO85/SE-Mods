@@ -376,17 +376,19 @@ namespace SKONanobotBuildAndRepairSystem
                 return 0;
 
             // BUG-160: each BaR contributes +1 per grid; subtract at most 1 here.
-            var myWeldBlock = State.CurrentWeldingBlock;
-            var myWeldGridId = (myWeldBlock != null && myWeldBlock.CubeGrid != null) ? myWeldBlock.CubeGrid.EntityId : 0L;
-            if (myWeldGridId == gridEntityId)
+            // BUG-260612.1: compare against the EXACT counted keys (effective grid
+            // ids cached by the lock-on setters) — the raw CubeGrid.EntityId differs
+            // for projected lock-ons, so the BaR counted itself and self-evicted at
+            // the per-grid limit.
+            var myWeldGridId = State.WeldCountedGridId;
+            if (myWeldGridId != 0L && myWeldGridId == gridEntityId)
             {
                 count--;
             }
             else
             {
-                var myGrindBlock = State.CurrentGrindingBlock;
-                var myGrindGridId = (myGrindBlock != null && myGrindBlock.CubeGrid != null) ? myGrindBlock.CubeGrid.EntityId : 0L;
-                if (myGrindGridId == gridEntityId) count--;
+                var myGrindGridId = State.GrindCountedGridId;
+                if (myGrindGridId != 0L && myGrindGridId == gridEntityId) count--;
             }
 
             return count;
