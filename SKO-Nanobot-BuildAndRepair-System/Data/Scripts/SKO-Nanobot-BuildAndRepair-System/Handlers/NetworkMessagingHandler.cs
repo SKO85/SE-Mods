@@ -160,7 +160,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         // risk of clobbering _adminBroadcastPlayers mid-iteration).
         private static readonly List<IMyPlayer> _adminCheckPlayers = new List<IMyPlayer>();
 
-        private static bool IsRemoteAdmin(ulong steamId)
+        // BUG-260610.2: resolve the connected player behind a transport sender id.
+        // Main thread only (shares the _adminCheckPlayers scratch list).
+        private static IMyPlayer TryGetPlayerBySteamId(ulong steamId)
         {
             _adminCheckPlayers.Clear();
             MyAPIGateway.Players.GetPlayers(_adminCheckPlayers);
@@ -168,20 +170,25 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             {
                 for (var i = 0; i < _adminCheckPlayers.Count; i++)
                 {
-                    var player = _adminCheckPlayers[i];
-                    if (player.SteamUserId == steamId)
+                    if (_adminCheckPlayers[i].SteamUserId == steamId)
                     {
-                        // BUG-260502.3: use the shared canonical helper instead of an
-                        // inline copy of the REF-4 pattern.
-                        return SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel);
+                        return _adminCheckPlayers[i];
                     }
                 }
-                return false;
+                return null;
             }
             finally
             {
                 _adminCheckPlayers.Clear();
             }
+        }
+
+        private static bool IsRemoteAdmin(ulong steamId)
+        {
+            // BUG-260502.3: use the shared canonical helper instead of an
+            // inline copy of the REF-4 pattern.
+            var player = TryGetPlayerBySteamId(steamId);
+            return player != null && SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel);
         }
 
         #endregion Server Message Received Handlers
@@ -284,6 +291,26 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     if (MyAPIGateway.Session.IsServer)
                     {
+                        // BUG-260610.2: validate the tamper-proof sender against the block
+                        // before applying anything. Admins may edit any block; everyone
+                        // else goes through the engine's own ownership/share gate
+                        // (HasPlayerAccess) — owner, faction share, share-all and unowned
+                        // blocks pass, exactly like the vanilla terminal client-side, so
+                        // legit players are never rejected. Checked before the rate limit
+                        // so a forger can't consume the owner's send window.
+                        var senderPlayer = TryGetPlayerBySteamId(sender);
+                        var senderAllowed = senderPlayer != null
+                            && (Utils.UtilsPlayer.IsAdminLevel(senderPlayer.PromoteLevel)
+                                || system.Welder.HasPlayerAccess(senderPlayer.IdentityId));
+                        if (!senderAllowed)
+                        {
+                            if (Logging.Instance.ShouldLog(Logging.Level.Error))
+                            {
+                                Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: rejected block settings from sender={0} for EntityId={1} (no access)", sender, msgRcv.EntityId);
+                            }
+                            return;
+                        }
+
                         // BUG-260610.31: per-block rate limit. Legit clients send at most
                         // once per second (IsTransmitNeeded gate); each accepted message
                         // costs a synchronous XML save + broadcast, so drop floods.
