@@ -60,6 +60,11 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
+                    // BUG-260824.2: aggregate missing-components rebuild (cadence-gated,
+                    // also clears the list when targets/welding go away so no stale
+                    // "Missing Components" state survives idling).
+                    ServerTryRebuildMissingComponentsAggregate(playTime);
+
                     // FEAT-039: skip sub-method dispatch for idle BaRs.
                     var isIdleNoWork = State.PossibleWeldTargets.CurrentCount == 0
                         && State.PossibleGrindTargets.CurrentCount == 0
@@ -112,7 +117,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                     transportBlocked = transporting;
                     // BUG-103: don't gate work dispatch on the cosmetic transport timer.
-                    State.MissingComponents.Clear();
+                    // BUG-260824.2: no per-tick MissingComponents.Clear() — the list is
+                    // owned by ServerTryRebuildMissingComponentsAggregate above.
                     State.LimitsExceeded = false;
 
                     var diagTs = MethodProfiler.Start();
@@ -156,7 +162,6 @@ namespace SKONanobotBuildAndRepairSystem
                             MultiGrind(ref grinding, ref needGrinding, ref transporting, ref currentGrindingBlock);
                             break;
                     }
-                    State.MissingComponents.RebuildHash();
 
                     if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding)
                         ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);

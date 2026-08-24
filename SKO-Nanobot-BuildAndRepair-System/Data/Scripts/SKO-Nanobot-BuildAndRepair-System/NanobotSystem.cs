@@ -327,6 +327,13 @@ namespace SKONanobotBuildAndRepairSystem
         // BUG-136: round-robin cursor for the capped source walk.
         private int _NextPullSourceIdx;
 
+        // BUG-260824.2: aggregate missing-components rebuild (cadence marker + reusable buffers).
+        private TimeSpan _NextMissingAggregateAt;
+        private List<TargetBlockData> _AggTargetsSnapshot = new List<TargetBlockData>();
+        private Dictionary<string, int> _AggMissingNeed = new Dictionary<string, int>();
+        private Dictionary<string, int> _AggPerBlockMissing = new Dictionary<string, int>();
+        private List<IMyInventory> _AggSourcesSnapshot = new List<IMyInventory>();
+
         private int _UpdateEffectsInterval;
         private bool _UpdateCustomInfoNeeded;
         internal bool _firstSettingsReceived = false;

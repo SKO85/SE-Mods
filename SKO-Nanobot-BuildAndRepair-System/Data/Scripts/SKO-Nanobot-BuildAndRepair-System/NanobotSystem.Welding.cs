@@ -141,6 +141,16 @@ namespace SKONanobotBuildAndRepairSystem
                         if (_opTs != 0L) tsAssignOps += Stopwatch.GetTimestamp() - _opTs;
                         if (assignedToOther)
                         {
+                            // BUG-260824.9: a foreign-claimed lock-on (TTL expired, another
+                            // BaR re-claimed it) kept the lock-on filter active and skipped
+                            // every later target — whole weld ticks were wasted until the
+                            // other BaR released the block. Drop the lock-on and keep
+                            // looking; the claim belongs to the other BaR, so no release.
+                            if (isLockOnBlock)
+                            {
+                                State.CurrentWeldingBlock = null;
+                                lookingForNext = true;
+                            }
                             skippedByAssign++;
                             continue;
                         }
@@ -849,6 +859,10 @@ namespace SKONanobotBuildAndRepairSystem
                 // block full, transport can't drain) stack leftovers toward the REAL
                 // transport cap, where the add then failed and items were destroyed.
                 var remainingVolume = Math.Max(0f, _MaxWeldTransportVolume - (float)_TransportInventory.CurrentVolume);
+                // BUG-260824.5: baseline for "did this pass pick anything". Comparing the
+                // end value against _MaxWeldTransportVolume started phantom transports
+                // whenever leftovers already occupied transport volume at entry.
+                var entryRemainingVolume = remainingVolume;
                 _TempMissingComponents.Clear();
                 var picked = false;
                 var cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;
@@ -936,7 +950,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (tsMark != 0L) tsPullPick += Stopwatch.GetTimestamp() - tsMark;
                 }
 
-                if (remainingVolume < _MaxWeldTransportVolume || (CreativeModeActive && _TempMissingComponents.Count > 0))
+                if (remainingVolume < entryRemainingVolume || (CreativeModeActive && _TempMissingComponents.Count > 0))
                 {
                     //Transport startet
                     State.CurrentTransportIsPick = false;
@@ -1003,16 +1017,10 @@ namespace SKONanobotBuildAndRepairSystem
                 picked = PullFromSourcesOnePass(ref remainingVolume) || picked;
             }
 
-            // Phase 3: report whatever we still could not get.
-            foreach (var keyValue in _TempPullRemaining)
-            {
-                if (keyValue.Value > 0)
-                {
-                    var componentId = new MyDefinitionId(typeof(MyObjectBuilder_Component), keyValue.Key);
-                    AddToMissingComponents(componentId, keyValue.Value);
-                }
-            }
-
+            // BUG-260824.2: no per-target missing report anymore — State.MissingComponents
+            // is rebuilt as an aggregate over ALL weld targets on a slow cadence
+            // (ServerTryRebuildMissingComponentsAggregate); reporting only the single
+            // chosen target here made the companion script queue one block's worth at a time.
             _TempPullRemaining.Clear();
             _TempPullDefs.Clear();
             return picked;
@@ -1236,7 +1244,16 @@ namespace SKONanobotBuildAndRepairSystem
                 // through to TransferItemFrom returning false (cheap engine calls).
 
                 var maxByVolume = (int)Math.Floor(remainingVolume / volume);
-                if (maxByVolume <= 0) continue;
+                if (maxByVolume <= 0)
+                {
+                    // BUG-260824.1: a single item larger than the whole per-pass budget
+                    // (e.g. RadioCommunication, 70 L, on small BaRs) floored to 0 forever
+                    // and the block could never be welded. The real transport capacity is
+                    // ~10x the logical budget, so let one item through when the transport
+                    // inventory is empty.
+                    if (_TransportInventory.CurrentVolume > 0 || !_TransportInventory.CanItemsBeAdded(1, componentId)) continue;
+                    maxByVolume = 1;
+                }
                 var amountPossible = Math.Min(Math.Min(neededAmount, (int)srcItem.Amount), maxByVolume);
                 if (amountPossible <= 0) continue;
 
@@ -1298,6 +1315,11 @@ namespace SKONanobotBuildAndRepairSystem
                 if (srcItem != null && (MyDefinitionId)srcItem.Type == componentId && srcItem.Amount > 0)
                 {
                     var maxpossibleAmount = Math.Min(neededAmount, (int)Math.Floor(remainingVolume / volume));
+                    // BUG-260824.1: allow one oversized item when the transport inventory
+                    // is empty (same rationale as TryPullFromSource); the CanItemsBeAdded
+                    // check below still guards the real transport capacity.
+                    if (maxpossibleAmount <= 0 && _TransportInventory.CurrentVolume == 0)
+                        maxpossibleAmount = 1;
                     var pickedAmount = MyFixedPoint.Min(maxpossibleAmount, srcItem.Amount);
                     if (pickedAmount > 0)
                     {
@@ -1330,17 +1352,152 @@ namespace SKONanobotBuildAndRepairSystem
             return picked;
         }
 
-        private void AddToMissingComponents(MyDefinitionId componentId, int neededAmount)
+        // BUG-260824.2: aggregate missing-components rebuild cadence.
+        private const int MissingAggregateIntervalSeconds = 3;
+
+        /// <summary>
+        /// BUG-260824.2: rebuild State.MissingComponents as the aggregate shortfall over
+        /// ALL possible weld targets (total need minus what the welder, transport and
+        /// connected sources already hold). Runs every MissingAggregateIntervalSeconds on
+        /// the main thread; targets are capped at MaxPossibleWeldTargets by the scan.
+        /// </summary>
+        private void ServerTryRebuildMissingComponentsAggregate(TimeSpan playTime)
         {
-            int missingAmount;
-            if (State.MissingComponents.TryGetValue(componentId, out missingAmount))
+            if (playTime < _NextMissingAggregateAt) return;
+            _NextMissingAggregateAt = playTime + TimeSpan.FromSeconds(MissingAggregateIntervalSeconds);
+
+            var profilerTs = MethodProfiler.Start();
+            var targetCount = 0;
+            var blocksWalked = 0;
+            var sourcesWalked = 0;
+            var missingKinds = 0;
+            try
             {
-                State.MissingComponents[componentId] = missingAmount + neededAmount;
+                var weldingEnabled = BlockWeldPriority.AnyEnabled && Settings.WorkMode != WorkModes.GrindOnly;
+
+                _AggTargetsSnapshot.Clear();
+                if (weldingEnabled)
+                {
+                    lock (State.PossibleWeldTargets)
+                    {
+                        foreach (var targetData in State.PossibleWeldTargets)
+                        {
+                            if (targetData.Ignore || targetData.Block == null) continue;
+                            _AggTargetsSnapshot.Add(targetData);
+                        }
+                    }
+                }
+                targetCount = _AggTargetsSnapshot.Count;
+
+                _AggMissingNeed.Clear();
+                if (targetCount > 0)
+                {
+                    var level = Settings.WeldOptions == AutoWeldOptions.WeldSkeleton
+                        ? IntegrityLevel.Create
+                        : (Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? IntegrityLevel.Functional : IntegrityLevel.Complete);
+
+                    for (int i = 0; i < _AggTargetsSnapshot.Count; i++)
+                    {
+                        var block = _AggTargetsSnapshot[i].Block;
+                        if (block.IsDestroyed || (block.CubeGrid != null && block.CubeGrid.Closed)) continue;
+                        _AggPerBlockMissing.Clear();
+                        try
+                        {
+                            block.GetMissingComponents(_AggPerBlockMissing, level);
+                        }
+                        catch
+                        {
+                            continue;
+                        }
+                        blocksWalked++;
+                        foreach (var keyValue in _AggPerBlockMissing)
+                        {
+                            int amount;
+                            if (_AggMissingNeed.TryGetValue(keyValue.Key, out amount)) _AggMissingNeed[keyValue.Key] = amount + keyValue.Value;
+                            else _AggMissingNeed[keyValue.Key] = keyValue.Value;
+                        }
+                    }
+                    _AggPerBlockMissing.Clear();
+
+                    // Subtract stock on hand; only the true shortfall is reported so the
+                    // companion script doesn't queue components that are already in cargo.
+                    if (_AggMissingNeed.Count > 0)
+                    {
+                        SubtractInventoryFromAggregateNeed(_Welder.GetInventory(0));
+                        SubtractInventoryFromAggregateNeed(_TransportInventory);
+
+                        _AggSourcesSnapshot.Clear();
+                        lock (_PossibleSources)
+                        {
+                            for (int i = 0; i < _PossibleSources.Count; i++) _AggSourcesSnapshot.Add(_PossibleSources[i]);
+                        }
+                        for (int i = 0; i < _AggSourcesSnapshot.Count; i++)
+                        {
+                            if (!AggregateNeedAnyPositive()) break;
+                            SubtractInventoryFromAggregateNeed(_AggSourcesSnapshot[i]);
+                            sourcesWalked++;
+                        }
+                        _AggSourcesSnapshot.Clear();
+                    }
+                }
+                _AggTargetsSnapshot.Clear();
+
+                lock (State.MissingComponents)
+                {
+                    State.MissingComponents.Clear();
+                    foreach (var keyValue in _AggMissingNeed)
+                    {
+                        if (keyValue.Value > 0)
+                        {
+                            State.MissingComponents.Add(new MyDefinitionId(typeof(MyObjectBuilder_Component), keyValue.Key), keyValue.Value);
+                            missingKinds++;
+                        }
+                    }
+                    State.MissingComponents.RebuildHash();
+                }
+                _AggMissingNeed.Clear();
             }
-            else
+            finally
             {
-                State.MissingComponents.Add(componentId, neededAmount);
+                if (profilerTs != 0L)
+                {
+                    var _targetCount = targetCount;
+                    var _blocksWalked = blocksWalked;
+                    var _sourcesWalked = sourcesWalked;
+                    var _missingKinds = missingKinds;
+                    MethodProfiler.StopAndLog("RebuildMissingComponentsAggregate", profilerTs, () =>
+                        string.Format("entityId={0};targets={1};blocksWalked={2};sourcesWalked={3};missingKinds={4}",
+                            _Welder.EntityId, _targetCount, _blocksWalked, _sourcesWalked, _missingKinds));
+                }
             }
+        }
+
+        private bool AggregateNeedAnyPositive()
+        {
+            foreach (var keyValue in _AggMissingNeed)
+            {
+                if (keyValue.Value > 0) return true;
+            }
+            return false;
+        }
+
+        private void SubtractInventoryFromAggregateNeed(IMyInventory srcInventory)
+        {
+            if (srcInventory == null || srcInventory.ItemCount == 0) return;
+            var owner = srcInventory.Owner as IMyEntity;
+            if (owner != null && owner.MarkedForClose) return;
+
+            _TempInventoryItems.Clear();
+            srcInventory.GetItems(_TempInventoryItems);
+            for (int i = 0; i < _TempInventoryItems.Count; i++)
+            {
+                var item = _TempInventoryItems[i];
+                if (item.Type.TypeId != typeof(MyObjectBuilder_Component).Name) continue;
+                int needed;
+                if (!_AggMissingNeed.TryGetValue(item.Type.SubtypeId, out needed) || needed <= 0) continue;
+                _AggMissingNeed[item.Type.SubtypeId] = needed - (int)item.Amount;
+            }
+            _TempInventoryItems.Clear();
         }
 
         // Single source of truth for the ServerDoWeld profile format.
