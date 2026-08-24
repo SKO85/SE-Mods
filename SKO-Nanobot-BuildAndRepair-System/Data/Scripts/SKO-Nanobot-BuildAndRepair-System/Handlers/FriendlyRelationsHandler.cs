@@ -67,6 +67,60 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             return snapshot.TryGetValue(ownerId, out owners);
         }
 
+        // BUG-260824.4: memoized entries for attackers who own no BaR (not keys of the
+        // rebuilt cache). Invalidated whenever Rebuild swaps in a new snapshot.
+        private static readonly object _ComputedLock = new object();
+        private static readonly Dictionary<long, List<long>> _ComputedOwners = new Dictionary<long, List<long>>();
+        private static Dictionary<long, List<long>> _ComputedSnapshotSource;
+
+        /// <summary>
+        /// BUG-260824.4: resolve friendly welder-owners for ANY attacker. The rebuilt
+        /// cache only has welder owners as keys, so a BaR-less faction member never got
+        /// friendly-damage suppression (BaR instantly re-welded whatever they ground).
+        /// Misses are computed against the live welders once and memoized until the next
+        /// Rebuild swap (~15 s), keeping per-damage-event cost at a dictionary lookup.
+        /// </summary>
+        public static bool TryGetOrComputeOwnersForOwner(long attackerId, out List<long> owners)
+        {
+            var snapshot = _OwnersByOwner;
+            if (snapshot.TryGetValue(attackerId, out owners)) return true;
+
+            lock (_ComputedLock)
+            {
+                if (_ComputedSnapshotSource == snapshot && _ComputedOwners.TryGetValue(attackerId, out owners))
+                    return owners != null;
+            }
+
+            List<long> computed = null;
+            var seenOwners = new HashSet<long>();
+            foreach (var entry in Mod.NanobotSystems)
+            {
+                var system = entry.Value;
+                var welder = system != null ? system.Welder : null;
+                if (welder == null) continue;
+                var welderOwnerId = welder.OwnerId;
+                if (welderOwnerId == 0 || !seenOwners.Add(welderOwnerId)) continue;
+                var relation = welder.GetUserRelationToOwner(attackerId);
+                if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
+                {
+                    if (computed == null) computed = new List<long>();
+                    computed.Add(welderOwnerId);
+                }
+            }
+
+            lock (_ComputedLock)
+            {
+                if (_ComputedSnapshotSource != snapshot)
+                {
+                    _ComputedOwners.Clear();
+                    _ComputedSnapshotSource = snapshot;
+                }
+                _ComputedOwners[attackerId] = computed;
+            }
+            owners = computed;
+            return computed != null;
+        }
+
         /// <summary>BUG-130: mark friendly damage for the welder-owner (one shared entry).</summary>
         public static void MarkDamage(long welderOwnerId, IMySlimBlock block, TimeSpan deadline)
         {
@@ -175,6 +229,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             _BaRsByOwner = new Dictionary<long, List<NanobotSystem>>();
             _OwnersByOwner = new Dictionary<long, List<long>>();
+            lock (_ComputedLock)
+            {
+                _ComputedOwners.Clear();
+                _ComputedSnapshotSource = null;
+            }
             lock (_DamageLock)
             {
                 _DamageByOwner.Clear();

@@ -99,6 +99,26 @@ namespace SKONanobotBuildAndRepairSystem
         public static bool CustomControlsInit = false;
         internal static List<IMyTerminalControl> CustomControls = new List<IMyTerminalControl>();
 
+        // BUG-260824.11: engine-side registrations are append-only (no removal API).
+        // Every id handed to AddControl/AddAction is remembered here so a retry after a
+        // mid-init exception skips the ones that already made it in instead of
+        // registering duplicates. Kept across the exception rollback; cleared on a
+        // fresh (non-retry) init and on session Cleanup.
+        private static readonly HashSet<string> _EngineRegisteredIds = new HashSet<string>();
+        private static bool _InitRetryAfterException = false;
+
+        internal static void EngineAddControl(IMyTerminalControl control)
+        {
+            if (control == null || !_EngineRegisteredIds.Add("C:" + control.Id)) return;
+            MyAPIGateway.TerminalControls.AddControl<Sandbox.ModAPI.IMyShipWelder>(control);
+        }
+
+        internal static void EngineAddAction(IMyTerminalAction action)
+        {
+            if (action == null || !_EngineRegisteredIds.Add("A:" + action.Id)) return;
+            MyAPIGateway.TerminalControls.AddAction<Sandbox.ModAPI.IMyShipWelder>(action);
+        }
+
         internal static IMyTerminalControlSeparator _SeparateWeldOptions;
 
         internal static IMyTerminalControlSlider _IgnoreColorHueSlider;
@@ -148,6 +168,11 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (CustomControlsInit) return;
                 CustomControlsInit = true;
+                // BUG-260824.11: on a fresh init (new session) forget engine ids from a
+                // previous session; on a retry after an exception keep them so already
+                // registered controls/actions aren't added twice.
+                if (!_InitRetryAfterException) _EngineRegisteredIds.Clear();
+                _InitRetryAfterException = false;
                 try
                 {
                     // As CustomControlGetter is only called if the NanobotTerminal is opened,
@@ -591,7 +616,13 @@ namespace SKONanobotBuildAndRepairSystem
                     Properties.CurrentGrindTarget();
 
                     // --- Publish functions to scripting
-                    Properties.ProductionBlockEnsureQueued();
+                    // BUG-260824.10: EnsureQueued MUTATES assembler queues (AddQueueItem on
+                    // caller-supplied entity ids) — it must stay behind the script-control
+                    // gate; only the pure-read blueprint query is always published.
+                    if (scriptControlAllowed)
+                    {
+                        Properties.ProductionBlockEnsureQueued();
+                    }
                     Properties.InventoryNeededComponents4Blueprint();
                 }
                 catch (Exception ex)
@@ -600,12 +631,14 @@ namespace SKONanobotBuildAndRepairSystem
                     // BUG-260610.38: the init flag was set before the work — leaving it
                     // latched after a mid-init exception meant a permanently half-built
                     // terminal with no retry. Roll our state back so the next
-                    // InitializeControls call starts clean. (Controls/actions already
-                    // handed to the engine before the exception can't be withdrawn —
-                    // they are simply re-used on the retry.)
+                    // InitializeControls call starts clean.
+                    // BUG-260824.11: engine-side entries can't be withdrawn — mark this a
+                    // retry so _EngineRegisteredIds survives and EngineAddControl/Action
+                    // skip the ids that already made it in (no duplicates on retry).
                     try { MyAPIGateway.TerminalControls.CustomControlGetter -= CustomControlGetter; } catch { }
                     CustomControls.Clear();
                     CustomControlsInit = false;
+                    _InitRetryAfterException = true;
                 }
             }
         }
@@ -616,7 +649,7 @@ namespace SKONanobotBuildAndRepairSystem
             property.SupportsMultipleBlocks = false;
             property.Getter = control.Getter;
             if (!readOnly) property.Setter = control.Setter;
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(property);
+            NanobotTerminal.EngineAddControl(property);
         }
 
         /// <summary>
@@ -630,6 +663,10 @@ namespace SKONanobotBuildAndRepairSystem
                 CustomControls.Clear();
                 CustomControlsInit = false;
             }
+            // BUG-260824.11: session boundary — the engine rebuilds terminal controls per
+            // session, so forget the registered ids and the retry latch.
+            _EngineRegisteredIds.Clear();
+            _InitRetryAfterException = false;
         }
 
         internal static Vector3 CheckConvertToHSVColor(Vector3 value)

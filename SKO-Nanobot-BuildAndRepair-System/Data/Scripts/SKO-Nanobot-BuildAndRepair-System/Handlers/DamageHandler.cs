@@ -110,8 +110,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                             // cache instead of walking every BaR and querying engine faction
                             // relations on each damage event — grinders emit many per second,
                             // making the old walk hundreds of relation calls/s on busy servers.
+                            // BUG-260824.4: use the compute-on-miss variant — the rebuilt
+                            // cache only keys welder owners, so BaR-less attackers (e.g. a
+                            // faction member hand-grinding) never got suppression.
                             List<long> friendlyOwners;
-                            if (FriendlyRelationsHandler.TryGetOwnersForOwner(attackerId, out friendlyOwners))
+                            if (FriendlyRelationsHandler.TryGetOrComputeOwnersForOwner(attackerId, out friendlyOwners) && friendlyOwners != null)
                             {
                                 // A 'friendly' damage from grinder -> do not repair (for a while)
                                 var deadline = MyAPIGateway.Session.ElapsedPlayTime + Mod.Settings.FriendlyDamageTimeout;

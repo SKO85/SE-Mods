@@ -55,7 +55,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 slider.Setter(block, val + 1);
             };
             action.ValidForGroups = slider.SupportsMultipleBlocks;
-            MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
+            NanobotTerminal.EngineAddAction(action);
 
             action = MyAPIGateway.TerminalControls.CreateAction<IMyShipWelder>(string.Format("{0}_Decrease", sliderName));
             action.Name = new StringBuilder(string.Format("{0} Decrease", sliderName));
@@ -67,7 +67,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 slider.Setter(block, val - 1);
             };
             action.ValidForGroups = slider.SupportsMultipleBlocks;
-            MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
+            NanobotTerminal.EngineAddAction(action);
         }
 
         public static IMyTerminalControlSlider IgnoreColorHue(Func<IMyTerminalBlock, bool> colorPickerEnabled, Func<IMyTerminalBlock, bool> isWeldingAllowed)

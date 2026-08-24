@@ -46,10 +46,18 @@ namespace SKONanobotBuildAndRepairSystem.Extensions
 
             if (target.MaxDeformation > MinDeformation)
             {
-                if (allowMutate) target.ResetSkeleton();
-                // MaxDeformation is bugged in-game and doesn't reset until restart/full removal,
-                // so don't tell BaR to weld for this case.
-                return false;
+                if (allowMutate)
+                {
+                    target.ResetSkeleton();
+                    // MaxDeformation is bugged in-game and doesn't reset until restart/full removal,
+                    // so don't tell BaR to weld for this case.
+                    return false;
+                }
+                // BUG-260824.7: pure-read scan — flag as candidate so the weld loop's
+                // mutating call (Weldable → NeedRepair(allowMutate:true)) performs the
+                // skeleton reset on the main thread. Returning false here dropped
+                // deformation-only blocks entirely and dents were never repaired.
+                return true;
             }
 
             if (target.HasDeformation)

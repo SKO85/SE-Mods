@@ -271,7 +271,9 @@ namespace SKONanobotBuildAndRepairSystem
         // Legit clients gate sends on a 1 s transmit timer; anything faster is dropped
         // by NetworkMessagingHandler to stop spam from costing an XML save + broadcast
         // per message. Server main thread only.
-        internal TimeSpan _lastClientSettingsAppliedAt;
+        // BUG-260824.8: rate-limit window per sender, not per block — a shared window
+        // silently dropped a second player's concurrent terminal change.
+        internal Dictionary<ulong, TimeSpan> _lastClientSettingsAppliedBySender = new Dictionary<ulong, TimeSpan>();
 
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
         // Rebuilt by _gridSaturation.Rebuild(), used as fast-path in IsGridOverSystemLimit().

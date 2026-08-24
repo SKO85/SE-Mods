@@ -106,7 +106,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                     comboBox1.Setter(block, mode);
                 };
                 action.ValidForGroups = true;
-                MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
+                NanobotTerminal.EngineAddAction(action);
             }
 
             return control;
@@ -181,7 +181,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                     comboBox1.Setter(block, mode);
                 };
                 action.ValidForGroups = true;
-                MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
+                NanobotTerminal.EngineAddAction(action);
             }
 
             return control;
@@ -248,7 +248,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                     comboBox1.Setter(block, mode);
                 };
                 action.ValidForGroups = true;
-                MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
+                NanobotTerminal.EngineAddAction(action);
             }
 
             return control;

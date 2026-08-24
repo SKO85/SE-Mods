@@ -24,10 +24,11 @@ namespace SKONanobotBuildAndRepairSystem.Caches
 
         /// <summary>
         /// Gets entities in the given bounding box, using the shared cache with quantized
-        /// position + extent keys. BUG-260610.8: the entry stores both quantized keys and a
-        /// hit requires an exact match on them — a slot-key collision (or two boxes of
-        /// different size sharing a slot) is treated as a miss instead of silently serving
-        /// the wrong box's entity list.
+        /// position + extent keys. BUG-260610.8/BUG-260824.6: a hit requires the cached
+        /// box to fully CONTAIN the requested box — the quantized-key check alone let
+        /// boxes differing by up to 50 m per axis share results, hiding entities in the
+        /// difference shell. A containing box yields a superset list; callers filter by
+        /// their precise area downstream, so a superset is always safe.
         /// </summary>
         public static List<IMyEntity> GetEntitiesInBox(ref BoundingBoxD areaBoundingBox)
         {
@@ -40,7 +41,7 @@ namespace SKONanobotBuildAndRepairSystem.Caches
             unchecked
             {
                 // Slot key mixes position and extents; exactness is guaranteed by the
-                // PosKey/ExtentKey verification on hit, not by this mix.
+                // containment verification on hit, not by this mix.
                 key = posKey * 0x100000001B3L ^ extentKey;
             }
             var now = session.ElapsedPlayTime;
@@ -50,15 +51,16 @@ namespace SKONanobotBuildAndRepairSystem.Caches
             {
                 CachedEntityEntry entry;
                 if (_cache.TryGetValue(key, out entry)
-                    && entry.PosKey == posKey && entry.ExtentKey == extentKey
-                    && (now - entry.Timestamp).TotalSeconds < CacheTtlSeconds)
+                    && (now - entry.Timestamp).TotalSeconds < CacheTtlSeconds
+                    && entry.Box.Contains(areaBoundingBox) == ContainmentType.Contains)
                 {
                     cacheHit = true;
                     // Return a copy — caller may modify the list (sorting, etc).
                     return new List<IMyEntity>(entry.Entities);
                 }
 
-                // Cache miss — call the API.
+                // Cache miss — call the API. The new (possibly larger) box overwrites the
+                // slot, so same-cell smaller requests hit it afterwards.
                 List<IMyEntity> entities;
                 lock (MyAPIGateway.Entities)
                 {
@@ -67,8 +69,7 @@ namespace SKONanobotBuildAndRepairSystem.Caches
 
                 var newEntry = new CachedEntityEntry();
                 newEntry.Timestamp = now;
-                newEntry.PosKey = posKey;
-                newEntry.ExtentKey = extentKey;
+                newEntry.Box = areaBoundingBox;
                 newEntry.Entities = entities ?? new List<IMyEntity>();
 
                 _cache[key] = newEntry;
@@ -146,9 +147,9 @@ namespace SKONanobotBuildAndRepairSystem.Caches
         internal class CachedEntityEntry
         {
             public TimeSpan Timestamp;
-            // BUG-260610.8: verified on hit so a slot collision can't serve wrong data.
-            public long PosKey;
-            public long ExtentKey;
+            // BUG-260824.6: the exact queried box; a hit requires it to contain the
+            // requested box (slot collisions and smaller cached boxes are misses).
+            public BoundingBoxD Box;
             public List<IMyEntity> Entities;
         }
     }

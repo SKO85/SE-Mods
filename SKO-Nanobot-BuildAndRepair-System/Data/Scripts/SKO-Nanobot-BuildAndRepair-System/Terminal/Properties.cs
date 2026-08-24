@@ -30,7 +30,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
             };
 
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyIC);
+            NanobotTerminal.EngineAddControl(propertyIC);
         }
 
         public static void GrindColor()
@@ -53,7 +53,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
             };
 
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGC);
+            NanobotTerminal.EngineAddControl(propertyGC);
         }
 
         public static void WeldPriorityList()
@@ -65,7 +65,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system != null ? system.BlockWeldPriority.GetList() : null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyWeldPriorityList);
+            NanobotTerminal.EngineAddControl(propertyWeldPriorityList);
         }
 
         public static void SetWeldPriority()
@@ -81,7 +81,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertySWP);
+            NanobotTerminal.EngineAddControl(propertySWP);
         }
 
         public static void GetWeldPriority()
@@ -97,7 +97,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGWP);
+            NanobotTerminal.EngineAddControl(propertyGWP);
         }
 
         public static void SetWeldEnabled()
@@ -113,7 +113,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertySWE);
+            NanobotTerminal.EngineAddControl(propertySWE);
         }
 
         public static void GetWeldEnabled()
@@ -129,7 +129,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGWE);
+            NanobotTerminal.EngineAddControl(propertyGWE);
         }
 
         public static void GrindPriorityList()
@@ -141,7 +141,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system?.BlockGrindPriority.GetList();
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGrindPriorityList);
+            NanobotTerminal.EngineAddControl(propertyGrindPriorityList);
         }
 
         public static void SetGrindPriority()
@@ -157,7 +157,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertySGP);
+            NanobotTerminal.EngineAddControl(propertySGP);
         }
 
         public static void GetGrindPriority()
@@ -173,7 +173,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGGP);
+            NanobotTerminal.EngineAddControl(propertyGGP);
         }
 
         public static void SetGrindEnabled()
@@ -189,7 +189,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertySGE);
+            NanobotTerminal.EngineAddControl(propertySGE);
         }
 
         public static void GetGrindEnabled()
@@ -205,7 +205,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGGE);
+            NanobotTerminal.EngineAddControl(propertyGGE);
         }
 
         public static void ComponentClassList()
@@ -217,7 +217,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system != null ? system.ComponentCollectPriority.GetList() : null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyComponentClassList);
+            NanobotTerminal.EngineAddControl(propertyComponentClassList);
         }
 
         public static void SetCollectPriority()
@@ -233,7 +233,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertySPC);
+            NanobotTerminal.EngineAddControl(propertySPC);
         }
 
         public static void GetCollectPriority()
@@ -249,7 +249,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGPC);
+            NanobotTerminal.EngineAddControl(propertyGPC);
         }
 
         public static void SetCollectEnabled()
@@ -265,7 +265,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertySEC);
+            NanobotTerminal.EngineAddControl(propertySEC);
         }
 
         public static void GetCollectEnabled()
@@ -281,7 +281,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 }
                 return null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyGEC);
+            NanobotTerminal.EngineAddControl(propertyGEC);
         }
 
         public static void MissingComponents()
@@ -293,7 +293,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system != null ? system.GetMissingComponentsDict() : null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyMissingComponentsDict);
+            NanobotTerminal.EngineAddControl(propertyMissingComponentsDict);
         }
 
         public static void PossibleTargets()
@@ -305,7 +305,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system != null ? system.GetPossibleWeldTargetsList() : null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPossibleWeldTargetsList);
+            NanobotTerminal.EngineAddControl(propertyPossibleWeldTargetsList);
         }
 
         public static void PossibleGrindTargets()
@@ -317,7 +317,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system != null ? system.GetPossibleGrindTargetsList() : null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPossibleGrindTargetsList);
+            NanobotTerminal.EngineAddControl(propertyPossibleGrindTargetsList);
         }
 
         public static void PossibleCollectTargets()
@@ -329,7 +329,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system != null ? system.GetPossibleCollectingTargetsList() : null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPossibleCollectTargetsList);
+            NanobotTerminal.EngineAddControl(propertyPossibleCollectTargetsList);
         }
 
         public static void CurrentPickedTarget(bool readOnly = false)
@@ -353,7 +353,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                     }
                 };
             }
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyCPT);
+            NanobotTerminal.EngineAddControl(propertyCPT);
         }
 
         public static void CurrentTarget()
@@ -365,7 +365,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system != null ? system.State.CurrentWeldingBlock : null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyCT);
+            NanobotTerminal.EngineAddControl(propertyCT);
         }
 
         public static void CurrentPickedGrindTarget(bool readOnly = false)
@@ -389,7 +389,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                     }
                 };
             }
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyCPGT);
+            NanobotTerminal.EngineAddControl(propertyCPGT);
         }
 
         public static void CurrentGrindTarget()
@@ -401,7 +401,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 return system != null ? system.State.CurrentGrindingBlock : null;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyCGT);
+            NanobotTerminal.EngineAddControl(propertyCGT);
         }
 
         public static void ProductionBlockEnsureQueued()
@@ -412,7 +412,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             {
                 return UtilsProductionBlock.EnsureQueued;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyPEQ);
+            NanobotTerminal.EngineAddControl(propertyPEQ);
         }
 
         public static void InventoryNeededComponents4Blueprint()
@@ -423,7 +423,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
             {
                 return UtilsProductionBlock.NeededComponentsForBlueprint;
             };
-            MyAPIGateway.TerminalControls.AddControl<IMyShipWelder>(propertyNC4B);
+            NanobotTerminal.EngineAddControl(propertyNC4B);
         }
     }
 }

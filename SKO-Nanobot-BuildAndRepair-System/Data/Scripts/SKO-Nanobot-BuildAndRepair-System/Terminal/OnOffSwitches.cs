@@ -62,7 +62,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 onoffSwitch.Setter(block, !onoffSwitch.Getter(block));
             };
             action.ValidForGroups = onoffSwitch.SupportsMultipleBlocks;
-            MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
+            NanobotTerminal.EngineAddAction(action);
 
             action = MyAPIGateway.TerminalControls.CreateAction<IMyShipWelder>(string.Format("{0}_On", name));
             action.Name = new StringBuilder(string.Format("{0} {1}", name, onText));
@@ -73,7 +73,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 onoffSwitch.Setter(block, true);
             };
             action.ValidForGroups = onoffSwitch.SupportsMultipleBlocks;
-            MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
+            NanobotTerminal.EngineAddAction(action);
 
             action = MyAPIGateway.TerminalControls.CreateAction<IMyShipWelder>(string.Format("{0}_Off", name));
             action.Name = new StringBuilder(string.Format("{0} {1}", name, offText));
@@ -84,7 +84,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 onoffSwitch.Setter(block, false);
             };
             action.ValidForGroups = onoffSwitch.SupportsMultipleBlocks;
-            MyAPIGateway.TerminalControls.AddAction<IMyShipWelder>(action);
+            NanobotTerminal.EngineAddAction(action);
         }
 
         public static IMyTerminalControlOnOffSwitch CreateGrindJanitorOptionDisableOnly(bool grindingAllowed, Func<IMyTerminalBlock, bool> isJanitorAllowed, Func<IMyTerminalBlock, bool> isReadonly, Func<IMyTerminalBlock, bool> isBaRSystem)

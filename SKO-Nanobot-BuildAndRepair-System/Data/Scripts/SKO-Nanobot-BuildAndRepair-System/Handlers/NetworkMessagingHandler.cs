@@ -56,7 +56,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static void Unregister()
         {
-            if (!_registered || MyAPIGateway.Multiplayer == null || MyAPIGateway.Utilities == null)
+            if (!_registered)
+                return;
+
+            // BUG-260824.3: reset the latch BEFORE the gateway guards — a bare return
+            // with the flag stuck true made the next world's Register() a no-op
+            // (same pattern as BUG-260610.27 in DamageHandler/SafeZoneHandler).
+            _registered = false;
+
+            if (MyAPIGateway.Multiplayer == null || MyAPIGateway.Utilities == null || MyAPIGateway.Session == null)
                 return;
 
             if (MyAPIGateway.Session.IsServer)
@@ -311,12 +319,17 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                             return;
                         }
 
-                        // BUG-260610.31: per-block rate limit. Legit clients send at most
-                        // once per second (IsTransmitNeeded gate); each accepted message
-                        // costs a synchronous XML save + broadcast, so drop floods.
+                        // BUG-260610.31: rate limit. Legit clients send at most once per
+                        // second (IsTransmitNeeded gate); each accepted message costs a
+                        // synchronous XML save + broadcast, so drop floods.
+                        // BUG-260824.8: keyed per (block, sender) — a per-block window
+                        // silently dropped a second player's concurrent change (their
+                        // client clears its dirty bit on transmit, so it never resends).
                         var now = MyAPIGateway.Session.ElapsedPlayTime;
-                        if ((now - system._lastClientSettingsAppliedAt).TotalMilliseconds < 500) return;
-                        system._lastClientSettingsAppliedAt = now;
+                        TimeSpan lastApplied;
+                        if (system._lastClientSettingsAppliedBySender.TryGetValue(sender, out lastApplied)
+                            && (now - lastApplied).TotalMilliseconds < 500) return;
+                        system._lastClientSettingsAppliedBySender[sender] = now;
 
                         system.Settings.AssignReceived(msgRcv.Settings, system.BlockWeldPriority, system.BlockGrindPriority, system.ComponentCollectPriority);
                         system.SettingsChanged();
