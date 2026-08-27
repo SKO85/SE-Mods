@@ -2,7 +2,7 @@ namespace SKONanobotBuildAndRepairSystem
 {
     public static class Constants
     {
-        public const string ModVersion = "2.5.5";
+        public const string ModVersion = "2.5.6";
 
         // BuildId — bumped before every build. Format: "YYMMDD.N" where YYMMDD is
         // today's date and N is an auto-incrementing sequence for that day, starting
