@@ -538,6 +538,7 @@ namespace SKONanobotBuildAndRepairSystem
             // phantom grid saturation, pinned object graphs).
             try { FriendlyRelationsHandler.Clear(); } catch { }
             try { RazeQueueHandler.Clear(); } catch { }
+            try { SkeletonResetHandler.Clear(); } catch { }
             try { GridOwnershipCacheHandler.Clear(); } catch { }
             try { GridSystemCount.Clear(); } catch { }
             try { BlockPriorityHandling.GetItemKeyCache.Clear(); } catch { }
@@ -614,6 +615,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                         // BUG-127: tick the deferred raze handler (internally throttled).
                         RazeQueueHandler.Process();
+
+                        // BUG-260827.1: main-thread skeleton resets for dented blocks.
+                        SkeletonResetHandler.Process();
 
                         // BUG-130: shared friendly-damage map cleanup (internally throttled).
                         CleanupFriendlyDamage();

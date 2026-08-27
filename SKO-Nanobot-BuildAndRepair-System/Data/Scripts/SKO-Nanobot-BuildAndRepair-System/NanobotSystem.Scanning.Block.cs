@@ -243,6 +243,21 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
                 }
+                else if (!block.IsDestroyed
+                    && block.Integrity >= block.GetRequiredIntegrity(Settings.WeldOptions)
+                    && block.MaxDeformation > SlimBlockExtensions.MinDeformation
+                    && IsRelationAllowed4Welding(block))
+                {
+                    // BUG-260827.1: deformation-only block (integrity fine, dented) —
+                    // never a weld target (MaxDeformation is engine-bugged and doesn't
+                    // reset), queue a budgeted main-thread skeleton reset instead so
+                    // dents still get repaired.
+                    double distance;
+                    if (skipRangeCheck || block.IsInRange(ref areaBox, out distance))
+                    {
+                        SkeletonResetHandler.Enqueue(block);
+                    }
+                }
             }
 
             return false;

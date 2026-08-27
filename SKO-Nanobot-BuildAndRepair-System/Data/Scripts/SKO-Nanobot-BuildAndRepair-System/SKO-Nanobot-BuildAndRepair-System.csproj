@@ -150,6 +150,7 @@
     <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />
     <Compile Include="Handlers\NetworkMessagingHandler.cs" />
     <Compile Include="Handlers\RazeQueueHandler.cs" />
+    <Compile Include="Handlers\SkeletonResetHandler.cs" />
     <Compile Include="Helpers\PowerHelper.cs" />
     <Compile Include="Extensions\SlimBlockExtensions.cs" />
     <Compile Include="Localization\LocalizationHelper.cs" />
