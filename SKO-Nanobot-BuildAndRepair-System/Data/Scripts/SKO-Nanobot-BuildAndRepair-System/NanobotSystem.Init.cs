@@ -177,7 +177,10 @@ namespace SKONanobotBuildAndRepairSystem
             _Welder.IsWorkingChanged += _onIsWorkingChanged;
 
             // Set transport Inventory.
-            _TransportInventory = new Sandbox.Game.MyInventory((float)welderInventory.MaxVolume / MyAPIGateway.Session.BlocksInventorySizeMultiplier, Vector3.MaxValue, MyInventoryFlags.CanSend);
+            // BUG-260827.2: explicit maxMass — current SE builds leave the short
+            // constructor's mass constraint at 0, making CanItemsBeAdded/adds refuse
+            // everything on this detached inventory (welding starved completely).
+            _TransportInventory = new Sandbox.Game.MyInventory((float)welderInventory.MaxVolume / MyAPIGateway.Session.BlocksInventorySizeMultiplier, float.MaxValue, Vector3.MaxValue, MyInventoryFlags.CanSend);
 
             // BUG-018: seed InventoryFull from current welder volume on world reload.
             if ((float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)

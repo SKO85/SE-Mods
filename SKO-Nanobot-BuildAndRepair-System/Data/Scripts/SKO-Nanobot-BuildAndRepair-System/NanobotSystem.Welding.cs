@@ -847,6 +847,9 @@ namespace SKONanobotBuildAndRepairSystem
             var tsGetMissing = 0L;
             var tsPullPick = 0L;
             long tsMark;
+            // BUG-260827.x diagnostics: volume budget state for the no-weld investigation.
+            var diagEntryRemaining = -1f;
+            var diagEndRemaining = -1f;
             try
             {
                 var playTime = MyAPIGateway.Session.ElapsedPlayTime;
@@ -863,6 +866,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // end value against _MaxWeldTransportVolume started phantom transports
                 // whenever leftovers already occupied transport volume at entry.
                 var entryRemainingVolume = remainingVolume;
+                diagEntryRemaining = remainingVolume;
                 _TempMissingComponents.Clear();
                 var picked = false;
                 var cubeGrid = targetData.Block.CubeGrid as MyCubeGrid;
@@ -950,6 +954,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (tsMark != 0L) tsPullPick += Stopwatch.GetTimestamp() - tsMark;
                 }
 
+                diagEndRemaining = remainingVolume;
                 if (remainingVolume < entryRemainingVolume || (CreativeModeActive && _TempMissingComponents.Count > 0))
                 {
                     //Transport startet
@@ -975,13 +980,19 @@ namespace SKONanobotBuildAndRepairSystem
                     var tsFreq = Stopwatch.Frequency;
                     var _getMissingMs = tsGetMissing * 1000.0 / tsFreq;
                     var _pullPickMs = tsPullPick * 1000.0 / tsFreq;
+                    var _diagEntryRemaining = diagEntryRemaining;
+                    var _diagEndRemaining = diagEndRemaining;
+                    var _budget = _MaxWeldTransportVolume;
+                    var _transportVol = (float)_TransportInventory.CurrentVolume;
+                    var _transportMaxVol = (float)_TransportInventory.MaxVolume;
                     MethodProfiler.StopAndLog("ServerFindMissingComponents", profilerTs, () =>
-                        string.Format("entityId={0};block={1};projected={2};transportStarted={3};transportTimeS={4:F3};distance={5:F1};weldTransportSpeed={6:F1};getMissingMs={7:F3};pullPickMs={8:F3}",
+                        string.Format("entityId={0};block={1};projected={2};transportStarted={3};transportTimeS={4:F3};distance={5:F1};weldTransportSpeed={6:F1};getMissingMs={7:F3};pullPickMs={8:F3};budget={9:F4};entryRem={10:F4};endRem={11:F4};transportVol={12:F4};transportMax={13:F4}",
                             _Welder.EntityId,
                             targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
                             (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0,
                             _transportStarted, _transportTimeS, _distance, _weldTransportSpeed,
-                            _getMissingMs, _pullPickMs));
+                            _getMissingMs, _pullPickMs,
+                            _budget, _diagEntryRemaining, _diagEndRemaining, _transportVol, _transportMaxVol));
                 }
             }
         }
@@ -1250,8 +1261,10 @@ namespace SKONanobotBuildAndRepairSystem
                     // (e.g. RadioCommunication, 70 L, on small BaRs) floored to 0 forever
                     // and the block could never be welded. The real transport capacity is
                     // ~10x the logical budget, so let one item through when the transport
-                    // inventory is empty.
-                    if (_TransportInventory.CurrentVolume > 0 || !_TransportInventory.CanItemsBeAdded(1, componentId)) continue;
+                    // inventory is empty. BUG-260827.2: direct headroom check instead of
+                    // CanItemsBeAdded (unreliable on the detached transport inventory).
+                    if (_TransportInventory.CurrentVolume > 0
+                        || (float)_TransportInventory.MaxVolume - (float)_TransportInventory.CurrentVolume < volume) continue;
                     maxByVolume = 1;
                 }
                 var amountPossible = Math.Min(Math.Min(neededAmount, (int)srcItem.Amount), maxByVolume);
@@ -1294,6 +1307,11 @@ namespace SKONanobotBuildAndRepairSystem
             var profilerTs = MethodProfiler.Start();
             var picked = false;
             var startNeeded = neededAmount;
+            // BUG-260827.x diagnostics: expose WHY a pick moved nothing.
+            var diagMatched = 0;
+            var diagFlooredZero = 0;
+            var diagCanAddFailed = false;
+            var diagItemCount = 0;
 
             var welderInventory = _Welder.GetInventory(0);
             if (welderInventory == null || welderInventory.Empty())
@@ -1309,32 +1327,54 @@ namespace SKONanobotBuildAndRepairSystem
 
             _TempInventoryItems.Clear();
             welderInventory.GetItems(_TempInventoryItems);
+            diagItemCount = _TempInventoryItems.Count;
             for (int i1 = _TempInventoryItems.Count - 1; i1 >= 0; i1--)
             {
                 var srcItem = _TempInventoryItems[i1];
                 if (srcItem != null && (MyDefinitionId)srcItem.Type == componentId && srcItem.Amount > 0)
                 {
+                    diagMatched++;
                     var maxpossibleAmount = Math.Min(neededAmount, (int)Math.Floor(remainingVolume / volume));
                     // BUG-260824.1: allow one oversized item when the transport inventory
                     // is empty (same rationale as TryPullFromSource); the CanItemsBeAdded
                     // check below still guards the real transport capacity.
                     if (maxpossibleAmount <= 0 && _TransportInventory.CurrentVolume == 0)
                         maxpossibleAmount = 1;
+                    if (maxpossibleAmount <= 0) diagFlooredZero++;
                     var pickedAmount = MyFixedPoint.Min(maxpossibleAmount, srcItem.Amount);
                     if (pickedAmount > 0)
                     {
-                        // BUG-260612.2: verify the transport inventory can take the stack
-                        // BEFORE removing it from the welder — AddItems silently adds
-                        // nothing when full, so the old unchecked order destroyed items.
-                        if (!_TransportInventory.CanItemsBeAdded(pickedAmount, componentId))
+                        // BUG-260612.2/BUG-260827.2: guard against a full transport BEFORE
+                        // removing from the welder, but do NOT trust CanItemsBeAdded — the
+                        // engine returns false for this detached inventory in current SE
+                        // builds even when empty. Check the real volume headroom directly.
+                        var transportHeadroom = (float)_TransportInventory.MaxVolume - (float)_TransportInventory.CurrentVolume;
+                        if (transportHeadroom < (float)pickedAmount * volume)
+                        {
+                            diagCanAddFailed = true;
                             break;
+                        }
 
                         welderInventory.RemoveItems(srcItem.ItemId, pickedAmount);
                         var physicalObjBuilder = (MyObjectBuilder_PhysicalObject)MyObjectBuilderSerializer.CreateNewObject((MyDefinitionId)srcItem.Type);
+                        // BUG-260827.2: verify the add actually landed; if the engine
+                        // refused (partially), return the remainder to the welder so no
+                        // items are destroyed (the BUG-260612.2 concern, kept intact).
+                        var beforeAmount = _TransportInventory.GetItemAmount(componentId);
                         _TransportInventory.AddItems(pickedAmount, physicalObjBuilder);
+                        var addedAmount = _TransportInventory.GetItemAmount(componentId) - beforeAmount;
+                        if (addedAmount < pickedAmount)
+                        {
+                            welderInventory.AddItems(pickedAmount - addedAmount, physicalObjBuilder);
+                        }
+                        if (addedAmount <= 0)
+                        {
+                            diagCanAddFailed = true;
+                            break;
+                        }
 
-                        neededAmount -= (int)pickedAmount;
-                        remainingVolume -= (float)pickedAmount * volume;
+                        neededAmount -= (int)addedAmount;
+                        remainingVolume -= (float)addedAmount * volume;
 
                         picked = true;
                     }
@@ -1345,9 +1385,15 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (profilerTs != 0L)
             {
+                var _remainingVolume = remainingVolume;
+                var _diagMatched = diagMatched;
+                var _diagFlooredZero = diagFlooredZero;
+                var _diagCanAddFailed = diagCanAddFailed;
+                var _diagItemCount = diagItemCount;
                 MethodProfiler.StopAndLog("ServerPickFromWelder", profilerTs, () =>
-                    string.Format("entityId={0};component={1};startNeeded={2};picked={3};empty=False",
-                        _Welder.EntityId, componentId.SubtypeName, startNeeded, picked));
+                    string.Format("entityId={0};component={1};startNeeded={2};picked={3};empty=False;items={4};matched={5};flooredZero={6};canAddFailed={7};remVol={8:F4}",
+                        _Welder.EntityId, componentId.SubtypeName, startNeeded, picked,
+                        _diagItemCount, _diagMatched, _diagFlooredZero, _diagCanAddFailed, _remainingVolume));
             }
             return picked;
         }
