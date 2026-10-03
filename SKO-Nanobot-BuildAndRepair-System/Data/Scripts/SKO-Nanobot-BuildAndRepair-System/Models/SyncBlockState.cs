@@ -39,6 +39,16 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private IMySlimBlock _CurrentWeldingBlock;
         private IMySlimBlock _CurrentGrindingBlock;
 
+        // Stable bookkeeping IDs for Mod.GridSystemCount. Do not derive the old grid ID
+        // from an IMySlimBlock during release: a fully-dismounted/razed block can lose
+        // CubeGrid before Current*Block is cleared, which would skip the decrement and
+        // permanently inflate the per-grid system count.
+        private long _CurrentWeldingGridId;
+        private long _CurrentGrindingGridId;
+
+        internal long CurrentWeldingGridId { get { return _CurrentWeldingGridId; } }
+        internal long CurrentGrindingGridId { get { return _CurrentGrindingGridId; } }
+
         private Vector3D? _CurrentTransportTarget;
         private Vector3D? _LastTransportTarget;
         private bool _CurrentTransportIsPick;
@@ -171,31 +181,25 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 if (value != _CurrentWeldingBlock)
                 {
-                    // BUG-097: detect same-physical-block lock-on refresh (new IMySlimBlock
-                    // ref but same grid+position) so we skip Dec/Inc and avoid the count dip.
-                    var oldGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
-                        ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
+                    var oldGridId = _CurrentWeldingGridId;
                     var newGridId = (value != null && value.CubeGrid != null)
                         ? value.CubeGrid.EntityId : 0L;
                     var oldPos = _CurrentWeldingBlock != null ? _CurrentWeldingBlock.Position : default(Vector3I);
                     var newPos = value != null ? value.Position : default(Vector3I);
                     var samePhysicalBlock = oldGridId != 0L && oldGridId == newGridId && oldPos == newPos;
 
-                    // BUG-160: count-once-per-grid (skip Inc/Dec when the other lock already
-                    // pins this grid so weld+grind on the same grid contributes +1, not +2).
-                    if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
+                    // BUG-160: each BaR contributes once per distinct target grid. Use
+                    // stable stored IDs so destruction of either slim block cannot erase
+                    // the information needed to balance the counter.
+                    if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer && oldGridId != newGridId)
                     {
-                        if (oldGridId != newGridId)
-                        {
-                            var otherGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
-                                ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
-                            if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
-                            if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
-                        }
+                        var otherGridId = _CurrentGrindingGridId;
+                        if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
+                        if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
                     }
+
                     _CurrentWeldingBlock = value;
-                    // Same-physical-block reference refresh produces an identical SyncEntityId,
-                    // so the network sync is redundant. Skip Changed=true in that case.
+                    _CurrentWeldingGridId = newGridId;
                     if (!samePhysicalBlock) Changed = true;
                 }
             }
@@ -221,27 +225,24 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 if (value != _CurrentGrindingBlock)
                 {
-                    // BUG-097: see CurrentWeldingBlock above (same-grid lock-on refresh).
-                    var oldGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
-                        ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
+                    var oldGridId = _CurrentGrindingGridId;
                     var newGridId = (value != null && value.CubeGrid != null)
                         ? value.CubeGrid.EntityId : 0L;
                     var oldPos = _CurrentGrindingBlock != null ? _CurrentGrindingBlock.Position : default(Vector3I);
                     var newPos = value != null ? value.Position : default(Vector3I);
                     var samePhysicalBlock = oldGridId != 0L && oldGridId == newGridId && oldPos == newPos;
 
-                    // BUG-160: count-once-per-grid (see CurrentWeldingBlock above).
-                    if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
+                    // BUG-160: each BaR contributes once per distinct target grid. Use
+                    // stable stored IDs so a razed grind target cannot leak a grid slot.
+                    if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer && oldGridId != newGridId)
                     {
-                        if (oldGridId != newGridId)
-                        {
-                            var otherGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
-                                ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
-                            if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
-                            if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
-                        }
+                        var otherGridId = _CurrentWeldingGridId;
+                        if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
+                        if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
                     }
+
                     _CurrentGrindingBlock = value;
+                    _CurrentGrindingGridId = newGridId;
                     if (!samePhysicalBlock) Changed = true;
                 }
             }
@@ -611,6 +612,10 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
             _CurrentWeldingBlock = SyncEntityId.GetItemAsSlimBlock(newState.CurrentWeldingBlockSync);
             _CurrentGrindingBlock = SyncEntityId.GetItemAsSlimBlock(newState.CurrentGrindingBlockSync);
+            _CurrentWeldingGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
+                ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
+            _CurrentGrindingGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
+                ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
             _CurrentTransportTarget = newState.CurrentTransportTarget;
             _CurrentTransportIsPick = newState.CurrentTransportIsPick;
 
