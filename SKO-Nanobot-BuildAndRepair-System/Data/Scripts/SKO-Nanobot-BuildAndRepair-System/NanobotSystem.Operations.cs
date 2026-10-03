@@ -376,18 +376,10 @@ namespace SKONanobotBuildAndRepairSystem
                 return 0;
 
             // BUG-160: each BaR contributes +1 per grid; subtract at most 1 here.
-            var myWeldBlock = State.CurrentWeldingBlock;
-            var myWeldGridId = (myWeldBlock != null && myWeldBlock.CubeGrid != null) ? myWeldBlock.CubeGrid.EntityId : 0L;
-            if (myWeldGridId == gridEntityId)
-            {
+            // Use the stable bookkeeping IDs rather than dereferencing a target that may
+            // already have been razed and lost CubeGrid.
+            if (State.CurrentWeldingGridId == gridEntityId || State.CurrentGrindingGridId == gridEntityId)
                 count--;
-            }
-            else
-            {
-                var myGrindBlock = State.CurrentGrindingBlock;
-                var myGrindGridId = (myGrindBlock != null && myGrindBlock.CubeGrid != null) ? myGrindBlock.CubeGrid.EntityId : 0L;
-                if (myGrindGridId == gridEntityId) count--;
-            }
 
             return count;
         }

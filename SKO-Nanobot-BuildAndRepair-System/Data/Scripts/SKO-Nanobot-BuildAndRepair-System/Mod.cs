@@ -399,11 +399,11 @@ namespace SKONanobotBuildAndRepairSystem
                 var bar = pair.Value;
                 if (bar == null || bar.State == null) continue;
 
-                var weldBlock = bar.State.CurrentWeldingBlock;
-                var grindBlock = bar.State.CurrentGrindingBlock;
-
-                var weldGridId = (weldBlock != null && weldBlock.CubeGrid != null) ? weldBlock.CubeGrid.EntityId : 0L;
-                var grindGridId = (grindBlock != null && grindBlock.CubeGrid != null) ? grindBlock.CubeGrid.EntityId : 0L;
+                // Use the stable counter-bookkeeping IDs. A razed target may have
+                // already lost CubeGrid even though this BaR still contributes to the
+                // live per-grid count.
+                var weldGridId = bar.State.CurrentWeldingGridId;
+                var grindGridId = bar.State.CurrentGrindingGridId;
 
                 var weldOver = weldGridId != 0L && overLimitGrids.Contains(weldGridId);
                 var grindOver = grindGridId != 0L && overLimitGrids.Contains(grindGridId);
