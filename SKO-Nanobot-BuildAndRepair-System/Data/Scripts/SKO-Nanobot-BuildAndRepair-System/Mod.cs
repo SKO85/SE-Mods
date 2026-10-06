@@ -421,11 +421,10 @@
                 var bar = pair.Value;
                 if (bar == null || bar.State == null) continue;
 
-                var weldBlock = bar.State.CurrentWeldingBlock;
-                var grindBlock = bar.State.CurrentGrindingBlock;
-
-                var weldGridId = (weldBlock != null && weldBlock.CubeGrid != null) ? weldBlock.CubeGrid.EntityId : 0L;
-                var grindGridId = (grindBlock != null && grindBlock.CubeGrid != null) ? grindBlock.CubeGrid.EntityId : 0L;
+                // BUG-261006.1: use the counted effective ids (GridSystemCount keys), not
+                // block.CubeGrid — a razed lock-on has no grid, a projected one has the wrong one.
+                var weldGridId = bar.State.WeldCountedGridId;
+                var grindGridId = bar.State.GrindCountedGridId;
 
                 var weldOver = weldGridId != 0L && overLimitGrids.Contains(weldGridId);
                 var grindOver = grindGridId != 0L && overLimitGrids.Contains(grindGridId);
