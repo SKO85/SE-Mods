@@ -1,4 +1,4 @@
-using SKONanobotBuildAndRepairSystem.Handlers;
+﻿using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
@@ -113,6 +113,16 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 IntSetting("WorkSpeed",
                     () => Mod.Settings.Welder.WorkSpeed,
                     v => { Mod.Settings.Welder.WorkSpeed = v; }, 1, 10),
+                EnumSetting("LanguageOverride",
+                    () => string.IsNullOrEmpty(Mod.Settings.LanguageOverride) ? "none" : Mod.Settings.LanguageOverride,
+                    v =>
+                    {
+                        var code = (v ?? "").Trim().ToLowerInvariant();
+                        if (code == "none" || code == "game") code = "";
+                        if (code != "" && code != "ko") return "Unknown language code. Accepted: none, ko. Takes effect on world reload / rejoin.";
+                        Mod.Settings.LanguageOverride = code;
+                        return null;
+                    }, "none|ko (applies on reload)"),
             };
 
             _lookup = new Dictionary<string, SettingEntry>(StringComparer.OrdinalIgnoreCase);

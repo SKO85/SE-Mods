@@ -133,6 +133,7 @@
     <Compile Include="Localization\TextsRussian.cs" />
     <Compile Include="Localization\TextsGerman.cs" />
     <Compile Include="Localization\TextsEnglish.cs" />
+    <Compile Include="Localization\TextsKorean.cs" />
     <Compile Include="Caches\TtlCache.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="Chat\ChatHandler.cs" />

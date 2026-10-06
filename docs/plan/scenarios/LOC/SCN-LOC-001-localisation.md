@@ -7,12 +7,17 @@
 ## Steps
 1. For each language open the BaR terminal, the info panel, a toolbar action tooltip, and trigger
    `/nanobars -help`.
-2. `DisableLocalization = true`: repeat in Deutsch.
+2. `DisableLocalization = true`: repeat in Deutsch — everything English.
+3. `LanguageOverride = ko` (`/nanobars config set LanguageOverride ko`, save, reload): terminal labels,
+   tooltips and info-panel texts Korean regardless of game language; a joining client gets it via
+   settings sync; `set LanguageOverride xx` is rejected; `none` + reload restores the game language.
 ## Expected outcome
 - Every control label, tooltip, combo entry, on/off action name and panel line
   (`Info_InventoryFull`, `Info_LimitReached`, `Info_BlockSwitchedOff`, …) shows the translated text
   from `Localization/Texts*.cs`; no raw key names, no `???`.
 - Unlocalised languages fall back to English; `DisableLocalization` forces English everywhere.
+- `LanguageOverride = ko` uses the Korean dictionary with English fallback per key; chat/HUD/state
+  strings stay English (not localised for any language).
 - Action on/off texts resolve through `MyTexts` (BUG-260610.37); the grind priority tooltip matches the
   code behaviour (BUG-260610.43).
 ## Perf envelope
@@ -22,4 +27,4 @@ manual
 ## Last verified
 never
 ## Related
-BUG-260610.37, BUG-260610.43, `Localization/LocalizationHelper.cs`
+BUG-260610.37, BUG-260610.43, FEAT-261006.1 (GitHub #145, Korean via LanguageOverride), `Localization/LocalizationHelper.cs`
