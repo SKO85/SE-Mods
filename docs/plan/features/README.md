@@ -24,11 +24,12 @@ Track feature requests and designs.
 ## Files Affected
 [List of files that need changes]
 ## Testing
-[How to verify]
+[How to verify; list the SCN-<AREA>-NNN scenarios this feature adds or changes]
 ```
 
 ## Rules
 
 - Implementations must be performance-conscious. This mod runs every tick in a game loop — avoid allocations, LINQ in hot paths, and unnecessary complexity.
 - Do not over-engineer. Implement the minimum needed to deliver the feature. No speculative abstractions or premature configurability.
+- `## Testing` names the scenario ids (`docs/plan/scenarios/`) the feature adds or changes.
 - Move tickets from `TODO/` to `DONE/` when status becomes `Done` or `Rejected`. Delete tickets that are obsolete or superseded — do not park them in `DONE/` with a misleading status.
