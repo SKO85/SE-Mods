@@ -220,6 +220,12 @@
     <Compile Include="Managers\PerTickBudget.cs" />
     <Compile Include="Managers\PeriodicMaintenanceScheduler.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- FEAT-260910.2: scenario test harness. Compiled with the mod for IDE/C# 6 checks, deployed only to the -Testing variant by build_post.cmd. -->
+    <Compile Include="..\..\..\..\_Scripts\BuildAndRepairSystem\Testing\Data\Scripts\SKO-Nanobot-BuildAndRepair-System\Testing\**\*.cs">
+      <Link>Testing\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>D:\Git\GitHub\SKO85\SE\SE-Mods\_Scripts\BuildAndRepairSystem\build_post.cmd $(ProjectName) $(ProjectDir)..\..\..\</PostBuildEvent>

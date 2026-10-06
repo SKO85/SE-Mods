@@ -1,4 +1,4 @@
-namespace SKONanobotBuildAndRepairSystem
+﻿namespace SKONanobotBuildAndRepairSystem
 {
     using DefenseShields;
     using Sandbox.ModAPI;
@@ -137,6 +137,11 @@ namespace SKONanobotBuildAndRepairSystem
         // When set (not null), overrides MyAPIGateway.Physics.ServerSimulationRatio.
         // Controlled via /nanobars sim <value|reset> command (admin-only).
         public static float? SimSpeedOverride = null;
+
+        // FEAT-260910.2: scenario test harness seam. Assigned by the Testing overlay's
+        // session component; null in the release variant.
+        public static Action TestTick;
+        public static Func<string[], ulong, Chat.ChatCommandResult> TestCommand;
 
         public static float GetEffectiveSimSpeed()
         {
@@ -544,6 +549,10 @@ namespace SKONanobotBuildAndRepairSystem
             try { BlockPriorityHandling.GetItemKeyCache.Clear(); } catch { }
             try { GridScanCache.Clear(); } catch { }
 
+            // FEAT-260910.2: drop the harness hooks; the Testing component re-assigns on next load.
+            TestTick = null;
+            TestCommand = null;
+
             // BUG-260610.1: reset session-relative static timers/overrides.
             try { ResetSessionState(); } catch { }
 
@@ -621,6 +630,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                         // BUG-130: shared friendly-damage map cleanup (internally throttled).
                         CleanupFriendlyDamage();
+
+                        // FEAT-260910.2: scenario test harness (Testing variant only).
+                        if (TestTick != null) TestTick();
                     }
 
                     // If the Settings is not yet valid, sync the settings between clients and server.

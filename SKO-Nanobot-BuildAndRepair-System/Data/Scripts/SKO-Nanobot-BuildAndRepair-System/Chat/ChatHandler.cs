@@ -1,4 +1,4 @@
-using Sandbox.ModAPI;
+﻿using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Chat.Commands;
 using SKONanobotBuildAndRepairSystem.Cluster;
 using SKONanobotBuildAndRepairSystem.Handlers;
@@ -309,6 +309,12 @@ namespace SKONanobotBuildAndRepairSystem.Chat
                     break;
                 case "version":
                     result = VersionCommand.Execute();
+                    break;
+                case "test":
+                    // FEAT-260910.2: scenario harness lives in the Testing overlay only.
+                    result = Mod.TestCommand != null
+                        ? Mod.TestCommand(args, senderSteamId)
+                        : ChatCommandResult.Error("Test harness not installed (Testing variant only).");
                     break;
                 default:
                     result = ChatCommandResult.Error("Unknown command: " + args[0]);
