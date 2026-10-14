@@ -535,6 +535,13 @@ namespace SKONanobotBuildAndRepairSystem
                     tsLimitsCheck = Stopwatch.GetTimestamp() - tsLimitsCheck;
                     if (withinLimits)
                     {
+                        // SE's projector build takes the creation component (Components[0] x1) from the
+                        // builder's *real* inventory (MySpaceBuildComponent.TakeMaterialsFromBuilder), but
+                        // BaR stages it in the virtual _TransportInventory. Snapshot the welder inventory so
+                        // we can charge the transport inventory if SE didn't take anything.
+                        var createCompId = blockDefinition.Components[0].Definition.Id;
+                        var welderCreateCompBefore = welderInventory != null ? welderInventory.GetItemAmount(createCompId) : (MyFixedPoint)0;
+
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed))
                         {
                             // BUG-107: gate proj.Build on the global per-tick budget; skip resolve
@@ -612,7 +619,7 @@ namespace SKONanobotBuildAndRepairSystem
                             tsBuild = Stopwatch.GetTimestamp() - tsBuild;
                         }
 
-                        // proj.Build() handles component consumption internally; manual RemoveItems is not needed.
+                        // proj.Build() only consumes the creation component from the welder's real inventory; see above.
 
                         // BUG-105/108: instrument projected→physical block resolution.
                         tsResolve = Stopwatch.GetTimestamp();
@@ -641,6 +648,16 @@ namespace SKONanobotBuildAndRepairSystem
                                 targetData.Block = target;
                                 targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
                                 created = true;
+
+                                // Charge the creation component. Without this the block spawns with
+                                // Components[0] x1 already mounted for free and the transported one is then
+                                // stockpiled on top, so the first (often most expensive) component is never paid.
+                                if (!CreativeModeActive)
+                                {
+                                    var welderCreateCompAfter = welderInventory != null ? welderInventory.GetItemAmount(createCompId) : (MyFixedPoint)0;
+                                    if (welderCreateCompAfter >= welderCreateCompBefore)
+                                        _TransportInventory.RemoveItemsOfType(1, createCompId);
+                                }
 
                                 // Close assignment gap: the projected block's key (ProjGridId:Pos) differs
                                 // from the physical block's key (RealGridId:Pos). Assign the physical block
