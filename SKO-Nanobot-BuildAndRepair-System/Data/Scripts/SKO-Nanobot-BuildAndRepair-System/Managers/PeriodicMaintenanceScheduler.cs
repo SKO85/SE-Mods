@@ -3,6 +3,7 @@ using SKONanobotBuildAndRepairSystem.Caches;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Profiling;
+using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 
 namespace SKONanobotBuildAndRepairSystem.Managers
@@ -18,6 +19,7 @@ namespace SKONanobotBuildAndRepairSystem.Managers
     {
         private struct PeriodicTask
         {
+            public string Name;
             public TimeSpan Interval;
             public TimeSpan LastRun;
             public Action Work;
@@ -36,6 +38,7 @@ namespace SKONanobotBuildAndRepairSystem.Managers
         // from MyAPIGateway.Parallel.StartBackground.
         private static PeriodicTask _ownership = new PeriodicTask
         {
+            Name = "Ownership",
             Interval = TimeSpan.FromSeconds(10),
             LastRun = TimeSpan.Zero,
             MainThread = true,
@@ -48,6 +51,7 @@ namespace SKONanobotBuildAndRepairSystem.Managers
         // _staleZoneKeys scratch buffer with main-thread maintenance paths.
         private static PeriodicTask _safeZone = new PeriodicTask
         {
+            Name = "SafeZone",
             Interval = TimeSpan.FromSeconds(6),
             LastRun = TimeSpan.Zero,
             MainThread = true,
@@ -58,15 +62,17 @@ namespace SKONanobotBuildAndRepairSystem.Managers
         // long lingering of expired entries (TryGet filters them at read time).
         private static PeriodicTask _ttlCleanup = new PeriodicTask
         {
+            Name = "TtlCleanup",
             Interval = TimeSpan.FromMinutes(2),
             LastRun = TimeSpan.Zero,
             Work = () =>
             {
-                try { InventoryHelper.Cleanup(); } catch { }
-                try { BlockPriorityHandling.GetItemKeyCache.CleanupExpired(); } catch { }
-                try { BlockFailureCooldownHandler.Cleanup(); } catch { }
-                try { SharedGridBlockCache.Cleanup(); } catch { }
-                try { SharedEntityCache.Cleanup(); } catch { }
+                // Per-cache isolation: one failing cleanup must not skip the others.
+                Run("InventoryHelper.Cleanup", () => InventoryHelper.Cleanup());
+                Run("BlockPriorityCache.CleanupExpired", () => BlockPriorityHandling.GetItemKeyCache.CleanupExpired());
+                Run("BlockFailureCooldownHandler.Cleanup", () => BlockFailureCooldownHandler.Cleanup());
+                Run("SharedGridBlockCache.Cleanup", () => SharedGridBlockCache.Cleanup());
+                Run("SharedEntityCache.Cleanup", () => SharedEntityCache.Cleanup());
             }
         };
 
@@ -78,9 +84,10 @@ namespace SKONanobotBuildAndRepairSystem.Managers
         // active grinding and looks like a leak to admins watching the panel.
         private static PeriodicTask _assignmentCleanup = new PeriodicTask
         {
+            Name = "AssignmentCleanup",
             Interval = TimeSpan.FromSeconds(5),
             LastRun = TimeSpan.Zero,
-            Work = () => { try { BlockSystemAssigningHandler.Cleanup(); } catch { } }
+            Work = () => BlockSystemAssigningHandler.Cleanup()
         };
 
         // BUG-123: friendly-BaR cache rebuild. MUST run on the main thread —
@@ -96,6 +103,7 @@ namespace SKONanobotBuildAndRepairSystem.Managers
         // inside the safety envelope).
         private static PeriodicTask _friendlyRebuild = new PeriodicTask
         {
+            Name = "FriendlyRebuild",
             Interval = TimeSpan.FromSeconds(15),
             LastRun = TimeSpan.Zero,
             MainThread = true,
@@ -106,6 +114,7 @@ namespace SKONanobotBuildAndRepairSystem.Managers
         // the main thread, kept on background to avoid blocking the sim tick.
         private static PeriodicTask _profilerFlush = new PeriodicTask
         {
+            Name = "ProfilerFlush",
             Interval = TimeSpan.FromSeconds(5),
             LastRun = TimeSpan.Zero,
             Work = () => MethodProfiler.FlushAll()
@@ -146,15 +155,29 @@ namespace SKONanobotBuildAndRepairSystem.Managers
             if (now.Subtract(task.LastRun) < task.Interval) return;
             task.LastRun = now;
             var work = task.Work;
+            var name = task.Name;
             if (task.MainThread)
             {
-                try { work(); } catch { }
+                Run(name, work);
                 return;
             }
-            MyAPIGateway.Parallel.StartBackground(() =>
+            MyAPIGateway.Parallel.StartBackground(() => Run(name, work));
+        }
+
+        /// <summary>
+        /// BUG-260909.2: run one maintenance step isolated but logged — a cache whose
+        /// cleanup throws every cycle would otherwise leak silently.
+        /// </summary>
+        private static void Run(string name, Action work)
+        {
+            try
             {
-                try { work(); } catch { }
-            });
+                work();
+            }
+            catch (Exception ex)
+            {
+                try { Logging.Instance.Write(Logging.Level.Error, "PeriodicMaintenance: {0} failed: {1}", name, ex); } catch { }
+            }
         }
     }
 }
