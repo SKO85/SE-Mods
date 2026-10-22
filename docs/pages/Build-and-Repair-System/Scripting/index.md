@@ -11,7 +11,7 @@ The Build and Repair System exposes a set of terminal properties that can be rea
 
 All property names are prefixed with `BuildAndRepair.`.
 
-> **Note:** When the server locks script control (`ScriptControllFixed = true` in `ModSettings.xml`), the script-control toggle and the list/function properties (priority lists, targets, missing components, production helpers) are not registered and cannot be used from scripts.
+> **Note:** When the server locks script control (`ScriptControllFixed = true` in `ModSettings.xml`), scripts can still **read** everything — priority lists, targets, missing components, current targets and `Inventory.NeededComponents4Blueprint` stay available. What disappears is everything that changes behaviour: the `ScriptControlled` toggle, the `Set…Priority` / `Set…Enabled` functions, the `CurrentPicked…Target` setters and `ProductionBlock.EnsureQueued`. Calling one of those throws, so wrap writes in `try`/`catch`.
 
 > Properties whose terminal option is locked server-wide via a `*Fixed` setting are read-only — writes from a script are ignored.
 
@@ -19,14 +19,14 @@ All property names are prefixed with `BuildAndRepair.`.
 
 ## Detecting a Build and Repair Block
 
-To check whether a block is a Build and Repair System, try reading a known property. If the property exists, the block is a BaR system:
+To check whether a block is a Build and Repair System, try reading a known property. If the property exists, the block is a BaR system. Probe `BuildAndRepair.Mode` — it exists on every server, while `BuildAndRepair.ScriptControlled` is removed when script control is locked:
 
 ```csharp
 bool IsBuildAndRepairBlock(IMyTerminalBlock block)
 {
     try
     {
-        block.GetValueBool("BuildAndRepair.ScriptControlled");
+        block.GetValue<long>("BuildAndRepair.Mode");
         return true;
     }
     catch
