@@ -22,7 +22,7 @@ CORE 3 · WELD 6 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-BUDGET-003 | BUDGET | 1 | Ms budget caps work even when count budget remains | planned: unit:PerTickBudgetTests.MsCapWins_WhenCountBudgetRemains | never |
 | SCN-BUDGET-004 | BUDGET | 3 | Auto stagger groups 1/2/3 by enabled BaR count | planned: unit:ModResolverTests.AutoStaggerGroupsFor_Thresholds | never |
 | SCN-BUDGET-005 | BUDGET | 3 | Failure cooldown: many BaRs do not bounce off one unweldable block | manual | never |
-| SCN-BUDGET-006 | BUDGET | 4 | Large-grid performance envelope (3000+ blocks, 5 BaRs) | planned: ingame:S08 | never |
+| SCN-BUDGET-006 | BUDGET | 4 | Large-grid performance envelope (3000+ blocks, 5 BaRs) | ingame:S08 | never |
 | SCN-WELD-001 | WELD | 1 | WeldOnly repairs damaged blocks and never grinds | ingame:S01 | never |
 | SCN-WELD-002 | WELD | 2 | Projected block build incl. DLC-missing skip and silent-fail blacklist | planned: ingame:S03 | never |
 | SCN-WELD-003 | WELD | 2 | Weld options Full / Functional / Skeleton stop at the right integrity | manual | never |

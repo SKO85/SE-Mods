@@ -23,6 +23,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         /// <summary>Armor blocks spawned at full integrity (grind targets / filler).</summary>
         public int Armor;
         public float DamagedBuildPercent = 0.2f;
+        /// <summary>Armor blocks per row (grid X); rows grow along grid Z.</summary>
+        public int RowWidth = 10;
         /// <summary>World offset from the scenario origin.</summary>
         public Vector3D Offset = Vector3D.Zero;
         /// <summary>Block owner; -1 = the admin running the test, 0 = nobody.</summary>
@@ -40,6 +42,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public readonly List<NanobotSystem> Bars = new List<NanobotSystem>();
         public readonly List<IMySlimBlock> Targets = new List<IMySlimBlock>();
         public IMyCubeBlock Cargo;
+        public readonly List<IMyCubeBlock> Cargos = new List<IMyCubeBlock>();
         public bool Resolved;
     }
 
@@ -132,11 +135,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                     var slim = rig.Grid.GetCubeBlock(rig.TargetPositions[t]);
                     if (slim != null) rig.Targets.Add(slim);
                 }
-                if (rig.CargoPositions.Count > 0)
+                rig.Cargos.Clear();
+                for (int c = 0; c < rig.CargoPositions.Count; c++)
                 {
-                    var cargo = rig.Grid.GetCubeBlock(rig.CargoPositions[0]);
-                    rig.Cargo = cargo != null ? cargo.FatBlock : null;
+                    var cargo = rig.Grid.GetCubeBlock(rig.CargoPositions[c]);
+                    if (cargo != null && cargo.FatBlock != null) rig.Cargos.Add(cargo.FatBlock);
                 }
+                rig.Cargo = rig.Cargos.Count > 0 ? rig.Cargos[0] : null;
                 rig.Resolved = true;
             }
             return all;
@@ -172,6 +177,17 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             var inv = rig.Cargo.GetInventory(0);
             if (inv == null) throw new Exception("StockCargo(" + rig.Name + "): cargo has no inventory");
             inv.AddItems((MyFixedPoint)amount, new MyObjectBuilder_Component { SubtypeName = componentSubtype });
+        }
+
+        /// <summary>Stocks every container on the rig (one small container holds ~5000 SteelPlate).</summary>
+        public void StockAllCargo(TestRig rig, string componentSubtype, int amountPerContainer)
+        {
+            if (rig.Cargos.Count == 0) throw new Exception("StockAllCargo(" + rig.Name + "): no cargo on rig");
+            for (int i = 0; i < rig.Cargos.Count; i++)
+            {
+                var inv = rig.Cargos[i].GetInventory(0);
+                if (inv != null) inv.AddItems((MyFixedPoint)amountPerContainer, new MyObjectBuilder_Component { SubtypeName = componentSubtype });
+            }
         }
 
         public void ClearInventory(IMyCubeBlock block)
@@ -320,7 +336,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 catch { }
             }
             _spawned.Clear();
-            for (int i = 0; i < Rigs.Count; i++) { Rigs[i].Bars.Clear(); Rigs[i].Targets.Clear(); Rigs[i].Grid = null; }
+            for (int i = 0; i < Rigs.Count; i++) { Rigs[i].Bars.Clear(); Rigs[i].Targets.Clear(); Rigs[i].Cargos.Clear(); Rigs[i].Cargo = null; Rigs[i].Grid = null; }
 
             if (!box.Valid) return;
             box.Inflate(50.0);

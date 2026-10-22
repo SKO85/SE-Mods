@@ -11,7 +11,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
     /// Builds a static large-grid test rig as an object builder.
     /// Layout (grid units, y up): base layer y=0 holds the BaRs (1x1x2, at x=2i, z=0..1) wrapped by
     /// small containers on their side and back faces so the conveyor network is reachable whichever
-    /// face carries the port, plus a battery. Armor targets sit directly on top at y=1 in rows of 10.
+    /// face carries the port, plus a battery. Armor targets sit directly on top at y=1 in rows of RigSpec.RowWidth.
     /// Target-only grids (Bars == 0) are just the armor rows at y=0.
     /// </summary>
     internal static class RigBuilder
@@ -20,7 +20,6 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         private const string CargoSubtype = "LargeBlockSmallContainer";
         private const string BatterySubtype = "LargeBlockBatteryBlock";
         private const string ArmorSubtype = "LargeBlockArmorBlock";
-        private const int RowWidth = 10;
 
         public static MyObjectBuilder_CubeGrid Build(RigSpec spec, Vector3D position, long ownerId, TestRig rig)
         {
@@ -66,10 +65,11 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 Add(grid, used, battery, 1, 1, 1);
             }
 
+            var rowWidth = spec.RowWidth > 0 ? spec.RowWidth : 10;
             var n = 0;
             for (int i = 0; i < spec.DamagedArmor; i++, n++)
             {
-                var pos = new Vector3I(n % RowWidth, armorY, n / RowWidth);
+                var pos = new Vector3I(n % rowWidth, armorY, n / rowWidth);
                 var armor = Create<MyObjectBuilder_CubeBlock>(ArmorSubtype, pos, ownerId);
                 armor.BuildPercent = spec.DamagedBuildPercent;
                 armor.IntegrityPercent = spec.DamagedBuildPercent;
@@ -78,7 +78,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             }
             for (int i = 0; i < spec.Armor; i++, n++)
             {
-                var pos = new Vector3I(n % RowWidth, armorY, n / RowWidth);
+                var pos = new Vector3I(n % rowWidth, armorY, n / rowWidth);
                 var armor = Create<MyObjectBuilder_CubeBlock>(ArmorSubtype, pos, ownerId);
                 Add(grid, used, armor, 1, 1, 1);
             }

@@ -25,7 +25,7 @@
 - Mod tick cost avg ≤ 0.5 ms, peak ≤ 15 ms; sim speed min ≥ 0.8; `WeldBudgetPeakUsed ≤ GetEffectiveMaxWeldsPerTick()`.
 - Thresholds are starting points — replace with the `agg=` min/avg/max from the first five green runs.
 ## Coverage
-planned: ingame:S08
+ingame:S08 (code-built 1000-block grid until the BigShip prefab exists)
 ## Last verified
 never
 ## Related

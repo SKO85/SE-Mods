@@ -12,7 +12,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S04_JanitorGrind(),
             new S05_NoDoubleAssign(),
             new S06_MaxSystemsPerGrid(),
-            new S07_ClusterOneScanner()
+            new S07_ClusterOneScanner(),
+            new S08_LargeGridPerf()
         };
 
         public static ITestScenario Find(string id)
