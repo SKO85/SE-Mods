@@ -624,6 +624,22 @@ namespace SKONanobotBuildAndRepairSystem.Models
             return settings;
         }
 
+        /// <summary>
+        /// BUG-261023.6: server side — while the admin locks are on, a client's settings message
+        /// can't change the priority lists; the current lists are kept.
+        /// </summary>
+        internal static void KeepLockedPriorities(SyncBlockSettings received, SyncBlockSettings current)
+        {
+            if (received == null || current == null) return;
+            if (Mod.Settings.Welder.PriorityFixed)
+            {
+                received.WeldPriority = current.WeldPriority;
+                received.GrindPriority = current.GrindPriority;
+            }
+            if (Mod.Settings.Welder.CollectPriorityFixed)
+                received.ComponentCollectPriority = current.ComponentCollectPriority;
+        }
+
         public void AssignReceived(SyncBlockSettings newSettings, BlockPriorityHandling weldPriority, BlockPriorityHandling grindPriority, ComponentPriorityHandling componentCollectPriority)
         {
             _Flags = newSettings._Flags;

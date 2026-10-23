@@ -331,6 +331,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                             && (now - lastApplied).TotalMilliseconds < 500) return;
                         system._lastClientSettingsAppliedBySender[sender] = now;
 
+                        SyncBlockSettings.KeepLockedPriorities(msgRcv.Settings, system.Settings);
                         system.Settings.AssignReceived(msgRcv.Settings, system.BlockWeldPriority, system.BlockGrindPriority, system.ComponentCollectPriority);
                         system.SettingsChanged();
                         system.Settings.Save(system.Entity, Mod.ModGuid);

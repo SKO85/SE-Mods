@@ -36,7 +36,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-COLLECT-001 | COLLECT | 2 | Floating objects inside area only, CollectIfIdle, component class priority | manual, ingame:S10, unit | 261023.2 unit |
 | SCN-INV-001 | INV | 2 | Source scan via conveyors, pull cursor rotation, push-targets-full backoff | manual | never |
 | SCN-INV-002 | INV | 2 | Push-immediately flags and inventory-full pause | manual | never |
-| SCN-PRIO-001 | PRIO | 2 | Priority list enable / disable / reorder reflected in target order; reset | manual | never |
+| SCN-PRIO-001 | PRIO | 2 | Priority list enable / disable / reorder reflected in target order; reset | manual, unit | 261023.4 unit |
 | SCN-CLUSTER-001 | CLUSTER | 3 | Coordinator election and shared scan results for co-located BaRs | ingame:S07 | never |
 | SCN-CLUSTER-002 | CLUSTER | 3 | MaxSystemsPerTargetGrid saturation (strictly greater-than) and secondary task | unit:GridSaturationTrackerTests; ingame:S06 | 261006.3 unit |
 | SCN-CLUSTER-003 | CLUSTER | 3 | Fair-share target truncation across grids | planned: unit:TruncateGridAwareTests (second wave) | never |

@@ -427,6 +427,50 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
+        // BUG-261023.6: PB scripting setters honour the admin locks and write the list through
+        // to Settings like the terminal does (saved, synced, cluster re-keyed via SettingsChanged).
+        internal void ScriptSetWeldPriority(int itemKey, int prio)
+        {
+            if (Mod.Settings.Welder.PriorityFixed) return;
+            BlockWeldPriority.SetPriority(itemKey, prio);
+            Settings.WeldPriority = BlockWeldPriority.GetEntries();
+        }
+
+        internal void ScriptSetWeldEnabled(int itemKey, bool enabled)
+        {
+            if (Mod.Settings.Welder.PriorityFixed) return;
+            BlockWeldPriority.SetEnabled(itemKey, enabled);
+            Settings.WeldPriority = BlockWeldPriority.GetEntries();
+        }
+
+        internal void ScriptSetGrindPriority(int itemKey, int prio)
+        {
+            if (Mod.Settings.Welder.PriorityFixed) return;
+            BlockGrindPriority.SetPriority(itemKey, prio);
+            Settings.GrindPriority = BlockGrindPriority.GetEntries();
+        }
+
+        internal void ScriptSetGrindEnabled(int itemKey, bool enabled)
+        {
+            if (Mod.Settings.Welder.PriorityFixed) return;
+            BlockGrindPriority.SetEnabled(itemKey, enabled);
+            Settings.GrindPriority = BlockGrindPriority.GetEntries();
+        }
+
+        internal void ScriptSetCollectPriority(int itemKey, int prio)
+        {
+            if (Mod.Settings.Welder.CollectPriorityFixed) return;
+            ComponentCollectPriority.SetPriority(itemKey, prio);
+            Settings.ComponentCollectPriority = ComponentCollectPriority.GetEntries();
+        }
+
+        internal void ScriptSetCollectEnabled(int itemKey, bool enabled)
+        {
+            if (Mod.Settings.Welder.CollectPriorityFixed) return;
+            ComponentCollectPriority.SetEnabled(itemKey, enabled);
+            Settings.ComponentCollectPriority = ComponentCollectPriority.GetEntries();
+        }
+
         public IMyShipWelder Welder
         { get { return _Welder; } }
 

@@ -77,7 +77,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 if (system != null)
                 {
-                    return system.BlockWeldPriority.SetPriority;
+                    return system.ScriptSetWeldPriority;
                 }
                 return null;
             };
@@ -109,7 +109,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 if (system != null)
                 {
-                    return system.BlockWeldPriority.SetEnabled;
+                    return system.ScriptSetWeldEnabled;
                 }
                 return null;
             };
@@ -153,7 +153,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 if (system != null)
                 {
-                    return system.BlockGrindPriority.SetPriority;
+                    return system.ScriptSetGrindPriority;
                 }
                 return null;
             };
@@ -185,7 +185,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 if (system != null)
                 {
-                    return system.BlockGrindPriority.SetEnabled;
+                    return system.ScriptSetGrindEnabled;
                 }
                 return null;
             };
@@ -229,7 +229,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 if (system != null)
                 {
-                    return system.ComponentCollectPriority.SetPriority;
+                    return system.ScriptSetCollectPriority;
                 }
                 return null;
             };
@@ -261,7 +261,7 @@ namespace SKONanobotBuildAndRepairSystem.Terminal
                 var system = NanobotTerminal.GetSystem(block);
                 if (system != null)
                 {
-                    return system.ComponentCollectPriority.SetEnabled;
+                    return system.ScriptSetCollectEnabled;
                 }
                 return null;
             };
