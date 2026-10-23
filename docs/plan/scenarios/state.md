@@ -27,7 +27,7 @@ CORE 3 · WELD 6 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-WELD-002 | WELD | 2 | Projected block build incl. DLC-missing skip and silent-fail blacklist | planned: ingame:S03 | never |
 | SCN-WELD-003 | WELD | 2 | Weld options Full / Functional / Skeleton stop at the right integrity | manual | never |
 | SCN-WELD-004 | WELD | 2 | Ignore-colour blocks are skipped; creative mode needs no components | manual | never |
-| SCN-WELD-005 | WELD | 2 | Missing components aggregate over all weld targets | ingame:S02 | never |
+| SCN-WELD-005 | WELD | 2 | Missing components aggregate over all weld targets | ingame:S02, unit | 261023.1 unit |
 | SCN-GRIND-001 | GRIND | 1 | GrindOnly with NoOwnership grinds only unowned grids | ingame:S04 | never |
 | SCN-GRIND-002 | GRIND | 2 | Janitor relation matrix × DisableOnly / HackOnly | manual | never |
 | SCN-GRIND-003 | GRIND | 2 | Grind order: near / far / smallest-grid first, ignore priority order | unit:QuickSelectTests.MatchesSortForKSmallest_RandomInputs | 261006.3 unit |

@@ -82,8 +82,8 @@ The release variant answers `/nanobars test` with "Test harness not installed".
 | `QuickSelectTests` | SCN-GRIND-003 |
 | `LocalizationTests` | SCN-LOC-001 |
 | `ProtoContractTests` | SCN-NET-001 (network-sync tag uniqueness) |
+| `MissingComponentsAggregateTests` | SCN-WELD-005, SCN-BUDGET-006 (BUG-261023.1 time slicing; drives the real `NanobotSystem` method with faked blocks and inventories) |
 | `ScenarioRegistryTests`, `CatalogueConsistencyTests` | harness + catalogue integrity |
 
 Next candidates: `TruncateGridAware` fair share (SCN-CLUSTER-003), `SyncBlockSettings.CheckLimits`
-policy enforcement (incl. REVIEW-261023.1 priority-lock finding), aggregate missing-components math
-with faked blocks.
+policy enforcement (incl. REVIEW-261023.1 priority-lock finding).

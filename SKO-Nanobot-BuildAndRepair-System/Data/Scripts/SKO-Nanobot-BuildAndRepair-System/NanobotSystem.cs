@@ -331,6 +331,11 @@ namespace SKONanobotBuildAndRepairSystem
 
         // BUG-260824.2: aggregate missing-components rebuild (cadence marker + reusable buffers).
         private TimeSpan _NextMissingAggregateAt;
+        // BUG-261023.1: time-sliced pass state (0 idle, 1 targets, 2 sources).
+        private int _AggPhase;
+        private int _AggCursor;
+        private bool _AggPhaseSeeded;
+        private Extensions.IntegrityLevel _AggLevel;
         private List<TargetBlockData> _AggTargetsSnapshot = new List<TargetBlockData>();
         private Dictionary<string, int> _AggMissingNeed = new Dictionary<string, int>();
         private Dictionary<string, int> _AggPerBlockMissing = new Dictionary<string, int>();

@@ -572,6 +572,7 @@ namespace SKONanobotBuildAndRepairSystem
             var welderInventory = _Welder.GetInventory(0);
             var welding = false;
             var created = false;
+            var creationCharged = false;
             float appliedWeldAmount = 0f;
             var target = targetData.Block;
             var hasIgnoreColor = ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0) && IsColorNearlyEquals(Settings.IgnoreColorPacked, target.GetColorMask());
@@ -581,8 +582,9 @@ namespace SKONanobotBuildAndRepairSystem
                 //New Block (Projected)
                 var cubeGridProjected = target.CubeGrid as MyCubeGrid;
                 var blockDefinition = target.BlockDefinition as MyCubeBlockDefinition;
+                var createCompId = blockDefinition.Components[0].Definition.Id;
                 tsFindItem = Stopwatch.GetTimestamp();
-                var item = _TransportInventory.FindItem(blockDefinition.Components[0].Definition.Id);
+                var item = _TransportInventory.FindItem(createCompId);
                 tsFindItem = Stopwatch.GetTimestamp() - tsFindItem;
 
                 if ((CreativeModeActive || (item != null && item.Amount >= 1)) && cubeGridProjected != null && cubeGridProjected.Projector != null)
@@ -592,6 +594,8 @@ namespace SKONanobotBuildAndRepairSystem
                     tsLimitsCheck = Stopwatch.GetTimestamp() - tsLimitsCheck;
                     if (withinLimits)
                     {
+                        var chargeCreation = false;
+                        var welderCreateBefore = MyFixedPoint.Zero;
                         if (!cubeGridProjected.Projector.Closed && !cubeGridProjected.Projector.CubeGrid.Closed && (target.FatBlock == null || !target.FatBlock.Closed))
                         {
                             // BUG-107: gate proj.Build on the global per-tick budget; skip resolve
@@ -611,6 +615,13 @@ namespace SKONanobotBuildAndRepairSystem
                                     "projBuildSlot");
                                 return false;
                             }
+
+                            // BUG-261023.2 (PR #148): the engine takes Components[0] from the builder's own
+                            // inventory only. Snapshot it, and skip the charge if a block already stands there.
+                            var preGrid = cubeGridProjected.Projector.CubeGrid;
+                            var builtBefore = preGrid.GetCubeBlock(preGrid.WorldToGridInteger(cubeGridProjected.GridIntegerToWorld(target.Position))) != null;
+                            if (welderInventory != null)
+                                welderCreateBefore = welderInventory.GetItemAmount(createCompId);
 
                             tsBuild = Stopwatch.GetTimestamp();
                             var proj = cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector;
@@ -670,9 +681,8 @@ namespace SKONanobotBuildAndRepairSystem
                                 return false;
                             }
                             tsBuild = Stopwatch.GetTimestamp() - tsBuild;
+                            chargeCreation = !CreativeModeActive && !builtBefore;
                         }
-
-                        // proj.Build() handles component consumption internally; manual RemoveItems is not needed.
 
                         // BUG-105/108: instrument projected→physical block resolution.
                         tsResolve = Stopwatch.GetTimestamp();
@@ -701,6 +711,18 @@ namespace SKONanobotBuildAndRepairSystem
                                 targetData.Block = target;
                                 targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
                                 created = true;
+
+                                // BUG-261023.2: charge the creation component from the transport unless the
+                                // engine already took it from the welder inventory.
+                                if (chargeCreation && (welderInventory == null || welderInventory.GetItemAmount(createCompId) >= welderCreateBefore))
+                                {
+                                    var transportBefore = _TransportInventory.GetItemAmount(createCompId);
+                                    if (transportBefore >= 1)
+                                    {
+                                        _TransportInventory.RemoveItemsOfType(1, createCompId);
+                                        creationCharged = _TransportInventory.GetItemAmount(createCompId) < transportBefore;
+                                    }
+                                }
 
                                 // Close assignment gap: the projected block's key (ProjGridId:Pos) differs
                                 // from the physical block's key (RealGridId:Pos). Assign the physical block
@@ -833,7 +855,7 @@ namespace SKONanobotBuildAndRepairSystem
                 target != null && target.MaxIntegrity > 0f ? target.Integrity / target.MaxIntegrity : 0f,
                 targetData.Ignore,
                 targetData.Distance,
-                null);
+                null, creationCharged);
             return result;
         }
 
@@ -1400,56 +1422,91 @@ namespace SKONanobotBuildAndRepairSystem
 
         // BUG-260824.2: aggregate missing-components rebuild cadence.
         private const int MissingAggregateIntervalSeconds = 3;
+        // BUG-261023.1: work per call (targets / source inventories); calls are also capped globally.
+        private const int MissingAggregateTargetsPerSlice = 128;
+        private const int MissingAggregateSourcesPerSlice = 32;
 
         /// <summary>
         /// BUG-260824.2: rebuild State.MissingComponents as the aggregate shortfall over
         /// ALL possible weld targets (total need minus what the welder, transport and
-        /// connected sources already hold). Runs every MissingAggregateIntervalSeconds on
-        /// the main thread; targets are capped at MaxPossibleWeldTargets by the scan.
+        /// connected sources already hold).
+        /// BUG-261023.1: the pass is time-sliced across calls (targets, then sources), each
+        /// slice claims a global per-tick slot, the first pass is phase-offset per BaR and
+        /// the next one starts MissingAggregateIntervalSeconds after the previous published.
+        /// The published list stays until the pass completes.
         /// </summary>
         private void ServerTryRebuildMissingComponentsAggregate(TimeSpan playTime)
         {
-            if (playTime < _NextMissingAggregateAt) return;
-            _NextMissingAggregateAt = playTime + TimeSpan.FromSeconds(MissingAggregateIntervalSeconds);
+            if (_AggPhase == 0)
+            {
+                if (!_AggPhaseSeeded)
+                {
+                    _AggPhaseSeeded = true;
+                    _NextMissingAggregateAt = playTime + TimeSpan.FromMilliseconds((_Welder.EntityId & 0x7FFFFFFF) % (MissingAggregateIntervalSeconds * 1000));
+                }
+                if (playTime < _NextMissingAggregateAt) return;
+            }
 
             var profilerTs = MethodProfiler.Start();
-            var targetCount = 0;
+            var startPhase = _AggPhase;
+            var targetCount = _AggTargetsSnapshot.Count;
             var blocksWalked = 0;
             var sourcesWalked = 0;
-            var missingKinds = 0;
+            var missingKinds = -1;
+            var deferred = false;
             try
             {
-                var weldingEnabled = BlockWeldPriority.AnyEnabled && Settings.WorkMode != WorkModes.GrindOnly;
-
-                _AggTargetsSnapshot.Clear();
-                if (weldingEnabled)
+                if (_AggPhase == 0)
                 {
-                    lock (State.PossibleWeldTargets)
+                    var weldingEnabled = BlockWeldPriority.AnyEnabled && Settings.WorkMode != WorkModes.GrindOnly;
+
+                    _AggTargetsSnapshot.Clear();
+                    _AggMissingNeed.Clear();
+                    if (weldingEnabled)
                     {
-                        foreach (var targetData in State.PossibleWeldTargets)
+                        lock (State.PossibleWeldTargets)
                         {
-                            if (targetData.Ignore || targetData.Block == null) continue;
-                            _AggTargetsSnapshot.Add(targetData);
+                            foreach (var targetData in State.PossibleWeldTargets)
+                            {
+                                if (targetData.Ignore || targetData.Block == null) continue;
+                                _AggTargetsSnapshot.Add(targetData);
+                            }
                         }
                     }
-                }
-                targetCount = _AggTargetsSnapshot.Count;
+                    targetCount = _AggTargetsSnapshot.Count;
 
-                _AggMissingNeed.Clear();
-                if (targetCount > 0)
-                {
-                    var level = Settings.WeldOptions == AutoWeldOptions.WeldSkeleton
+                    // Nothing to walk: publish the empty list now so no stale state survives idling.
+                    if (targetCount == 0)
+                    {
+                        missingKinds = PublishMissingComponentsAggregate(playTime);
+                        return;
+                    }
+
+                    _AggLevel = Settings.WeldOptions == AutoWeldOptions.WeldSkeleton
                         ? IntegrityLevel.Create
                         : (Settings.WeldOptions == AutoWeldOptions.WeldFunctional ? IntegrityLevel.Functional : IntegrityLevel.Complete);
+                    _AggCursor = 0;
+                    _AggPhase = 1;
+                }
 
-                    for (int i = 0; i < _AggTargetsSnapshot.Count; i++)
+                if (!Mod.TryClaimAggregateSlice())
+                {
+                    deferred = true;
+                    return;
+                }
+
+                if (_AggPhase == 1)
+                {
+                    var end = Math.Min(_AggCursor + MissingAggregateTargetsPerSlice, _AggTargetsSnapshot.Count);
+                    for (; _AggCursor < end; _AggCursor++)
                     {
-                        var block = _AggTargetsSnapshot[i].Block;
-                        if (block.IsDestroyed || (block.CubeGrid != null && block.CubeGrid.Closed)) continue;
+                        var targetData = _AggTargetsSnapshot[_AggCursor];
+                        var block = targetData.Block;
+                        if (targetData.Ignore || block == null || block.IsDestroyed || (block.CubeGrid != null && block.CubeGrid.Closed)) continue;
                         _AggPerBlockMissing.Clear();
                         try
                         {
-                            block.GetMissingComponents(_AggPerBlockMissing, level);
+                            block.GetMissingComponents(_AggPerBlockMissing, _AggLevel);
                         }
                         catch
                         {
@@ -1464,58 +1521,111 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
                     _AggPerBlockMissing.Clear();
+                    if (_AggCursor < _AggTargetsSnapshot.Count) return;
+
+                    _AggTargetsSnapshot.Clear();
+                    if (_AggMissingNeed.Count == 0)
+                    {
+                        missingKinds = PublishMissingComponentsAggregate(playTime);
+                        return;
+                    }
 
                     // Subtract stock on hand; only the true shortfall is reported so the
                     // companion script doesn't queue components that are already in cargo.
-                    if (_AggMissingNeed.Count > 0)
+                    SubtractInventoryFromAggregateNeed(_Welder.GetInventory(0));
+                    SubtractInventoryFromAggregateNeed(_TransportInventory);
+
+                    _AggSourcesSnapshot.Clear();
+                    lock (_PossibleSources)
                     {
-                        SubtractInventoryFromAggregateNeed(_Welder.GetInventory(0));
-                        SubtractInventoryFromAggregateNeed(_TransportInventory);
-
-                        _AggSourcesSnapshot.Clear();
-                        lock (_PossibleSources)
-                        {
-                            for (int i = 0; i < _PossibleSources.Count; i++) _AggSourcesSnapshot.Add(_PossibleSources[i]);
-                        }
-                        for (int i = 0; i < _AggSourcesSnapshot.Count; i++)
-                        {
-                            if (!AggregateNeedAnyPositive()) break;
-                            SubtractInventoryFromAggregateNeed(_AggSourcesSnapshot[i]);
-                            sourcesWalked++;
-                        }
-                        _AggSourcesSnapshot.Clear();
+                        for (int i = 0; i < _PossibleSources.Count; i++) _AggSourcesSnapshot.Add(_PossibleSources[i]);
                     }
+                    if (_AggSourcesSnapshot.Count == 0 || !AggregateNeedAnyPositive())
+                    {
+                        missingKinds = PublishMissingComponentsAggregate(playTime);
+                        return;
+                    }
+                    _AggCursor = 0;
+                    _AggPhase = 2;
+                    // Sources start on the next slice.
+                    return;
                 }
-                _AggTargetsSnapshot.Clear();
 
-                lock (State.MissingComponents)
+                // Phase 2: connected sources, stopping as soon as the need is covered.
+                var sourceEnd = Math.Min(_AggCursor + MissingAggregateSourcesPerSlice, _AggSourcesSnapshot.Count);
+                var covered = !AggregateNeedAnyPositive();
+                for (; !covered && _AggCursor < sourceEnd; _AggCursor++)
                 {
-                    State.MissingComponents.Clear();
-                    foreach (var keyValue in _AggMissingNeed)
-                    {
-                        if (keyValue.Value > 0)
-                        {
-                            State.MissingComponents.Add(new MyDefinitionId(typeof(MyObjectBuilder_Component), keyValue.Key), keyValue.Value);
-                            missingKinds++;
-                        }
-                    }
-                    State.MissingComponents.RebuildHash();
+                    SubtractInventoryFromAggregateNeed(_AggSourcesSnapshot[_AggCursor]);
+                    sourcesWalked++;
+                    covered = !AggregateNeedAnyPositive();
                 }
-                _AggMissingNeed.Clear();
+                if (!covered && _AggCursor < _AggSourcesSnapshot.Count) return;
+
+                _AggSourcesSnapshot.Clear();
+                missingKinds = PublishMissingComponentsAggregate(playTime);
             }
             finally
             {
                 if (profilerTs != 0L)
                 {
+                    var _startPhase = startPhase;
+                    var _endPhase = _AggPhase;
                     var _targetCount = targetCount;
                     var _blocksWalked = blocksWalked;
                     var _sourcesWalked = sourcesWalked;
                     var _missingKinds = missingKinds;
+                    var _deferred = deferred;
                     MethodProfiler.StopAndLog("RebuildMissingComponentsAggregate", profilerTs, () =>
-                        string.Format("entityId={0};targets={1};blocksWalked={2};sourcesWalked={3};missingKinds={4}",
-                            _Welder.EntityId, _targetCount, _blocksWalked, _sourcesWalked, _missingKinds));
+                        string.Format("entityId={0};phase={1}->{2};targets={3};blocksWalked={4};sourcesWalked={5};published={6};missingKinds={7};deferred={8}",
+                            _Welder.EntityId, _startPhase, _endPhase, _targetCount, _blocksWalked, _sourcesWalked,
+                            _missingKinds >= 0, _missingKinds, _deferred));
                 }
             }
+        }
+
+        /// <summary>
+        /// BUG-261023.1: swap the finished aggregate into State.MissingComponents, reset the
+        /// pass and schedule the next one. Returns the number of missing component kinds.
+        /// </summary>
+        private int PublishMissingComponentsAggregate(TimeSpan playTime)
+        {
+            var missingKinds = 0;
+            lock (State.MissingComponents)
+            {
+                State.MissingComponents.Clear();
+                foreach (var keyValue in _AggMissingNeed)
+                {
+                    if (keyValue.Value > 0)
+                    {
+                        State.MissingComponents.Add(new MyDefinitionId(typeof(MyObjectBuilder_Component), keyValue.Key), keyValue.Value);
+                        missingKinds++;
+                    }
+                }
+                State.MissingComponents.RebuildHash();
+            }
+            _AggMissingNeed.Clear();
+            _AggTargetsSnapshot.Clear();
+            _AggSourcesSnapshot.Clear();
+            _AggCursor = 0;
+            _AggPhase = 0;
+            _NextMissingAggregateAt = playTime + TimeSpan.FromSeconds(MissingAggregateIntervalSeconds);
+            return missingKinds;
+        }
+
+        /// <summary>
+        /// BUG-261023.1: drop an unfinished pass (BaR not ready) so it holds no target references;
+        /// the next pass is phase-offset again.
+        /// </summary>
+        private void AbortMissingComponentsAggregate()
+        {
+            if (_AggPhase == 0 && !_AggPhaseSeeded) return;
+            _AggTargetsSnapshot.Clear();
+            _AggSourcesSnapshot.Clear();
+            _AggMissingNeed.Clear();
+            _AggCursor = 0;
+            _AggPhase = 0;
+            _AggPhaseSeeded = false;
         }
 
         private bool AggregateNeedAnyPositive()
@@ -1554,7 +1664,7 @@ namespace SKONanobotBuildAndRepairSystem
             "stockpileMs={10:F3};mountMs={11:F3};deformMs={12:F3};" +
             "findItemMs={13:F3};limitsMs={14:F3};canContinueMs={15:F3};integrityCheckMs={16:F3};" +
             "assignMs={17:F3};weldAmount={18:F2};integrityRatio={19:F3};completed={20};" +
-            "distance={21:F1};earlyExit={22}";
+            "distance={21:F1};earlyExit={22};creationCharged={23}";
 
         private void EmitServerDoWeldProfile(long profilerTs,
             string blockSubtype, bool projected, bool created, bool welding, bool result,
@@ -1562,7 +1672,7 @@ namespace SKONanobotBuildAndRepairSystem
             double stockpileMs, double mountMs, double deformMs,
             double findItemMs, double limitsMs, double canContinueMs, double integrityCheckMs, double assignMs,
             float weldAmount, float integrityRatio, bool completed, double distance,
-            string earlyExit)
+            string earlyExit, bool creationCharged = false)
         {
             if (profilerTs == 0L) return;
             var entityId = _Welder.EntityId;
@@ -1573,7 +1683,7 @@ namespace SKONanobotBuildAndRepairSystem
                     stockpileMs, mountMs, deformMs,
                     findItemMs, limitsMs, canContinueMs, integrityCheckMs, assignMs,
                     weldAmount, integrityRatio, completed, distance,
-                    earlyExit ?? string.Empty));
+                    earlyExit ?? string.Empty, creationCharged));
         }
     }
 }

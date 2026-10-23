@@ -184,6 +184,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 State.MissingComponents.Clear();
                 State.MissingComponents.RebuildHash();
+                AbortMissingComponentsAggregate();
             }
 
             if (!(welding || grinding || collecting || transporting) && _TransportInventory.CurrentVolume > 0)

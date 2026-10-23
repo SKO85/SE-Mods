@@ -79,9 +79,14 @@
         public const int MaxProjBuildsPerTickDefault = 3;
         private static readonly PerTickBudget _projBuildBudget = new PerTickBudget(MaxProjBuildsPerTickDefault);
 
+        // BUG-261023.1: missing-components aggregate slices per tick (all BaRs).
+        public const int MaxAggregateSlicesPerTickDefault = 4;
+        private static readonly PerTickBudget _aggregateSliceBudget = new PerTickBudget(MaxAggregateSlicesPerTickDefault);
+
         public static bool TryClaimMechanicalGrindSlot() { return _mechanicalGrindBudget.TryClaim(); }
         public static bool TryClaimDismountSlot() { return _dismountBudget.TryClaim(); }
         public static bool TryClaimProjBuildSlot() { return _projBuildBudget.TryClaim(); }
+        public static bool TryClaimAggregateSlice() { return _aggregateSliceBudget.TryClaim(); }
 
         // --- OPT 2: BaR update staggering ---
         // Distributes ServerTryWeldingGrindingCollecting() calls across StaggerGroupCount groups

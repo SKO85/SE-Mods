@@ -11,6 +11,8 @@
 1. Enable the BaR; watch `Blocks to build` list projected blocks (name suffix marks projected).
 2. Let it run 120 s.
 3. Variant B: repeat with the DLC blueprint. Variant C: repeat with the overlapping blueprint.
+4. Variant D (survival, component accounting): note the cargo totals, let the BaR build and fully
+   weld a 1-block heavy-armor projection, then hand-grind the block and collect the components.
 ## Expected outcome
 - All 20 projected blocks are materialised (`proj.Build`) then welded to full; the projector's
   remaining block count reaches 0; the rig grid gains 20 blocks.
@@ -20,6 +22,9 @@
 - C: after `PROJ_BUILD_MAX_SILENT_FAILS = 3` the block key lands in `_BrokenProjBuildKeys` and is
   no longer retried; the BaR continues with other targets instead of spinning.
 - Global `proj.Build` budget: no more than 3 builds per tick across all BaRs (BUG-107).
+- D: components returned by grinding = components taken from cargo — no free creation component
+  (BUG-261023.2 / PR #148). The `ServerDoWeld` profile line of the build shows
+  `creationCharged=True` (False in creative, or when the engine took it from the welder inventory).
 ## Perf envelope
 `ServerDoWeld` `buildMs` ≤ 40 per call (engine cost); `resolveMs` ≤ 5; steadyAvgMs ≤ 3.
 ## Coverage
@@ -27,4 +32,4 @@ planned: ingame:S03
 ## Last verified
 never
 ## Related
-BUG-030, BUG-107, BUG-108, BUG-120, BUG-260610.35, FEAT-260910.2
+BUG-030, BUG-107, BUG-108, BUG-120, BUG-260610.35, BUG-261023.2 (GitHub PR #148), FEAT-260910.2

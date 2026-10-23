@@ -17,11 +17,13 @@
 - ≥ 500 blocks welded within the run or a clear budget-limited rate (welds/s ≈ budget × 60 / stagger).
 - No single-BaR spike pattern "on every new block selection" beyond the engine `proj.Build`/
   `IncreaseMountLevel` cost already characterised in BUG-105/108/122.
-- `RebuildMissingComponentsAggregate` (new in v2.5.6, walks up to 1024 targets every 3 s per BaR)
-  stays within its threshold below — this is the specific check for BUG-260909.1 (#143).
+- `RebuildMissingComponentsAggregate` (new in v2.5.6; time-sliced by BUG-261023.1: ≤ 128 targets
+  per call, ≤ 4 slices per tick, per-BaR phase offset) stays within its threshold below and shows
+  no 3 s sim-speed sawtooth — this is the specific check for BUG-260909.1 (#143).
 ## Perf envelope
 - `UpdateBeforeSimulation10_100` steadyAvgMs ≤ 1.5 per BaR; `ServerDoWeld` steadyAvgMs ≤ 3, maxMs ≤ 40.
-- `RebuildMissingComponentsAggregate` maxMs ≤ 5 (per BaR, 1024-target cap).
+- `RebuildMissingComponentsAggregate` maxMs ≤ 1 per call (one slice); `deferred=True` lines show the
+  global slice cap at work.
 - Mod tick cost avg ≤ 0.5 ms, peak ≤ 15 ms; sim speed min ≥ 0.8; `WeldBudgetPeakUsed ≤ GetEffectiveMaxWeldsPerTick()`.
 - Thresholds are starting points — replace with the `agg=` min/avg/max from the first five green runs.
 ## Coverage
@@ -29,4 +31,4 @@ ingame:S08 (code-built 1000-block grid until the BigShip prefab exists)
 ## Last verified
 never
 ## Related
-BUG-260909.1 (GitHub #143), BUG-105, BUG-108, BUG-122, BUG-126, BUG-129, BUG-260824.2 (aggregate), FEAT-260910.2
+BUG-260909.1 (GitHub #143), BUG-105, BUG-108, BUG-122, BUG-126, BUG-129, BUG-260824.2 (aggregate), BUG-261023.1, BUG-261023.4, FEAT-260910.2
