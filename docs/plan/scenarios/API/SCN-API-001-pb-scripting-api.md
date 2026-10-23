@@ -23,12 +23,14 @@
   per-block `ScriptControlled` flag is forced off (`SyncBlockSettings:806`). `EnsureQueued` never
   mutates queues under lockdown (BUG-260824.10).
 - Detection probe on a plain vanilla welder returns defaults, never throws (`Terminal.cs:180` note).
-- Companion script queues the aggregate shortfall once, `info-only` mode queues nothing.
+- Companion script queues the aggregate shortfall once, `info-only` mode queues nothing and stays on
+  across automatic runs and world reloads until the PB is run with `queue` (BUG-261023.7).
 ## Perf envelope
 `GetPossibleWeldTargetsList` etc. copy under lock ≤ 0.5 ms for 512 targets (PB call cadence Update100).
 ## Coverage
 manual
 planned: ingame:S09
+unit:CompanionScriptTests.Script_CompilesAsAProgrammableBlockProgram
 ## Last verified
 never
 ## Related

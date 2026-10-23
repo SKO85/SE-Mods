@@ -60,6 +60,9 @@
     <Reference Include="Sandbox.Game"><HintPath>$(SpaceEngineersBin)\Sandbox.Game.dll</HintPath></Reference>
     <Reference Include="ProtoBuf.Net"><HintPath>$(SpaceEngineersBin)\ProtoBuf.Net.dll</HintPath></Reference>
     <Reference Include="ProtoBuf.Net.Core"><HintPath>$(SpaceEngineersBin)\ProtoBuf.Net.Core.dll</HintPath></Reference>
+    <!-- Companion script compile check: the game's own Roslyn (CompanionScriptTests). -->
+    <Reference Include="Microsoft.CodeAnalysis"><HintPath>$(SpaceEngineersBin)\Microsoft.CodeAnalysis.dll</HintPath></Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp"><HintPath>$(SpaceEngineersBin)\Microsoft.CodeAnalysis.CSharp.dll</HintPath></Reference>
   </ItemGroup>
 
 </Project>

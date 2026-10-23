@@ -363,7 +363,9 @@ Both the name tag and Custom Data are read at init and again on the periodic ~30
 
 ## info-only Mode
 
-To display status without queuing any components into assemblers, set the Programmable Block **argument** to `info-only` and rerun the script.
+To display status without queuing any components into assemblers, run the Programmable Block with the **argument** `info-only` (Run button in the terminal, or a toolbar/timer action with that argument).
+
+The mode is remembered — also after reloading the world or recompiling the script — until you run the Programmable Block with the argument `queue`, which turns assembler queuing back on.
 
 ---
 

@@ -61,13 +61,24 @@ public Program()
 {
     Runtime.UpdateFrequency = UpdateFrequency.Update100;
     _AutoQueuing = new BuildAndRepairAutoQueuing(this);
+    // The info-only mode is remembered across world reloads and recompiles.
+    _AutoQueuing.SetInfoOnly(Storage == "info-only");
 }
 
 void Main(string arg)
 {
-    var infoOnly = arg != null && arg.Trim().Equals("info-only", StringComparison.OrdinalIgnoreCase);
-    _AutoQueuing.SetInfoOnly(infoOnly);
+    // Automatic runs pass an empty argument, so only an explicit argument switches the mode:
+    // "info-only" stops assembler queuing, "queue" turns it back on.
+    var command = arg != null ? arg.Trim() : string.Empty;
+    if (command.Equals("info-only", StringComparison.OrdinalIgnoreCase)) SetInfoOnly(true);
+    else if (command.Equals("queue", StringComparison.OrdinalIgnoreCase)) SetInfoOnly(false);
     _AutoQueuing.Handle();
+}
+
+void SetInfoOnly(bool infoOnly)
+{
+    _AutoQueuing.SetInfoOnly(infoOnly);
+    Storage = infoOnly ? "info-only" : string.Empty;
 }
 
 public class BuildAndRepairSystemQueuingGroup

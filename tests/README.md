@@ -83,6 +83,7 @@ The release variant answers `/nanobars test` with "Test harness not installed".
 | `QuickSelectTests` | SCN-GRIND-003 |
 | `LocalizationTests` | SCN-LOC-001 |
 | `ProtoContractTests` | SCN-NET-001 (network-sync tag uniqueness) |
+| `CompanionScriptTests` | SCN-API-001 (companion PB script compiles as C# 6 with the game's Roslyn) |
 | `PriorityLockTests` | SCN-PRIO-001 (BUG-261023.6 admin priority locks vs PB setters and client messages) |
 | `SkeletonResetHandlerTests` | SCN-WELD-006 (BUG-261023.3 drain re-checks HasDeformation) |
 | `TransportInventoryMoveTests` | SCN-COLLECT-001 (BUG-261023.5 verified moves into the transport) |
