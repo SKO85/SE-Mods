@@ -32,7 +32,7 @@ CORE 3 · WELD 6 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-GRIND-002 | GRIND | 2 | Janitor relation matrix × DisableOnly / HackOnly | manual | never |
 | SCN-GRIND-003 | GRIND | 2 | Grind order: near / far / smallest-grid first, ignore priority order | unit:QuickSelectTests.MatchesSortForKSmallest_RandomInputs | 261006.3 unit |
 | SCN-GRIND-004 | GRIND | 2 | Raze queue and mech / dismount per-tick throttles | unit:PerTickBudgetTests | 261006.3 unit |
-| SCN-COLLECT-001 | COLLECT | 2 | Floating objects inside area only, CollectIfIdle, component class priority | manual | never |
+| SCN-COLLECT-001 | COLLECT | 2 | Floating objects inside area only, CollectIfIdle, component class priority | manual, ingame:S10, unit | 261023.2 unit |
 | SCN-INV-001 | INV | 2 | Source scan via conveyors, pull cursor rotation, push-targets-full backoff | manual | never |
 | SCN-INV-002 | INV | 2 | Push-immediately flags and inventory-full pause | manual | never |
 | SCN-PRIO-001 | PRIO | 2 | Priority list enable / disable / reorder reflected in target order; reset | manual | never |

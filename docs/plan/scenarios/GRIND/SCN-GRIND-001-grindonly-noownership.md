@@ -15,6 +15,9 @@
   `ServerTryPushInventory`); no floating debris remains inside the area (collect picks up any).
 - Grid A's entity closes (last block razed via `RazeQueueHandler`); the BaR goes `Idle`.
 - `GrindBudgetPeakUsed ≤ GetEffectiveMaxGrindsPerTick()`.
+- Loot (manual, BUG-261023.5): grinding a container with items moves them into the transport;
+  `EmptyBlockInventories` `fallbackMoves=0` expected (non-zero = engine still refuses the detached
+  inventory, items still arrive via the verified move); the block is razed only once empty.
 ## Perf envelope
 `ServerDoGrind` steadyAvgMs ≤ 2, maxMs ≤ 30 (`decreaseMs` engine cascade on full dismount);
 `RazeQueueHandler.Process` maxMs ≤ 5.
@@ -23,4 +26,4 @@ ingame:S04
 ## Last verified
 never
 ## Related
-BUG-033, BUG-042, BUG-067, BUG-127 (raze queue), BUG-260612.30 (NoOwnership policy), BUG-260827.2 (loot inventory path — verify), FEAT-260910.2
+BUG-033, BUG-042, BUG-067, BUG-127 (raze queue), BUG-260612.30 (NoOwnership policy), BUG-260827.2 (loot inventory path — verify), FEAT-260910.2, BUG-261023.5

@@ -17,11 +17,16 @@
 - `CollectIfIdle` on: no collecting while weld work exists; collecting starts once `Idle`.
   Off: collecting interleaves (`Collecting (Transporting)` state).
 - Collected items never exceed welder capacity (`InventoryFull` pause, BUG-015).
+- Conservation (BUG-261023.5): every collected item arrives — cargo + welder + transport equals what
+  was dropped; a refused add never removes or shrinks the floating object.
 ## Perf envelope
 `ServerTryCollectingFloatingTargets` maxMs ≤ 3 (engine work outside the list lock, BUG-260610.22).
 ## Coverage
 manual
+ingame:S10 (5 SteelPlate stacks inside the area, conservation; not the outside/ore/priority steps)
+unit:TransportInventoryMoveTests.MoveItemVerified_RefusedAdd_LeavesTheSourceUntouched
+unit:TransportInventoryMoveTests.MoveItemVerified_RemovesOnlyWhatLanded
 ## Last verified
-never
+v2.5.6 build 261023.2 2026-10-23 — unit (verified-move helpers only; in-game S10 not yet run)
 ## Related
-BUG-012, BUG-015, BUG-020b, BUG-260610.22, BUG-260612.21..24
+BUG-012, BUG-015, BUG-020b, BUG-260610.22, BUG-260612.21..24, BUG-261023.5

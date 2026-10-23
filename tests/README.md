@@ -64,7 +64,8 @@ See `docs/plan/features/TODO/FEAT-260910.2-ingame-scenario-harness.md`. In short
 
 1. Build the mod (`dotnet build ... -c Debug`); the harness deploys only to `SKO-Nanobot-BuildAndRepair-System-Testing`.
 2. Load an offline creative world with only the `-Testing` mod.
-3. `/nanobars test list`, `/nanobars test run S01`, then `run all`; `run S08 x5` for perf stability.
+3. `/nanobars test list`, `/nanobars test run S01`, then `run all`; `run S08 x5` for perf stability
+   (S01/02/04-08/10 exist; S03 projector and S09 PB contract are planned).
 4. Results: chat + `%AppData%\SpaceEngineers\Storage\SKO-Nanobot-BuildAndRepair-System-Testing_SKO-Nanobot-BuildAndRepair-System\NanobotTest.<session>.log`.
 
 The release variant answers `/nanobars test` with "Test harness not installed".
@@ -82,6 +83,7 @@ The release variant answers `/nanobars test` with "Test harness not installed".
 | `QuickSelectTests` | SCN-GRIND-003 |
 | `LocalizationTests` | SCN-LOC-001 |
 | `ProtoContractTests` | SCN-NET-001 (network-sync tag uniqueness) |
+| `TransportInventoryMoveTests` | SCN-COLLECT-001 (BUG-261023.5 verified moves into the transport) |
 | `MissingComponentsAggregateTests` | SCN-WELD-005, SCN-BUDGET-006 (BUG-261023.1 time slicing; drives the real `NanobotSystem` method with faked blocks and inventories) |
 | `ScenarioRegistryTests`, `CatalogueConsistencyTests` | harness + catalogue integrity |
 

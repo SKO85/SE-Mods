@@ -297,6 +297,7 @@ namespace SKONanobotBuildAndRepairSystem
             var itemsExamined = 0;
             var transferAttempts = 0;
             var transfersSucceeded = 0;
+            var fallbackMoves = 0;
             var tsGetItems = 0L;
             var tsGetItemById = 0L;
             var tsTransfer = 0L;
@@ -341,11 +342,20 @@ namespace SKONanobotBuildAndRepairSystem
                         transferAttempts++;
                         tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                         var transferred = dstInventory.TransferItemFrom(srcInventory, srcItemIndex, null, true, maxpossibleAmount, false);
+                        var movedAmount = maxpossibleAmount;
+                        if (!transferred)
+                        {
+                            // BUG-261023.5: the engine refused; engine capacity checks are unreliable on
+                            // the detached transport (BUG-260827.2), so retry as a verified move.
+                            movedAmount = MoveItemVerified(srcInventory, srcItem.ItemId, definition, dstInventory, maxpossibleAmount);
+                            transferred = movedAmount > 0;
+                            if (transferred) fallbackMoves++;
+                        }
                         if (tsMark != 0L) tsTransfer += Stopwatch.GetTimestamp() - tsMark;
                         if (transferred)
                         {
                             transfersSucceeded++;
-                            remainingVolume -= (float)maxpossibleAmount * definition.Volume;
+                            remainingVolume -= (float)movedAmount * definition.Volume;
                             running = true;
 
                             if (remainingVolume <= 0)
@@ -379,14 +389,51 @@ namespace SKONanobotBuildAndRepairSystem
                     var _itemsExamined = itemsExamined;
                     var _transferAttempts = transferAttempts;
                     var _transfersSucceeded = transfersSucceeded;
+                    var _fallbackMoves = fallbackMoves;
                     var _isEmptyResult = isEmpty;
                     var _running = running;
                     MethodProfiler.StopAndLog("EmptyBlockInventories", profilerTs, () =>
-                        string.Format("entityId={0};inventoryCount={1};invScanned={2};invEmpty={3};itemsExamined={4};transferAttempts={5};transferSucceeded={6};isEmpty={7};running={8};getItemsMs={9:F3};getItemByIdMs={10:F3};transferMs={11:F3}",
+                        string.Format("entityId={0};inventoryCount={1};invScanned={2};invEmpty={3};itemsExamined={4};transferAttempts={5};transferSucceeded={6};isEmpty={7};running={8};getItemsMs={9:F3};getItemByIdMs={10:F3};transferMs={11:F3};fallbackMoves={12}",
                             _entityId, _inventoryCount, _inventoriesScanned, _inventoriesEmpty, _itemsExamined, _transferAttempts, _transfersSucceeded, _isEmptyResult, _running,
-                            _getItemsMs, _getItemByIdMs, _transferMs));
+                            _getItemsMs, _getItemByIdMs, _transferMs, _fallbackMoves));
                 }
             }
+        }
+
+        /// <summary>
+        /// BUG-261023.5: add to an inventory and return the amount that actually landed
+        /// (engine capacity checks are not trusted on the detached transport, BUG-260827.2).
+        /// </summary>
+        private static MyFixedPoint AddItemsVerified(IMyInventory dstInventory, MyFixedPoint amount, MyObjectBuilder_PhysicalObject content)
+        {
+            var id = content.GetId();
+            var before = dstInventory.GetItemAmount(id);
+            dstInventory.AddItems(amount, content);
+            var added = dstInventory.GetItemAmount(id) - before;
+            return added > amount ? amount : added;
+        }
+
+        /// <summary>
+        /// BUG-261023.5: move up to `amount` of one source item into dstInventory: clamp to the
+        /// real volume headroom, add first, then remove from the source only what landed.
+        /// </summary>
+        private static MyFixedPoint MoveItemVerified(IMyInventory srcInventory, uint itemId, MyPhysicalItemDefinition definition, IMyInventory dstInventory, MyFixedPoint amount)
+        {
+            var item = srcInventory.GetItemByID(itemId);
+            var content = item != null ? item.Content as MyObjectBuilder_PhysicalObject : null;
+            if (content == null) return MyFixedPoint.Zero;
+            if (amount > item.Amount) amount = item.Amount;
+            if (definition.Volume > 0f)
+            {
+                var fits = (MyFixedPoint)(((float)dstInventory.MaxVolume - (float)dstInventory.CurrentVolume) / definition.Volume);
+                if (amount > fits) amount = fits;
+            }
+            if (definition.HasIntegralAmounts) amount = MyFixedPoint.Floor(amount);
+            if (amount <= 0) return MyFixedPoint.Zero;
+
+            var added = AddItemsVerified(dstInventory, amount, content);
+            if (added > 0) srcInventory.RemoveItems(itemId, added);
+            return added;
         }
 
         // BUG-133: PullComponents retired; see PullFromSourcesOnePass in Welding.cs.
