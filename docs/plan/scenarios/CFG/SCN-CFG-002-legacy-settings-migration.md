@@ -19,9 +19,9 @@
 ## Perf envelope
 n/a
 ## Coverage
-planned: unit:SyncModSettingsTests.AdjustSettings_MigratesVersion0To7
-planned: unit:SyncModSettingsTests.ValidateAndClamp_FoldsDeprecatedGrindIfWeldGetStuck
+unit:SyncModSettingsTests.AdjustSettings_MigratesOldVersion_AndIsIdempotent
+unit:SyncModSettingsTests.ValidateAndClamp_FoldsDeprecatedGrindIfWeldGetStuck
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 FEAT-260910.3, BUG-101 (GrindIfWeldGetStuck deadlock removed), BUG-260511.12, BUG-093

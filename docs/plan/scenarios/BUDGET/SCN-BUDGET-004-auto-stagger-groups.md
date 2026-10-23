@@ -19,8 +19,8 @@
 ## Perf envelope
 n/a
 ## Coverage
-planned: unit:ModResolverTests.AutoStaggerGroupsFor_Thresholds
+unit:ModResolverTests.AutoStaggerGroups_Thresholds
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 FEAT-260910.3 (seam S3 `AutoStaggerGroupsFor`), BUG-031, BUG-102 (isolated BaR stagger collapse)

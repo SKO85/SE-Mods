@@ -22,8 +22,8 @@
 ## Perf envelope
 `SortAndCapGridCandidates` maxMs ≤ 5 for 1000 candidates (distance/priority cached per compare, BUG-099/100).
 ## Coverage
-planned: unit:QuickSelectTests.MatchesSortForKSmallest_RandomInputs
+unit:QuickSelectTests.MatchesSortForKSmallest_RandomInputs
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 BUG-008, BUG-019, BUG-086, BUG-091, BUG-094, BUG-096, BUG-099, BUG-100, FEAT-260910.3

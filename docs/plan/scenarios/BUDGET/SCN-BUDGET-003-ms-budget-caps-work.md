@@ -16,8 +16,8 @@
 ## Perf envelope
 Mod tick cost peak ≈ `MaxWeldMsPerTick + MaxGrindMsPerTick` + engine overhead; never unbounded.
 ## Coverage
-planned: unit:PerTickBudgetTests.MsCapWins_WhenCountBudgetRemains
+unit:PerTickBudgetTests.MsCapWins_WhenCountBudgetRemains
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 FEAT-260910.3, BUG-105 / BUG-113 (`buildMs` root cause), CLAUDE.md "Performance Tuning"

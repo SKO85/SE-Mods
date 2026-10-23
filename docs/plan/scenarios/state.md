@@ -13,14 +13,14 @@ CORE 3 · WELD 6 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 |---|---|---|---|---|---|
 | SCN-CORE-001 | CORE | 1 | Idle → Welding → Idle state transitions on one damaged grid | ingame:S01 | never |
 | SCN-CORE-002 | CORE | 2 | BoundingBox search mode: area size/offset clamps and Show Area | manual | never |
-| SCN-CFG-001 | CFG | 1 | ModSettings.xml out-of-range values are clamped on load | planned: unit:SyncModSettingsTests.ValidateAndClamp_ClampsEveryBoundedField | never |
-| SCN-CFG-002 | CFG | 1 | Legacy settings migrate to version 7; deprecated GrindIfWeldGetStuck folded | planned: unit:SyncModSettingsTests.AdjustSettings_MigratesVersion0To7 | never |
-| SCN-CHAT-001 | CHAT | 1 | /nanobars config set/get round trip and bounds rejection | planned: unit:ConfigCommandTests.SetGetRoundTrip_AndBoundsRejection | never |
+| SCN-CFG-001 | CFG | 1 | ModSettings.xml out-of-range values are clamped on load | unit:SyncModSettingsTests.ValidateAndClamp_ClampsEveryBoundedField | 261006.3 unit |
+| SCN-CFG-002 | CFG | 1 | Legacy settings migrate to version 7; deprecated GrindIfWeldGetStuck folded | unit:SyncModSettingsTests.AdjustSettings_MigratesOldVersion_AndIsIdempotent | 261006.3 unit |
+| SCN-CHAT-001 | CHAT | 1 | /nanobars config set/get round trip and bounds rejection | unit:ConfigCommandTests.SetGetRoundTrip_AndBoundsRejection | 261006.3 unit |
 | SCN-CHAT-002 | CHAT | 4 | Dedicated server: admin command forwarding and response routing | manual | never |
-| SCN-BUDGET-001 | BUDGET | 1 | Block assignment TTL: a claimed block is released to another BaR | planned: unit:TtlCacheTests; ingame:S05 | never |
-| SCN-BUDGET-002 | BUDGET | 1 | Per-tick weld/grind count budget refuses beyond cap, resets next frame | planned: unit:PerTickBudgetTests | never |
-| SCN-BUDGET-003 | BUDGET | 1 | Ms budget caps work even when count budget remains | planned: unit:PerTickBudgetTests.MsCapWins_WhenCountBudgetRemains | never |
-| SCN-BUDGET-004 | BUDGET | 3 | Auto stagger groups 1/2/3 by enabled BaR count | planned: unit:ModResolverTests.AutoStaggerGroupsFor_Thresholds | never |
+| SCN-BUDGET-001 | BUDGET | 1 | Block assignment TTL: a claimed block is released to another BaR | unit:TtlCacheTests; ingame:S05 | 261006.3 unit |
+| SCN-BUDGET-002 | BUDGET | 1 | Per-tick weld/grind count budget refuses beyond cap, resets next frame | unit:PerTickBudgetTests | 261006.3 unit |
+| SCN-BUDGET-003 | BUDGET | 1 | Ms budget caps work even when count budget remains | unit:PerTickBudgetTests.MsCapWins_WhenCountBudgetRemains | 261006.3 unit |
+| SCN-BUDGET-004 | BUDGET | 3 | Auto stagger groups 1/2/3 by enabled BaR count | unit:ModResolverTests.AutoStaggerGroups_Thresholds | 261006.3 unit |
 | SCN-BUDGET-005 | BUDGET | 3 | Failure cooldown: many BaRs do not bounce off one unweldable block | manual | never |
 | SCN-BUDGET-006 | BUDGET | 4 | Large-grid performance envelope (3000+ blocks, 5 BaRs) | ingame:S08 | never |
 | SCN-WELD-001 | WELD | 1 | WeldOnly repairs damaged blocks and never grinds | ingame:S01 | never |
@@ -30,21 +30,21 @@ CORE 3 · WELD 6 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-WELD-005 | WELD | 2 | Missing components aggregate over all weld targets | ingame:S02 | never |
 | SCN-GRIND-001 | GRIND | 1 | GrindOnly with NoOwnership grinds only unowned grids | ingame:S04 | never |
 | SCN-GRIND-002 | GRIND | 2 | Janitor relation matrix × DisableOnly / HackOnly | manual | never |
-| SCN-GRIND-003 | GRIND | 2 | Grind order: near / far / smallest-grid first, ignore priority order | planned: unit:QuickSelectTests.MatchesSortForKSmallest_RandomInputs | never |
-| SCN-GRIND-004 | GRIND | 2 | Raze queue and mech / dismount per-tick throttles | planned: unit:PerTickBudgetTests | never |
+| SCN-GRIND-003 | GRIND | 2 | Grind order: near / far / smallest-grid first, ignore priority order | unit:QuickSelectTests.MatchesSortForKSmallest_RandomInputs | 261006.3 unit |
+| SCN-GRIND-004 | GRIND | 2 | Raze queue and mech / dismount per-tick throttles | unit:PerTickBudgetTests | 261006.3 unit |
 | SCN-COLLECT-001 | COLLECT | 2 | Floating objects inside area only, CollectIfIdle, component class priority | manual | never |
 | SCN-INV-001 | INV | 2 | Source scan via conveyors, pull cursor rotation, push-targets-full backoff | manual | never |
 | SCN-INV-002 | INV | 2 | Push-immediately flags and inventory-full pause | manual | never |
 | SCN-PRIO-001 | PRIO | 2 | Priority list enable / disable / reorder reflected in target order; reset | manual | never |
 | SCN-CLUSTER-001 | CLUSTER | 3 | Coordinator election and shared scan results for co-located BaRs | ingame:S07 | never |
-| SCN-CLUSTER-002 | CLUSTER | 3 | MaxSystemsPerTargetGrid saturation (strictly greater-than) and secondary task | planned: unit:GridSaturationTrackerTests; ingame:S06 | never |
+| SCN-CLUSTER-002 | CLUSTER | 3 | MaxSystemsPerTargetGrid saturation (strictly greater-than) and secondary task | unit:GridSaturationTrackerTests; ingame:S06 | 261006.3 unit |
 | SCN-CLUSTER-003 | CLUSTER | 3 | Fair-share target truncation across grids | planned: unit:TruncateGridAwareTests (second wave) | never |
 | SCN-ZONE-001 | ZONE | 3 | Safe zones and DefenseShields block weld / grind / build; characters protected | manual | never |
 | SCN-FX-001 | FX | 1 | Weld / grind particle and sound effects at block position, distance-culled | manual | never |
 | SCN-TERM-001 | TERM | 2 | Terminal controls, actions and sliders reflect fixed vs default mod settings | manual | never |
 | SCN-API-001 | API | 3 | PB scripting API incl. ScriptControlled and ScriptControllFixed lockdown | manual; planned: ingame:S09 | never |
-| SCN-NET-001 | NET | 4 | Dedicated server: client settings sync and per-sender rate limit | manual | never |
-| SCN-LOC-001 | LOC | 1 | Terminal labels render in EN / DE / PL / RU and DisableLocalization | manual | never |
+| SCN-NET-001 | NET | 4 | Dedicated server: client settings sync and per-sender rate limit | manual; unit:ProtoContractTests.ProtoMemberTags_AreUniquePerType | 261006.3 unit |
+| SCN-LOC-001 | LOC | 1 | Terminal labels render in EN / DE / PL / RU and DisableLocalization | manual; unit:LocalizationTests.Translation_HasExactlyTheEnglishKeys | 261006.3 unit |
 
 ## Coverage summary
 

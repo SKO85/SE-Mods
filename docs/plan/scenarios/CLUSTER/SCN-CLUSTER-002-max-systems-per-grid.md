@@ -23,9 +23,9 @@
 ## Perf envelope
 `RebuildSaturatedGrids` maxMs ≤ 0.5; no `CountSystemsOnGrid`-style walk on the main thread (BUG-017).
 ## Coverage
-planned: unit:GridSaturationTrackerTests.Rebuild_UsesStrictlyGreaterThan
+unit:GridSaturationTrackerTests.Rebuild_UsesStrictlyGreaterThan
 ingame:S06
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 BUG-017, BUG-018, BUG-052, BUG-077, BUG-260610.21, BUG-260612.1, BUG-261006.1 (GitHub #146 / PR #147), FEAT-002, FEAT-260910.2/.3

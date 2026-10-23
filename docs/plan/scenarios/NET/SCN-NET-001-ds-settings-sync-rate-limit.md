@@ -25,7 +25,8 @@
 `MsgBlockStateSend` steadyAvgMs ≤ 0.3; `TryTransmitState` skip path ≤ 0.05 ms.
 ## Coverage
 manual
+unit:ProtoContractTests.ProtoMemberTags_AreUniquePerType
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 BUG-034, BUG-043, BUG-260610.2/.23/.27/.31/.41, BUG-260824.3/.8, BUG-260612.8..10

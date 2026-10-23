@@ -24,7 +24,8 @@
 n/a
 ## Coverage
 manual
+unit:LocalizationTests.Translation_HasExactlyTheEnglishKeys
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 BUG-260610.37, BUG-260610.43, FEAT-261006.1 (GitHub #145, Korean via LanguageOverride), `Localization/LocalizationHelper.cs`

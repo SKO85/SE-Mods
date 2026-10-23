@@ -18,11 +18,11 @@
 ## Perf envelope
 n/a (the budget *is* the perf control).
 ## Coverage
-planned: unit:PerTickBudgetTests.ClaimsUpToMax_ThenRefuses
-planned: unit:PerTickBudgetTests.ResetsWhenFrameAdvances
-planned: unit:PerTickBudgetTests.Refund_ReturnsOneSlot_NotBelowZero
-planned: unit:ModResolverTests.GetEffectiveMaxGrindsPerTick_AutoClampsBetween5And10
+unit:PerTickBudgetTests.ClaimsUpToMax_ThenRefuses
+unit:PerTickBudgetTests.ResetsWhenFrameAdvances_PeakKeptUntilResetStats
+unit:PerTickBudgetTests.Refund_ReturnsOneSlot_NotBelowZero
+unit:ModResolverTests.GetEffectiveMaxGrindsPerTick_AutoClampsBetween5And10
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 FEAT-260910.3, BUG-106 / BUG-107 (dismount / proj-build budgets), BUG-260610.35 (refund on defer), BUG-260612.11

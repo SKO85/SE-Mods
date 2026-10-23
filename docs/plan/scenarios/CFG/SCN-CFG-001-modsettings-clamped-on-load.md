@@ -19,8 +19,8 @@
 ## Perf envelope
 n/a
 ## Coverage
-planned: unit:SyncModSettingsTests.ValidateAndClamp_ClampsEveryBoundedField
+unit:SyncModSettingsTests.ValidateAndClamp_ClampsEveryBoundedField
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 FEAT-260910.3, BUG-076 (config no bounds), BUG-260610.30 / .42 (range bounds aligned with clamps)

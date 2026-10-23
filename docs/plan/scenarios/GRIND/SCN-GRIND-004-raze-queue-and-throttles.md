@@ -17,8 +17,8 @@
 ## Perf envelope
 `RazeQueueHandler.Process` maxMs ≤ 5; `ServerDoGrind` `decreaseMs` ≤ 12 (engine).
 ## Coverage
-planned: unit:PerTickBudgetTests
+unit:PerTickBudgetTests
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 BUG-106, BUG-127, BUG-260511.10, BUG-260522.1/.2, BUG-260612.20, BUG-260824.12, FEAT-260910.3

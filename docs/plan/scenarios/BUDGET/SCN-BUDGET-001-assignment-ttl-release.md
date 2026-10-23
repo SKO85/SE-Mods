@@ -19,10 +19,10 @@
 ## Perf envelope
 `ServerTryWelding` `assignOpsMs` ≤ 0.5 per call.
 ## Coverage
-planned: unit:TtlCacheTests.SetThenTryGet_ReturnsBeforeExpiry_AndMissesAfter
-planned: unit:TtlCacheTests.CleanupExpired_RemovesOnlyExpired_TwoPass
+unit:TtlCacheTests.SetThenTryGet_ReturnsBeforeExpiry_AndMissesAfter
+unit:TtlCacheTests.CleanupExpired_RemovesOnlyExpired_TwoPass
 ingame:S05
 ## Last verified
-never
+v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
 BUG-005, BUG-028, BUG-029, BUG-048, BUG-054, BUG-003 / BUG-260522.3 (TtlCache cleanup), FEAT-260910.2/.3
