@@ -42,7 +42,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-CLUSTER-003 | CLUSTER | 3 | Fair-share target truncation across grids | planned: unit:TruncateGridAwareTests (second wave) | never |
 | SCN-ZONE-001 | ZONE | 3 | Safe zones and DefenseShields block weld / grind / build; characters protected | manual | never |
 | SCN-FX-001 | FX | 1 | Weld / grind particle and sound effects at block position, distance-culled | manual | never |
-| SCN-TERM-001 | TERM | 2 | Terminal controls, actions and sliders reflect fixed vs default mod settings | manual | never |
+| SCN-TERM-001 | TERM | 2 | Terminal controls, actions and sliders reflect fixed vs default mod settings | manual, unit | 261023.6 unit |
 | SCN-API-001 | API | 3 | PB scripting API incl. ScriptControlled and ScriptControllFixed lockdown | manual, unit; planned: ingame:S09 | never |
 | SCN-NET-001 | NET | 4 | Dedicated server: client settings sync and per-sender rate limit | manual; unit:ProtoContractTests.ProtoMemberTags_AreUniquePerType | 261006.3 unit |
 | SCN-LOC-001 | LOC | 1 | Terminal labels render in EN / DE / PL / RU and DisableLocalization | manual; unit:LocalizationTests.Translation_HasExactlyTheEnglishKeys | 261006.3 unit |

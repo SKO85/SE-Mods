@@ -275,6 +275,8 @@ namespace SKONanobotBuildAndRepairSystem
         // BUG-260824.8: rate-limit window per sender, not per block — a shared window
         // silently dropped a second player's concurrent terminal change.
         internal Dictionary<ulong, TimeSpan> _lastClientSettingsAppliedBySender = new Dictionary<ulong, TimeSpan>();
+        // BUG-261023.10: per-sender window for block data requests (server side).
+        internal Dictionary<ulong, TimeSpan> _lastDataRequestBySender = new Dictionary<ulong, TimeSpan>();
 
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
         // Rebuilt by _gridSaturation.Rebuild(), used as fast-path in IsGridOverSystemLimit().
@@ -536,6 +538,8 @@ namespace SKONanobotBuildAndRepairSystem
         /// the full cluster key string every second.
         /// </summary>
         internal int _lastClusterKeyHash;
+        // BUG-261023.9: last ComputeSettingsScanKey seen by SettingsChanged.
+        private int _lastSettingsScanKey;
 
         // Shared release helper for the weld/grind loops; second overload preserves
         // tsAssignOps profiler timing at call sites that aggregate it.

@@ -16,13 +16,15 @@
 - Disabling A releases its claims immediately (`ReleaseAllForSystem`); if A had crashed instead, B
   picks the block up after the TTL expires (`TtlCache.IsExpired` uses `>=`).
 - Lock-on survives a scan rebuild (identity by `CubeGrid.EntityId + Position`, not reference).
+- BUG-261023.11: the periodic cleanup (background pool) never deletes a claim refreshed while it runs.
 ## Perf envelope
 `ServerTryWelding` `assignOpsMs` ≤ 0.5 per call.
 ## Coverage
 unit:TtlCacheTests.SetThenTryGet_ReturnsBeforeExpiry_AndMissesAfter
 unit:TtlCacheTests.CleanupExpired_RemovesOnlyExpired_TwoPass
 ingame:S05
+unit:TtlCacheTests.CleanupExpired_KeepsEntriesRefreshedWhileItRuns
 ## Last verified
 v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
-BUG-005, BUG-028, BUG-029, BUG-048, BUG-054, BUG-003 / BUG-260522.3 (TtlCache cleanup), FEAT-260910.2/.3
+BUG-005, BUG-028, BUG-029, BUG-048, BUG-054, BUG-003 / BUG-260522.3 (TtlCache cleanup), FEAT-260910.2/.3, BUG-261023.11

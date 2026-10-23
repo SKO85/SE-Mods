@@ -19,6 +19,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         public const int ProcessIntervalTicks = 10;
 
         private static int _tickCounter;
+        // BUG-261023.13: throttled error logging for a drain that keeps throwing.
+        private static readonly TimeSpan ErrorLogInterval = TimeSpan.FromSeconds(60);
+        private static bool _errorLogged;
+        private static TimeSpan _lastErrorLogged;
+        private static int _errorsSinceLog;
 
         // BUG-260511.10: queue entry pairs the block with its precomputed dedup
         // key so Process can free the key even if target.CubeGrid has gone null
@@ -71,6 +76,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             _pendingKeys.Clear();
             _batchByGrid.Clear();
             _tickCounter = 0;
+            _errorLogged = false;
+            _errorsSinceLog = 0;
         }
 
         /// <summary>
@@ -205,12 +212,23 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                             _mechDeferred, _drainMs, _razeMs, _maxPerGridMs));
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 if (profilerTs != 0L)
                 {
                     MethodProfiler.StopAndLog("RazeQueueHandler.Process", profilerTs, () =>
                         string.Format("queueAtEntry={0};exception=true", queueDepthAtEntry));
+                }
+
+                // BUG-261023.13: log it — first failure, then at most once a minute with a count.
+                _errorsSinceLog++;
+                var now = Mod.NowPlayTime;
+                if (!_errorLogged || now - _lastErrorLogged >= ErrorLogInterval)
+                {
+                    try { Logging.Instance.Write(Logging.Level.Error, "RazeQueueHandler.Process failed ({0}x since last report): {1}", _errorsSinceLog, ex); } catch { }
+                    _errorLogged = true;
+                    _lastErrorLogged = now;
+                    _errorsSinceLog = 0;
                 }
             }
             finally

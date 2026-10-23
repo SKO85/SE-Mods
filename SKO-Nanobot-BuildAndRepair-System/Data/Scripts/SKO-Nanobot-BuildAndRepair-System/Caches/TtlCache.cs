@@ -131,20 +131,23 @@ namespace SKONanobotBuildAndRepairSystem.Caches
             // background pool (no in-flight guard in PeriodicMaintenanceScheduler).
             // The allocation cost is negligible — cleanups fire every 5 s to 2 min
             // and the list is small.
-            List<TKey> expiredKeys = null;
+            List<KeyValuePair<TKey, CacheItem>> expired = null;
             foreach (var pair in Entries)
             {
                 if (pair.Value.IsExpired(now))
                 {
-                    if (expiredKeys == null) expiredKeys = new List<TKey>();
-                    expiredKeys.Add(pair.Key);
+                    if (expired == null) expired = new List<KeyValuePair<TKey, CacheItem>>();
+                    expired.Add(pair);
                 }
             }
-            if (expiredKeys == null) return;
-            CacheItem removed;
-            for (int i = 0; i < expiredKeys.Count; i++)
+            if (expired == null) return;
+            // BUG-261023.11: remove only the exact entry seen expiring (key + value) — a Set()
+            // between the two passes (claim refreshed on the main thread while this runs on the
+            // background pool) must survive.
+            var entries = (ICollection<KeyValuePair<TKey, CacheItem>>)Entries;
+            for (int i = 0; i < expired.Count; i++)
             {
-                Entries.TryRemove(expiredKeys[i], out removed);
+                entries.Remove(expired[i]);
             }
         }
     }

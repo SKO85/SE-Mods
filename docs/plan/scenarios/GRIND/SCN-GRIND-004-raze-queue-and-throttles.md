@@ -14,6 +14,8 @@
   deferral does not starve non-mech razes in the same drain (BUG-260824.12); the queue drains to 0
   after grinding stops; no entry survives a grid close.
 - A completed mech grind is reported as success, not failed (BUG-260612.20).
+- Budget refusal (BUG-261023.8): a BaR refused a grind slot keeps its claim and current block
+  (no `CurrentGrindingBlock` null/non-null flicker, no grid-count churn); it resumes the same block.
 ## Perf envelope
 `RazeQueueHandler.Process` maxMs ≤ 5; `ServerDoGrind` `decreaseMs` ≤ 12 (engine).
 ## Coverage
@@ -21,4 +23,4 @@ unit:PerTickBudgetTests
 ## Last verified
 v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
-BUG-106, BUG-127, BUG-260511.10, BUG-260522.1/.2, BUG-260612.20, BUG-260824.12, FEAT-260910.3
+BUG-106, BUG-127, BUG-260511.10, BUG-260522.1/.2, BUG-260612.20, BUG-260824.12, FEAT-260910.3, BUG-261023.8

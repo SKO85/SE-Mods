@@ -181,7 +181,11 @@ namespace SKONanobotBuildAndRepairSystem
                 // OPT 3: Global grind budget — cap ServerDoGrind calls per tick (count + time).
                 if (!Mod.TryClaimGrindSlot())
                 {
-                    ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
+                    // BUG-261023.8: budget deferral, not a failure — keep the claim and report
+                    // the block (like BUG-154 for welding) so the current block / grid count
+                    // don't flicker and no other BaR takes it between ticks.
+                    needGrinding = true;
+                    currentGrindingBlock = chosenGrindTarget.Block;
                 }
                 else
                 {

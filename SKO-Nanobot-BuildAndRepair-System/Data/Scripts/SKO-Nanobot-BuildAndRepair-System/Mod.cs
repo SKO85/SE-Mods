@@ -394,7 +394,7 @@
                 // Trigger settings changed for all nanobots first.
                 foreach (var entry in NanobotSystems)
                 {
-                    entry.Value.SettingsChanged();
+                    entry.Value.SettingsChanged(true);
                 }
 
                 // Init terminal controls after settings have changed for all nanobots.

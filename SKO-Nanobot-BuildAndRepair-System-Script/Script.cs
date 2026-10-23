@@ -1,4 +1,4 @@
-﻿// Version: v2.5.5 - 12.06.2026
+﻿// Version: v2.5.6 - 23.10.2026
 // Compatible with: SKO Nanobot Build and Repair System (Maintained) v2.5.0+
 // This script only works with SKO's maintained versions of the mod.
 // It will NOT work with the original mod by Dummy08.
@@ -7,7 +7,7 @@ static double UpdateIntervalAssemblerQueues = 0.1; //Update every x seconds (0=a
 static double UpdateIntervalGrinding = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
 
 // Configure groups below. Full docs:
-// https://sko85.github.io/SE-Mods/pages/Build-and-Repair-System/Companion-Script/
+// https://sko85.github.io/SE-Mods/Build-and-Repair-System/Companion-Script/
 //
 // LCDs can also be auto-attached via a [BaR:group] tag in the block name, e.g.
 //   "Hangar LCD [BaR:1]"           -> group 1
@@ -220,6 +220,7 @@ public class BuildAndRepairAutoQueuing
                 _GroupData[idx].RepairSystems.SetProgram(_Program);
             }
             _GroupData[idx].Assemblers = InitAssemblerList(queuingGroup);
+            _GroupData[idx].AssemblerBlocks = ResolveAssemblers(_GroupData[idx].Assemblers);
             _GroupData[idx].DisplayEntries = new List<DisplayEntry>();
             var groupLabel = string.IsNullOrEmpty(queuingGroup != null ? queuingGroup.Name : null) ? "BaR Group " + idx : queuingGroup.Name;
 
@@ -301,7 +302,8 @@ public class BuildAndRepairAutoQueuing
             }
         }
 
-        // Fallback: auto-detect BaR blocks by probing for known properties.
+        // Fallback: auto-detect BaR blocks by subtype, then probe for known properties.
+        // (The mod adds its properties to every ship welder, so the probe alone also matches vanilla welders.)
         if (handler == null || handler.Count == 0)
         {
             try
@@ -311,6 +313,7 @@ public class BuildAndRepairAutoQueuing
                     var auto = new RepairSystemHandler();
                     auto.Init(_Program.GridTerminalSystem, (IMyShipWelder blk) =>
                     {
+                        if (!blk.BlockDefinition.SubtypeName.Contains("NanobotBuildAndRepairSystem")) return false;
                         try
                         {
                             var _ = blk.GetValueBool("BuildAndRepair.ScriptControlled");
@@ -343,6 +346,18 @@ public class BuildAndRepairAutoQueuing
         }
 
         return handler;
+    }
+
+    private List<IMyAssembler> ResolveAssemblers(List<long> ids)
+    {
+        if (ids == null) return null;
+        var blocks = new List<IMyAssembler>();
+        foreach (var id in ids)
+        {
+            var assembler = _Program.GridTerminalSystem.GetBlockWithId(id) as IMyAssembler;
+            if (assembler != null) blocks.Add(assembler);
+        }
+        return blocks;
     }
 
     private List<long> InitAssemblerList(BuildAndRepairSystemQueuingGroup queuingGroup)
@@ -757,6 +772,7 @@ public class BuildAndRepairSystemQueuingGroupData
     public BuildAndRepairSystemQueuingGroup Settings { get; set; }
     public RepairSystemHandler RepairSystems { get; set; }
     public List<long> Assemblers { get; set; }
+    public List<IMyAssembler> AssemblerBlocks { get; set; }
     public List<DisplayEntry> DisplayEntries { get; set; }
     public bool InfoOnly { get; set; }
 
@@ -773,10 +789,27 @@ public class BuildAndRepairSystemQueuingGroupData
             {
                 if (item.Value > 0)
                 {
-                    RepairSystems.EnsureQueued(Assemblers, item.Key, item.Value);
+                    // The missing list is already net of components sitting in connected assembler
+                    // outputs, and EnsureQueued subtracts that output stock again - add it back so the
+                    // assemblers don't under-queue.
+                    RepairSystems.EnsureQueued(Assemblers, item.Key, item.Value + AssemblerOutputAmount(item.Key));
                 }
             }
         }
+    }
+
+    private int AssemblerOutputAmount(VRage.Game.MyDefinitionId itemId)
+    {
+        if (AssemblerBlocks == null) return 0;
+        var itemType = (MyItemType)itemId;
+        var amount = 0;
+        foreach (var assembler in AssemblerBlocks)
+        {
+            // Same assemblers EnsureQueued counts: in Assembly mode.
+            if (assembler == null || assembler.Closed || assembler.Mode != MyAssemblerMode.Assembly || assembler.OutputInventory == null) continue;
+            amount += (int)assembler.OutputInventory.GetItemAmount(itemType);
+        }
+        return amount;
     }
 
     public void RefreshDisplay(double elapsedTime)

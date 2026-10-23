@@ -105,7 +105,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         /// BUG-260612.17: owner-checked release — removes the claim only when it is
         /// held by the given system, so a caller with a stale lock-on (TTL expired,
         /// block re-claimed by another BaR) can't delete the other BaR's claim.
-        /// All assignment ops are main-thread, so get+remove can't interleave.
+        /// All assignment ops are main-thread, so get+remove can't interleave (the periodic
+        /// cleanup runs on the background pool, but only removes entries it saw expire, BUG-261023.11).
         /// (The old unconditional overload is gone — every release is an "I'm done
         /// with MY claim" operation.)
         /// </summary>

@@ -45,7 +45,10 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        public void SettingsChanged()
+        /// <param name="forceRescan">BUG-261023.9: true for mod-level changes (they can alter the scan
+        /// without changing this BaR's settings); otherwise the immediate rescan only fires when the
+        /// scan-relevant settings key changed.</param>
+        public void SettingsChanged(bool forceRescan = false)
         {
             if (Mod.SettingsValid)
             {
@@ -86,9 +89,13 @@ namespace SKONanobotBuildAndRepairSystem
             // assignment held by this BaR — the multi-action wrapper may have claimed
             // several blocks in one cycle, and we want the next scan to pick from the
             // freshly sorted list with no carryover.
+            var scanKeyChanged = true;
             if (_Welder != null && _Welder.CubeGrid != null)
             {
                 var newClusterHash = ScanClusterCoordinator.ComputeClusterKeyHash(this);
+                var scanKey = ComputeSettingsScanKey(newClusterHash);
+                scanKeyChanged = scanKey != _lastSettingsScanKey;
+                _lastSettingsScanKey = scanKey;
                 if (_lastClusterKeyHash != 0 && newClusterHash != _lastClusterKeyHash)
                 {
                     State.CurrentWeldingBlock = null;
@@ -101,7 +108,27 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // FEAT-080: settings changed — force immediate rescan, bypassing FEAT-075 debounce.
-            TriggerImmediateRescan("settingsChanged", true);
+            // BUG-261023.9: not when only e.g. a script's CurrentPicked*Block moved (the picker
+            // reads it directly) — that forced a full rescan on every pick.
+            if (forceRescan || scanKeyChanged)
+                TriggerImmediateRescan("settingsChanged", true);
+        }
+
+        /// <summary>
+        /// BUG-261023.9: hash of everything a per-BaR settings change can alter in the scan result —
+        /// the cluster key plus area and all flags.
+        /// </summary>
+        internal int ComputeSettingsScanKey(int clusterKeyHash)
+        {
+            unchecked
+            {
+                var s = Settings;
+                var hash = clusterKeyHash;
+                hash = (hash ^ (int)s.Flags) * 16777619;
+                hash = (hash ^ s.AreaSize.GetHashCode()) * 16777619;
+                hash = (hash ^ s.AreaOffset.GetHashCode()) * 16777619;
+                return hash;
+            }
         }
 
         /// <summary>

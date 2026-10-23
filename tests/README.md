@@ -74,7 +74,7 @@ The release variant answers `/nanobars test` with "Test harness not installed".
 
 | Test class | Scenarios |
 |---|---|
-| `TtlCacheTests` | SCN-BUDGET-001 |
+| `TtlCacheTests` | SCN-BUDGET-001 (incl. concurrent cleanup race, BUG-261023.11) |
 | `PerTickBudgetTests` | SCN-BUDGET-002, SCN-BUDGET-003, SCN-GRIND-004 |
 | `ModResolverTests` | SCN-BUDGET-002, SCN-BUDGET-004 |
 | `SyncModSettingsTests` | SCN-CFG-001, SCN-CFG-002 |
@@ -83,6 +83,7 @@ The release variant answers `/nanobars test` with "Test harness not installed".
 | `QuickSelectTests` | SCN-GRIND-003 |
 | `LocalizationTests` | SCN-LOC-001 |
 | `ProtoContractTests` | SCN-NET-001 (network-sync tag uniqueness) |
+| `SettingsScanKeyTests` | SCN-TERM-001 (BUG-261023.9 forced rescan only for scan-relevant changes) |
 | `CompanionScriptTests` | SCN-API-001 (companion PB script compiles as C# 6 with the game's Roslyn) |
 | `PriorityLockTests` | SCN-PRIO-001 (BUG-261023.6 admin priority locks vs PB setters and client messages) |
 | `SkeletonResetHandlerTests` | SCN-WELD-006 (BUG-261023.3 drain re-checks HasDeformation) |

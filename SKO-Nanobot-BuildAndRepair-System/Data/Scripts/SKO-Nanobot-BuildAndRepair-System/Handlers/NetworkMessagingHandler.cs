@@ -14,6 +14,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static ushort MSGID_MOD_DATAREQUEST = 40000;
         private static ushort MSGID_MOD_SETTINGS = 40001;
         private static ushort MSGID_BLOCK_DATAREQUEST = 40100;
+        private const double DataRequestMinIntervalSeconds = 2.0;
         private static ushort MSGID_BLOCK_SETTINGS_FROM_SERVER = 40102;
         private static ushort MSGID_BLOCK_SETTINGS_FROM_CLIENT = 40103;
         private static ushort MSGID_BLOCK_STATE_FROM_SERVER = 40104;
@@ -112,6 +113,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 NanobotSystem system;
                 if (Mod.NanobotSystems.TryGetValue(msgRcv.EntityId, out system))
                 {
+                    // BUG-261023.10: each request costs two full serializations — drop repeats per
+                    // (block, sender). No global cap: clients send one request per BaR on stream-in
+                    // and never retry, so a cap would leave BaRs without data on big bases.
+                    var now = MyAPIGateway.Session.ElapsedPlayTime;
+                    TimeSpan lastRequest;
+                    if (system._lastDataRequestBySender.TryGetValue(sender, out lastRequest)
+                        && (now - lastRequest).TotalSeconds < DataRequestMinIntervalSeconds) return;
+                    system._lastDataRequestBySender[sender] = now;
+
                     // BUG-260610.19: reply to the tamper-proof transport sender, not the
                     // client-controlled payload SteamId.
                     MsgBlockSettingsSend(sender, system);

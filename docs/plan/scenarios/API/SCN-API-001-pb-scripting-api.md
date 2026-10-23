@@ -25,6 +25,9 @@
 - Detection probe on a plain vanilla welder returns defaults, never throws (`Terminal.cs:180` note).
 - Companion script queues the aggregate shortfall once, `info-only` mode queues nothing and stays on
   across automatic runs and world reloads until the PB is run with `queue` (BUG-261023.7).
+- Companion auto-detection (no group configured) counts BaR blocks only, never vanilla ship welders
+  (BUG-261023.12); with components already in an assembler output it still queues the full remaining
+  need (BUG-261023.14).
 ## Perf envelope
 `GetPossibleWeldTargetsList` etc. copy under lock ≤ 0.5 ms for 512 targets (PB call cadence Update100).
 ## Coverage
@@ -34,4 +37,4 @@ unit:CompanionScriptTests.Script_CompilesAsAProgrammableBlockProgram
 ## Last verified
 never
 ## Related
-BUG-049..051, BUG-260612.36..39, BUG-260824.10, BUG-260824.2, FEAT-069, docs Scripting page (stale note on lockdown — fix)
+BUG-049..051, BUG-260612.36..39, BUG-260824.10, BUG-260824.2, FEAT-069, docs Scripting page (stale note on lockdown — fix), BUG-261023.12, BUG-261023.14

@@ -23,6 +23,8 @@
 - Step 4: list empty; state `Idle`. The companion script queues the reported total to assemblers in
   one go (no 5–6-item trickle), and queues nothing once the list is empty.
 - No block integrity changes while starved; no spikes (`ServerTryWelding` exits early on exhaustion).
+- Companion with stock already in the assembler output (BUG-261023.14): the queued amount plus that
+  stock covers the full shortfall at once — no production stall until the BaR drains the output.
 ## Perf envelope
 `RebuildMissingComponentsAggregate` maxMs ≤ 1 per call; `ServerTryWelding` maxMs ≤ 5 while starved.
 ## Coverage
@@ -33,4 +35,4 @@ unit:MissingComponentsAggregateTests.SourcesAreWalkedInSlices_AfterTheTargets
 ## Last verified
 v2.5.6 build 261023.1 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related
-BUG-260824.2 (GitHub #142 / #83), BUG-260909.1 (aggregate cost at scale), BUG-261023.1 (time slicing), FEAT-260910.2
+BUG-260824.2 (GitHub #142 / #83), BUG-260909.1 (aggregate cost at scale), BUG-261023.1 (time slicing), FEAT-260910.2, BUG-261023.14
