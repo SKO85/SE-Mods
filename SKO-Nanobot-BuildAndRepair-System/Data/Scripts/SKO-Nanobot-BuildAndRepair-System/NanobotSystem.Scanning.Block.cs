@@ -243,15 +243,20 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
                 }
-                else if (!block.IsDestroyed
+                else if (Settings.WeldOptions != AutoWeldOptions.WeldSkeleton
+                    && !block.IsDestroyed
                     && block.Integrity >= block.GetRequiredIntegrity(Settings.WeldOptions)
                     && block.MaxDeformation > SlimBlockExtensions.MinDeformation
+                    && (!useIgnoreColor || !IsColorNearlyEquals(ignoreColor, colorMask)) && (!useGrindColor || !IsColorNearlyEquals(grindColor, colorMask))
+                    && BlockWeldPriority.GetEnabled(block)
                     && IsRelationAllowed4Welding(block))
                 {
                     // BUG-260827.1: deformation-only block (integrity fine, dented) —
                     // never a weld target (MaxDeformation is engine-bugged and doesn't
                     // reset), queue a budgeted main-thread skeleton reset instead so
-                    // dents still get repaired.
+                    // dents still get repaired. BUG-261023.3: same filters as weld
+                    // targets (skeleton mode, colors, priority); the drain re-checks
+                    // HasDeformation because MaxDeformation stays latched.
                     double distance;
                     if (skipRangeCheck || block.IsInRange(ref areaBox, out distance))
                     {

@@ -25,7 +25,7 @@
 - Detection probe on a plain vanilla welder returns defaults, never throws (`Terminal.cs:180` note).
 - Companion script queues the aggregate shortfall once, `info-only` mode queues nothing.
 ## Perf envelope
-`GetPossibleWeldTargetsList` etc. copy under lock ≤ 0.5 ms for 1024 targets (PB call cadence Update100).
+`GetPossibleWeldTargetsList` etc. copy under lock ≤ 0.5 ms for 512 targets (PB call cadence Update100).
 ## Coverage
 manual
 planned: ingame:S09

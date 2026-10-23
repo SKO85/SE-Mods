@@ -47,7 +47,8 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 6f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
-        private const int MaxPossibleWeldTargets = 1024;
+        // BUG-261023.4: back to the released 512 (1024 slipped in unmeasured; scales scan, truncation and aggregate).
+        private const int MaxPossibleWeldTargets = 512;
         private const int MaxPossibleGrindTargets = 256;
         private const int MaxPossibleFloatingTargets = 16;
 

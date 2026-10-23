@@ -3,13 +3,13 @@
 ## Tier: 3
 ## Preconditions
 - One BaR, BoundingBox, area covering one 2000-block damaged grid and four 20-block damaged grids.
-- `MaxPossibleWeldTargets = 1024` (constant).
+- `MaxPossibleWeldTargets = 512` (constant; BUG-261023.4).
 ## Steps
 1. Enable the BaR; with DebugMode on read `LastScan: W=<n>` and the profiler `ApplyClusterResultToSelf`
    details (`weldTargets=N(pre=,grids=)`).
 2. Watch which grids receive welds in the first 60 s.
 ## Expected outcome
-- After the cap, every grid keeps at least `max(1024 / 5, 4)` of its candidates (`TruncateGridAware`
+- After the cap, every grid keeps at least `max(512 / 5, 4)` of its candidates (`TruncateGridAware`
   fair share) — the four small grids are fully represented, the big grid fills the overflow; the
   small grids are not starved by the big one (BUG-027).
 - Pre-truncation the per-grid sort keeps the best candidates (`SortAndCapGridCandidates`), so the

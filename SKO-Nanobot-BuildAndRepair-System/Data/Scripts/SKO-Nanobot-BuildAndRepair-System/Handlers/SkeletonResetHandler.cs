@@ -15,10 +15,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
     /// instead; the drain resets a few per tick on the main thread (skeleton engine
     /// calls are main-thread only, BUG-260610.5). A per-block cooldown keeps
     /// permanently-bugged blocks from being reset every scan cycle.
+    /// BUG-261023.3: MaxDeformation latches, so the drain re-checks HasDeformation (main
+    /// thread) and only resets blocks that are really dented; others just get the cooldown.
     /// </summary>
     public static class SkeletonResetHandler
     {
         private const int MaxResetsPerTick = 2;
+        // BUG-261023.3: bounds the HasDeformation checks per tick when most entries are skipped.
+        private const int MaxDequeuesPerTick = 16;
         private const int CooldownCleanupThreshold = 512;
         private static readonly TimeSpan PerBlockCooldown = TimeSpan.FromSeconds(60);
 
@@ -65,10 +69,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             var profilerTs = MethodProfiler.Start();
             var resets = 0;
             var dequeued = 0;
+            var skippedNotDeformed = 0;
             var now = MyAPIGateway.Session.ElapsedPlayTime;
             try
             {
-                while (resets < MaxResetsPerTick)
+                while (resets < MaxResetsPerTick && dequeued < MaxDequeuesPerTick)
                 {
                     QueueEntry entry;
                     lock (_lock)
@@ -83,6 +88,13 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     if (block == null || block.IsDestroyed) continue;
                     var grid = block.CubeGrid;
                     if (grid == null || grid.Closed) continue;
+
+                    if (!block.HasDeformation)
+                    {
+                        lock (_lock) { _lastReset[entry.Key] = now; }
+                        skippedNotDeformed++;
+                        continue;
+                    }
 
                     block.ResetSkeleton();
                     lock (_lock) { _lastReset[entry.Key] = now; }
@@ -109,8 +121,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     var _resets = resets;
                     var _dequeued = dequeued;
+                    var _skipped = skippedNotDeformed;
                     MethodProfiler.StopAndLog("SkeletonResetHandler.Process", profilerTs, () =>
-                        string.Format("dequeued={0};resets={1};queueAfter={2}", _dequeued, _resets, _queue.Count));
+                        string.Format("dequeued={0};resets={1};skippedNotDeformed={2};queueAfter={3}", _dequeued, _resets, _skipped, _queue.Count));
                 }
             }
         }

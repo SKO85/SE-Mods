@@ -17,6 +17,7 @@
 - ≥ 500 blocks welded within the run or a clear budget-limited rate (welds/s ≈ budget × 60 / stagger).
 - No single-BaR spike pattern "on every new block selection" beyond the engine `proj.Build`/
   `IncreaseMountLevel` cost already characterised in BUG-105/108/122.
+- Weld target cap is 512 per BaR (BUG-261023.4); record the envelope at that value.
 - `RebuildMissingComponentsAggregate` (new in v2.5.6; time-sliced by BUG-261023.1: ≤ 128 targets
   per call, ≤ 4 slices per tick, per-BaR phase offset) stays within its threshold below and shows
   no 3 s sim-speed sawtooth — this is the specific check for BUG-260909.1 (#143).

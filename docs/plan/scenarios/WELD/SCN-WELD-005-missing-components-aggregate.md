@@ -17,6 +17,8 @@
 - Timing (BUG-261023.1): the first list appears within ~3 s (per-BaR phase offset) plus the pass
   duration; a pass walks ≤ 128 targets per BaR call (4 slices per tick across all BaRs), then the
   sources, and the previous list stays visible until the new one is complete.
+- The aggregate covers the BaR's capped target list (`MaxPossibleWeldTargets = 512`, BUG-261023.4):
+  on bigger projections it is the need for the next 512 targets, not the whole blueprint.
 - Step 3: the amount drops by the stock on hand (welder + transport + connected sources subtracted).
 - Step 4: list empty; state `Idle`. The companion script queues the reported total to assemblers in
   one go (no 5–6-item trickle), and queues nothing once the list is empty.

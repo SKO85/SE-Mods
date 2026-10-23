@@ -83,6 +83,7 @@ The release variant answers `/nanobars test` with "Test harness not installed".
 | `QuickSelectTests` | SCN-GRIND-003 |
 | `LocalizationTests` | SCN-LOC-001 |
 | `ProtoContractTests` | SCN-NET-001 (network-sync tag uniqueness) |
+| `SkeletonResetHandlerTests` | SCN-WELD-006 (BUG-261023.3 drain re-checks HasDeformation) |
 | `TransportInventoryMoveTests` | SCN-COLLECT-001 (BUG-261023.5 verified moves into the transport) |
 | `MissingComponentsAggregateTests` | SCN-WELD-005, SCN-BUDGET-006 (BUG-261023.1 time slicing; drives the real `NanobotSystem` method with faked blocks and inventories) |
 | `ScenarioRegistryTests`, `CatalogueConsistencyTests` | harness + catalogue integrity |
