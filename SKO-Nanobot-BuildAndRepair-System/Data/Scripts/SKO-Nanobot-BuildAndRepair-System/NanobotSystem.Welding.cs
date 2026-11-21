@@ -505,6 +505,66 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
+        /// <summary>
+        /// Makes sure the block inventory holds one piece of the first component of a projected block, as the game
+        /// checks in survival before it builds. Takes the piece from the transport inventory. Returns false if the
+        /// piece is needed but cannot be placed (no piece in transport, no free volume). lent is true only if a
+        /// piece was moved and has to be returned by ServerReturnBuildComponent.
+        /// </summary>
+        private bool ServerLendBuildComponent(IMyInventory welderInventory, MyDefinitionId componentId, out bool lent)
+        {
+            lent = false;
+            if (CreativeModeActive) return true; // game does not check the builder inventory in creative mode
+
+            // A piece already in the block inventory satisfies the game's check, nothing to move.
+            if (welderInventory.GetItemAmount(componentId) >= 1) return true;
+
+            // Volume and mass limit of the block inventory (e.g. a full inventory) can refuse the piece.
+            if (welderInventory.MaxItemsAddable(1, componentId) < 1) return false;
+
+            _TempInventoryItems.Clear();
+            _TransportInventory.GetItems(_TempInventoryItems);
+            var srcIndex = -1;
+            for (int i = _TempInventoryItems.Count - 1; i >= 0; i--)
+            {
+                var srcItem = _TempInventoryItems[i];
+                if ((MyDefinitionId)srcItem.Type == componentId && srcItem.Amount >= 1)
+                {
+                    srcIndex = i;
+                    break;
+                }
+            }
+            _TempInventoryItems.Clear();
+            if (srcIndex < 0) return false;
+
+            lent = welderInventory.TransferItemFrom(_TransportInventory, srcIndex, null, true, 1, false);
+            return lent;
+        }
+
+        /// <summary>
+        /// Moves a piece lent by ServerLendBuildComponent back into the transport inventory if the game did not
+        /// consume it. Same remove/add pattern as ServerPickFromWelder.
+        /// </summary>
+        private void ServerReturnBuildComponent(IMyInventory welderInventory, MyDefinitionId componentId)
+        {
+            _TempInventoryItems.Clear();
+            welderInventory.GetItems(_TempInventoryItems);
+            for (int i = _TempInventoryItems.Count - 1; i >= 0; i--)
+            {
+                var item = _TempInventoryItems[i];
+                if ((MyDefinitionId)item.Type == componentId && item.Amount >= 1)
+                {
+                    var itemId = item.ItemId;
+                    _TempInventoryItems.Clear();
+                    welderInventory.RemoveItems(itemId, 1);
+                    var physicalObjBuilder = (MyObjectBuilder_PhysicalObject)MyObjectBuilderSerializer.CreateNewObject(componentId);
+                    _TransportInventory.AddItems(1, physicalObjBuilder);
+                    return;
+                }
+            }
+            _TempInventoryItems.Clear();
+        }
+
         private bool ServerDoWeld(TargetBlockData targetData)
         {
             var profilerTs = MethodProfiler.Start();
@@ -552,6 +612,27 @@ namespace SKONanobotBuildAndRepairSystem
                                 return false;
                             }
 
+                            // SE 1.211 MyProjectorBase.BuildInternal aborts silently in survival unless the builder's
+                            // own inventory (here the block inventory 0) holds one piece of the first component.
+                            // BaR keeps its components in _TransportInventory, so one piece is lent to the block
+                            // inventory for the duration of Build and returned if the game did not consume it.
+                            var firstComponentId = blockDefinition.Components[0].Definition.Id;
+                            bool lentComponent;
+                            if (!ServerLendBuildComponent(welderInventory, firstComponentId, out lentComponent))
+                            {
+                                // Block inventory has no room for the piece: do not call Build (it would fail
+                                // silently and count towards the permanent ignore), retry on a later tick.
+                                EmitServerDoWeldProfile(profilerTs,
+                                    targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
+                                    true, false, false, false,
+                                    0.0, 0.0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0,
+                                    tsFindItem * 1000.0 / Stopwatch.Frequency, tsLimitsCheck * 1000.0 / Stopwatch.Frequency, 0.0, 0.0, 0.0,
+                                    0f, 0f, false, targetData.Distance,
+                                    "buildComponentLend");
+                                return false;
+                            }
+
                             tsBuild = Stopwatch.GetTimestamp();
                             var proj = cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector;
                             // BUG-115: proj.Build() can throw NRE from inside SE's
@@ -564,6 +645,7 @@ namespace SKONanobotBuildAndRepairSystem
                             catch (NullReferenceException ex)
                             {
                                 tsBuild = Stopwatch.GetTimestamp() - tsBuild;
+                                if (lentComponent) ServerReturnBuildComponent(welderInventory, firstComponentId);
                                 targetData.Ignore = true;
                                 // BUG-115: persist the skip so background scans don't unset Ignore.
                                 var brokenKey = GetBrokenBlockKey(target);
@@ -609,10 +691,19 @@ namespace SKONanobotBuildAndRepairSystem
                                     "projBuildNRE");
                                 return false;
                             }
+                            catch
+                            {
+                                if (lentComponent) ServerReturnBuildComponent(welderInventory, firstComponentId);
+                                throw;
+                            }
                             tsBuild = Stopwatch.GetTimestamp() - tsBuild;
+                            // If the game consumed the lent piece (MySpaceBuildComponent.TakeMaterialsFromBuilder),
+                            // nothing is left to return. Otherwise (Build refused, or creative tools build instantly
+                            // without consuming) give it back so no component is lost or created.
+                            if (lentComponent) ServerReturnBuildComponent(welderInventory, firstComponentId);
                         }
 
-                        // proj.Build() handles component consumption internally; manual RemoveItems is not needed.
+                        // proj.Build() consumes the first component from the block inventory (lent above), no further RemoveItems needed.
 
                         // BUG-105/108: instrument projected→physical block resolution.
                         tsResolve = Stopwatch.GetTimestamp();
