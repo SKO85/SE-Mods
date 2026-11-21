@@ -228,6 +228,12 @@ namespace SKONanobotBuildAndRepairSystem
         // BUG-120: owner the broken-block caches are scoped to; cleared on owner change.
         private long _BrokenCacheOwnerId = long.MinValue;
 
+        // Projector cold-start probe: last projected-grid EntityId seen per projector (0 = not
+        // projecting). The game builds a fresh preview grid (new EntityId) every time a projection
+        // is (re)activated, so a changed id means a new or restored projection.
+        private readonly Dictionary<long, long> _projectorLastProjectedGridId = new Dictionary<long, long>();
+        private Func<Sandbox.ModAPI.IMyProjector, bool> _projectorColdStartFilter;
+
         /// <summary>
         /// Tracks grids that were scanned and had no weld/grind targets.
         /// Key: grid EntityId, Value: playTime when grid was found empty.

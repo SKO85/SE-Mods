@@ -92,16 +92,53 @@ namespace SKONanobotBuildAndRepairSystem
 
         /// <summary>
         /// Projector cold-start detection: checks if any projector on the BaR's
-        /// own grid, connected grids, or nearby grids (BoundingBox mode) has
-        /// BuildableBlocksCount > 0.
+        /// own grid, connected grids, or nearby grids (BoundingBox mode) is projecting
+        /// something new (see ProjectorNeedsRescan) or reports BuildableBlocksCount > 0.
         /// Called once per second on the main thread, only when idle.
         /// </summary>
         private static readonly List<Sandbox.ModAPI.IMyProjector> _projectorScratch = new List<Sandbox.ModAPI.IMyProjector>();
-        private static readonly Func<Sandbox.ModAPI.IMyProjector, bool> _buildableProjectorFilter =
-            p => p != null && p.IsProjecting && p.BuildableBlocksCount > 0;
+
+        /// <summary>
+        /// BuildableBlocksCount is a snapshot the game refreshes asynchronously (and only after
+        /// events like a block being added to the projector's grid), so it can read 0 right after a
+        /// projection became active. Besides the count this therefore also fires once for every
+        /// newly created projected grid. Side effect: drops the scan caches that may hold a stale
+        /// "nothing buildable here" answer for the projector grid and the preview grid.
+        /// </summary>
+        private bool ProjectorNeedsRescan(Sandbox.ModAPI.IMyProjector projector)
+        {
+            if (projector == null) return false;
+
+            var projecting = projector.IsProjecting;
+            var projectedGrid = projecting ? projector.ProjectedGrid : null;
+            var projectedGridId = projectedGrid != null ? projectedGrid.EntityId : 0L;
+
+            long lastGridId;
+            var seen = _projectorLastProjectedGridId.TryGetValue(projector.EntityId, out lastGridId);
+            _projectorLastProjectedGridId[projector.EntityId] = projectedGridId;
+
+            if (seen && lastGridId != projectedGridId && Logging.Instance.ShouldLog(Logging.Level.Event))
+            {
+                Logging.Instance.Write(Logging.Level.Event,
+                    "BuildAndRepairSystemBlock {0}: projector {1} projected grid changed {2} -> {3} (isProjecting={4}, remaining={5}, buildable={6})",
+                    Logging.BlockName(_Welder, Logging.BlockNameOptions.None), projector.EntityId, lastGridId, projectedGridId,
+                    projecting, projector.RemainingBlocks, projector.BuildableBlocksCount);
+            }
+
+            if (!projecting) return false;
+
+            var newProjection = projectedGridId != 0L && (!seen || lastGridId != projectedGridId);
+            if (!newProjection && projector.BuildableBlocksCount <= 0) return false;
+
+            if (projector.CubeGrid != null) GridScanCache.Invalidate(projector.CubeGrid.EntityId);
+            if (projectedGridId != 0L) GridScanCache.Invalidate(projectedGridId);
+            return true;
+        }
 
         private bool HasBuildableProjectorOnGrid()
         {
+            if (_projectorColdStartFilter == null) _projectorColdStartFilter = ProjectorNeedsRescan;
+            var coldStartFilter = _projectorColdStartFilter;
             try
             {
                 // BUG-132: use logical grid-group's typed projector lookup instead of per-block BFS.
@@ -112,7 +149,7 @@ namespace SKONanobotBuildAndRepairSystem
                     if (terminalSystem != null)
                     {
                         _projectorScratch.Clear();
-                        terminalSystem.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, _buildableProjectorFilter);
+                        terminalSystem.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, coldStartFilter);
                         var found = _projectorScratch.Count > 0;
                         _projectorScratch.Clear();
                         if (found) return true;
@@ -162,7 +199,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 if (nearbyTerminal != null)
                                 {
                                     _projectorScratch.Clear();
-                                    nearbyTerminal.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, _buildableProjectorFilter);
+                                    nearbyTerminal.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, coldStartFilter);
                                     var found = _projectorScratch.Count > 0;
                                     _projectorScratch.Clear();
                                     if (found) return true;
@@ -613,14 +650,13 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
 
-                    // Update empty-grid cache the same way the slow path would have.
+                    // Update empty-grid cache the same way the slow path would have, except that
+                    // an empty cached result never marks the grid empty: the cache entry does not
+                    // record whether the grid carries an active projector. The slow path does the
+                    // marking, with the projector check, once the 3 s cache entry has expired.
                     var weldAfterCache = clusterWeldTargets != null ? clusterWeldTargets.Count : 0;
                     var grindAfterCache = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
-                    if (weldAfterCache == weldBefore && grindAfterCache == grindBefore && !weldCapSkipped && !grindCapSkipped)
-                    {
-                        _EmptyGridCache[gridEntityId] = playTime;
-                    }
-                    else if (weldAfterCache != weldBefore || grindAfterCache != grindBefore)
+                    if (weldAfterCache != weldBefore || grindAfterCache != grindBefore)
                     {
                         TimeSpan dummy;
                         _EmptyGridCache.TryRemove(gridEntityId, out dummy);
@@ -658,6 +694,12 @@ namespace SKONanobotBuildAndRepairSystem
 
             var newBlocks = GetBlocksFromCache(cubeGrid);
 
+            // A grid with a working projector (or a projected grid itself) must never be
+            // remembered as "empty": which projected blocks are buildable changes every
+            // time a neighbour is built, and a projection (re)activates asynchronously,
+            // both without any change to the grid's blocks that the scan could notice.
+            var projectionRelevant = cubeGrid.IsProjected();
+
             foreach (var slimBlock in newBlocks)
             {
                 if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
@@ -680,7 +722,13 @@ namespace SKONanobotBuildAndRepairSystem
                     var projector = fatBlock as Sandbox.ModAPI.IMyProjector;
                     if (projector != null)
                     {
-                        if (projector.IsProjecting && projector.BuildableBlocksCount > 0 && IsRelationAllowed4Welding(slimBlock))
+                        if (projector.IsProjecting || projector.IsWorking) projectionRelevant = true;
+
+                        // BuildableBlocksCount is no gate here: the game recomputes it asynchronously
+                        // and only on events (block added to the projector's grid, offset change,
+                        // projection activation, at most every 2 s), so it can lag or read 0 while
+                        // blocks are buildable. The per-block CanBuild(false) below decides.
+                        if (projector.IsProjecting && IsRelationAllowed4Welding(slimBlock))
                         {
                             if (!State.SafeZoneAllowsBuildingProjections)
                             {
@@ -742,7 +790,8 @@ namespace SKONanobotBuildAndRepairSystem
             var grindAfter = clusterGrindTargets != null ? clusterGrindTargets.Count : 0;
             if (weldAfter == weldBefore && grindAfter == grindBefore && !weldCapSkipped && !grindCapSkipped)
             {
-                _EmptyGridCache[gridEntityId] = playTime;
+                if (!projectionRelevant)
+                    _EmptyGridCache[gridEntityId] = playTime;
             }
             else if (weldAfter != weldBefore || grindAfter != grindBefore)
             {

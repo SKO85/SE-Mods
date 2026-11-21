@@ -98,10 +98,10 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // Projector cold-start detection: when idle and AllowBuild is enabled,
-            // check if any projector on our grid has buildable blocks. If so, reset
-            // the idle backoff so the next scan discovers them within 1 tick instead
-            // of waiting 20s+. Only the coordinator checks (once per 1s timer tick).
-            // BuildableBlocksCount is a cheap property read — no scan overhead.
+            // check if any projector on our grid is projecting a new grid or reports
+            // buildable blocks. If so, reset the idle backoff so the next scan discovers
+            // them within 1 tick instead of waiting 20s+. Only the coordinator checks
+            // (once per 1s timer tick). Only cheap property reads, no scan overhead.
             var coordinator = cluster.Coordinator;
             if (coordinator == this
                 && _consecutiveEmptyScans >= 1
@@ -112,6 +112,9 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _consecutiveEmptyScans = 0;
                     _rescanForced = true;
+                    // Without this the forced scan would hit the empty-grid fast path for the
+                    // projector's grid and never look at the projector.
+                    _EmptyGridCache.Clear();
                 }
             }
 
