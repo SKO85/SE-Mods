@@ -580,6 +580,15 @@ namespace SKONanobotBuildAndRepairSystem
             return count;
         }
 
+        /// <summary>
+        /// BUG-261122.6: IMyShipWelder.IsWithinWorldLimits tests the welder's builder; it only answers for the identity
+        /// we build as (the owner) when both are the same.
+        /// </summary>
+        internal static bool LimitsPreCheckApplies(long welderBuiltBy, long welderOwnerId)
+        {
+            return welderBuiltBy != 0L && welderBuiltBy == welderOwnerId;
+        }
+
         // BUG-261122.2: drop expired skips and publish the skipped count to the terminal (synced state).
         private void RefreshProjBuildSkips()
         {
@@ -696,7 +705,10 @@ namespace SKONanobotBuildAndRepairSystem
                 if ((CreativeModeActive || (item != null && item.Amount >= 1)) && cubeGridProjected != null && cubeGridProjected.Projector != null)
                 {
                     tsLimitsCheck = Stopwatch.GetTimestamp();
-                    var withinLimits = _Welder.IsWithinWorldLimits(cubeGridProjected.Projector, blockDefinition.BlockPairName, blockDefinition.PCU);
+                    // BUG-261122.6: the pre-check can only test the welder's builder; we build as the owner, whose limits
+                    // the game itself checks in proj.Build (1.211+). Builder != owner: let the game decide.
+                    var limitsPreCheck = LimitsPreCheckApplies(_Welder.SlimBlock != null ? _Welder.SlimBlock.BuiltBy : 0L, _Welder.OwnerId);
+                    var withinLimits = !limitsPreCheck || _Welder.IsWithinWorldLimits(cubeGridProjected.Projector, blockDefinition.BlockPairName, blockDefinition.PCU);
                     tsLimitsCheck = Stopwatch.GetTimestamp() - tsLimitsCheck;
                     if (withinLimits)
                     {
@@ -886,7 +898,9 @@ namespace SKONanobotBuildAndRepairSystem
                                 if (buildAttempted)
                                 {
                                     _projBuildSilentFails++;
-                                    LogProjBuildSilentFail(targetData.Block, cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector, createCompId, welderCreateBefore, silentFailCount);
+                                    // BUG-261122.6: no pre-check ran, so the owner's limits are the likely refusal.
+                                    if (!limitsPreCheck) State.LimitsExceeded = true;
+                                    LogProjBuildSilentFail(targetData.Block, cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector, createCompId, welderCreateBefore, silentFailCount, !limitsPreCheck);
                                 }
                             }
                         }
@@ -995,9 +1009,9 @@ namespace SKONanobotBuildAndRepairSystem
         /// Once per minute per BaR. BUG-261122.5: Error only when it points at the mod (lend did not land)
         /// or for the first unexplained failure per BaR; later ones (DLC, limits, placement) at Event.
         /// </summary>
-        private void LogProjBuildSilentFail(IMySlimBlock projected, Sandbox.ModAPI.IMyProjector proj, MyDefinitionId compId, MyFixedPoint inBlockInventory, int failsForBlock)
+        private void LogProjBuildSilentFail(IMySlimBlock projected, Sandbox.ModAPI.IMyProjector proj, MyDefinitionId compId, MyFixedPoint inBlockInventory, int failsForBlock, bool ownerLimitsLikely)
         {
-            var reason = !CreativeModeActive && inBlockInventory < 1 ? "builderInventoryEmpty" : "unknown";
+            var reason = !CreativeModeActive && inBlockInventory < 1 ? "builderInventoryEmpty" : ownerLimitsLikely ? "ownerLimitsLikely" : "unknown";
             _projBuildLastFail = reason;
 
             var now = MyAPIGateway.Session.ElapsedPlayTime;

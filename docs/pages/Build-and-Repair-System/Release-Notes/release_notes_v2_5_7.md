@@ -17,6 +17,10 @@ nav_order: 0
 
 - **Show Area is lighter on your graphics card.** When you're inside a BaR's working area (for example flying a ship full of BaRs), only thin edges are drawn instead of a tinted box filling your whole screen. From outside it looks the same as before. Boxes more than 1 km away aren't drawn at all.
 
+## Welding
+
+- A BaR that was handed over to another player no longer refuses to build projections because of the **original builder's** block or PCU limits. The game now decides by the limits of the BaR's owner, who also pays for the blocks, and the terminal says so when those limits are reached.
+
 ## Docs
 
 - New FAQ entry: why BaRs stop building a projection when you log off or fly away (the game hides projections when no player is near).

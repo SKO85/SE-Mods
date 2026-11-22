@@ -30,7 +30,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-BUDGET-008 | BUDGET | 3 | Many BaRs on target ships of mixed sizes: weld, grind, mixed; large vs small clusters | ingame:S64; ingame:S65; ingame:S66; ingame:S67; ingame:S68; ingame:S69; ingame:S70 | never |
 | SCN-BUDGET-009 | BUDGET | 2 | Speed settings (WorkSpeed, multipliers) and throughput floors | ingame:S79; ingame:S80 | 261122.28 in game |
 | SCN-WELD-001 | WELD | 1 | WeldOnly repairs damaged blocks and never grinds | ingame:S01, S26 | never |
-| SCN-WELD-002 | WELD | 2 | Projected block build incl. DLC-missing skip, expiring silent-fail skip, SE 1.211.018 builder-inventory lend | unit:ProjectedBuildComponentTests, ProjectorScanCacheTests; ingame:S03, S27, S42, S46 | 261122.3 unit |
+| SCN-WELD-002 | WELD | 2 | Projected block build incl. DLC-missing skip, expiring silent-fail skip, SE 1.211.018 builder-inventory lend | unit:ProjectedBuildComponentTests, ProjectorScanCacheTests, LimitsPreCheckTests; ingame:S03, S27, S42, S46 | 261122.3 unit |
 | SCN-WELD-003 | WELD | 2 | Weld options Full / Functional / Skeleton stop at the right integrity | ingame:S21, S22 | never |
 | SCN-WELD-004 | WELD | 2 | Ignore-colour blocks are skipped; creative mode needs no components | manual; ingame:S23 | never |
 | SCN-WELD-005 | WELD | 2 | Missing components aggregate over all weld targets | ingame:S02, S84, unit | 261122.32 in game |
