@@ -95,6 +95,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool HasBuildableProjectorOnGrid()
         {
+            _coldStartGridIds.Clear();
             try
             {
                 // BUG-132: use logical grid-group's typed projector lookup instead of per-block BFS.
@@ -107,6 +108,7 @@ namespace SKONanobotBuildAndRepairSystem
                         _projectorScratch.Clear();
                         terminalSystem.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, _buildableProjectorFilter);
                         var found = _projectorScratch.Count > 0;
+                        RecordProjectorGrids(_coldStartGridIds);
                         _projectorScratch.Clear();
                         if (found) return true;
                     }
@@ -127,6 +129,7 @@ namespace SKONanobotBuildAndRepairSystem
                         return _lastProjectorPhase2Result;
                     _lastProjectorPhase2Check = now;
                     _lastProjectorPhase2Result = false;
+                    _coldStartPhase2GridIds.Clear();
 
                     var ownGroupGridIds = new HashSet<long>();
                     if (helper != null && _Welder.CubeGrid != null)
@@ -166,6 +169,7 @@ namespace SKONanobotBuildAndRepairSystem
                                     _projectorScratch.Clear();
                                     nearbyTerminal.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, _buildableProjectorFilter);
                                     var found = _projectorScratch.Count > 0;
+                                    RecordProjectorGrids(_coldStartPhase2GridIds);
                                     _projectorScratch.Clear();
                                     if (found)
                                     {
@@ -184,6 +188,36 @@ namespace SKONanobotBuildAndRepairSystem
                 Logging.Instance.Write(Logging.Level.Error, "HasBuildableProjectorOnGrid: {0}", ex.Message);
             }
             return false;
+        }
+
+        // BUG-261122.3: remember the grids of the projectors in _projectorScratch.
+        private static void RecordProjectorGrids(List<long> gridIds)
+        {
+            for (int i = 0; i < _projectorScratch.Count; i++)
+            {
+                var grid = _projectorScratch[i].CubeGrid;
+                if (grid != null && !gridIds.Contains(grid.EntityId)) gridIds.Add(grid.EntityId);
+            }
+        }
+
+        /// <summary>
+        /// BUG-261122.3: the cold-start rescan must not take the empty-grid fast path (or reuse a stale
+        /// scan-cache entry) for the grids whose projector fired; both were written while the projector
+        /// still read BuildableBlocksCount 0.
+        /// </summary>
+        private void DropColdStartGridCaches()
+        {
+            TimeSpan dummy;
+            for (int i = 0; i < _coldStartGridIds.Count; i++)
+            {
+                _EmptyGridCache.TryRemove(_coldStartGridIds[i], out dummy);
+                GridScanCache.Invalidate(_coldStartGridIds[i]);
+            }
+            for (int i = 0; i < _coldStartPhase2GridIds.Count; i++)
+            {
+                _EmptyGridCache.TryRemove(_coldStartPhase2GridIds[i], out dummy);
+                GridScanCache.Invalidate(_coldStartPhase2GridIds[i]);
+            }
         }
 
         // BUG-261122.3 diagnostic (profiling only): does a projector reporting BuildableBlocksCount 0
@@ -334,8 +368,10 @@ namespace SKONanobotBuildAndRepairSystem
             if (autoGrind)
             {
                 var relation = block.GetUserRelationToOwner(_Welder.OwnerId);
+                // BUG-261122.7: unowned blocks the owner (or faction) built are theirs, not debris
+                // (an armor-only hull has no owner) — same rule as the weld side.
                 autoGrind =
-                   (relation == MyRelationsBetweenPlayerAndBlock.NoOwnership && ((autoGrindRelation & AutoGrindRelation.NoOwnership) != 0)) ||
+                   (relation == MyRelationsBetweenPlayerAndBlock.NoOwnership && ((autoGrindRelation & AutoGrindRelation.NoOwnership) != 0) && !IsBuiltByOwnerOrFaction(block)) ||
                    (relation == MyRelationsBetweenPlayerAndBlock.Enemies && ((autoGrindRelation & AutoGrindRelation.Enemies) != 0)) ||
                    (relation == MyRelationsBetweenPlayerAndBlock.Neutral && ((autoGrindRelation & AutoGrindRelation.Neutral) != 0));
             }
@@ -547,7 +583,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var fatBlocks = RentFatBlocksList();
                     try
                     {
-                        cubeGrid.GetBlocks(fatBlocks, _fatBlockFilter);
+                        SharedGridBlockCache.GetBlocks(cubeGrid, fatBlocks, _fatBlockFilter); // BUG-261122.4
                         for (int i = 0; i < fatBlocks.Count; i++)
                         {
                             if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
@@ -628,7 +664,7 @@ namespace SKONanobotBuildAndRepairSystem
                 int fatNewCount;
                 try
                 {
-                    cubeGrid.GetBlocks(fatBlocks, _fatBlockFilter);
+                    SharedGridBlockCache.GetBlocks(cubeGrid, fatBlocks, _fatBlockFilter); // BUG-261122.4
                     fatNewCount = fatBlocks.Count;
                     for (int i = 0; i < fatBlocks.Count; i++)
                     {
@@ -712,7 +748,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var fatBlocksHit = RentFatBlocksList();
                     try
                     {
-                        cubeGrid.GetBlocks(fatBlocksHit, _fatBlockFilter);
+                        SharedGridBlockCache.GetBlocks(cubeGrid, fatBlocksHit, _fatBlockFilter); // BUG-261122.4
                         for (int i = 0; i < fatBlocksHit.Count; i++)
                         {
                             if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;

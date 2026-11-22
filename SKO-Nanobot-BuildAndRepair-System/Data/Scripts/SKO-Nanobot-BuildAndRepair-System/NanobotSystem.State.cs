@@ -115,14 +115,23 @@ namespace SKONanobotBuildAndRepairSystem
                 // that haven't reached OwnershipIntegrityRatio). Fall back to checking
                 // who placed the block — allow welding if the builder is the BaR owner
                 // or a faction member. This avoids welding derelict/NPC grids.
-                var builtBy = block.BuiltBy;
-                if (builtBy <= 0) return false;
-                if (builtBy == _Welder.OwnerId) return true;
-                var builderRelation = MyIDModule.GetRelationPlayerBlock(builtBy, _Welder.OwnerId, MyOwnershipShareModeEnum.Faction);
-                return builderRelation == MyRelationsBetweenPlayerAndBlock.Owner
-                    || builderRelation == MyRelationsBetweenPlayerAndBlock.FactionShare;
+                return IsBuiltByOwnerOrFaction(block);
             }
             return true;
+        }
+
+        /// <summary>
+        /// An unowned block placed by the BaR owner or a faction member counts as the owner's.
+        /// Shared by the weld rule and the janitor NoOwnership rule (BUG-261122.7).
+        /// </summary>
+        internal bool IsBuiltByOwnerOrFaction(IMySlimBlock block)
+        {
+            var builtBy = block.BuiltBy;
+            if (builtBy <= 0) return false;
+            if (builtBy == _Welder.OwnerId) return true;
+            var builderRelation = MyIDModule.GetRelationPlayerBlock(builtBy, _Welder.OwnerId, MyOwnershipShareModeEnum.Faction);
+            return builderRelation == MyRelationsBetweenPlayerAndBlock.Owner
+                || builderRelation == MyRelationsBetweenPlayerAndBlock.FactionShare;
         }
 
         private static bool IsColorNearlyEquals(uint colorA, Vector3 colorB)

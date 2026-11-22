@@ -122,6 +122,7 @@ namespace SKONanobotBuildAndRepairSystem
                         _projectorColdStartArmed = false;
                         _consecutiveEmptyScans = 0;
                         _rescanForced = true;
+                        DropColdStartGridCaches(); // BUG-261122.3
                     }
                 }
                 else

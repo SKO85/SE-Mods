@@ -240,6 +240,9 @@ namespace SKONanobotBuildAndRepairSystem
         private TimeSpan _lastProjectorPhase2Check;
         private bool _lastProjectorPhase2Result;
         private static readonly TimeSpan ProjectorPhase2CheckInterval = TimeSpan.FromSeconds(5);
+        // BUG-261122.3: grids whose projector made the check fire (phase 2 list lives with its cached verdict).
+        private readonly List<long> _coldStartGridIds = new List<long>();
+        private readonly List<long> _coldStartPhase2GridIds = new List<long>();
 
         // BUG-110: reusable scan-thread pools (eliminate per-scan allocations).
         private List<IMyCubeGrid> _ScanGridsBuffer;

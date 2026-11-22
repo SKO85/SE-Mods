@@ -46,6 +46,8 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     if ((Settings.Flags & SyncBlockSettings.Settings.ShowArea) != 0)
                     {
+                        // Per-frame client cost of the area box (static vs moving grids, harness S28-S33).
+                        var profilerTs = MethodProfiler.Start();
                         // BUG-260526.3: lighter and more transparent — old Color.Black was
                         // too dark and the default opaque alpha obscured what's inside the box.
                         // Color * float scales all channels (R,G,B,A); 0.3f → alpha ~76/255.
@@ -54,6 +56,12 @@ namespace SKONanobotBuildAndRepairSystem
                         var emitterMatrix = _Welder.WorldMatrix;
                         emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
                         MySimpleObjectDraw.DrawTransparentBox(ref emitterMatrix, ref areaBoundingBox, ref color, MySimpleObjectRasterizer.Solid, 1, 0.04f, RangeGridResourceId, null, false);
+                        if (profilerTs != 0L)
+                        {
+                            var size = areaBoundingBox.Size;
+                            MethodProfiler.StopAndLog("ShowAreaDraw", profilerTs, () =>
+                                string.Format("entityId={0};areaSize={1:F0}x{2:F0}x{3:F0}", _Welder.EntityId, size.X, size.Y, size.Z));
+                        }
                     }
 
                     if (HudHandler.LocalClusterAreaVisible)
