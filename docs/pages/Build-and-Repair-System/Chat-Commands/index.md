@@ -35,11 +35,11 @@ Available to **all players** (not just admins). Used to diagnose version mismatc
 On a dedicated server the response is delivered as **two separate chat messages** — the client version is shown locally first, and the server version arrives as a follow-up message once the server responds:
 
 ```
-Nanobars: Client: v2.5.5 (build 260610.1)
+Nanobars: Client: v2.5.6 (build 261122.29)
 ```
 
 ```
-Nanobars: Server: v2.5.5 (build 260610.1)
+Nanobars: Server: v2.5.6 (build 261122.29)
 ```
 
 On a local (single-player or listen) game session only the client line is shown, since there is no separate server process.
