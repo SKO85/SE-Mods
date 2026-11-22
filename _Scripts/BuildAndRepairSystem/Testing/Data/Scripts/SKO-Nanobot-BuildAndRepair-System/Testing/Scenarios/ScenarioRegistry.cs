@@ -80,7 +80,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S71_CompanionScript(),
             new S72_PlacedFrame(),
             new S73_ProtectedGrid("S73", ProtectionMode.Indestructible),
-            new S73_ProtectedGrid("S74", ProtectionMode.DamageHandler)
+            new S73_ProtectedGrid("S74", ProtectionMode.DamageHandler),
+            new S75_LeavingTarget("S75", false),
+            new S75_LeavingTarget("S76", true)
         };
 
         public static ITestScenario Find(string id)

@@ -12,7 +12,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | ID | Area | Tier | Title | Coverage | Last verified |
 |---|---|---|---|---|---|
 | SCN-CORE-001 | CORE | 1 | Idle → Welding → Idle state transitions on one damaged grid | unit:GridChangeHandlerTests; ingame:S01, S57, S72 | never |
-| SCN-CORE-002 | CORE | 2 | BoundingBox search mode: area size/offset clamps and Show Area | manual; ingame:S25 | never |
+| SCN-CORE-002 | CORE | 2 | BoundingBox search mode: area size/offset clamps and Show Area | manual; ingame:S25; ingame:S75, S76 | never |
 | SCN-CORE-003 | CORE | 2 | No power / power restored / insufficient power | ingame:S19; ingame:S20 | never |
 | SCN-CFG-001 | CFG | 1 | ModSettings.xml out-of-range values are clamped on load | unit:SyncModSettingsTests.ValidateAndClamp_ClampsEveryBoundedField | 261006.3 unit |
 | SCN-CFG-002 | CFG | 1 | Legacy settings migrate to version 7; deprecated GrindIfWeldGetStuck folded | unit:SyncModSettingsTests.AdjustSettings_MigratesOldVersion_AndIsIdempotent; unit:BlockSettingsLegacyLoadTests | 261006.3 unit |
@@ -22,7 +22,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-BUDGET-001 | BUDGET | 1 | Block assignment TTL: a claimed block is released to another BaR | unit:TtlCacheTests; ingame:S05, S51, S55, S56 | 261006.3 unit |
 | SCN-BUDGET-002 | BUDGET | 1 | Per-tick weld/grind count budget refuses beyond cap, resets next frame | unit:PerTickBudgetTests; ingame:S52 | 261006.3 unit |
 | SCN-BUDGET-003 | BUDGET | 1 | Ms budget caps work even when count budget remains | unit:PerTickBudgetTests.MsCapWins_WhenCountBudgetRemains | 261006.3 unit |
-| SCN-BUDGET-004 | BUDGET | 3 | Auto stagger groups 1/2/3 by enabled BaR count | unit:ModResolverTests.AutoStaggerGroups_Thresholds | 261006.3 unit |
+| SCN-BUDGET-004 | BUDGET | 3 | Auto stagger groups 1/2/3 by enabled BaR count | unit:ModResolverTests.AutoStaggerGroups_Thresholds; unit:StaggerGroupsTests | 261006.3 unit |
 | SCN-BUDGET-005 | BUDGET | 3 | Failure cooldown: many BaRs do not bounce off one unweldable block | manual | never |
 | SCN-BUDGET-006 | BUDGET | 4 | Large-grid performance envelope (3000+ blocks, 5 BaRs) | ingame:S08, S43 | never |
 | SCN-BUDGET-007 | BUDGET | 3 | Station vs ship standing still vs ship in motion, ShowArea off/on: cost and work | ingame:S28; ingame:S29; ingame:S30; ingame:S31; ingame:S32; ingame:S33 | 261122.8 in game |

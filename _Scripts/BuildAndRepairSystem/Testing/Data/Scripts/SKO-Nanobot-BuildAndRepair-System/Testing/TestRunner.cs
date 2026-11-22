@@ -58,13 +58,17 @@ namespace SKONanobotBuildAndRepairSystem.Testing
 
         public static Vector3D? OriginOverride;
 
+        // "test run ... detail": keep per-call profiler logs (MinDurationMs 0) for analysis runs.
+        private static bool _detail;
+
         public static bool IsBusy { get { return _phase != Phase.Idle || _queue.Count > 0; } }
 
         // ---------------------------------------------------------------- command surface
 
-        public static string Enqueue(IList<ITestScenario> scenarios, int repeat, ulong steamId)
+        public static string Enqueue(IList<ITestScenario> scenarios, int repeat, ulong steamId, bool detail = false)
         {
             if (IsBusy) return null;
+            _detail = detail;
 
             long ownerId;
             Vector3D origin;
@@ -237,7 +241,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             _settingsSnapshot = MyAPIGateway.Utilities.SerializeToXML(Mod.Settings);
             _savedMinDuration = MethodProfiler.MinDurationMs;
             string msg;
-            MethodProfiler.SetMinDurationMs(10000, out msg); // aggregates only, no per-call file spam
+            MethodProfiler.SetMinDurationMs(_detail ? 0 : 10000, out msg); // aggregates only unless "detail" (per-call logs)
             TestIsolation.Reset();
 
             var baseScenario = _current.Scenario as TestScenarioBase;

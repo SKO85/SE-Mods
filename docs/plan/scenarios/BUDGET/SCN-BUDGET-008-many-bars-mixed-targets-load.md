@@ -28,5 +28,7 @@ ingame:S70
 v2.5.6 build 261122.16 2026-11-22 — in game (SP): S64-S70 green. Tick avg 0.03-0.07 ms, peak <= 7.8 ms, sim >= 0.98,
 100 % of BaRs worked, every ship finished. Large clusters slower than small (weld 35.9 vs 55.7 /s, grind 20.4 vs
 37.5 /s, mixed 13.6 vs 21.0 /s) — BUG-261122.14. weldBudgetPeak 2, ServerDoWeld max 9-15 ms.
+v2.5.6 build 261122.27 2026-11-22 — after BUG-261122.14: 2 x 10 = 10 x 2 (weld 59.8 / 62.1 /s, grind 38.4 / 36.7 /s),
+tick avg <= 0.08 ms, sim 1.00.
 ## Related
 FEAT-260910.2, BUG-260909.1 (#143), SCN-BUDGET-006, SCN-CLUSTER-001

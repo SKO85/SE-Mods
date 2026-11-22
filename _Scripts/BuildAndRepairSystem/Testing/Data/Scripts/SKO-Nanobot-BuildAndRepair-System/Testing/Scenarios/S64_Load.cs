@@ -50,6 +50,11 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         private bool _started;
         private int _activePeak;
 
+        // BUG-261122.14 diagnostics (sampled every 10th frame, per BaR).
+        private readonly HashSet<long> _blockKeys = new HashSet<long>();
+        private long _diagSamples, _busySamples, _transportSamples, _transportIdleSamples, _sharedSamples, _listSizeSum;
+        private double _distSum, _distMax;
+
         public S64_Load(string id, string label, LoadWork work, int rigs, int barsPerRig)
         {
             _id = id;
@@ -90,6 +95,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             _rigs.Clear();
             _started = false;
             _activePeak = 0;
+            _diagSamples = _busySamples = _transportSamples = _transportIdleSamples = _sharedSamples = _listSizeSum = 0;
+            _distSum = _distMax = 0;
             for (int i = 0; i < 3; i++) { _own[i] = null; _derelict[i] = null; }
             ctx.SetModSettings(s =>
             {
@@ -158,6 +165,29 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 }
             }
             if (active > _activePeak) _activePeak = active;
+
+            // BUG-261122.14 diagnostics, every 10th frame (keeps the measured tick clean).
+            if (TestContext.Frame % 10 != 0) return;
+            _blockKeys.Clear();
+            for (int r = 0; r < _rigs.Count; r++)
+            {
+                var bars = _rigs[r].Bars;
+                for (int b = 0; b < bars.Count; b++)
+                {
+                    var bar = bars[b];
+                    var st = bar.State;
+                    _diagSamples++;
+                    _listSizeSum += st.PossibleWeldTargets.CurrentCount + st.PossibleGrindTargets.CurrentCount;
+                    if (st.Transporting) _transportSamples++;
+                    var block = st.CurrentWeldingBlock ?? st.CurrentGrindingBlock;
+                    if (block == null || block.CubeGrid == null) { if (st.Transporting) _transportIdleSamples++; continue; }
+                    _busySamples++;
+                    var dist = Vector3D.Distance(bar.Welder.GetPosition(), block.CubeGrid.GridIntegerToWorld(block.Position));
+                    _distSum += dist;
+                    if (dist > _distMax) _distMax = dist;
+                    if (!_blockKeys.Add(block.CubeGrid.EntityId * 397 ^ block.Position.GetHashCode())) _sharedSamples++;
+                }
+            }
         }
 
         private bool OwnDone(TestContext ctx, int i)
@@ -198,6 +228,15 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             ctx.Metric("barsWorked", (long)worked);
             ctx.Metric("barsWorkedPct", barCount > 0 ? (double)worked / barCount : 0);
             ctx.Metric("activePeak", (long)_activePeak);
+            // BUG-261122.14: where the time goes (per BaR sample, every 10th frame).
+            var ds = _diagSamples > 0 ? (double)_diagSamples : 1.0;
+            ctx.Metric("busyPct", _busySamples / ds);
+            ctx.Metric("transportPct", _transportSamples / ds);
+            ctx.Metric("idleTransportPct", _transportIdleSamples / ds);
+            ctx.Metric("avgTargetDistM", _busySamples > 0 ? _distSum / _busySamples : -1);
+            ctx.Metric("maxTargetDistM", _distMax);
+            ctx.Metric("avgListSize", _listSizeSum / ds);
+            ctx.Metric("sharedBlockSamples", _sharedSamples);
 
             var weldedTotal = 0;
             var groundTotal = 0;

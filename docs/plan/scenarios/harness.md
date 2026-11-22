@@ -50,7 +50,7 @@ behaviour is not listed here (then also add/extend the `SCN-` catalogue entry).
 | Power | S19, S20 |
 | Weld options (Full / Functional / Skeleton) | S01, S21, S22 |
 | Colours (ignore / grind) | S23, S24 |
-| Area, range, search mode | S25, S49 |
+| Area, range, search mode (incl. targets leaving the area) | S25, S49, S75, S76 |
 | Work modes | S26, S48 |
 | Safe zones | S39, S40, S41, S42, S53 |
 | DefenseShields (skipped without DS) | S58, S59, S60, S61, S62, S63 |
@@ -132,10 +132,10 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S61 | DS: shield check switched on mid-grind stops the grinding | ZONE-001 | ~45 s | 261122.25 — 0 lost after the switch |
 | S62 | DS: BaR ship inside its own shield welds its own blocks | ZONE-001 | ~30 s | 261122.20 — 6/6 welded, IsShielded |
 | S63 | DS: friendly ship with its shield up is welded from outside | ZONE-001 | ~30 s | 261122.20 — 6/6 welded |
-| S64 | Load weld: 20 BaRs (2 x 10) on ships of 25/150/600 blocks | BUDGET-008 | 22 s | 261122.16 — 35.9 welds/s, 2 clusters |
-| S65 | Load weld: 20 BaRs (10 x 2) | BUDGET-008 | 14 s | 261122.16 — 55.7 welds/s, 10 clusters |
-| S66 | Load grind: 20 BaRs (2 x 10) on derelicts of 25/150/600 blocks | BUDGET-008 | 38 s | 261122.16 — 20.4 ground/s |
-| S67 | Load grind: 20 BaRs (10 x 2) | BUDGET-008 | 21 s | 261122.16 — 37.5 ground/s |
+| S64 | Load weld: 20 BaRs (2 x 10) on ships of 25/150/600 blocks | BUDGET-008 | 22 s | 261122.27 — 59.8 welds/s (BUG-261122.14 fixed) |
+| S65 | Load weld: 20 BaRs (10 x 2) | BUDGET-008 | 14 s | 261122.27 — 62.1 welds/s |
+| S66 | Load grind: 20 BaRs (2 x 10) on derelicts of 25/150/600 blocks | BUDGET-008 | 38 s | 261122.27 — 38.4 ground/s |
+| S67 | Load grind: 20 BaRs (10 x 2) | BUDGET-008 | 21 s | 261122.27 — 36.7 ground/s |
 | S68 | Load mixed: 20 BaRs (2 x 10), own + derelict ships | BUDGET-008 | 57 s | 261122.16 — 13.6 + 13.6 /s |
 | S69 | Load mixed: 20 BaRs (10 x 2) | BUDGET-008 | 37 s | 261122.16 — 21.0 + 21.0 /s |
 | S70 | Stress mixed: 40 BaRs (4 x 10) | BUDGET-008 | 36 s | 261122.16 — 21.8 + 21.8 /s, 40 BaRs |
@@ -143,6 +143,8 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S72 | Block frame added to a repaired grid (after 3 s and 30 s idle) is welded | CORE-001 | 39 s | 261122.20 — welded 2.8 s / 0.2 s after placing |
 | S73 | Protected grid: indestructible derelict is not ground (no grind call) | GRIND-006 | 20 s | 261122.25 — 0 grind calls |
 | S74 | Protected grid: damage-handler (plugin style) protection respected, no retry storm | GRIND-006 | 20 s | 261122.25 — 1 refused attempt, nothing ground |
+| S75 | Leaving target: own ship pushed out of the area is not welded from afar | CORE-002 | ~20 s | 261122.27 — no change after leaving |
+| S76 | Leaving target: derelict ship pushed out of the area is not ground from afar | CORE-002 | ~20 s | 261122.27 — no change after leaving |
 
 ## Scenarios
 
@@ -423,8 +425,9 @@ welding has no shield check.
 **Measures / proves** load: 2 rigs x 10 BaRs (large clusters) on own damaged ships of 25 / 150 / 600 blocks (dynamic,
 in a row along X), WeldBeforeGrind, BoundingBox 200 m, 1000 SteelPlate per container, 75 s or until done.
 **Pass** every ship got welding, >= 75 % of BaRs worked, tick avg <= 2 ms / peak <= 50 ms, sim >= 0.5.
-**Records** `bars`, `rigs`, `clusters`, `barsWorked(Pct)`, `activePeak`, `weldedS/M/L`, `weldedPerSecond`, and
-weld / grind / scan / cluster method stats.
+**Records** `bars`, `rigs`, `clusters`, `barsWorked(Pct)`, `activePeak`, `weldedS/M/L`, `weldedPerSecond`, weld / grind /
+scan / cluster method stats, and (BUG-261122.14) `busyPct`, `transportPct`, `avgTargetDistM`, `avgListSize`,
+`sharedBlockSamples`. `test run S64-S67 detail` keeps per-call profiler logs.
 
 ### S65
 S64 with 10 rigs x 2 BaRs (small clusters).
@@ -470,6 +473,15 @@ welded to full. **Records** `frameNDetectS`, `frameNWeldedS`.
 **Proves** BUG-261122.15: a protection plugin's damage handler is respected. The harness registers a BeforeDamage
 handler (once per session, inert unless a grid is listed) that zeroes grind damage on the target. **Pass** nothing ground
 and at most 3 grind attempts in 20 s (refused grid skipped 30 s). **Records** `grindCalls`, `handlerRefusals`.
+
+### S75
+**Proves** BUG-261122.16: a target leaving the area is not worked from afar. BaR with a 40 m BoundingBox area, own
+ship (10 damaged armor, dynamic) 12 m away, WorkSpeed 1; once welding has started the ship is pushed away at 20 m/s.
+**Pass** from 1 s after its last block left the area, the ship's integrity does not change for 6 s.
+**Records** `workBeforePush`, `outOfAreaS`, `integrityChangedAfterLeaving`.
+
+### S76
+S75 with a derelict ship and janitor grinding (GrindOnly, NoOwnership).
 
 ## Building blocks for new scenarios
 

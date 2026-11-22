@@ -12,7 +12,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
     /// <summary>/nanobars test list | run &lt;id|all&gt; [xN] | status | abort | clear | origin &lt;x&gt; &lt;y&gt; &lt;z&gt; | origin reset</summary>
     internal static class TestCommand
     {
-        private const string Usage = "Usage: /nanobars test list | run <id|id,id|id-id|all> [xN] | status | abort | clear | origin <x> <y> <z>|reset";
+        private const string Usage = "Usage: /nanobars test list | run <id|id,id|id-id|all> [xN] [detail] | status | abort | clear | origin <x> <y> <z>|reset";
 
         public static ChatCommandResult Execute(string[] args, ulong senderSteamId)
         {
@@ -71,17 +71,19 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             }
 
             var repeat = 1;
-            if (args.Length >= 4)
+            var detail = false;
+            for (int i = 3; i < args.Length; i++)
             {
-                var r = args[3];
+                var r = args[i];
+                if (string.Equals(r, "detail", System.StringComparison.OrdinalIgnoreCase)) { detail = true; continue; }
                 if (r.StartsWith("x") || r.StartsWith("X")) r = r.Substring(1);
                 if (!int.TryParse(r, NumberStyles.Integer, CultureInfo.InvariantCulture, out repeat) || repeat < 1 || repeat > 20)
-                    return ChatCommandResult.Error("Repeat must be x1..x20.");
+                    return ChatCommandResult.Error("Repeat must be x1..x20 (optional 'detail' for per-call profiler logs).");
             }
 
-            var msg = TestRunner.Enqueue(scenarios, repeat, senderSteamId);
+            var msg = TestRunner.Enqueue(scenarios, repeat, senderSteamId, detail);
             if (msg == null) return ChatCommandResult.Error("Runner busy.");
-            return msg.StartsWith("Queued") ? ChatCommandResult.Success(msg) : ChatCommandResult.Error(msg);
+            return msg.Contains("Queued ") ? ChatCommandResult.Success(msg) : ChatCommandResult.Error(msg);
         }
 
         /// <summary>
