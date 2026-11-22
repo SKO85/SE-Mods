@@ -68,6 +68,8 @@ See `docs/plan/features/TODO/FEAT-260910.2-ingame-scenario-harness.md`. In short
    A hidden warm-up (S00) runs first in every session; each scenario posts a start line in chat.
    S01-S08, S10-S53 exist (S09 PB contract planned); S28-S33 are measurements (grid state × ShowArea).
    Lists and ranges: `test run S03,S20,S27`, `test run S34-S45`.
+   What each scenario checks, an index by area (reuse before adding) and the building blocks for new ones:
+   [`docs/plan/scenarios/harness.md`](../docs/plan/scenarios/harness.md) — `CatalogueConsistencyTests` keeps it in sync with the registry.
 4. Results: chat + `%AppData%\SpaceEngineers\Storage\SKO-Nanobot-BuildAndRepair-System-Testing_SKO-Nanobot-BuildAndRepair-System\NanobotTest.<session>.log`.
 
 The release variant answers `/nanobars test` with "Test harness not installed".

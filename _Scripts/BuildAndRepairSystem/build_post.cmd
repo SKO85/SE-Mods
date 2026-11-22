@@ -28,6 +28,8 @@ rmdir "%ModFolderTesting%" /s /q 2>nul
 mkdir "%ModFolderTesting%"
 xcopy "%ModFolder%" "%ModFolderTesting%" /S /Y
 xcopy "%ProjectDir%\..\_Scripts\BuildAndRepairSystem\Testing\" "%ModFolderTesting%" /S /Y
+rem Companion PB script as data for the harness (S71).
+copy /Y "%ProjectDir%\..\SKO-Nanobot-BuildAndRepair-System-Script\Script.cs" "%ModFolderTesting%\Data\CompanionScript.txt"
 
 set ModFolderOriginal=%ModFolder%-Original
 rmdir "%ModFolderOriginal%" /s /q 2>nul

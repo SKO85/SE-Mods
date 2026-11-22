@@ -17,6 +17,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         private TestRig _ship;
         private bool _connectRequested;
         private double _connectRequestedAt;
+        private bool _reported;
 
         public override string Id { get { return "S38"; } }
         public override string Description { get { return "Docked ship (connector): damaged armor on the ship is welded in Grids mode"; } }
@@ -24,6 +25,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         public override void Setup(TestContext ctx)
         {
             _connectRequested = false;
+            _reported = false;
             ctx.SetModSettings(s => { s.Welder.WorkSpeed = 10; });
 
             var rig = new RigSpec { Name = "S38", Bars = 1 };
@@ -69,9 +71,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 _connectRequested = true;
                 _connectRequestedAt = ctx.RunSecondsSinceSetup;
             }
-            else if (ctx.RunSecondsSinceSetup > 15.0 || (_connectRequested && ctx.RunSecondsSinceSetup - _connectRequestedAt > 10.0))
+            else if (!_reported && (ctx.RunSecondsSinceSetup > 15.0 || (_connectRequested && ctx.RunSecondsSinceSetup - _connectRequestedAt > 10.0)))
             {
                 ctx.Check(false, "connectors did not lock (status " + connector.Status + ")");
+                _reported = true;
             }
             return false;
         }

@@ -11,7 +11,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 
 | ID | Area | Tier | Title | Coverage | Last verified |
 |---|---|---|---|---|---|
-| SCN-CORE-001 | CORE | 1 | Idle → Welding → Idle state transitions on one damaged grid | ingame:S01 | never |
+| SCN-CORE-001 | CORE | 1 | Idle → Welding → Idle state transitions on one damaged grid | unit:GridChangeHandlerTests; ingame:S01, S57 | never |
 | SCN-CORE-002 | CORE | 2 | BoundingBox search mode: area size/offset clamps and Show Area | manual; ingame:S25 | never |
 | SCN-CORE-003 | CORE | 2 | No power / power restored / insufficient power | ingame:S19; ingame:S20 | never |
 | SCN-CFG-001 | CFG | 1 | ModSettings.xml out-of-range values are clamped on load | unit:SyncModSettingsTests.ValidateAndClamp_ClampsEveryBoundedField | 261006.3 unit |
@@ -19,13 +19,14 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-CFG-003 | CFG | 2 | Admin restrictions and switches in ModSettings win over block settings | ingame:S46, S47, S48, S49, S50, S51, S52, S53 | never |
 | SCN-CHAT-001 | CHAT | 1 | /nanobars config set/get round trip and bounds rejection | unit:ConfigCommandTests.SetGetRoundTrip_AndBoundsRejection | 261006.3 unit |
 | SCN-CHAT-002 | CHAT | 4 | Dedicated server: admin command forwarding and response routing | manual | never |
-| SCN-BUDGET-001 | BUDGET | 1 | Block assignment TTL: a claimed block is released to another BaR | unit:TtlCacheTests; ingame:S05, S51 | 261006.3 unit |
+| SCN-BUDGET-001 | BUDGET | 1 | Block assignment TTL: a claimed block is released to another BaR | unit:TtlCacheTests; ingame:S05, S51, S55, S56 | 261006.3 unit |
 | SCN-BUDGET-002 | BUDGET | 1 | Per-tick weld/grind count budget refuses beyond cap, resets next frame | unit:PerTickBudgetTests; ingame:S52 | 261006.3 unit |
 | SCN-BUDGET-003 | BUDGET | 1 | Ms budget caps work even when count budget remains | unit:PerTickBudgetTests.MsCapWins_WhenCountBudgetRemains | 261006.3 unit |
 | SCN-BUDGET-004 | BUDGET | 3 | Auto stagger groups 1/2/3 by enabled BaR count | unit:ModResolverTests.AutoStaggerGroups_Thresholds | 261006.3 unit |
 | SCN-BUDGET-005 | BUDGET | 3 | Failure cooldown: many BaRs do not bounce off one unweldable block | manual | never |
 | SCN-BUDGET-006 | BUDGET | 4 | Large-grid performance envelope (3000+ blocks, 5 BaRs) | ingame:S08, S43 | never |
 | SCN-BUDGET-007 | BUDGET | 3 | Station vs ship standing still vs ship in motion, ShowArea off/on: cost and work | ingame:S28; ingame:S29; ingame:S30; ingame:S31; ingame:S32; ingame:S33 | 261122.8 in game |
+| SCN-BUDGET-008 | BUDGET | 3 | Many BaRs on target ships of mixed sizes: weld, grind, mixed; large vs small clusters | ingame:S64; ingame:S65; ingame:S66; ingame:S67; ingame:S68; ingame:S69; ingame:S70 | never |
 | SCN-WELD-001 | WELD | 1 | WeldOnly repairs damaged blocks and never grinds | ingame:S01, S26 | never |
 | SCN-WELD-002 | WELD | 2 | Projected block build incl. DLC-missing skip, expiring silent-fail skip, SE 1.211.018 builder-inventory lend | unit:ProjectedBuildComponentTests, ProjectorScanCacheTests; ingame:S03, S27, S42, S46 | 261122.3 unit |
 | SCN-WELD-003 | WELD | 2 | Weld options Full / Functional / Skeleton stop at the right integrity | ingame:S21, S22 | never |
@@ -43,12 +44,13 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-INV-002 | INV | 2 | Push-immediately flags and inventory-full pause | manual | never |
 | SCN-PRIO-001 | PRIO | 2 | Priority list enable / disable / reorder reflected in target order; reset | manual, unit; ingame:S14, S15, S16 | 261023.4 unit |
 | SCN-CLUSTER-001 | CLUSTER | 3 | Coordinator election and shared scan results for co-located BaRs | ingame:S07 | never |
-| SCN-CLUSTER-002 | CLUSTER | 3 | MaxSystemsPerTargetGrid saturation (strictly greater-than) and secondary task | unit:GridSaturationTrackerTests; ingame:S06, S50 | 261006.3 unit |
+| SCN-CLUSTER-002 | CLUSTER | 3 | MaxSystemsPerTargetGrid saturation (strictly greater-than) and secondary task | unit:GridSaturationTrackerTests; ingame:S06, S50, S54 | 261006.3 unit |
 | SCN-CLUSTER-003 | CLUSTER | 3 | Fair-share target truncation across grids | planned: unit:TruncateGridAwareTests (second wave) | never |
-| SCN-ZONE-001 | ZONE | 3 | Safe zones and DefenseShields block weld / grind / build; characters protected | manual; ingame:S39, S40, S41, S42, S53 | never |
+| SCN-ZONE-001 | ZONE | 3 | Safe zones and DefenseShields block weld / grind / build; characters protected | manual; ingame:S39, S40, S41, S42, S53, S58-S63 | never |
 | SCN-FX-001 | FX | 1 | Weld / grind particle and sound effects at block position, distance-culled | manual | never |
 | SCN-TERM-001 | TERM | 2 | Terminal controls, actions and sliders reflect fixed vs default mod settings | manual, unit | 261023.6 unit |
-| SCN-API-001 | API | 3 | PB scripting API incl. ScriptControlled and ScriptControllFixed lockdown | manual, unit; planned: ingame:S09 | never |
+| SCN-API-001 | API | 3 | PB scripting API incl. ScriptControlled and ScriptControllFixed lockdown | manual, unit:CompanionScriptContractTests; ingame:S09 | 261122.18 in game |
+| SCN-API-002 | API | 3 | Companion script: groups, assembler queuing, displays, tags, Custom Data, arguments | unit:CompanionScriptBehaviourTests; ingame:S71 | 261122.18 in game |
 | SCN-NET-001 | NET | 4 | Dedicated server: client settings sync and per-sender rate limit | manual; unit:ProtoContractTests.ProtoMemberTags_AreUniquePerType | 261006.3 unit |
 | SCN-LOC-001 | LOC | 1 | Terminal labels render in EN / DE / PL / RU and DisableLocalization | manual; unit:LocalizationTests.Translation_HasExactlyTheEnglishKeys | 261006.3 unit |
 

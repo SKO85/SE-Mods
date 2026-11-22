@@ -31,7 +31,6 @@ namespace SKONanobotBuildAndRepairSystem.Testing
 
         private const int PollFrames = 30;
         private const int WarmUpFrames = 180;
-        private const int WaitReadySeconds = 60;
         private const string LogPrefix = "NanobotTest.";
 
         private static Phase _phase = Phase.Idle;
@@ -151,6 +150,15 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             _ctx = new TestContext(_result, _steamId, _ownerId, _origin, _current.Scenario.PerfMethods);
             _runStarting = false;
 
+            var skip = _current.Scenario.SkipReason(_ctx);
+            if (skip != null)
+            {
+                _result.SkipReason = skip;
+                _result.Passed = false;
+                EnterPhase(Phase.Report);
+                return;
+            }
+
             // Start line in chat, so a long scenario is not mistaken for a hang.
             Notify(string.Format(CultureInfo.InvariantCulture, "Running {0}{1} ({2}/{3}): {4} (max {5} s)",
                 _current.Scenario.Id,
@@ -184,7 +192,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 EnterPhase(Phase.WarmUp);
                 return;
             }
-            if ((TestContext.Now - _phaseStartTime).TotalSeconds > WaitReadySeconds)
+            if ((TestContext.Now - _phaseStartTime).TotalSeconds > _current.Scenario.ReadyTimeoutSeconds)
             {
                 _result.Fail("ready-timeout");
                 EnterPhase(Phase.Teardown);
@@ -287,8 +295,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             if (_queue.Count == 0)
             {
                 WriteSessionSummary();
-                Notify(string.Format(CultureInfo.InvariantCulture, "Session {0} finished: {1} passed, {2} failed.",
-                    _session, CountPassed(), _sessionResults.Count - CountPassed()));
+                Notify(string.Format(CultureInfo.InvariantCulture, "Session {0} finished: {1} passed, {2} failed, {3} skipped.",
+                    _session, CountPassed(), CountFailed(), CountSkipped()));
             }
             ForceIdle();
         }
@@ -391,9 +399,22 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             return n;
         }
 
+        private static int CountSkipped()
+        {
+            var n = 0;
+            for (int i = 0; i < _sessionResults.Count; i++) if (_sessionResults[i].SkipReason != null) n++;
+            return n;
+        }
+
+        private static int CountFailed()
+        {
+            return _sessionResults.Count - CountPassed() - CountSkipped();
+        }
+
         private static string FormatChatLine(TestResult r)
         {
             var sb = new StringBuilder();
+            if (r.SkipReason != null) return sb.Append(r.Id).Append(" SKIPPED — ").Append(r.SkipReason).ToString();
             sb.Append(r.Id).Append(r.Passed ? " PASS " : " FAIL ");
             sb.Append(r.DurationSeconds.ToString("F1", CultureInfo.InvariantCulture)).Append("s");
             if (!r.Passed)
@@ -533,6 +554,12 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 _log.WriteLine(sb.ToString());
             }
             sb.Length = 0;
+            if (r.SkipReason != null)
+            {
+                _log.WriteLine("result=" + r.Id + ";run=" + r.Run + ";pass=skipped;reason=" + r.SkipReason.Replace(';', ',').Replace('\n', ' '));
+                _log.Flush();
+                return;
+            }
             sb.Append("result=").Append(r.Id).Append(";run=").Append(r.Run).Append(";pass=").Append(r.Passed ? "true" : "false");
             for (int i = 0; i < r.Metrics.Count; i++)
                 sb.Append(';').Append(r.Metrics[i].Key).Append('=').Append(r.Metrics[i].Value);
@@ -573,7 +600,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 _log.WriteLine(sb.ToString());
             }
             var passed = CountPassed();
-            _log.WriteLine("summary=passed=" + passed + ";failed=" + (_sessionResults.Count - passed) + ";session=" + _session);
+            _log.WriteLine("summary=passed=" + passed + ";failed=" + CountFailed() + ";skipped=" + CountSkipped() + ";session=" + _session);
             _log.Flush();
         }
     }

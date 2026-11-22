@@ -54,6 +54,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                     var bar = Create<MyObjectBuilder_ShipWelder>(BarSubtype, new Vector3I(x, 0, 0), ownerId);
                     bar.Enabled = false; // switched on by the runner when the measured run starts
                     Add(grid, used, bar, 1, 1, 2);
+                    if (spec.BarGroup != null) AddToGroup(grid, spec.BarGroup, new Vector3I(x, 0, 0));
                     rig.BarPositions.Add(new Vector3I(x, 0, 0));
 
                     // side face fillers between/next to BaRs (x odd)
@@ -105,10 +106,12 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             for (int i = 0; i < spec.Extra.Count; i++)
             {
                 var extra = spec.Extra[i];
-                var height = ExtraHeight(extra.Kind);
-                for (int y = 0; y < height; y++)
-                    if (used.Contains(extra.Position + new Vector3I(0, y, 0)))
-                        throw new System.Exception("RigBuilder(" + spec.Name + "): extra block at " + extra.Position + " overlaps another block");
+                var size = ExtraSize(extra.Kind);
+                for (int x = 0; x < size.X; x++)
+                    for (int y = 0; y < size.Y; y++)
+                        for (int z = 0; z < size.Z; z++)
+                            if (used.Contains(extra.Position + new Vector3I(x, y, z)))
+                                throw new System.Exception("RigBuilder(" + spec.Name + "): extra block at " + extra.Position + " overlaps another block");
                 var owner = extra.OwnerId == long.MinValue ? ownerId : extra.OwnerId;
                 var block = CreateExtra(extra.Kind, extra.Position, owner);
                 block.BuiltBy = extra.BuiltBy == long.MinValue ? owner : extra.BuiltBy;
@@ -118,25 +121,47 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                     block.IntegrityPercent = extra.BuildPercent;
                 }
                 if (extra.Color.HasValue) block.ColorMaskHSV = extra.Color.Value;
-                Add(grid, used, block, 1, height, 1);
+                var terminal = block as MyObjectBuilder_TerminalBlock;
+                if (terminal != null && extra.Name != null) terminal.CustomName = extra.Name;
+                var functional = block as MyObjectBuilder_FunctionalBlock;
+                if (functional != null && !extra.Enabled) functional.Enabled = false;
+                var pb = block as MyObjectBuilder_MyProgrammableBlock;
+                if (pb != null && extra.Program != null) pb.Program = extra.Program;
+                if (extra.Groups != null) foreach (var g in extra.Groups) AddToGroup(grid, g, extra.Position);
+                Add(grid, used, block, size.X, size.Y, size.Z);
                 rig.ExtraSpecs.Add(extra);
             }
 
             return grid;
         }
 
-        /// <summary>Grid cells along Y (all extras are 1 wide and deep; these mechanical bases are 1x2x1).</summary>
-        private static int ExtraHeight(RigBlockKind kind)
+        /// <summary>Grid cells of an extra (default orientation): mechanical bases 1x2x1, assembler 1x1x2.</summary>
+        private static Vector3I ExtraSize(RigBlockKind kind)
         {
             switch (kind)
             {
                 case RigBlockKind.AdvancedStator:
                 case RigBlockKind.Piston:
                 case RigBlockKind.Suspension:
-                    return 2;
+                    return new Vector3I(1, 2, 1);
+                case RigBlockKind.Assembler:
+                    return new Vector3I(1, 1, 2);
                 default:
-                    return 1;
+                    return Vector3I.One;
             }
+        }
+
+        private static void AddToGroup(MyObjectBuilder_CubeGrid grid, string name, Vector3I blockMin)
+        {
+            if (grid.BlockGroups == null) grid.BlockGroups = new List<MyObjectBuilder_BlockGroup>();
+            MyObjectBuilder_BlockGroup group = null;
+            foreach (var g in grid.BlockGroups) if (g.Name == name) { group = g; break; }
+            if (group == null)
+            {
+                group = new MyObjectBuilder_BlockGroup { Name = name, Blocks = new List<Vector3I>() };
+                grid.BlockGroups.Add(group);
+            }
+            group.Blocks.Add(blockMin);
         }
 
         private static MyObjectBuilder_CubeBlock CreateExtra(RigBlockKind kind, Vector3I pos, long ownerId)
@@ -147,6 +172,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 case RigBlockKind.Battery:
                     var battery = Create<MyObjectBuilder_BatteryBlock>(BatterySubtype, pos, ownerId);
                     battery.Enabled = true;
+                    battery.CurrentStoredPower = 3f;
+                    battery.MaxStoredPower = 3f;
                     return battery;
                 case RigBlockKind.Stator:
                     var stator = Create<MyObjectBuilder_MotorStator>(StatorSubtype, pos, ownerId);
@@ -172,6 +199,28 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                     var connector = Create<MyObjectBuilder_ShipConnector>("Connector", pos, ownerId);
                     connector.Enabled = true;
                     return connector;
+                case RigBlockKind.ShieldController:
+                    var controller = Create<MyObjectBuilder_UpgradeModule>("DSControlLarge", pos, ownerId);
+                    controller.Enabled = true;
+                    return controller;
+                case RigBlockKind.Assembler:
+                    var assembler = Create<MyObjectBuilder_Assembler>("LargeAssembler", pos, ownerId);
+                    assembler.Enabled = true;
+                    return assembler;
+                case RigBlockKind.ProgrammableBlock:
+                    var program = Create<MyObjectBuilder_MyProgrammableBlock>("LargeProgrammableBlock", pos, ownerId);
+                    program.Enabled = true;
+                    return program;
+                case RigBlockKind.Lcd:
+                    var lcd = Create<MyObjectBuilder_TextPanel>("LargeLCDPanel", pos, ownerId);
+                    lcd.Enabled = true;
+                    return lcd;
+                case RigBlockKind.CockpitSeat:
+                    return Create<MyObjectBuilder_Cockpit>("LargeBlockCockpitSeat", pos, ownerId);
+                case RigBlockKind.ShieldEmitter:
+                    var emitter = Create<MyObjectBuilder_UpgradeModule>("EmitterL", pos, ownerId);
+                    emitter.Enabled = true;
+                    return emitter;
                 default: return Create<MyObjectBuilder_CubeBlock>(ArmorSubtype, pos, ownerId);
             }
         }

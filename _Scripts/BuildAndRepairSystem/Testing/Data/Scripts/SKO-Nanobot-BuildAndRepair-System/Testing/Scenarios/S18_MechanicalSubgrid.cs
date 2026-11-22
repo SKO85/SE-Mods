@@ -27,6 +27,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         private readonly List<IMySlimBlock> _subgridTargets = new List<IMySlimBlock>();
         private bool _topRequested;
         private double _topRequestedAt;
+        private bool _reported;
 
         public S18_MechanicalSubgrid(string id, string label, RigBlockKind kind, string addTopAction)
         {
@@ -44,6 +45,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             _top = null;
             _subgridTargets.Clear();
             _topRequested = false;
+            _reported = false;
             ctx.SetModSettings(s =>
             {
                 s.Welder.WorkSpeed = 10;
@@ -80,13 +82,32 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             {
                 if (!_topRequested)
                 {
-                    Sandbox.ModAPI.Ingame.TerminalBlockExtentions.ApplyAction(mech, _addTopAction);
+                    // Look the action up first: ApplyAction throws on an unknown id (pistons and suspensions
+                    // use "Add Top Part"; AddPistonHead / AddWheel are only label keys).
+                    var actions = new List<Sandbox.ModAPI.Interfaces.ITerminalAction>();
+                    mech.GetActions(actions);
+                    Sandbox.ModAPI.Interfaces.ITerminalAction action = null;
+                    var ids = "";
+                    for (int i = 0; i < actions.Count; i++)
+                    {
+                        ids += (i > 0 ? ", " : "") + actions[i].Id;
+                        if (actions[i].Id == _addTopAction) action = actions[i];
+                    }
+                    if (action == null)
+                    {
+                        ctx.Check(false, "no action '" + _addTopAction + "' on " + _label + "; available: " + ids);
+                        _topRequested = true;
+                        _reported = true;
+                        return false;
+                    }
+                    action.Apply(mech);
                     _topRequested = true;
                     _topRequestedAt = ctx.RunSecondsSinceSetup;
                 }
-                else if (ctx.RunSecondsSinceSetup - _topRequestedAt > 10.0)
+                else if (!_reported && ctx.RunSecondsSinceSetup - _topRequestedAt > 10.0)
                 {
                     ctx.Check(false, "no top part after '" + _addTopAction + "'");
+                    _reported = true;
                 }
                 return false;
             }

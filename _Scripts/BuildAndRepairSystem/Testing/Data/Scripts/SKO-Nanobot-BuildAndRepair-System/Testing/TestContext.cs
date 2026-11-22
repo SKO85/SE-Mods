@@ -40,10 +40,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         /// <summary>World direction of the grid's Forward (-Z); Up stays world Up.</summary>
         public Vector3 Forward = Vector3.Forward;
         public Vector3 LinearVelocity = Vector3.Zero;
+        /// <summary>Terminal group holding every BaR of the rig; null = none.</summary>
+        public string BarGroup;
         public Vector3 AngularVelocity = Vector3.Zero;
     }
 
-    internal enum RigBlockKind { Armor, Conveyor, Battery, Stator, AdvancedStator, Hinge, Piston, Suspension, Connector }
+    /// <summary>ShieldController / ShieldEmitter are DefenseShields blocks (DSControlLarge, EmitterL — ships only); only spawn them when DS is loaded.</summary>
+    internal enum RigBlockKind { Armor, Conveyor, Battery, Stator, AdvancedStator, Hinge, Piston, Suspension, Connector, ShieldController, ShieldEmitter, Assembler, ProgrammableBlock, Lcd, CockpitSeat }
 
     /// <summary>One extra block of a rig.</summary>
     internal sealed class RigBlock
@@ -59,6 +62,14 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public Vector3? Color;
         /// <summary>Lookup key: TestRig.Tagged[Tag].</summary>
         public string Tag = "extra";
+        /// <summary>Terminal name (CustomName); null = game default.</summary>
+        public string Name;
+        /// <summary>Functional blocks: on/off at spawn.</summary>
+        public bool Enabled = true;
+        /// <summary>ProgrammableBlock: program text compiled at spawn.</summary>
+        public string Program;
+        /// <summary>Terminal groups this block joins.</summary>
+        public string[] Groups;
     }
 
     /// <summary>A spawned rig with its resolved BaRs and target blocks.</summary>

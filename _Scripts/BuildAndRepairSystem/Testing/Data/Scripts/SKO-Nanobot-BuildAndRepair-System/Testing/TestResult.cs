@@ -9,6 +9,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public string Id;
         public int Run;
         public bool Passed = true;
+        /// <summary>Set when the scenario could not run here (e.g. a required mod is missing); neither pass nor fail.</summary>
+        public string SkipReason;
         public double DurationSeconds;
         public readonly List<string> Failures = new List<string>();
         public readonly List<KeyValuePair<string, string>> Metrics = new List<KeyValuePair<string, string>>();

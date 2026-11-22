@@ -32,9 +32,10 @@
 `GetPossibleWeldTargetsList` etc. copy under lock ≤ 0.5 ms for 512 targets (PB call cadence Update100).
 ## Coverage
 manual
-planned: ingame:S09
+ingame:S09
 unit:CompanionScriptTests.Script_CompilesAsAProgrammableBlockProgram
+unit:CompanionScriptContractTests
 ## Last verified
-never
+v2.5.6 build 261122.18 2026-11-22 — in game (S09): all 46 script properties registered and readable, ScriptControlled round-trips, EnsureQueued queued 10/10 SteelPlate.
 ## Related
 BUG-049..051, BUG-260612.36..39, BUG-260824.10, BUG-260824.2, FEAT-069, docs Scripting page (stale note on lockdown — fix), BUG-261023.12, BUG-261023.14

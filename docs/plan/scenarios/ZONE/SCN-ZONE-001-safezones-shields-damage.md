@@ -33,6 +33,12 @@ ingame:S40
 ingame:S41
 ingame:S42
 ingame:S53
+ingame:S58
+ingame:S59
+ingame:S60
+ingame:S61
+ingame:S62
+ingame:S63
 ## Last verified
 never
 ## Related

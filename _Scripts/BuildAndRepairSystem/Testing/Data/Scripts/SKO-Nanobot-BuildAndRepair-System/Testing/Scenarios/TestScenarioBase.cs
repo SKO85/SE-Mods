@@ -26,7 +26,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         public abstract string Id { get; }
         public abstract string Description { get; }
         public virtual int TimeoutSeconds { get { return 120; } }
+        public virtual int ReadyTimeoutSeconds { get { return 60; } }
         public virtual IList<string> PerfMethods { get { return DefaultPerfMethods; } }
+
+        public virtual string SkipReason(TestContext ctx) { return null; }
 
         public abstract void Setup(TestContext ctx);
 

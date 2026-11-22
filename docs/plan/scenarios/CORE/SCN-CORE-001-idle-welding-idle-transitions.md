@@ -25,6 +25,8 @@
 - Mod tick cost peak ≤ 10 ms; sim speed min ≥ 0.9.
 ## Coverage
 ingame:S01
+ingame:S57
+unit:GridChangeHandlerTests
 ## Last verified
 never
 ## Related

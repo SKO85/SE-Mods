@@ -12,8 +12,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         string Id { get; }
         string Description { get; }
         int TimeoutSeconds { get; }
+        /// <summary>Max seconds in WaitReady (setup until the measured run may start).</summary>
+        int ReadyTimeoutSeconds { get; }
         /// <summary>Profiler methods whose steady-state stats are recorded as metrics.</summary>
         IList<string> PerfMethods { get; }
+
+        /// <summary>Checked before Setup: null to run, else why it cannot run in this world (reported as skipped).</summary>
+        string SkipReason(TestContext ctx);
 
         void Setup(TestContext ctx);
         bool IsReady(TestContext ctx);

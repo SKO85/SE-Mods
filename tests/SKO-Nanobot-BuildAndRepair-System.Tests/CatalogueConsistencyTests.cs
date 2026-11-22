@@ -67,6 +67,24 @@ namespace SKONanobotBuildAndRepairSystem.Tests
                 " | index rows without file: " + string.Join(", ", indexIds.Except(fileIds)));
         }
 
+        /// <summary>harness.md documents every registered in-game scenario (summary row + section) and no stale ones.</summary>
+        [Fact]
+        public void HarnessDoc_DocumentsEveryRegisteredScenario()
+        {
+            var doc = File.ReadAllText(Path.Combine(ScenariosDir, "harness.md"));
+            var sections = new HashSet<string>(Regex.Matches(doc, @"^### (S\d{2})\s*$", RegexOptions.Multiline).Cast<Match>().Select(m => m.Groups[1].Value));
+            var summary = doc.Substring(doc.IndexOf("## Summary", StringComparison.Ordinal)); // rows must sit in the Summary table
+            summary = summary.Substring(0, summary.IndexOf("\n## ", 1, StringComparison.Ordinal));
+            var rows = new HashSet<string>(Regex.Matches(summary, @"^\| (S\d{2}) \|", RegexOptions.Multiline).Cast<Match>().Select(m => m.Groups[1].Value));
+            var registered = HarnessScenarioIds();
+            registered.Add("S00"); // hidden warm-up, queued by the runner
+
+            var missing = registered.Where(id => !sections.Contains(id) || !rows.Contains(id)).OrderBy(id => id).ToList();
+            var stale = sections.Union(rows).Where(id => !registered.Contains(id)).OrderBy(id => id).ToList();
+            Assert.True(missing.Count == 0 && stale.Count == 0,
+                "harness.md out of sync — undocumented: " + string.Join(", ", missing) + " | documented but not registered: " + string.Join(", ", stale));
+        }
+
         [Fact]
         public void CoverageEntries_NameExistingTestsAndScenarios()
         {

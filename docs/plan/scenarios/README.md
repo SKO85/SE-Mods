@@ -2,6 +2,8 @@
 
 Catalogue of every feature and behaviour the BaR has to offer, written so each one can be
 verified — by hand, by a unit test, or by the in-game harness (`/nanobars test`, FEAT-260910.2).
+The harness scenarios themselves (`S00`..`S57`: what each checks, index by area, building blocks, how to add
+one) are described in [`harness.md`](harness.md) — check it before writing a new scenario.
 This is the spec that tests point back at; "covered" means a scenario here names a real test.
 
 ## ID format
