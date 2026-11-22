@@ -354,3 +354,6 @@ _Scripts/SteamRelease/
 
 # Ignore Claude MD file for now.
 CLAUDE.md
+
+# Local MCP servers (holds the Discord bot token)
+.mcp.json
