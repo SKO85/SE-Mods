@@ -23,6 +23,9 @@
 `SortAndCapGridCandidates` maxMs ≤ 5 for 1000 candidates (distance/priority cached per compare, BUG-099/100).
 ## Coverage
 unit:QuickSelectTests.MatchesSortForKSmallest_RandomInputs
+ingame:S11
+ingame:S12
+ingame:S13
 ## Last verified
 v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related

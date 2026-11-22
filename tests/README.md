@@ -63,9 +63,11 @@ Visual Studio: open the test `.csproj` (or add it to a solution of your own) —
 See `docs/plan/features/TODO/FEAT-260910.2-ingame-scenario-harness.md`. In short:
 
 1. Build the mod (`dotnet build ... -c Debug`); the harness deploys only to `SKO-Nanobot-BuildAndRepair-System-Testing`.
-2. Load an offline creative world with only the `-Testing` mod.
-3. `/nanobars test list`, `/nanobars test run S01`, then `run all`; `run S08 x5` for perf stability
-   (S01/02/04-08/10 exist; S03 projector and S09 PB contract are planned).
+2. Load an empty offline **survival** world with only the `-Testing` mod (the harness refuses creative: it welds without components).
+3. `/nanobars test clear` (old results), `/nanobars test list`, then `run all`; `run S08 x5` for perf stability.
+   A hidden warm-up (S00) runs first in every session; each scenario posts a start line in chat.
+   S01-S08, S10-S53 exist (S09 PB contract planned); S28-S33 are measurements (grid state × ShowArea).
+   Lists and ranges: `test run S03,S20,S27`, `test run S34-S45`.
 4. Results: chat + `%AppData%\SpaceEngineers\Storage\SKO-Nanobot-BuildAndRepair-System-Testing_SKO-Nanobot-BuildAndRepair-System\NanobotTest.<session>.log`.
 
 The release variant answers `/nanobars test` with "Test harness not installed".
@@ -88,6 +90,7 @@ The release variant answers `/nanobars test` with "Test harness not installed".
 | `PriorityLockTests` | SCN-PRIO-001 (BUG-261023.6 admin priority locks vs PB setters and client messages) |
 | `SkeletonResetHandlerTests` | SCN-WELD-006 (BUG-261023.3 drain re-checks HasDeformation) |
 | `ProjectedBuildComponentTests` | SCN-WELD-002 (BUG-261122.1 lend/return of the creation component for SE 1.211.018; BUG-261122.2 expiring skip + synced count) |
+| `ProjectorScanCacheTests` | SCN-WELD-002 (BUG-261122.3 cold start drops stale empty/scan-cache verdicts); BUG-261122.4 filtered `GetBlocks` guard |
 | `TransportInventoryMoveTests` | SCN-COLLECT-001 (BUG-261023.5 verified moves into the transport) |
 | `MissingComponentsAggregateTests` | SCN-WELD-005, SCN-BUDGET-006 (BUG-261023.1 time slicing; drives the real `NanobotSystem` method with faked blocks and inventories) |
 | `ScenarioRegistryTests`, `CatalogueConsistencyTests` | harness + catalogue integrity |

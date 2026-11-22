@@ -38,12 +38,16 @@
 ## Perf envelope
 `ServerDoWeld` `buildMs` ≤ 40 per call (engine cost); `resolveMs` ≤ 5; steadyAvgMs ≤ 3.
 ## Coverage
-planned: ingame:S03
 unit:ProjectedBuildComponentTests.Lend_MovesOnePieceFromTheTransport_WhenTheBlockInventoryHasNone
 unit:ProjectedBuildComponentTests.Lend_FullBlockInventory_FailsWithoutLosingThePiece
 unit:ProjectedBuildComponentTests.Return_MovesTheUntakenPieceBackToTheTransport
 unit:ProjectedBuildComponentTests.SilentFailSkip_Expires_NreSkipStays_CountIsPublished
+unit:ProjectorScanCacheTests.ColdStart_DropsEmptyAndScanCacheEntriesOfTheFiringGrids
+ingame:S03
+ingame:S27
+ingame:S42
+ingame:S46
 ## Last verified
-v2.5.6 build 261122.2 2026-11-22 — unit (lend/return + skip expiry; in-game steps not yet run)
+v2.5.6 build 261122.3 2026-11-22 — in game (01_211_018, SP survival): variant E steps 1-3 green (239/239 built, lent+engineTook on every build, no silent fails); D accounting by hand-grind, cold-start timing and DS not yet run. Unit: lend/return, skip expiry, cold-start cache drop
 ## Related
 BUG-030, BUG-107, BUG-108, BUG-120, BUG-260610.35, BUG-261023.2 (GitHub PR #148), BUG-261122.1..3 (GitHub #149, #150, PR #151), FEAT-260910.2

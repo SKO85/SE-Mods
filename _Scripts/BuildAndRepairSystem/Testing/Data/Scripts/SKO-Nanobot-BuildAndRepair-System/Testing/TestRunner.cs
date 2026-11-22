@@ -51,6 +51,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         private static string _settingsSnapshot;
         private static int _savedMinDuration = -1;
         private static bool _profilerStarted;
+        private static bool _runStarting; // first Run frame: reset stats, switch the rig BaRs on
+        private static int _sessionTotal; // queued runs this session, for the "n/total" start line
+        private static readonly ITestScenario WarmUp = new S00_WarmUp();
 
         public static Vector3D? OriginOverride;
 
@@ -73,9 +76,12 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             _session = DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
             _sessionResults.Clear();
 
+            // Warm-up first, so the first real scenario does not measure the one-time JIT cost.
+            _queue.Enqueue(new QueueItem { Scenario = WarmUp, Run = 1, Runs = 1 });
             for (int i = 0; i < scenarios.Count; i++)
                 for (int r = 1; r <= repeat; r++)
                     _queue.Enqueue(new QueueItem { Scenario = scenarios[i], Run = r, Runs = repeat });
+            _sessionTotal = _queue.Count;
 
             OpenLog();
             return string.Format(CultureInfo.InvariantCulture,
@@ -143,6 +149,14 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             _current = _queue.Dequeue();
             _result = new TestResult(_current.Scenario.Id, _current.Run);
             _ctx = new TestContext(_result, _steamId, _ownerId, _origin, _current.Scenario.PerfMethods);
+            _runStarting = false;
+
+            // Start line in chat, so a long scenario is not mistaken for a hang.
+            Notify(string.Format(CultureInfo.InvariantCulture, "Running {0}{1} ({2}/{3}): {4} (max {5} s)",
+                _current.Scenario.Id,
+                _current.Runs > 1 ? " run " + _current.Run + "/" + _current.Runs : "",
+                _sessionResults.Count + 1, _sessionTotal,
+                _current.Scenario.Description, _current.Scenario.TimeoutSeconds));
 
             _settingsSnapshot = MyAPIGateway.Utilities.SerializeToXML(Mod.Settings);
             _savedMinDuration = MethodProfiler.MinDurationMs;
@@ -180,17 +194,27 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         private static void TickWarmUp()
         {
             if (TestContext.Frame - _phaseStartFrame < WarmUpFrames) return;
-            Mod.ResetTickCostStats();
-            Mod.ResetWeldBudgetStats();
-            Mod.ResetGrindBudgetStats();
+            // Session start writes files; keep it out of the measured ticks (stats reset next frame).
             string msg;
             _profilerStarted = MethodProfiler.StartSession(0, _steamId, out msg, "test-" + _current.Scenario.Id + "-r" + _current.Run);
-            _ctx.RunStartTime = TestContext.Now;
+            _runStarting = true;
             EnterPhase(Phase.Run);
         }
 
         private static void TickRun()
         {
+            if (_runStarting)
+            {
+                // The rig BaRs were held off since spawn, so every scan and weld lands in the measured run.
+                _runStarting = false;
+                Mod.ResetTickCostStats();
+                Mod.ResetWeldBudgetStats();
+                Mod.ResetGrindBudgetStats();
+                _ctx.SetRigBarsEnabled(true);
+                _ctx.RunStartTime = TestContext.Now;
+                return;
+            }
+
             _ctx.SampleTick();
             _current.Scenario.Sample(_ctx);
 
@@ -409,12 +433,87 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 _log.WriteLine("# NanobotTest;modVersion=" + Constants.ModVersion + ";buildId=" + Constants.BuildId +
                                ";session=" + _session + ";generatedUtc=" + DateTime.UtcNow.ToString("u", CultureInfo.InvariantCulture));
                 _log.Flush();
+                var sessions = ReadSessionIndex();
+                sessions.Add(_session);
+                WriteSessionIndex(sessions);
             }
             catch (Exception ex)
             {
                 Logging.Instance.Write(Logging.Level.Error, "NanobotTest: cannot open log: {0}", ex.Message);
                 _log = null;
             }
+        }
+
+        // ---------------------------------------------------------------- clear
+
+        // Local storage cannot be listed, so result logs are tracked in an index (like the profiler's).
+        private const string SessionsIndexFileName = "NanobotTest.sessions";
+
+        /// <summary>Deletes all result logs and the harness profiler sessions ("test-*").</summary>
+        public static string ClearResults()
+        {
+            if (IsBusy) return "A test session is running; abort it first.";
+            if (MethodProfiler.IsRunning) return "A profiling session is active; stop it first (/nanobars profile stop).";
+            if (MyAPIGateway.Utilities == null) return "Storage not available.";
+
+            var sessions = ReadSessionIndex();
+            var logs = 0;
+            for (int i = 0; i < sessions.Count; i++)
+            {
+                var name = LogPrefix + sessions[i] + ".log";
+                try
+                {
+                    if (!MyAPIGateway.Utilities.FileExistsInLocalStorage(name, typeof(Mod))) continue;
+                    MyAPIGateway.Utilities.DeleteFileInLocalStorage(name, typeof(Mod));
+                    logs++;
+                }
+                catch { }
+            }
+            try
+            {
+                if (MyAPIGateway.Utilities.FileExistsInLocalStorage(SessionsIndexFileName, typeof(Mod)))
+                    MyAPIGateway.Utilities.DeleteFileInLocalStorage(SessionsIndexFileName, typeof(Mod));
+            }
+            catch { }
+            var profiles = MethodProfiler.ClearSessionsWithPrefix("test-");
+            return string.Format(CultureInfo.InvariantCulture, "Deleted {0} test result log(s) and {1} test profiler session(s).", logs, profiles);
+        }
+
+        private static List<string> ReadSessionIndex()
+        {
+            var sessions = new List<string>();
+            try
+            {
+                if (!MyAPIGateway.Utilities.FileExistsInLocalStorage(SessionsIndexFileName, typeof(Mod))) return sessions;
+                var reader = MyAPIGateway.Utilities.ReadFileInLocalStorage(SessionsIndexFileName, typeof(Mod));
+                try
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        line = line.Trim();
+                        if (line.Length > 0 && !sessions.Contains(line)) sessions.Add(line);
+                    }
+                }
+                finally { reader.Close(); }
+            }
+            catch { }
+            return sessions;
+        }
+
+        private static void WriteSessionIndex(List<string> sessions)
+        {
+            try
+            {
+                var writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(SessionsIndexFileName, typeof(Mod));
+                try
+                {
+                    for (int i = 0; i < sessions.Count; i++) writer.WriteLine(sessions[i]);
+                    writer.Flush();
+                }
+                finally { writer.Close(); }
+            }
+            catch { }
         }
 
         private static void CloseLog()

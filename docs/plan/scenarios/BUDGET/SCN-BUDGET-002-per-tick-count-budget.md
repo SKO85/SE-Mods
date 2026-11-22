@@ -22,6 +22,7 @@ unit:PerTickBudgetTests.ClaimsUpToMax_ThenRefuses
 unit:PerTickBudgetTests.ResetsWhenFrameAdvances_PeakKeptUntilResetStats
 unit:PerTickBudgetTests.Refund_ReturnsOneSlot_NotBelowZero
 unit:ModResolverTests.GetEffectiveMaxGrindsPerTick_AutoClampsBetween5And10
+ingame:S52
 ## Last verified
 v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related

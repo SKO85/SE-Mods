@@ -23,6 +23,8 @@
 `RazeQueueHandler.Process` maxMs ≤ 5.
 ## Coverage
 ingame:S04
+ingame:S17
+unit:JanitorOwnershipTests
 ## Last verified
 never
 ## Related

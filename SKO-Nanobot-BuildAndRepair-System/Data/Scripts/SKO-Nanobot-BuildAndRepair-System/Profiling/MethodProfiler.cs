@@ -906,6 +906,22 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
         }
 
         /// <summary>
+        /// Clears every session whose name starts with prefix (test harness: "test-"). Returns the count.
+        /// </summary>
+        internal static int ClearSessionsWithPrefix(string prefix)
+        {
+            if (_isRunning || MyAPIGateway.Utilities == null) return 0;
+            var count = 0;
+            foreach (var session in ReadSessionIndex())
+            {
+                if (!session.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                ClearSession(session);
+                count++;
+            }
+            return count;
+        }
+
+        /// <summary>
         /// Returns a formatted list of known profiling sessions.
         /// </summary>
         public static string GetSessionListText()

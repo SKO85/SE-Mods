@@ -24,6 +24,8 @@
 `ServerDoGrind` `friendlyMs` ≤ 0.1 per call (relation lookup cached).
 ## Coverage
 manual
+ingame:S17
+ingame:S45
 ## Last verified
 never
 ## Related

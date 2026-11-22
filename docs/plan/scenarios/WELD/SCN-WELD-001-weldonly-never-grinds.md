@@ -17,6 +17,7 @@
 `ServerDoWeld` steadyAvgMs ≤ 2; `ServerDoGrind.calls == 0` in WeldOnly.
 ## Coverage
 ingame:S01
+ingame:S26
 ## Last verified
 never
 ## Related

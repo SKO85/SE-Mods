@@ -87,7 +87,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             ctx.Metric("peakOnGrid", (long)_peakOnGrid);
             ctx.Metric("sawLimitsExceeded", _sawLimitsExceeded);
             ctx.Check(_violations == 0, "GridSystemCount exceeded " + Limit + " in " + _violations + " ticks (peak " + _peakOnGrid + ")");
-            ctx.Check(_sawLimitsExceeded, "no BaR ever reported LimitsExceeded");
+            // LimitsExceeded is the PCU/world-limit flag, not this one: prove the limit was actually hit instead.
+            ctx.Check(_peakOnGrid == Limit, "per-grid limit never reached (peak " + _peakOnGrid + ", limit " + Limit + ")");
 
             var welded = ctx.CountFullIntegrity(_target.Targets);
             ctx.Metric("welded", (long)welded);

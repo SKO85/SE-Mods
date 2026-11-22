@@ -29,6 +29,36 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public Vector3D Offset = Vector3D.Zero;
         /// <summary>Block owner; -1 = the admin running the test, 0 = nobody.</summary>
         public long OwnerId = -1;
+        /// <summary>Adds a large projector next to the BaRs (Bars &gt; 0), at (2*Bars, 0, 1).</summary>
+        public bool Projector;
+        /// <summary>Rig battery on/off at spawn (off = the BaRs have no power).</summary>
+        public bool BatteryEnabled = true;
+        /// <summary>Additional blocks at explicit grid positions (tagged for lookup).</summary>
+        public readonly List<RigBlock> Extra = new List<RigBlock>();
+        /// <summary>Dynamic (ship) grid instead of a station; drifts with the velocities below (no gyros/dampeners).</summary>
+        public bool Dynamic;
+        /// <summary>World direction of the grid's Forward (-Z); Up stays world Up.</summary>
+        public Vector3 Forward = Vector3.Forward;
+        public Vector3 LinearVelocity = Vector3.Zero;
+        public Vector3 AngularVelocity = Vector3.Zero;
+    }
+
+    internal enum RigBlockKind { Armor, Conveyor, Battery, Stator, AdvancedStator, Hinge, Piston, Suspension, Connector }
+
+    /// <summary>One extra block of a rig.</summary>
+    internal sealed class RigBlock
+    {
+        public RigBlockKind Kind = RigBlockKind.Armor;
+        public Vector3I Position;
+        public float BuildPercent = 1f;
+        /// <summary>long.MinValue = the rig owner.</summary>
+        public long OwnerId = long.MinValue;
+        /// <summary>long.MinValue = same as the owner.</summary>
+        public long BuiltBy = long.MinValue;
+        /// <summary>ColorMaskHSV; null = the rig default.</summary>
+        public Vector3? Color;
+        /// <summary>Lookup key: TestRig.Tagged[Tag].</summary>
+        public string Tag = "extra";
     }
 
     /// <summary>A spawned rig with its resolved BaRs and target blocks.</summary>
@@ -43,7 +73,20 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public readonly List<IMySlimBlock> Targets = new List<IMySlimBlock>();
         public IMyCubeBlock Cargo;
         public readonly List<IMyCubeBlock> Cargos = new List<IMyCubeBlock>();
+        public Vector3I? BatteryPosition;
+        public Sandbox.ModAPI.IMyFunctionalBlock Battery;
+        public Vector3I? ProjectorPosition;
+        public Sandbox.ModAPI.IMyProjector Projector;
+        public readonly List<RigBlock> ExtraSpecs = new List<RigBlock>();
+        /// <summary>Extra blocks by RigBlock.Tag (resolved after spawn).</summary>
+        public readonly Dictionary<string, List<IMySlimBlock>> Tagged = new Dictionary<string, List<IMySlimBlock>>();
         public bool Resolved;
+
+        public List<IMySlimBlock> Tag(string tag)
+        {
+            List<IMySlimBlock> list;
+            return Tagged.TryGetValue(tag, out list) ? list : new List<IMySlimBlock>();
+        }
     }
 
     /// <summary>
@@ -90,6 +133,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public double SimAvg { get { return _simSamples > 0 ? _simSum / _simSamples : 0.0; } }
         public double TickAvgMs { get { return _tickAvgSamples > 0 ? _tickAvgSum / _tickAvgSamples : 0.0; } }
         public double RunSeconds { get { return (Now - RunStartTime).TotalSeconds; } }
+        /// <summary>Seconds since Setup/Configure (usable before the measured run starts).</summary>
+        public double RunSecondsSinceSetup { get { return (Now - SetupTime).TotalSeconds; } }
 
         // ---------------------------------------------------------------- spawning
 
@@ -142,6 +187,28 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                     if (cargo != null && cargo.FatBlock != null) rig.Cargos.Add(cargo.FatBlock);
                 }
                 rig.Cargo = rig.Cargos.Count > 0 ? rig.Cargos[0] : null;
+
+                if (rig.BatteryPosition.HasValue)
+                {
+                    var battery = rig.Grid.GetCubeBlock(rig.BatteryPosition.Value);
+                    rig.Battery = battery != null ? battery.FatBlock as Sandbox.ModAPI.IMyFunctionalBlock : null;
+                }
+                if (rig.ProjectorPosition.HasValue)
+                {
+                    var projector = rig.Grid.GetCubeBlock(rig.ProjectorPosition.Value);
+                    rig.Projector = projector != null ? projector.FatBlock as Sandbox.ModAPI.IMyProjector : null;
+                    if (rig.Projector == null) { all = false; continue; }
+                }
+                rig.Tagged.Clear();
+                for (int e = 0; e < rig.ExtraSpecs.Count; e++)
+                {
+                    var spec = rig.ExtraSpecs[e];
+                    var slim = rig.Grid.GetCubeBlock(spec.Position);
+                    if (slim == null) continue;
+                    List<IMySlimBlock> list;
+                    if (!rig.Tagged.TryGetValue(spec.Tag, out list)) { list = new List<IMySlimBlock>(); rig.Tagged[spec.Tag] = list; }
+                    list.Add(slim);
+                }
                 rig.Resolved = true;
             }
             return all;
@@ -150,6 +217,20 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public void MarkSetupTime()
         {
             SetupTime = Now;
+        }
+
+        /// <summary>Switches every rig BaR on or off (rigs spawn with their BaRs off).</summary>
+        public void SetRigBarsEnabled(bool enabled)
+        {
+            for (int i = 0; i < Rigs.Count; i++)
+            {
+                var rig = Rigs[i];
+                for (int b = 0; b < rig.Bars.Count; b++)
+                {
+                    var welder = rig.Bars[b].Welder;
+                    if (welder != null && welder.Enabled != enabled) welder.Enabled = enabled;
+                }
+            }
         }
 
         /// <summary>Every rig BaR registered, State.Ready, and scanned after SetupTime.</summary>
@@ -217,6 +298,88 @@ namespace SKONanobotBuildAndRepairSystem.Testing
 
         // ---------------------------------------------------------------- observation
 
+        /// <summary>Blocks still present (not ground away / destroyed).</summary>
+        public int CountExisting(List<IMySlimBlock> blocks)
+        {
+            var n = 0;
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var b = blocks[i];
+                if (b != null && !b.IsDestroyed && b.CubeGrid != null && !b.CubeGrid.Closed && b.CubeGrid.GetCubeBlock(b.Position) == b) n++;
+            }
+            return n;
+        }
+
+        /// <summary>Sum of integrity of the blocks still present.</summary>
+        public double IntegritySum(List<IMySlimBlock> blocks)
+        {
+            var sum = 0.0;
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var b = blocks[i];
+                if (b != null && !b.IsDestroyed && b.CubeGrid != null && !b.CubeGrid.Closed && b.CubeGrid.GetCubeBlock(b.Position) == b) sum += b.Integrity;
+            }
+            return sum;
+        }
+
+        /// <summary>
+        /// Spawns an enabled spherical safe zone (open to everyone) allowing only the given actions.
+        /// Closed with everything else in teardown; SafeZoneHandler picks it up through OnEntityAdd.
+        /// </summary>
+        public IMyEntity SpawnSafeZone(Vector3D center, float radius, VRage.Game.ObjectBuilders.Components.MySafeZoneAction allowed)
+        {
+            var ob = VRage.ObjectBuilders.MyObjectBuilderSerializer.CreateNewObject<Sandbox.Common.ObjectBuilders.MyObjectBuilder_SafeZone>();
+            ob.PositionAndOrientation = new MyPositionAndOrientation(center, Vector3.Forward, Vector3.Up);
+            ob.PersistentFlags = VRage.ObjectBuilders.MyPersistentEntityFlags2.InScene;
+            ob.Shape = Sandbox.Common.ObjectBuilders.MySafeZoneShape.Sphere;
+            ob.Radius = radius;
+            ob.Enabled = true;
+            ob.IsVisible = true;
+            ob.AllowedActions = allowed;
+            ob.AccessTypePlayers = Sandbox.Common.ObjectBuilders.MySafeZoneAccess.Blacklist;
+            ob.AccessTypeFactions = Sandbox.Common.ObjectBuilders.MySafeZoneAccess.Blacklist;
+            ob.AccessTypeGrids = Sandbox.Common.ObjectBuilders.MySafeZoneAccess.Blacklist;
+            ob.AccessTypeFloatingObjects = Sandbox.Common.ObjectBuilders.MySafeZoneAccess.Blacklist;
+            ob.DisplayName = "NanobotTest-zone";
+            MyAPIGateway.Entities.RemapObjectBuilder(ob);
+            var zone = MyAPIGateway.Entities.CreateFromObjectBuilderAndAdd(ob);
+            if (zone == null) throw new Exception("SpawnSafeZone: zone did not spawn");
+            _spawned.Add(zone);
+            return zone;
+        }
+
+        /// <summary>World position of a rig grid cell (rigs are spawned at Origin + Offset).</summary>
+        public Vector3D RigCellWorld(TestRig rig, Vector3I cell)
+        {
+            return rig.Grid != null ? rig.Grid.GridIntegerToWorld(cell) : Origin;
+        }
+
+        /// <summary>Registers an entity created at runtime (e.g. a rotor head subgrid) for teardown.</summary>
+        public void TrackSpawned(IMyEntity entity)
+        {
+            if (entity != null && !_spawned.Contains(entity)) _spawned.Add(entity);
+        }
+
+        /// <summary>Sum of one component subtype over every inventory of the rig: cargos, BaR blocks and BaR transports.</summary>
+        public double CountComponentOnRig(TestRig rig, string componentSubtype)
+        {
+            var id = new MyDefinitionId(typeof(MyObjectBuilder_Component), componentSubtype);
+            var total = 0.0;
+            for (int i = 0; i < rig.Cargos.Count; i++)
+            {
+                var inv = rig.Cargos[i].GetInventory(0);
+                if (inv != null) total += (double)inv.GetItemAmount(id);
+            }
+            for (int b = 0; b < rig.Bars.Count; b++)
+            {
+                var bar = rig.Bars[b];
+                var inv = bar.Welder != null ? bar.Welder.GetInventory(0) : null;
+                if (inv != null) total += (double)inv.GetItemAmount(id);
+                if (bar._TransportInventory != null) total += (double)bar._TransportInventory.GetItemAmount(id);
+            }
+            return total;
+        }
+
         public int CountFullIntegrity(List<IMySlimBlock> blocks)
         {
             var n = 0;
@@ -264,6 +427,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public void Metric(string key, double value) { Result.Metric(key, value); }
         public void Metric(string key, long value) { Result.Metric(key, value); }
         public void Metric(string key, bool value) { Result.Metric(key, value); }
+        public void Metric(string key, string value) { Result.Metric(key, value); }
 
         public void Check(bool ok, string failure)
         {
@@ -336,7 +500,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 catch { }
             }
             _spawned.Clear();
-            for (int i = 0; i < Rigs.Count; i++) { Rigs[i].Bars.Clear(); Rigs[i].Targets.Clear(); Rigs[i].Cargos.Clear(); Rigs[i].Cargo = null; Rigs[i].Grid = null; }
+            for (int i = 0; i < Rigs.Count; i++) { Rigs[i].Bars.Clear(); Rigs[i].Targets.Clear(); Rigs[i].Cargos.Clear(); Rigs[i].Cargo = null; Rigs[i].Grid = null; Rigs[i].Battery = null; Rigs[i].Projector = null; Rigs[i].Tagged.Clear(); }
 
             if (!box.Valid) return;
             box.Inflate(50.0);

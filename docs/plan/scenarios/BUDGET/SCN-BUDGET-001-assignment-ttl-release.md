@@ -24,6 +24,7 @@ unit:TtlCacheTests.SetThenTryGet_ReturnsBeforeExpiry_AndMissesAfter
 unit:TtlCacheTests.CleanupExpired_RemovesOnlyExpired_TwoPass
 ingame:S05
 unit:TtlCacheTests.CleanupExpired_KeepsEntriesRefreshedWhileItRuns
+ingame:S51
 ## Last verified
 v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related

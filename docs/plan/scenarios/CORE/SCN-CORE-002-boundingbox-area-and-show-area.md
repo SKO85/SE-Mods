@@ -22,6 +22,7 @@
 n/a (visual). `AsyncAddBlocksOfBox` maxMs ≤ 20 with one 100-block grid in range.
 ## Coverage
 manual
+ingame:S25
 ## Last verified
 never
 ## Related

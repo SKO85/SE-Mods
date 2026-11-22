@@ -21,6 +21,7 @@
 n/a
 ## Coverage
 manual
+ingame:S23
 ## Last verified
 never
 ## Related

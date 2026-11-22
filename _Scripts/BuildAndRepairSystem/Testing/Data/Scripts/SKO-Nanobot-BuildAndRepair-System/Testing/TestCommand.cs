@@ -1,3 +1,4 @@
+using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Chat;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Testing.Scenarios;
@@ -8,10 +9,10 @@ using VRageMath;
 
 namespace SKONanobotBuildAndRepairSystem.Testing
 {
-    /// <summary>/nanobars test list | run &lt;id|all&gt; [xN] | status | abort | origin &lt;x&gt; &lt;y&gt; &lt;z&gt; | origin reset</summary>
+    /// <summary>/nanobars test list | run &lt;id|all&gt; [xN] | status | abort | clear | origin &lt;x&gt; &lt;y&gt; &lt;z&gt; | origin reset</summary>
     internal static class TestCommand
     {
-        private const string Usage = "Usage: /nanobars test list | run <id|all> [xN] | status | abort | origin <x> <y> <z>|reset";
+        private const string Usage = "Usage: /nanobars test list | run <id|id,id|id-id|all> [xN] | status | abort | clear | origin <x> <y> <z>|reset";
 
         public static ChatCommandResult Execute(string[] args, ulong senderSteamId)
         {
@@ -28,6 +29,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                     TestRunner.Abort();
                     return ChatCommandResult.Success("Aborting current scenario; queue cleared.");
                 case "origin": return Origin(args);
+                case "clear":
+                    var cleared = TestRunner.ClearResults();
+                    return cleared.StartsWith("Deleted") ? ChatCommandResult.Success(cleared) : ChatCommandResult.Error(cleared);
                 default: return ChatCommandResult.Error(Usage);
             }
         }
@@ -52,6 +56,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             if (args.Length < 3) return ChatCommandResult.Error(Usage);
             if (TestRunner.IsBusy) return ChatCommandResult.Error("A test session is already running. Use 'test status' or 'test abort'.");
             if (MethodProfiler.IsRunning) return ChatCommandResult.Error("A profiling session is active; stop it first (/nanobars profile stop).");
+            // Scenarios assert component use (stock, shortfall, accounting); creative welds for free.
+            if (MyAPIGateway.Session.CreativeMode) return ChatCommandResult.Error("The test harness needs a survival world (creative mode welds without components).");
 
             var scenarios = new List<ITestScenario>();
             if (string.Equals(args[2], "all", System.StringComparison.OrdinalIgnoreCase))
@@ -60,9 +66,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             }
             else
             {
-                var s = ScenarioRegistry.Find(args[2]);
-                if (s == null) return ChatCommandResult.Error("Unknown scenario '" + args[2] + "'. Use 'test list'.");
-                scenarios.Add(s);
+                string error;
+                if (!Select(args[2], scenarios, out error)) return ChatCommandResult.Error(error);
             }
 
             var repeat = 1;
@@ -77,6 +82,45 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             var msg = TestRunner.Enqueue(scenarios, repeat, senderSteamId);
             if (msg == null) return ChatCommandResult.Error("Runner busy.");
             return msg.StartsWith("Queued") ? ChatCommandResult.Success(msg) : ChatCommandResult.Error(msg);
+        }
+
+        /// <summary>
+        /// "S03", "S03,S20,S27", "S28-S33" or mixed ("S01-S05,S17"); ranges follow the registry order.
+        /// Duplicates are dropped, order is the order given.
+        /// </summary>
+        private static bool Select(string spec, List<ITestScenario> into, out string error)
+        {
+            error = null;
+            var parts = spec.Split(',');
+            for (int p = 0; p < parts.Length; p++)
+            {
+                var part = parts[p].Trim();
+                if (part.Length == 0) continue;
+                var dash = part.IndexOf('-');
+                if (dash < 0)
+                {
+                    var s = ScenarioRegistry.Find(part);
+                    if (s == null) { error = "Unknown scenario '" + part + "'. Use 'test list'."; return false; }
+                    if (!into.Contains(s)) into.Add(s);
+                    continue;
+                }
+
+                var from = IndexOf(part.Substring(0, dash).Trim());
+                var to = IndexOf(part.Substring(dash + 1).Trim());
+                if (from < 0 || to < 0) { error = "Unknown scenario in range '" + part + "'. Use 'test list'."; return false; }
+                if (from > to) { var t = from; from = to; to = t; }
+                for (int i = from; i <= to; i++)
+                    if (!into.Contains(ScenarioRegistry.All[i])) into.Add(ScenarioRegistry.All[i]);
+            }
+            if (into.Count == 0) { error = Usage; return false; }
+            return true;
+        }
+
+        private static int IndexOf(string id)
+        {
+            for (int i = 0; i < ScenarioRegistry.All.Length; i++)
+                if (string.Equals(ScenarioRegistry.All[i].Id, id, System.StringComparison.OrdinalIgnoreCase)) return i;
+            return -1;
         }
 
         private static ChatCommandResult Origin(string[] args)

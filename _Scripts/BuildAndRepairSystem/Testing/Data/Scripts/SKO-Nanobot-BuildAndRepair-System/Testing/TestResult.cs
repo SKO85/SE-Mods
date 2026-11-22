@@ -40,6 +40,11 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             Metrics.Add(new KeyValuePair<string, string>(key, value ? "true" : "false"));
         }
 
+        public void Metric(string key, string value)
+        {
+            Metrics.Add(new KeyValuePair<string, string>(key, value ?? ""));
+        }
+
         /// <summary>Numeric value of a metric, or NaN when absent / non-numeric.</summary>
         public double GetNumeric(string key)
         {

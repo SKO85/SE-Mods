@@ -29,6 +29,7 @@
 - Thresholds are starting points — replace with the `agg=` min/avg/max from the first five green runs.
 ## Coverage
 ingame:S08 (code-built 1000-block grid until the BigShip prefab exists)
+ingame:S43
 ## Last verified
 never
 ## Related

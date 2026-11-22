@@ -28,6 +28,11 @@
 `SafeZoneHandler.GetSafeZones` / `IsProtectedFromGrinding` steadyAvgMs ≤ 0.2 (TTL caches, no LINQ — BUG-026).
 ## Coverage
 manual
+ingame:S39
+ingame:S40
+ingame:S41
+ingame:S42
+ingame:S53
 ## Last verified
 never
 ## Related

@@ -22,6 +22,8 @@
 n/a
 ## Coverage
 manual
+ingame:S21
+ingame:S22
 ## Last verified
 never
 ## Related

@@ -4,8 +4,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
 {
     /// <summary>
     /// Defaults shared by all scenarios: 120 s timeout, readiness = all rig BaRs registered
-    /// and scanned once, a one-shot Configure hook once BaRs are resolvable, teardown = close
-    /// everything the context spawned.
+    /// (they spawn switched off; the runner switches them on when the measured run starts),
+    /// a one-shot Configure hook once BaRs are resolvable, teardown = close everything the
+    /// context spawned.
     /// </summary>
     internal abstract class TestScenarioBase : ITestScenario
     {
@@ -39,11 +40,12 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             {
                 _configured = true;
                 Configure(ctx);
-                // Configure may change settings that trigger a rescan; wait for that scan.
                 ctx.MarkSetupTime();
                 return false;
             }
-            return ctx.AllBarsReadyAndScanned();
+            // BaRs are still off here (Ready needs Enabled), so there is no scan to wait for:
+            // work before the measured run would make it end early with no data.
+            return true;
         }
 
         public abstract bool IsComplete(TestContext ctx);

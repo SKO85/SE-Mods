@@ -20,16 +20,24 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         private const string CargoSubtype = "LargeBlockSmallContainer";
         private const string BatterySubtype = "LargeBlockBatteryBlock";
         private const string ArmorSubtype = "LargeBlockArmorBlock";
+        private const string ProjectorSubtype = "LargeProjector";
+        private const string ConveyorSubtype = "LargeBlockConveyor";
+        private const string StatorSubtype = "LargeStator";
 
         public static MyObjectBuilder_CubeGrid Build(RigSpec spec, Vector3D position, long ownerId, TestRig rig)
         {
             var grid = MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_CubeGrid>();
             grid.GridSizeEnum = MyCubeSize.Large;
-            grid.IsStatic = true;
+            grid.IsStatic = !spec.Dynamic;
+            if (spec.Dynamic)
+            {
+                grid.LinearVelocity = spec.LinearVelocity;
+                grid.AngularVelocity = spec.AngularVelocity;
+            }
             grid.CreatePhysics = true;
             grid.DestructibleBlocks = true;
             grid.PersistentFlags = MyPersistentEntityFlags2.InScene | MyPersistentEntityFlags2.CastShadows;
-            grid.PositionAndOrientation = new MyPositionAndOrientation(position, Vector3.Forward, Vector3.Up);
+            grid.PositionAndOrientation = new MyPositionAndOrientation(position, spec.Forward, Vector3.Up);
             grid.DisplayName = "NanobotTest-" + spec.Name;
             grid.CubeBlocks = new List<MyObjectBuilder_CubeBlock>();
 
@@ -44,7 +52,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 {
                     var x = i * 2;
                     var bar = Create<MyObjectBuilder_ShipWelder>(BarSubtype, new Vector3I(x, 0, 0), ownerId);
-                    bar.Enabled = true;
+                    bar.Enabled = false; // switched on by the runner when the measured run starts
                     Add(grid, used, bar, 1, 1, 2);
                     rig.BarPositions.Add(new Vector3I(x, 0, 0));
 
@@ -59,10 +67,21 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 AddCargo(grid, used, rig, new Vector3I(-1, 0, 1), ownerId);
 
                 var battery = Create<MyObjectBuilder_BatteryBlock>(BatterySubtype, new Vector3I(-1, 0, 2), ownerId);
-                battery.Enabled = true;
+                battery.Enabled = spec.BatteryEnabled;
                 battery.CurrentStoredPower = 3f;
                 battery.MaxStoredPower = 3f;
                 Add(grid, used, battery, 1, 1, 1);
+                rig.BatteryPosition = new Vector3I(-1, 0, 2);
+
+                if (spec.Projector)
+                {
+                    // Next to the last side filler (x = width - 1), on the base layer.
+                    var projectorPos = new Vector3I(width, 0, 1);
+                    var projector = Create<MyObjectBuilder_Projector>(ProjectorSubtype, projectorPos, ownerId);
+                    projector.Enabled = true;
+                    Add(grid, used, projector, 1, 1, 1);
+                    rig.ProjectorPosition = projectorPos;
+                }
             }
 
             var rowWidth = spec.RowWidth > 0 ? spec.RowWidth : 10;
@@ -83,7 +102,78 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 Add(grid, used, armor, 1, 1, 1);
             }
 
+            for (int i = 0; i < spec.Extra.Count; i++)
+            {
+                var extra = spec.Extra[i];
+                var height = ExtraHeight(extra.Kind);
+                for (int y = 0; y < height; y++)
+                    if (used.Contains(extra.Position + new Vector3I(0, y, 0)))
+                        throw new System.Exception("RigBuilder(" + spec.Name + "): extra block at " + extra.Position + " overlaps another block");
+                var owner = extra.OwnerId == long.MinValue ? ownerId : extra.OwnerId;
+                var block = CreateExtra(extra.Kind, extra.Position, owner);
+                block.BuiltBy = extra.BuiltBy == long.MinValue ? owner : extra.BuiltBy;
+                if (extra.BuildPercent < 1f)
+                {
+                    block.BuildPercent = extra.BuildPercent;
+                    block.IntegrityPercent = extra.BuildPercent;
+                }
+                if (extra.Color.HasValue) block.ColorMaskHSV = extra.Color.Value;
+                Add(grid, used, block, 1, height, 1);
+                rig.ExtraSpecs.Add(extra);
+            }
+
             return grid;
+        }
+
+        /// <summary>Grid cells along Y (all extras are 1 wide and deep; these mechanical bases are 1x2x1).</summary>
+        private static int ExtraHeight(RigBlockKind kind)
+        {
+            switch (kind)
+            {
+                case RigBlockKind.AdvancedStator:
+                case RigBlockKind.Piston:
+                case RigBlockKind.Suspension:
+                    return 2;
+                default:
+                    return 1;
+            }
+        }
+
+        private static MyObjectBuilder_CubeBlock CreateExtra(RigBlockKind kind, Vector3I pos, long ownerId)
+        {
+            switch (kind)
+            {
+                case RigBlockKind.Conveyor: return Create<MyObjectBuilder_Conveyor>(ConveyorSubtype, pos, ownerId);
+                case RigBlockKind.Battery:
+                    var battery = Create<MyObjectBuilder_BatteryBlock>(BatterySubtype, pos, ownerId);
+                    battery.Enabled = true;
+                    return battery;
+                case RigBlockKind.Stator:
+                    var stator = Create<MyObjectBuilder_MotorStator>(StatorSubtype, pos, ownerId);
+                    stator.Enabled = true;
+                    return stator;
+                case RigBlockKind.AdvancedStator:
+                    var advanced = Create<MyObjectBuilder_MotorAdvancedStator>("LargeAdvancedStator", pos, ownerId);
+                    advanced.Enabled = true;
+                    return advanced;
+                case RigBlockKind.Hinge:
+                    var hinge = Create<MyObjectBuilder_MotorAdvancedStator>("LargeHinge", pos, ownerId);
+                    hinge.Enabled = true;
+                    return hinge;
+                case RigBlockKind.Piston:
+                    var piston = Create<MyObjectBuilder_ExtendedPistonBase>("LargePistonBase", pos, ownerId);
+                    piston.Enabled = true;
+                    return piston;
+                case RigBlockKind.Suspension:
+                    var suspension = Create<MyObjectBuilder_MotorSuspension>("Suspension1x1", pos, ownerId);
+                    suspension.Enabled = true;
+                    return suspension;
+                case RigBlockKind.Connector:
+                    var connector = Create<MyObjectBuilder_ShipConnector>("Connector", pos, ownerId);
+                    connector.Enabled = true;
+                    return connector;
+                default: return Create<MyObjectBuilder_CubeBlock>(ArmorSubtype, pos, ownerId);
+            }
         }
 
         private static void AddCargo(MyObjectBuilder_CubeGrid grid, HashSet<Vector3I> used, TestRig rig, Vector3I pos, long ownerId)

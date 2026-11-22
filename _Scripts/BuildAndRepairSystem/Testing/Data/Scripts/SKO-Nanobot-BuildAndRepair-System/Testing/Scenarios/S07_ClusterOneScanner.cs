@@ -41,9 +41,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         public override void Sample(TestContext ctx)
         {
             if (_clusterChecked) return;
+
+            // BaRs are switched on when the run starts; wait until every one has been clustered.
+            var bars = _rig.Bars;
+            for (int i = 0; i < bars.Count; i++)
+                if (bars[i].AssignedCluster == null) return;
             _clusterChecked = true;
 
-            var bars = _rig.Bars;
             var first = bars.Count > 0 ? bars[0].AssignedCluster : null;
             _clusterOk = first != null;
             for (int i = 1; i < bars.Count && _clusterOk; i++)
