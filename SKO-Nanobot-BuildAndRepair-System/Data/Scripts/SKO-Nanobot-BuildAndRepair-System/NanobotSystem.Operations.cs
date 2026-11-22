@@ -328,7 +328,9 @@ namespace SKONanobotBuildAndRepairSystem
             // BUG-260612.13: execution-time gate — zone protection was scan-time only,
             // so a zone activating around the BaR kept it welding off the stale target
             // list for up to a scan cycle. Flag refreshes every ~2 s.
-            if (!State.SafeZoneAllowsWelding) return;
+            // BUG-261122.19: per operation — a zone may allow building projections but not welding;
+            // the chosen target is checked in ServerTryWelding (IsWeldTargetAllowedByZone).
+            if (!State.SafeZoneAllowsWelding && !State.SafeZoneAllowsBuildingProjections) return;
 
             for (int i = 0; i < MaxActionsPerCycle; i++)
             {

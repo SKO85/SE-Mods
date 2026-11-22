@@ -33,7 +33,7 @@ When everything was repaired, a BaR could take up to 20–30 seconds to notice n
 
 - **DefenseShields:** an enemy ship whose shield is switched off or drained is no longer treated as shielded — your BaRs grind it. A raised shield still protects it, also when it goes up mid-grind.
 - **Protection plugins and mods** that block grinding (for example admin or safe-base protection) now stop the BaR too, just like they stop hand grinders. Indestructible grids were and are left alone.
-- **Safe zones:** box-shaped zones, big zones and overlapping zones are now handled correctly.
+- **Safe zones:** box-shaped zones, big zones and overlapping zones are now handled correctly. A zone that forbids welding but allows building projections lets BaRs place projected blocks again.
 
 ### No more working from afar
 
@@ -46,7 +46,7 @@ A ship flying out of the BaR's working area was still welded or ground until the
 - The janitor no longer grinds blocks **you** built that just have no owner (armor-only hulls and the like) — it welds them instead.
 - Dented blocks (full integrity but deformed) get fixed properly again.
 - Big components (radio communication, detector parts) are no longer stuck in small BaRs — they get welded in again.
-- Missing components are reported for **all** blocks waiting to be welded, not just the current one — so assembler queuing asks for the right amounts.
+- Missing components are reported for **all** blocks waiting to be welded, not just the current one — so assembler queuing asks for the right amounts. Components the BaR can't reach (e.g. blocked by a sorter) still count as missing, and projected blocks in your ignore color only ask for the one component they need to be placed.
 - Several fixes so two BaRs don't fight over the same block, and a BaR doesn't hang on to a block it can't work.
 
 ## Inventories

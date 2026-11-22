@@ -40,8 +40,10 @@ ingame:S61
 ingame:S62
 ingame:S63
 unit:ShieldProtectionTests
+ingame:S85 (no Welding, BuildingProjections allowed: placed, not welded)
+
 ## Last verified
-v2.5.6 build 261122.25 2026-11-22 — in game with DefenseShields (workshop 3154379105): S58-S63 all green
-(S59 after the BUG-261122.12 fix, S61 after the armor-only test fix).
+v2.5.6 build 261122.36 2026-11-22 — in game: S85 (no welding, projections allowed: placed, not welded), S39, S42 green.
+
 ## Related
 BUG-006, BUG-010, BUG-020a, BUG-026, BUG-047, BUG-053, BUG-055, BUG-074, BUG-260502.1/.2, BUG-260612.3/.5/.6/.13/.31/.32

@@ -11,7 +11,7 @@ using VRageMath;
 namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
 {
     /// <summary>Build = normal; the others must build nothing.</summary>
-    internal enum ProjectionMode { Build, AllowBuildOff, ZoneForbids, AdminForbids }
+    internal enum ProjectionMode { Build, AllowBuildOff, ZoneForbids, AdminForbids, ZoneForbidsWelding }
 
     /// <summary>
     /// SCN-WELD-002 / SCN-ZONE-001 / SCN-CFG-003: the rig's projector shows 10 armor blocks on top of the rig (two layers over the
@@ -19,6 +19,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
     /// SE 1.211.018 case of BUG-261122.1) — every block built and welded, SteelPlate used exactly
     /// 25 per block (no free and no double creation component). S27: AllowBuild off; S42: a safe zone
     /// without BuildingProjections over the rig; S46: admin AllowBuildFixed with AllowBuildDefault=false — nothing built.
+    /// S85 (BUG-261122.19): a safe zone without Welding but with BuildingProjections — all placed, none welded further.
     /// New blocks are counted wherever they appear (alignment-independent); their positions are logged.
     /// </summary>
     internal sealed class S03_ProjectedBuild : TestScenarioBase
@@ -48,7 +49,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             _mode = mode;
         }
 
-        private bool Expect { get { return _mode == ProjectionMode.Build; } }
+        private bool Expect { get { return _mode == ProjectionMode.Build || _mode == ProjectionMode.ZoneForbidsWelding; } }
+        private bool PlaceOnly { get { return _mode == ProjectionMode.ZoneForbidsWelding; } }
 
         public override string Id { get { return _id; } }
         public override string Description
@@ -60,6 +62,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                     case ProjectionMode.AllowBuildOff: return "Projector with 'build projected' off: nothing is built";
                     case ProjectionMode.ZoneForbids: return "Projector in a safe zone without BuildingProjections: nothing is built";
                     case ProjectionMode.AdminForbids: return "Admin AllowBuildFixed (default off): projections are not built even when enabled";
+                    case ProjectionMode.ZoneForbidsWelding: return "Safe zone without Welding, with BuildingProjections: projections placed, not welded further";
                     default: return "Projector: 10 projected blocks built from an empty block inventory, components charged exactly once";
                 }
             }
@@ -84,6 +87,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             _rig = ctx.SpawnRig(new RigSpec { Name = _id, Bars = 1, Projector = true });
             if (_mode == ProjectionMode.ZoneForbids)
                 ctx.SpawnSafeZone(ctx.Origin, 60f, VRage.Game.ObjectBuilders.Components.MySafeZoneAction.All & ~VRage.Game.ObjectBuilders.Components.MySafeZoneAction.BuildingProjections);
+            if (_mode == ProjectionMode.ZoneForbidsWelding)
+                ctx.SpawnSafeZone(ctx.Origin, 60f, VRage.Game.ObjectBuilders.Components.MySafeZoneAction.All & ~VRage.Game.ObjectBuilders.Components.MySafeZoneAction.Welding);
         }
 
         protected override void Configure(TestContext ctx)
@@ -178,6 +183,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         {
             if (!Expect) return ctx.RunSeconds >= 20.0;
             var created = NewBlocks();
+            if (PlaceOnly) return created.Count == Cells.Length || (created.Count > 0 && ctx.RunSeconds - _lastChangeAt >= StallSeconds) || ctx.RunSeconds >= 40.0;
             if (created.Count == Cells.Length && ctx.CountFullIntegrity(created) == created.Count) return true;
             // Stalled: something was built, nothing new for a while and all of it welded.
             return created.Count > 0 && ctx.CountFullIntegrity(created) == created.Count && ctx.RunSeconds - _lastChangeAt >= StallSeconds;
@@ -200,6 +206,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             var onTarget = 0;
             for (int i = 0; i < created.Count; i++) if (Array.IndexOf(Cells, created[i].Position) >= 0) onTarget++;
             ctx.Metric("builtOnExpectedCells", (long)onTarget);
+            // proj.Build requests an instant build; the game grants it in creative / with creative tools (BUG-261122.19).
+            var session = Sandbox.ModAPI.MyAPIGateway.Session;
+            ctx.Metric("creativeMode", session != null && session.CreativeMode);
+            ctx.Metric("creativeRights", session != null && session.HasCreativeRights);
 
             if (!Expect)
             {
@@ -211,6 +221,22 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             }
 
             ctx.Check(created.Count == Cells.Length, "built=" + created.Count + "/" + Cells.Length);
+            if (PlaceOnly)
+            {
+                // Placed, not welded further. The build may move the BaR's ready components into the new block's
+                // construction stockpile: plates are conserved (rig + stockpiles, plus the mounted creation plate).
+                var steelLeft = ctx.CountComponentOnRig(_rig, "SteelPlate");
+                var plateId = new MyDefinitionId(typeof(MyObjectBuilder_Component), "SteelPlate");
+                var stockpiled = 0;
+                for (int i = 0; i < created.Count; i++) stockpiled += created[i].GetConstructionStockpileItemAmount(plateId);
+                ctx.Metric("steelOnRig", steelLeft);
+                ctx.Metric("steelInStockpiles", (long)stockpiled);
+                ctx.Check(welded == 0, "welded=" + welded + " inside a no-welding safe zone");
+                var sum = steelLeft + stockpiled;
+                ctx.Check(Math.Abs(sum - Stock) < 0.5 || Math.Abs(sum + created.Count - Stock) < 0.5,
+                    "SteelPlate not conserved: rig " + steelLeft + " + stockpiles " + stockpiled + " (+" + created.Count + " mounted) vs stock " + Stock);
+                return;
+            }
             ctx.Check(welded == created.Count, "welded=" + welded + "/" + created.Count);
             ctx.Check(onTarget == created.Count, "projection offset: " + (created.Count - onTarget) + " block(s) built off the expected cells (" + at + ")");
 

@@ -328,7 +328,8 @@ namespace SKONanobotBuildAndRepairSystem
 
             // BUG-261122.16: the area check is scan-time only — a target whose grid moved out of the area is dropped
             // from this BaR's list instead of being welded from afar (one box test per chosen target).
-            if (chosenTarget != null && !IsTargetInArea(chosenTarget.Block))
+            // BUG-261122.19: projected targets need the zone's building-projections permission, real blocks welding.
+            if (chosenTarget != null && (!IsTargetInArea(chosenTarget.Block) || !IsWeldTargetAllowedByZone(chosenTarget)))
             {
                 ReleaseAssignmentIfEnabled(chosenTarget.Block);
                 lock (State.PossibleWeldTargets)
@@ -1763,6 +1764,13 @@ namespace SKONanobotBuildAndRepairSystem
                             _missingKinds >= 0, _missingKinds, _deferred));
                 }
             }
+        }
+
+        private bool IsWeldTargetAllowedByZone(TargetBlockData targetData)
+        {
+            return (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0
+                ? State.SafeZoneAllowsBuildingProjections
+                : State.SafeZoneAllowsWelding;
         }
 
         /// <summary>

@@ -90,7 +90,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S81_CompanionGroups("S81", CompanionGroupsMode.TwoGroups),
             new S81_CompanionGroups("S82", CompanionGroupsMode.TwoAssemblers),
             new S81_CompanionGroups("S83", CompanionGroupsMode.StockInCargo),
-            new S84_SorterBlockedStock()
+            new S84_SorterBlockedStock(),
+            new S03_ProjectedBuild("S85", ProjectionMode.ZoneForbidsWelding)
         };
 
         public static ITestScenario Find(string id)

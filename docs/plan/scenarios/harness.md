@@ -72,7 +72,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S00 | Warm-up (not a test): JIT the weld/grind/scan/projector-build paths once per session | — | 3 s | 261122.11 |
 | S01 | One BaR repairs 10 damaged blocks from stocked cargo | CORE-001, WELD-001 | 3 s | 261122.8 |
 | S02 | Empty cargo: missing components reported, nothing welded, no spikes | WELD-005 | 20 s | 261122.8 |
-| S03 | Projector: 10 blocks built from an empty block inventory, charged once | WELD-002 | 3 s | 261122.28 — 10/10, slowest weld 0.8 ms |
+| S03 | Projector: 10 blocks built from an empty block inventory, charged once | WELD-002 | 3 s | 261122.36 — 10/10, 25 each |
 | S04 | Janitor (GrindOnly, NoOwnership) razes a derelict grid | GRIND-001 | 11 s | 261122.8 |
 | S05 | Two BaRs never weld the same or a foreign-claimed block | BUDGET-001 | 3 s | 261122.8 |
 | S06 | MaxSystemsPerTargetGrid=2 held with 4 BaRs, grid still finished | CLUSTER-002 | 9 s | 261122.8 |
@@ -108,10 +108,10 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S36 | Piston head subgrid repaired | WELD-007 | 2 s | 261122.12 |
 | S37 | Wheel subgrid repaired | WELD-007 | 1 s | 261122.12 |
 | S38 | Ship docked by connector repaired through the connector | WELD-007 | 1 s | 261122.11 |
-| S39 | Safe zone without Welding over the BaR: nothing welded | ZONE-001 | 20 s | 261122.11 |
+| S39 | Safe zone without Welding over the BaR: nothing welded | ZONE-001 | 20 s | 261122.36 — nothing welded |
 | S40 | Safe zone allowing everything: welded as usual | ZONE-001 | 2 s | 261122.11 |
 | S41 | Safe zone without Grinding around a derelict: not ground | ZONE-001 | 20 s | 261122.11 |
-| S42 | Safe zone without BuildingProjections: projection not built | ZONE-001, WELD-002 | 20 s | 261122.11 |
+| S42 | Safe zone without BuildingProjections: projection not built | ZONE-001, WELD-002 | 20 s | 261122.36 — nothing built |
 | S43 | Very large ship: 4000 blocks, 5 BaRs on board, 120 s | BUDGET-006 | 120 s | 261122.11 |
 | S44 | Two ships in flight: friendly ship repaired | WELD-007 | 2 s | 261122.11 |
 | S45 | Two ships in flight: pirate ship ground | GRIND-002 | 2 s | 261122.11 |
@@ -154,6 +154,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S82 | Companion script, two assemblers: queue = missing, both used, no 0 items, stable 20 s | API-002 | ~35 s | 261122.32 — 100/100, stable |
 | S83 | Companion script, stock in cargo: nothing queued while welding from stock | API-002 | 25 s | 261122.32 — nothing queued |
 | S84 | Sorter-blocked stock stays in the missing list (companion script keeps queuing) | WELD-005 | 20 s | 261122.32 — blocked 500 kept, 200 missing |
+| S85 | Safe zone without Welding, with BuildingProjections: projections placed, not welded further | ZONE-001 | ~20 s | 261122.36 — 10 placed, 0 welded, 750 + 240 + 10 = 1000 |
 
 ## Scenarios
 
@@ -532,6 +533,12 @@ nothing is queued (Steam: components queued with thousands on the grid). **Recor
 (0,0,2) -> sorter (0,0,3) -> cargo (0,0,4)); the rig's own cargo is empty. **Layout checks** the cargo is
 conveyor-connected to the BaR and the sorter refuses SteelPlate (otherwise the scenario proves nothing). **Pass** the
 stock stays put, SteelPlate is reported missing (the companion script keeps queuing), aggregate max <= 2 ms.
+
+### S85
+**Proves** BUG-261122.19: S03's projector rig inside a safe zone that forbids Welding but allows BuildingProjections.
+**Pass** all 10 projected blocks placed, none welded further, SteelPlate conserved (rig + the placed blocks'
+construction stockpiles, plus the mounted creation plates = stock: the build may stockpile the BaR's ready components).
+Run with admin creative tools and "ignore safe zones" off (creative tools build instantly; the bypass welds). Counterparts: S39 (no welding, real blocks), S42 (no building projections).
 
 ## Building blocks for new scenarios
 
