@@ -34,6 +34,7 @@ unit:MissingComponentsAggregateTests.StockOnHandIsSubtracted
 unit:MissingComponentsAggregateTests.SourcesAreWalkedInSlices_AfterTheTargets
 ingame:S84 (stock behind a blacklisting sorter stays missing)
 unit:MissingComponentsAggregateTests.SourceStockTheBarCannotPull_IsNotSubtracted
+unit:MissingComponentsAggregateTests.IgnoreColorProjection_CountsTheCreationComponentOnly
 
 ## Last verified
 v2.5.6 build 261122.32 2026-11-22 — in game: S84 (sorter-blocked stock stays missing); unit green.

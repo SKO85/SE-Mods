@@ -200,6 +200,51 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             Assert.Equal(260, Missing(system, "SteelPlate"));
         }
 
+        // PR #152 review: an ignore-color projection is only placed, so it needs its creation component only.
+        [Fact]
+        public void IgnoreColorProjection_CountsTheCreationComponentOnly()
+        {
+            var system = NewSystem(3000, 0, 0);
+            var settings = Field<SyncBlockSettings>(system, "_Settings");
+            var ignore = new VRageMath.Vector3(0.5f, 0.2f, 0.1f);
+            settings.IgnoreColor = ignore;
+            settings.Flags |= SyncBlockSettings.Settings.UseIgnoreColor;
+
+            system.State.PossibleWeldTargets.Add(new TargetBlockData(Projected(ignore), 0, TargetBlockData.AttributeFlags.Projected));
+            system.State.PossibleWeldTargets.Add(new TargetBlockData(Projected(new VRageMath.Vector3(0.9f, 0.9f, 0.9f)), 1, TargetBlockData.AttributeFlags.Projected));
+
+            Run(system);
+            Assert.Equal(1 + 25, Missing(system, "SteelPlate")); // ignore-colored: creation 1; other: full 25
+        }
+
+        // Armor-like definition: creation component SteelPlate; 25 missing for the full block (engine path).
+        private static readonly MyCubeBlockDefinition ArmorDef = new MyCubeBlockDefinition
+        {
+            Components = new[]
+            {
+                new MyCubeBlockDefinition.Component
+                {
+                    Definition = new MyComponentDefinition { Id = new VRage.Game.MyDefinitionId(typeof(VRage.Game.MyObjectBuilder_Component), "SteelPlate") },
+                    Count = 25
+                }
+            }
+        };
+
+        private static IMySlimBlock Projected(VRageMath.Vector3 color)
+        {
+            var block = Substitute.For<IMySlimBlock>();
+            block.BlockDefinition.Returns(ArmorDef);
+            block.GetColorMask().Returns(color);
+            block.When(b => b.GetMissingComponents(Arg.Any<Dictionary<string, int>>())).Do(ci =>
+            {
+                var d = ci.Arg<Dictionary<string, int>>();
+                int v;
+                d.TryGetValue("SteelPlate", out v);
+                d["SteelPlate"] = v + 25;
+            });
+            return block;
+        }
+
         // PR #152 review: a sorter can block a component between a connected source and the BaR; that stock
         // must stay "missing", or the companion script never queues it and the build stalls.
         [Fact]

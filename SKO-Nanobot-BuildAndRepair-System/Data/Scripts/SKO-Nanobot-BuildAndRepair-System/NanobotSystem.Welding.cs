@@ -1673,6 +1673,8 @@ namespace SKONanobotBuildAndRepairSystem
                 if (_AggPhase == 1)
                 {
                     var end = Math.Min(_AggCursor + MissingAggregateTargetsPerSlice, _AggTargetsSnapshot.Count);
+                    var useIgnoreColor = (Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0;
+                    var ignoreColor = Settings.IgnoreColorPacked;
                     for (; _AggCursor < end; _AggCursor++)
                     {
                         var targetData = _AggTargetsSnapshot[_AggCursor];
@@ -1681,7 +1683,10 @@ namespace SKONanobotBuildAndRepairSystem
                         _AggPerBlockMissing.Clear();
                         try
                         {
-                            block.GetMissingComponents(_AggPerBlockMissing, _AggLevel);
+                            // Ignore-color projections are only placed (creation component), like the pull path.
+                            var level = useIgnoreColor && (targetData.Attributes & TargetBlockData.AttributeFlags.Projected) != 0
+                                && IsColorNearlyEquals(ignoreColor, block.GetColorMask()) ? IntegrityLevel.Create : _AggLevel;
+                            block.GetMissingComponents(_AggPerBlockMissing, level);
                         }
                         catch
                         {
