@@ -308,6 +308,7 @@ namespace SKONanobotBuildAndRepairSystem
         private string _projBuildLastFail;
         private TimeSpan _projSilentFailLogLast = TimeSpan.MinValue;
         private int _projSilentFailLogSuppressed;
+        private bool _projUnknownFailLogged; // BUG-261122.5: first unexplained failure per BaR logs at Error
         private static readonly TimeSpan ProjSilentFailLogInterval = TimeSpan.FromSeconds(60);
 
         /// <summary>

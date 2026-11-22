@@ -535,6 +535,35 @@ namespace SKONanobotBuildAndRepairSystem
             return _ProjBuildSkipUntil.TryGetValue(key, out until) && MyAPIGateway.Session.ElapsedPlayTime < until;
         }
 
+        /// <summary>
+        /// BUG-120 / BUG-261122.2 / BUG-261122.5: counts a silent proj.Build failure for the cell; at
+        /// PROJ_BUILD_MAX_SILENT_FAILS it is skipped for ProjBuildSkipDuration. The counter stays one below the
+        /// limit, so after the skip expires a block that still fails is skipped again on its first retry.
+        /// Returns the failure count (0 when the key is null).
+        /// </summary>
+        private int RecordProjBuildSilentFail(string key)
+        {
+            if (key == null) return 0;
+            int count;
+            _ProjBuildSilentFailCount.TryGetValue(key, out count);
+            count++;
+            if (count < PROJ_BUILD_MAX_SILENT_FAILS)
+            {
+                _ProjBuildSilentFailCount[key] = count;
+                return count;
+            }
+            _ProjBuildSilentFailCount[key] = PROJ_BUILD_MAX_SILENT_FAILS - 1;
+            _ProjBuildSkipUntil[key] = MyAPIGateway.Session.ElapsedPlayTime + ProjBuildSkipDuration;
+            if (Logging.Instance.ShouldLog(Logging.Level.Event))
+            {
+                Logging.Instance.Write(Logging.Level.Event,
+                    "BuildAndRepairSystemBlock {0}: proj.Build silently failed {1} times for block at {2}; skipped for {3} min for owner {4}. Power-cycle the BaR to retry now.",
+                    _Welder != null ? Logging.BlockName(_Welder, Logging.BlockNameOptions.None) : "?",
+                    count, key, ProjBuildSkipDuration.TotalMinutes, _Welder != null ? _Welder.OwnerId : 0);
+            }
+            return count;
+        }
+
         // BUG-261122.2: drop expired skips and publish the skipped count to the terminal (synced state).
         private void RefreshProjBuildSkips()
         {
@@ -682,6 +711,7 @@ namespace SKONanobotBuildAndRepairSystem
                             if (!ServerLendBuildComponent(welderInventory, createCompDef, out lentComponent))
                             {
                                 // No room for it: skip Build (it would only count towards the skip), retry later.
+                                Mod.RefundProjBuildSlot(); // BUG-261122.5: the slot was not used
                                 EmitServerDoWeldProfile(profilerTs,
                                     targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
                                     true, false, false, false,
@@ -798,6 +828,12 @@ namespace SKONanobotBuildAndRepairSystem
                             {
                                 // BUG-113: instrument the assignment release+reassign pair.
                                 var tsAssignMark = Stopwatch.GetTimestamp();
+                                // BUG-261122.5: built — forget earlier silent fails of this cell.
+                                if (_ProjBuildSilentFailCount.Count > 0)
+                                {
+                                    var builtKey = GetBrokenBlockKey(targetData.Block);
+                                    if (builtKey != null) _ProjBuildSilentFailCount.Remove(builtKey);
+                                }
                                 // Release the projected block's assignment before switching to the physical block.
                                 ReleaseAssignmentIfEnabled(targetData.Block);
                                 targetData.Block = target;
@@ -829,30 +865,7 @@ namespace SKONanobotBuildAndRepairSystem
                                 targetData.Ignore = true;
                                 // BUG-120: proj.Build silent fail (likely DLC missing). Track per-block;
                                 // promote to persistent skip after PROJ_BUILD_MAX_SILENT_FAILS ticks.
-                                var brokenKey = GetBrokenBlockKey(targetData.Block);
-                                int silentFailCount = 0;
-                                if (brokenKey != null)
-                                {
-                                    _ProjBuildSilentFailCount.TryGetValue(brokenKey, out silentFailCount);
-                                    silentFailCount++;
-                                    if (silentFailCount >= PROJ_BUILD_MAX_SILENT_FAILS)
-                                    {
-                                        // BUG-261122.2: skip for ProjBuildSkipDuration, then retry (was permanent).
-                                        _ProjBuildSilentFailCount.Remove(brokenKey);
-                                        _ProjBuildSkipUntil[brokenKey] = MyAPIGateway.Session.ElapsedPlayTime + ProjBuildSkipDuration;
-                                        if (Logging.Instance.ShouldLog(Logging.Level.Event))
-                                        {
-                                            Logging.Instance.Write(Logging.Level.Event,
-                                                "BuildAndRepairSystemBlock {0}: proj.Build silently failed {1} times for block at {2}; skipped for {3} min for owner {4}. Power-cycle the BaR to retry now.",
-                                                Logging.BlockName(_Welder, Logging.BlockNameOptions.None),
-                                                PROJ_BUILD_MAX_SILENT_FAILS, brokenKey, ProjBuildSkipDuration.TotalMinutes, _Welder.OwnerId);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        _ProjBuildSilentFailCount[brokenKey] = silentFailCount;
-                                    }
-                                }
+                                var silentFailCount = RecordProjBuildSilentFail(GetBrokenBlockKey(targetData.Block));
 
                                 if (buildAttempted)
                                 {
@@ -963,7 +976,8 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// BUG-261122.1 diagnostic: proj.Build returned but no block appeared. SE 1.211.018 rejects
         /// survival builds when the builder's own inventory (block inventory 0) lacks Components[0].
-        /// Logged at Error so default server logs show it; once per minute per BaR.
+        /// Once per minute per BaR. BUG-261122.5: Error only when it points at the mod (lend did not land)
+        /// or for the first unexplained failure per BaR; later ones (DLC, limits, placement) at Event.
         /// </summary>
         private void LogProjBuildSilentFail(IMySlimBlock projected, Sandbox.ModAPI.IMyProjector proj, MyDefinitionId compId, MyFixedPoint inBlockInventory, int failsForBlock)
         {
@@ -976,7 +990,9 @@ namespace SKONanobotBuildAndRepairSystem
                 _projSilentFailLogSuppressed++;
                 return;
             }
-            if (!Logging.Instance.ShouldLog(Logging.Level.Error)) return;
+            var level = reason == "builderInventoryEmpty" || !_projUnknownFailLogged ? Logging.Level.Error : Logging.Level.Event;
+            if (!Logging.Instance.ShouldLog(level)) return;
+            if (reason == "unknown") _projUnknownFailLogged = true;
 
             var suppressed = _projSilentFailLogSuppressed;
             _projSilentFailLogSuppressed = 0;
@@ -986,7 +1002,7 @@ namespace SKONanobotBuildAndRepairSystem
             try { canBuild = proj != null && projected != null ? proj.CanBuild(projected, true).ToString() : "n/a"; }
             catch (Exception ex) { canBuild = "ex:" + ex.GetType().Name; }
 
-            Logging.Instance.Write(Logging.Level.Error,
+            Logging.Instance.Write(level,
                 "BuildAndRepairSystemBlock {0}: projected build left no block; reason={1}; block={2}; firstComponent={3}; inBlockInventory={4}; inTransport={5}; creative={6}; canBuild={7}; projecting={8}; buildable={9}; remaining={10}; failsForBlock={11}; suppressedSinceLast={12}",
                 Logging.BlockName(_Welder, Logging.BlockNameOptions.None),
                 reason,

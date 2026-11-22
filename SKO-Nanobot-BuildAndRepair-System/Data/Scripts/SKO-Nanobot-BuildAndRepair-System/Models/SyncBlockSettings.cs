@@ -572,6 +572,21 @@ namespace SKONanobotBuildAndRepairSystem.Models
             Changed = (Changed & ~2u);
         }
 
+        /// <summary>Rewrites names from older saves before deserializing.</summary>
+        public static string MigrateLegacyXml(string data)
+        {
+            if (data == null) return null;
+            //Fix changed names
+            data = data.Replace("GrindColorNearFirst", "GrindNearFirst");
+
+            // FEAT-034 backward compat: old [Flags] AutoWeldOptions serialized 0 as ""
+            // and FunctionalOnly as "FunctionalOnly". Map to new enum names.
+            data = data.Replace("<WeldOptions></WeldOptions>", "<WeldOptions>WeldFull</WeldOptions>");
+            data = data.Replace("<WeldOptions />", "<WeldOptions>WeldFull</WeldOptions>");
+            data = data.Replace("<WeldOptions>FunctionalOnly</WeldOptions>", "<WeldOptions>WeldFunctional</WeldOptions>");
+            return data;
+        }
+
         public static SyncBlockSettings Load(NanobotSystem system, Guid guid, BlockPriorityHandling blockWeldPriority, BlockPriorityHandling blockGrindPriority, ComponentPriorityHandling componentCollectPriority)
         {
             var storage = system.Entity.Storage;
@@ -581,15 +596,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 try
                 {
-                    //Fix changed names
-                    data = data.Replace("GrindColorNearFirst", "GrindNearFirst");
-
-                    // FEAT-034 backward compat: old [Flags] AutoWeldOptions serialized 0 as ""
-                    // and FunctionalOnly as "FunctionalOnly". Map to new enum names.
-                    data = data.Replace("<WeldOptions></WeldOptions>", "<WeldOptions>WeldFull</WeldOptions>");
-                    data = data.Replace("<WeldOptions />", "<WeldOptions>WeldFull</WeldOptions>");
-                    data = data.Replace("<WeldOptions>FunctionalOnly</WeldOptions>", "<WeldOptions>WeldFunctional</WeldOptions>");
-
+                    data = MigrateLegacyXml(data);
                     settings = MyAPIGateway.Utilities.SerializeFromXML<SyncBlockSettings>(data);
                     if (settings != null)
                     {

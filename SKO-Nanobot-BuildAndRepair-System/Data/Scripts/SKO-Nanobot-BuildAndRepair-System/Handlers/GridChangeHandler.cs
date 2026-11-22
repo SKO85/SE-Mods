@@ -1,12 +1,15 @@
+using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Cluster;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
 
 namespace SKONanobotBuildAndRepairSystem.Handlers
 {
     /// <summary>
-    /// BUG-261122.10: last-damage time per grid, so the empty-grid skip (FEAT-017) does not hide new damage.
+    /// BUG-261122.10 / .11: last change (damage, block added) per grid, so the empty-grid skip (FEAT-017) does not hide it.
     /// Written from the server damage handler, read by background scans.
     /// </summary>
     public static class GridChangeHandler
@@ -67,6 +70,64 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             _changedAt.Clear();
             _expired.Clear();
             _lastCleanup = TimeSpan.Zero;
+        }
+
+        // ---------------------------------------------------------------- BUG-261122.11: blocks added (hand-placed frames)
+
+        private static bool _registered;
+        private static readonly HashSet<IMyCubeGrid> _tracked = new HashSet<IMyCubeGrid>();   // main thread only
+        private static readonly HashSet<IMyEntity> _seedScratch = new HashSet<IMyEntity>();
+
+        public static int TrackedGrids { get { return _tracked.Count; } }
+
+        /// <summary>Server: stamp a grid whenever a block is added to it (seeds existing grids, follows new ones).</summary>
+        public static void Register()
+        {
+            if (_registered || MyAPIGateway.Session == null || !MyAPIGateway.Session.IsServer || MyAPIGateway.Entities == null) return;
+            _seedScratch.Clear();
+            MyAPIGateway.Entities.GetEntities(_seedScratch, e => e is IMyCubeGrid);
+            foreach (var entity in _seedScratch) Track(entity as IMyCubeGrid);
+            _seedScratch.Clear();
+            MyAPIGateway.Entities.OnEntityAdd += OnEntityAdd;
+            _registered = true;
+        }
+
+        public static void Unregister()
+        {
+            try { if (_registered && MyAPIGateway.Entities != null) MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd; } catch { }
+            foreach (var grid in _tracked)
+            {
+                try { grid.OnBlockAdded -= OnBlockAdded; grid.OnClose -= OnGridClose; } catch { }
+            }
+            _tracked.Clear();
+            _registered = false;
+        }
+
+        private static void OnEntityAdd(IMyEntity entity)
+        {
+            Track(entity as IMyCubeGrid);
+        }
+
+        internal static void Track(IMyCubeGrid grid)
+        {
+            if (grid == null || !_tracked.Add(grid)) return;
+            grid.OnBlockAdded += OnBlockAdded;
+            grid.OnClose += OnGridClose;
+        }
+
+        private static void OnGridClose(IMyEntity entity)
+        {
+            var grid = entity as IMyCubeGrid;
+            if (grid == null) return;
+            grid.OnBlockAdded -= OnBlockAdded;
+            grid.OnClose -= OnGridClose;
+            _tracked.Remove(grid);
+        }
+
+        private static void OnBlockAdded(IMySlimBlock block)
+        {
+            if (block == null || block.CubeGrid == null || MyAPIGateway.Session == null) return;
+            MarkChanged(block.CubeGrid.EntityId, MyAPIGateway.Session.ElapsedPlayTime);
         }
     }
 }

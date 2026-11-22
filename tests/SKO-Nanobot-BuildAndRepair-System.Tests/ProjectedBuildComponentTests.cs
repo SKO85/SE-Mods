@@ -148,5 +148,31 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             Assert.Empty(skipUntil);
             Assert.Equal(1, system.State.ProjectedBlocksSkipped);
         }
+
+        // BUG-261122.5: three silent fails skip the cell; after the skip expires a still-failing block gets one
+        // retry, not three (one proj.Build per block per skip period for DLC / limit blocks).
+        [Fact]
+        public void SilentFails_SkipAfterThree_ThenRetryOnceAfterExpiry()
+        {
+            var system = NewSystem(new Inv(0, TransportItemId));
+            var record = typeof(NanobotSystem).GetMethod("RecordProjBuildSilentFail", Any);
+            var isSkipped = typeof(NanobotSystem).GetMethod("IsProjBuildSkipped", Any);
+            var refresh = typeof(NanobotSystem).GetMethod("RefreshProjBuildSkips", Any);
+            Func<bool> skipped = () => (bool)isSkipped.Invoke(system, new object[] { "1:dlc" });
+            Action fail = () => record.Invoke(system, new object[] { "1:dlc" });
+
+            fail(); fail();
+            Assert.False(skipped());
+            fail();
+            Assert.True(skipped());
+
+            Now = Now + TimeSpan.FromMinutes(6);
+            refresh.Invoke(system, null);
+            Assert.False(skipped());   // retried once ...
+            fail();
+            Assert.True(skipped());    // ... and straight back into the skip
+
+            Assert.Equal(0, (int)record.Invoke(system, new object[] { null }));
+        }
     }
 }

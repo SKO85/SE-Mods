@@ -187,6 +187,17 @@ public class BuildAndRepairAutoQueuing
         _IsInit = false;
         InitializationResultMessage = string.Empty;
 
+        // Page rotation survives the periodic re-init (it restarted every ~30 s, so later pages never showed).
+        var previousEntries = new Dictionary<string, DisplayEntry>();
+        if (_GroupData != null)
+        {
+            foreach (var g in _GroupData)
+            {
+                if (g == null || g.DisplayEntries == null) continue;
+                foreach (var e in g.DisplayEntries) if (e != null && e.Key != null) previousEntries[e.Key] = e;
+            }
+        }
+
         if (BuildAndRepairSystemQueuingGroups == null)
         {
             _GroupData = new BuildAndRepairSystemQueuingGroupData[0];
@@ -233,7 +244,7 @@ public class BuildAndRepairAutoQueuing
                     var empty = new StatusAndLogDisplay(_Program, groupLabel, null, null);
                     empty.Clear();
                     empty.UpdateDisplay();
-                    _GroupData[idx].DisplayEntries.Add(new DisplayEntry { EffectiveSettings = displayDef, Display = empty });
+                    AddDisplayEntry(_GroupData[idx], new DisplayEntry { EffectiveSettings = displayDef, Display = empty, Key = idx + ":e:" + d }, previousEntries);
                     continue;
                 }
 
@@ -248,7 +259,7 @@ public class BuildAndRepairAutoQueuing
                     ApplyDisplayDefinitionToStatusDisplay(statusDisplay, effective);
                     statusDisplay.Clear();
                     statusDisplay.UpdateDisplay();
-                    _GroupData[idx].DisplayEntries.Add(new DisplayEntry { EffectiveSettings = effective, Display = statusDisplay });
+                    AddDisplayEntry(_GroupData[idx], new DisplayEntry { EffectiveSettings = effective, Display = statusDisplay, Key = idx + ":n:" + name }, previousEntries);
                 }
             }
 
@@ -263,7 +274,7 @@ public class BuildAndRepairAutoQueuing
                     ApplyDisplayDefinitionToStatusDisplay(statusDisplay, effective);
                     statusDisplay.Clear();
                     statusDisplay.UpdateDisplay();
-                    _GroupData[idx].DisplayEntries.Add(new DisplayEntry { EffectiveSettings = effective, Display = statusDisplay });
+                    AddDisplayEntry(_GroupData[idx], new DisplayEntry { EffectiveSettings = effective, Display = statusDisplay, Key = idx + ":t:" + tp.Block.EntityId + "@" + tp.SurfaceIndex }, previousEntries);
                 }
             }
 
@@ -271,6 +282,19 @@ public class BuildAndRepairAutoQueuing
         }
 
         _IsInit = true;
+    }
+
+    private static void AddDisplayEntry(BuildAndRepairSystemQueuingGroupData group, DisplayEntry entry, Dictionary<string, DisplayEntry> previous)
+    {
+        DisplayEntry old;
+        if (previous != null && entry.Key != null && previous.TryGetValue(entry.Key, out old) && old.Started)
+        {
+            var kinds = entry.EffectiveSettings != null && entry.EffectiveSettings.DisplayKinds != null ? entry.EffectiveSettings.DisplayKinds.Length : 0;
+            entry.Started = true;
+            entry.DisplayKindIdx = old.DisplayKindIdx < kinds ? old.DisplayKindIdx : 0;
+            entry.NextSwitchTime = old.NextSwitchTime;
+        }
+        group.DisplayEntries.Add(entry);
     }
 
     private T InitHandler<T>(BuildAndRepairSystemQueuingGroup queuingGroup) where T : EntityHandler, new()
@@ -765,6 +789,8 @@ public class DisplayEntry
     public StatusAndLogDisplay Display;
     public int DisplayKindIdx;
     public double NextSwitchTime;
+    public bool Started;
+    public string Key;
 }
 
 public class BuildAndRepairSystemQueuingGroupData
@@ -826,7 +852,14 @@ public class BuildAndRepairSystemQueuingGroupData
             display.Clear();
             if (settings.DisplayKinds == null || settings.DisplayKinds.Length == 0 || RepairSystems == null) continue;
 
-            if (elapsedTime > entry.NextSwitchTime)
+            // First refresh shows the first page; rotate only after SwitchTime.
+            if (!entry.Started)
+            {
+                entry.Started = true;
+                entry.DisplayKindIdx = 0;
+                entry.NextSwitchTime = elapsedTime + settings.DisplaySwitchTime;
+            }
+            else if (elapsedTime > entry.NextSwitchTime)
             {
                 entry.DisplayKindIdx = (entry.DisplayKindIdx + 1) % settings.DisplayKinds.Length;
                 entry.NextSwitchTime = elapsedTime + settings.DisplaySwitchTime;

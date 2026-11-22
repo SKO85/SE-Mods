@@ -7,6 +7,7 @@ using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using VRage.Game;
 using VRage.Game.ModAPI;
@@ -31,6 +32,7 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByAssign = 0;
             var skippedByScript = 0;
             var skippedByDestroyed = 0;
+            var skippedByRefused = 0;
             var iterationsExamined = 0;
             var loopSkipped = false;
             var tsLockAcquire = 0L;
@@ -74,6 +76,9 @@ namespace SKONanobotBuildAndRepairSystem
                     if (targetData.Block == null) { skippedByNullBlock++; continue; }
                     if (targetData.Block.CubeGrid == null) { skippedByNullBlock++; continue; }
                     if (targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed) { skippedByClosedFatBlock++; continue; }
+
+                    // BUG-261122.15: grinding this grid was refused (protection plugin / mod) — skip it for a while.
+                    if (_grindRefusedGrids.Count > 0 && IsGrindRefused(targetData.Block.CubeGrid.EntityId)) { skippedByRefused++; continue; }
 
                     if (Settings.CurrentPickedGrindingBlock == null)
                     {
@@ -265,13 +270,42 @@ namespace SKONanobotBuildAndRepairSystem
                     var _skippedByScript = skippedByScript;
                     var _skippedByDestroyed = skippedByDestroyed;
                     var _loopSkipped = loopSkipped;
+                    var _skippedByRefused = skippedByRefused;
                     MethodProfiler.StopAndLog("ServerTryGrinding", profilerTs, () =>
-                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15}",
+                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15};skipRefused={16}",
                             _Welder.EntityId, _grinding, _needGrinding, _transporting, _targetCount,
                             State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none",
-                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped));
+                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped, _skippedByRefused));
                 }
             }
+        }
+
+        // BUG-261122.15: grids whose grind a damage handler refused (protection plugin / mod), per BaR, main thread.
+        private readonly Dictionary<long, TimeSpan> _grindRefusedGrids = new Dictionary<long, TimeSpan>();
+        private static readonly TimeSpan GrindRefusedSkip = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// BUG-261122.15: vanilla grinders raise BeforeDamage so plugins / mods can veto or reduce grinding; the
+        /// original mod could not ("not available in modding"). False when the damage was zeroed: that grid is
+        /// then skipped by this BaR for GrindRefusedSkip (one event per grid per period, not one per tick).
+        /// </summary>
+        private bool RaiseGrindDamage(IMySlimBlock target, ref MyDamageInformation info)
+        {
+            var damageSystem = MyAPIGateway.Session.DamageSystem;
+            if (damageSystem == null) return true;
+            damageSystem.RaiseBeforeDamageApplied(target, ref info);
+            if (info.Amount > 0f) return true;
+            if (target.CubeGrid != null) _grindRefusedGrids[target.CubeGrid.EntityId] = Mod.NowPlayTime + GrindRefusedSkip;
+            return false;
+        }
+
+        private bool IsGrindRefused(long gridId)
+        {
+            TimeSpan until;
+            if (!_grindRefusedGrids.TryGetValue(gridId, out until)) return false;
+            if (Mod.NowPlayTime < until) return true;
+            _grindRefusedGrids.Remove(gridId);
+            return false;
         }
 
         /// <summary>
@@ -398,6 +432,26 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!emptying || isEmpty)
             {
+                MyDamageInformation damageInfo = new MyDamageInformation(false, damage, MyDamageType.Grind, _Welder.EntityId);
+
+                // BUG-261122.15: raise BeforeDamage like vanilla grinders, so protection plugins / mods can veto it.
+                if (target.UseDamageSystem && !RaiseGrindDamage(target, ref damageInfo))
+                {
+                    EmitServerDoGrindProfile(profilerTs,
+                        target.BlockDefinition.Id.SubtypeName,
+                        (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                        false, false,
+                        target.Integrity / target.MaxIntegrity,
+                        tsEmpty * 1000.0 / tsFreq, 0.0, 0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0,
+                        damage, targetData.Distance, 0.0,
+                        "grindRefused");
+                    Mod.RefundGrindSlot();
+                    return false;
+                }
+
                 // BUG-106: gate full dismount on the global budget before DecreaseMountLevel.
                 if (integrityRatio <= 0f && !Mod.TryClaimDismountSlot())
                 {
@@ -417,8 +471,6 @@ namespace SKONanobotBuildAndRepairSystem
                     Mod.RefundGrindSlot();
                     return false;
                 }
-
-                MyDamageInformation damageInfo = new MyDamageInformation(false, damage, MyDamageType.Grind, _Welder.EntityId);
 
                 if (target.UseDamageSystem)
                 {

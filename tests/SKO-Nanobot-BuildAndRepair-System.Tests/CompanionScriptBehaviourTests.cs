@@ -326,6 +326,44 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             Assert.Contains("short", seen);
         }
 
+        // BUG-261122.13: the first configured page is shown first.
+        [Fact]
+        public void FirstRun_ShowsTheFirstPage()
+        {
+            CompanionScriptHost.SetGroups(DefaultGroup(new DisplaySpec { Names = new[] { StatusPanel }, Kinds = new[] { "MissingItems", "ShortStatus" }, SwitchTime = 4 }));
+            FakeBar bar; Sandbox.ModAPI.Ingame.IMyAssembler a1, a2;
+            var run = World(out bar, out a1, out a2);
+            var lcd = FakeBlocks.Lcd(StatusPanel);
+            run.Gts.Add(lcd.Block);
+
+            run.Start().Run();
+
+            Assert.Contains("Missing Items: Count", lcd.Text);
+        }
+
+        // BUG-261122.13: the script re-inits every ~30 s; rotation must carry on so every page shows.
+        [Fact]
+        public void LongSwitchTime_EveryPageShows_AcrossReinit()
+        {
+            var kinds = new[] { "ShortStatus", "WeldTargets", "GrindTargets", "CollectTargets", "MissingItems" };
+            CompanionScriptHost.SetGroups(DefaultGroup(new DisplaySpec { Names = new[] { StatusPanel }, Kinds = kinds, SwitchTime = 10 }));
+            FakeBar bar; Sandbox.ModAPI.Ingame.IMyAssembler a1, a2;
+            var run = World(out bar, out a1, out a2);
+            var lcd = FakeBlocks.Lcd(StatusPanel);
+            run.Gts.Add(lcd.Block);
+
+            run.Start();
+            var seen = new System.Collections.Generic.HashSet<string>();
+            for (int i = 0; i < 60; i++) // 100 s, three re-inits
+            {
+                run.Run();
+                foreach (var marker in new[] { "Online", "Weld Targets:", "Grind Targets:", "Collect Targets:", "Missing Items:" })
+                    if (lcd.Text.Contains(marker)) seen.Add(marker);
+            }
+
+            Assert.Equal(5, seen.Count);
+        }
+
         // ---------------------------------------------------------------- [BaR:..] tags and Custom Data
 
         [Fact]

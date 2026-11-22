@@ -24,8 +24,43 @@ namespace SKONanobotBuildAndRepairSystem.Tests
 
         public override void Dispose()
         {
+            GridChangeHandler.Unregister();
             GridChangeHandler.Clear();
             base.Dispose();
+        }
+
+        private static void Track(IMyCubeGrid grid)
+        {
+            typeof(GridChangeHandler).GetMethod("Track", Any).Invoke(null, new object[] { grid });
+        }
+
+        // BUG-261122.11: a hand-placed frame (block added) ends the empty-grid skip like damage does.
+        [Fact]
+        public void BlockAdded_OnATrackedGrid_StampsIt()
+        {
+            var grid = Substitute.For<IMyCubeGrid>();
+            grid.EntityId.Returns(7L);
+            Track(grid);
+            Track(grid); // once only
+            Assert.Equal(1, GridChangeHandler.TrackedGrids);
+
+            var block = Substitute.For<IMySlimBlock>();
+            block.CubeGrid.Returns(grid);
+            grid.OnBlockAdded += Raise.Event<Action<IMySlimBlock>>(block);
+
+            Assert.True(GridChangeHandler.ChangedSince(7, Now - S(5)));
+        }
+
+        [Fact]
+        public void ClosedGrid_IsNoLongerTracked()
+        {
+            var grid = Substitute.For<IMyCubeGrid>();
+            grid.EntityId.Returns(8L);
+            Track(grid);
+
+            grid.OnClose += Raise.Event<Action<VRage.ModAPI.IMyEntity>>(grid);
+
+            Assert.Equal(0, GridChangeHandler.TrackedGrids);
         }
 
         private static IMySlimBlock BlockOn(long gridId)

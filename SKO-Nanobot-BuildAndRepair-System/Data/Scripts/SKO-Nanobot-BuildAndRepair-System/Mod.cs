@@ -86,6 +86,7 @@
         public static bool TryClaimMechanicalGrindSlot() { return _mechanicalGrindBudget.TryClaim(); }
         public static bool TryClaimDismountSlot() { return _dismountBudget.TryClaim(); }
         public static bool TryClaimProjBuildSlot() { return _projBuildBudget.TryClaim(); }
+        public static void RefundProjBuildSlot() { _projBuildBudget.Refund(); }
         public static bool TryClaimAggregateSlice() { return _aggregateSliceBudget.TryClaim(); }
 
         // --- OPT 2: BaR update staggering ---
@@ -331,6 +332,9 @@
             // Register Damage Handler.
             DamageHandler.Register();
 
+            // BUG-261122.11: blocks added to a grid end its empty-grid skip.
+            GridChangeHandler.Register();
+
             // Register Network Messaging Handler.
             NetworkMessagingHandler.Register();
 
@@ -527,6 +531,7 @@
 
             // Unregister Datamage Handler.
             try { DamageHandler.Unregister(); } catch { }
+            try { GridChangeHandler.Unregister(); } catch { }
 
             // Clear block assigned handler.
             try { BlockSystemAssigningHandler.Clear(); } catch { }

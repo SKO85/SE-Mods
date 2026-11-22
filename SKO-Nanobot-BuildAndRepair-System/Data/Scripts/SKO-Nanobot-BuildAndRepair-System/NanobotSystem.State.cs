@@ -1,4 +1,5 @@
 using Sandbox.Game.Entities;
+using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Profiling;
@@ -69,10 +70,15 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (Mod.Settings.ShieldCheckEnabled && slimBlock != null && Mod.Shield != null && Mod.Shield.IsReady)
                 {
-                    if (slimBlock.CubeGrid.EntityId == Welder.CubeGrid.EntityId)
+                    var grid = slimBlock.CubeGrid;
+                    if (grid.EntityId == Welder.CubeGrid.EntityId)
                         return false;
 
-                    return Mod.Shield.IsBlockProtected(slimBlock);
+                    // BUG-261122.12: DS IsBlockProtected only tests the block against the grid's shield ellipsoid,
+                    // also when that shield is off / lowered / drained — require it to be up. The grid state is
+                    // memoised (scans walk blocks grid by grid), so grids without a raised shield cost one DS call
+                    // per grid instead of one per block.
+                    return IsGridShieldOnline(grid) && Mod.Shield.IsBlockProtected(slimBlock);
                 }
             }
             catch (Exception ex)
@@ -81,6 +87,27 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             return false;
+        }
+
+        // BUG-261122.12: last grid's shield state, swapped as one object (scan thread + main-thread grind check).
+        private sealed class ShieldGridMemo
+        {
+            public long GridId;
+            public bool Online;
+            public TimeSpan Until;
+        }
+
+        private ShieldGridMemo _shieldGridMemo;
+        private static readonly TimeSpan ShieldGridMemoTtl = TimeSpan.FromSeconds(1);
+
+        private bool IsGridShieldOnline(IMyCubeGrid grid)
+        {
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            var memo = _shieldGridMemo;
+            if (memo != null && memo.GridId == grid.EntityId && now < memo.Until) return memo.Online;
+            var online = Mod.Shield.GridShieldOnline(grid);
+            _shieldGridMemo = new ShieldGridMemo { GridId = grid.EntityId, Online = online, Until = now + ShieldGridMemoTtl };
+            return online;
         }
 
         public bool IsWelderShielded()
