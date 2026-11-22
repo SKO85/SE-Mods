@@ -1,0 +1,28 @@
+---
+layout: default
+title: 'Release Notes – v2.5.7'
+parent: Release Notes
+grand_parent: Build and Repair System
+nav_order: 0
+---
+
+# Release Notes – v2.5.7
+
+- Status: **In development**
+- Notes: Follow-up to v2.5.6.
+
+---
+
+## Display
+
+- **Show Area is lighter on your graphics card.** When you're inside a BaR's working area (for example flying a ship full of BaRs), only thin edges are drawn instead of a tinted box filling your whole screen. From outside it looks the same as before. Boxes more than 1 km away aren't drawn at all.
+
+## Docs
+
+- New FAQ entry: why BaRs stop building a projection when you log off or fly away (the game hides projections when no player is near).
+
+---
+
+## Compatibility
+
+- No save changes — safe to drop straight in over v2.5.6.

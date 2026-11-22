@@ -26,7 +26,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-BUDGET-004 | BUDGET | 3 | Auto stagger groups 1/2/3 by enabled BaR count | unit:ModResolverTests.AutoStaggerGroups_Thresholds; unit:StaggerGroupsTests | 261006.3 unit |
 | SCN-BUDGET-005 | BUDGET | 3 | Failure cooldown: many BaRs do not bounce off one unweldable block | manual | never |
 | SCN-BUDGET-006 | BUDGET | 4 | Large-grid performance envelope (3000+ blocks, 5 BaRs) | ingame:S08, S43 | never |
-| SCN-BUDGET-007 | BUDGET | 3 | Station vs ship standing still vs ship in motion, ShowArea off/on: cost and work | ingame:S28; ingame:S29; ingame:S30; ingame:S31; ingame:S32; ingame:S33 | 261122.8 in game |
+| SCN-BUDGET-007 | BUDGET | 3 | Station vs ship standing still vs ship in motion, ShowArea off/on: cost and work | ingame:S28; ingame:S29; ingame:S30; ingame:S31; ingame:S32; ingame:S33; unit:AreaDrawModeTests | 261122.8 in game |
 | SCN-BUDGET-008 | BUDGET | 3 | Many BaRs on target ships of mixed sizes: weld, grind, mixed; large vs small clusters | ingame:S64; ingame:S65; ingame:S66; ingame:S67; ingame:S68; ingame:S69; ingame:S70 | never |
 | SCN-BUDGET-009 | BUDGET | 2 | Speed settings (WorkSpeed, multipliers) and throughput floors | ingame:S79; ingame:S80 | 261122.28 in game |
 | SCN-WELD-001 | WELD | 1 | WeldOnly repairs damaged blocks and never grinds | ingame:S01, S26 | never |

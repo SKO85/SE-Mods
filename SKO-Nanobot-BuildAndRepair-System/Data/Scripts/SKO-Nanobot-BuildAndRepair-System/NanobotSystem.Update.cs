@@ -34,6 +34,28 @@ namespace SKONanobotBuildAndRepairSystem
         // block alone is too small to spot from working-area distances.
         private const double CoordinatorMarkerHeightExtra = 2.5;
 
+        internal enum AreaDrawMode { None, Edges, Solid }
+
+        /// <summary>ShowArea edge width (m) seen from inside the area.</summary>
+        private const float AreaEdgeLineWidth = 0.01f;
+
+        /// <summary>Beyond this distance from the area's surface the ShowArea box is not drawn.</summary>
+        internal const double AreaDrawCullDistance = 1000.0;
+
+        /// <summary>
+        /// BUG-261122.8: how to draw the ShowArea box for a camera position. Inside -> edges only, outside -> solid,
+        /// farther than AreaDrawCullDistance from the box -> nothing. areaMatrix is orthonormal (block world matrix).
+        /// </summary>
+        internal static AreaDrawMode GetAreaDrawMode(Vector3D cameraPosition, ref MatrixD areaMatrix, ref BoundingBoxD localBox)
+        {
+            var d = cameraPosition - areaMatrix.Translation;
+            var local = new Vector3D(Vector3D.Dot(d, areaMatrix.Right), Vector3D.Dot(d, areaMatrix.Up), Vector3D.Dot(d, areaMatrix.Backward));
+            var clamped = Vector3D.Clamp(local, localBox.Min, localBox.Max);
+            var distanceSq = Vector3D.DistanceSquared(local, clamped);
+            if (distanceSq <= 0.0) return AreaDrawMode.Edges;
+            return distanceSq > AreaDrawCullDistance * AreaDrawCullDistance ? AreaDrawMode.None : AreaDrawMode.Solid;
+        }
+
         public override void UpdateBeforeSimulation()
         {
             try
@@ -51,16 +73,28 @@ namespace SKONanobotBuildAndRepairSystem
                         // BUG-260526.3: lighter and more transparent — old Color.Black was
                         // too dark and the default opaque alpha obscured what's inside the box.
                         // Color * float scales all channels (R,G,B,A); 0.3f → alpha ~76/255.
-                        var color = Color.Gray * 0.3f;
                         var areaBoundingBox = Settings.CorrectedAreaBoundingBox;
                         var emitterMatrix = _Welder.WorldMatrix;
                         emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
-                        MySimpleObjectDraw.DrawTransparentBox(ref emitterMatrix, ref areaBoundingBox, ref color, MySimpleObjectRasterizer.Solid, 1, 0.04f, RangeGridResourceId, null, false);
+                        // BUG-261122.8: solid fill only seen from outside; inside the area (e.g. piloting the ship)
+                        // the faces cover the whole screen once per box, so only the edges are drawn there.
+                        var camera = MyAPIGateway.Session.Camera;
+                        var mode = camera != null ? GetAreaDrawMode(camera.WorldMatrix.Translation, ref emitterMatrix, ref areaBoundingBox) : AreaDrawMode.Solid;
+                        if (mode == AreaDrawMode.Solid)
+                        {
+                            var color = Color.Gray * 0.3f;
+                            MySimpleObjectDraw.DrawTransparentBox(ref emitterMatrix, ref areaBoundingBox, ref color, MySimpleObjectRasterizer.Solid, 1, 0.04f, RangeGridResourceId, null, false);
+                        }
+                        else if (mode == AreaDrawMode.Edges)
+                        {
+                            var color = Color.Gray * 0.6f;
+                            MySimpleObjectDraw.DrawTransparentBox(ref emitterMatrix, ref areaBoundingBox, ref color, MySimpleObjectRasterizer.Wireframe, 1, AreaEdgeLineWidth, RangeGridResourceId, null, false);
+                        }
                         if (profilerTs != 0L)
                         {
                             var size = areaBoundingBox.Size;
                             MethodProfiler.StopAndLog("ShowAreaDraw", profilerTs, () =>
-                                string.Format("entityId={0};areaSize={1:F0}x{2:F0}x{3:F0}", _Welder.EntityId, size.X, size.Y, size.Z));
+                                string.Format("entityId={0};areaSize={1:F0}x{2:F0}x{3:F0};mode={4}", _Welder.EntityId, size.X, size.Y, size.Z, mode));
                         }
                     }
 
