@@ -87,6 +87,7 @@ The release variant answers `/nanobars test` with "Test harness not installed".
 | `CompanionScriptTests` | SCN-API-001 (companion PB script compiles as C# 6 with the game's Roslyn) |
 | `PriorityLockTests` | SCN-PRIO-001 (BUG-261023.6 admin priority locks vs PB setters and client messages) |
 | `SkeletonResetHandlerTests` | SCN-WELD-006 (BUG-261023.3 drain re-checks HasDeformation) |
+| `ProjectedBuildComponentTests` | SCN-WELD-002 (BUG-261122.1 lend/return of the creation component for SE 1.211.018; BUG-261122.2 expiring skip + synced count) |
 | `TransportInventoryMoveTests` | SCN-COLLECT-001 (BUG-261023.5 verified moves into the transport) |
 | `MissingComponentsAggregateTests` | SCN-WELD-005, SCN-BUDGET-006 (BUG-261023.1 time slicing; drives the real `NanobotSystem` method with faked blocks and inventories) |
 | `ScenarioRegistryTests`, `CatalogueConsistencyTests` | harness + catalogue integrity |

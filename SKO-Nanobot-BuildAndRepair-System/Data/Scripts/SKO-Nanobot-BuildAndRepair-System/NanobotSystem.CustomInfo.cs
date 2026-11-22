@@ -164,6 +164,12 @@ namespace SKONanobotBuildAndRepairSystem
                     maxPerGrid,
                     Environment.NewLine));
 
+                // BUG-261122.1 diagnostics: projected builds that worked / left no block / are skipped.
+                customInfo.Append(string.Format("ProjBuild: built={0} noBlock={1} skipped={2}{3}{4}",
+                    _projBuildCreated, _projBuildSilentFails, _BrokenProjBuildKeys.Count + _ProjBuildSkipUntil.Count,
+                    _projBuildLastFail != null ? " | last=" + _projBuildLastFail : "",
+                    Environment.NewLine));
+
                 var cluster = AssignedCluster;
                 if (cluster != null)
                 {
@@ -260,6 +266,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (State.InventoryFull) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_InventoryFull}[/color]{Environment.NewLine + Environment.NewLine}");
                 if (State.LimitsExceeded) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_LimitReached}[/color]{Environment.NewLine + Environment.NewLine}");
+                // BUG-261122.2: projected blocks on the (expiring) skip list after failed builds.
+                if (State.ProjectedBlocksSkipped > 0) customInfo.Append($"[color=#FFFFFF00]{string.Format(Texts.Info_ProjectedSkipped.String, State.ProjectedBlocksSkipped)}[/color]{Environment.NewLine + Environment.NewLine}");
 
                 var cnt = 0;
                 lock (State.MissingComponents)

@@ -285,13 +285,27 @@ namespace SKONanobotBuildAndRepairSystem
         // BUG-115: persistent skip set for projected blocks that threw NRE in proj.Build.
         private readonly HashSet<string> _BrokenProjBuildKeys = new HashSet<string>();
 
-        // BUG-120: silent proj.Build failure counter; promoted to _BrokenProjBuildKeys
+        // BUG-120: silent proj.Build failure counter; promoted to _ProjBuildSkipUntil
         // after PROJ_BUILD_MAX_SILENT_FAILS consecutive failures.
         private readonly Dictionary<string, int> _ProjBuildSilentFailCount = new Dictionary<string, int>();
         private const int PROJ_BUILD_MAX_SILENT_FAILS = 3;
 
+        // BUG-261122.2: silent-fail skips expire (key -> retry time) instead of lasting until a power cycle.
+        private readonly Dictionary<string, TimeSpan> _ProjBuildSkipUntil = new Dictionary<string, TimeSpan>();
+        private readonly List<string> _projBuildSkipExpired = new List<string>();
+        private static readonly TimeSpan ProjBuildSkipDuration = TimeSpan.FromMinutes(5);
+
         // BUG-120: owner the broken-block caches are scoped to; cleared on owner change.
         private long _BrokenCacheOwnerId = long.MinValue;
+
+        // BUG-261122.1 diagnostics: projected-build outcomes (debug panel) and the throttled
+        // log for builds that left no block.
+        private int _projBuildCreated;
+        private int _projBuildSilentFails;
+        private string _projBuildLastFail;
+        private TimeSpan _projSilentFailLogLast = TimeSpan.MinValue;
+        private int _projSilentFailLogSuppressed;
+        private static readonly TimeSpan ProjSilentFailLogInterval = TimeSpan.FromSeconds(60);
 
         /// <summary>
         /// Tracks grids that were scanned and had no weld/grind targets.

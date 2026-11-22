@@ -107,6 +107,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"Info_CurrentGrindEntity",          "현재 분해 대상:"},
             {"Info_InventoryFull",              "블록 인벤토리가 가득 찼습니다!"},
             {"Info_LimitReached",               "PCU 한도에 도달했습니다!"},
+            {"Info_ProjectedSkipped",           "건너뛴 투영 블록: {0}개 (자동으로 다시 시도)"},
             {"Info_DisabledByRemote",           "원격 제어로 비활성화되었습니다!"},
             {"Info_BlocksToBuild",              "건설할 블록:"},
             {"Info_BlocksToGrind",              "분해할 블록:"},

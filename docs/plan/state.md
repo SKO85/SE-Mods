@@ -26,6 +26,7 @@ The scenario catalogue (`SCN-<AREA>-NNN`, permanent, coverage tracked per file) 
 | REVIEW-260824.1 | Full code review + GitHub #141/#142 validation (12 findings triaged into BUG-260824.1..12, 2 refuted) | 2026-08-24 | v2.5.6 | Done |
 | REVIEW-260511.1 | Major issue audit — safe-zone fail-open, swallowed exceptions, friendly-relations scaling, admin checks (5 findings, all triaged) | 2026-05-11 | v2.5.4 | Done |
 | REVIEW-261023.1 | Pre-release review of v2.5.6 (mod + companion script) + external PRs #147/#148 (14 findings → BUG-261023.1..14: 2 High, 5 Medium, 7 Low; 3 dismissed with reasons) | 2026-10-23 | v2.5.6 | Done |
+| REVIEW-261122.1 | SE 1.211.018 projection-welding regression — GitHub #149/#150 + PR #151 (8 findings → BUG-261122.1..4: 1 Critical, 1 High, 1 Medium, 1 Low; part 2 of the PR deferred/dismissed with reasons) | 2026-11-22 | v2.5.6 | Done |
 
 ## Bugs
 
@@ -414,3 +415,7 @@ These were identified and fixed on the `fix/v2.5.1` branch — see MEMORY for de
 | BUG-261023.12 | Low | v2.5.6 | `SKO-Nanobot-BuildAndRepair-System-Script/Script.cs:9-10, 293-315`, `SKO-Nanobot-BuildAndRepair-System-Script/metadata.mod` | Done | REVIEW-261023.1: Companion script: auto-detect accepts vanilla welders; dead doc link; version strings out of date |
 | BUG-261023.13 | Low | v2.5.6 | `Handlers/RazeQueueHandler.cs:208-215` | Done | REVIEW-261023.1: RazeQueueHandler.Process swallows exceptions without logging |
 | BUG-261023.14 | Low | v2.5.6 | `Utils/UtilsProductionBlock.cs:57-121` (`EnsureQueued`), `NanobotSystem.Welding.cs:1470-1487` (aggregate source subtraction) | Done | REVIEW-261023.1: Companion auto-queuing under-queues: assembler output stock is subtracted twice |
+| BUG-261122.1 | Critical | v2.5.6 | `NanobotSystem.Welding.cs:597-620` (lend/return), `:682-812` (`ServerDoWeld` projected path) | Done | REVIEW-261122.1 / GitHub #149, #150, PR #151: SE 1.211.018 `BuildInternal` requires Components[0] in the BaR block inventory; BaR stages it in the transport → projected builds silently rejected |
+| BUG-261122.2 | High | v2.5.6 | `NanobotSystem.Welding.cs:530-552,842`, `Models/SyncBlockState.cs:407`, `NanobotSystem.CustomInfo.cs:270` | Done | REVIEW-261122.1 / GitHub #150: 3 silent projected-build failures skip the block until the BaR is power-cycled |
+| BUG-261122.3 | Medium | v2.5.6 | `NanobotSystem.Scanning.cs:100-125`, `NanobotSystem.Scanning.Block.cs:533-565` | TODO | REVIEW-261122.1 / PR #151 part 2: projector cold-start rescan is swallowed by the empty-grid cache |
+| BUG-261122.4 | Low | v2.5.6 | `NanobotSystem.Scanning.Block.cs:550,631,715` | TODO | REVIEW-261122.1 / PR #151 log: filtered `GetBlocks` on the scan thread bypasses the BUG-149 guard; whole cluster scan lost |

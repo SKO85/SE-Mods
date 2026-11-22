@@ -102,6 +102,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"Info_CurrentGrindEntity",          "Выбран блок резака:"},
             {"Info_InventoryFull",              "Блок инвентаря полон!"},
             {"Info_LimitReached",               "Достигнут предел PCU!"},
+            {"Info_ProjectedSkipped",           "Пропущено проецируемых блоков: {0} (повтор автоматически)"},
             {"Info_DisabledByRemote",           "Отключено дистанционным управлением!"},
             {"Info_BlocksToBuild",              "Блоки для сборки:"},
             {"Info_BlocksToGrind",              "Блоки для демонтажа:"},

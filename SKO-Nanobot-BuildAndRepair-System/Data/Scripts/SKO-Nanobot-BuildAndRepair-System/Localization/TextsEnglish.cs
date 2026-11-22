@@ -102,6 +102,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"Info_CurrentGrindEntity",          "Picked Grinding Block:"},
             {"Info_InventoryFull",              "Block inventory is full!"},
             {"Info_LimitReached",               "PCU limit reached!"},
+            {"Info_ProjectedSkipped",           "Projected blocks skipped: {0} (retried automatically)"},
             {"Info_DisabledByRemote",           "Disabled by remote control!"},
             {"Info_BlocksToBuild",              "Blocks to build:"},
             {"Info_BlocksToGrind",              "Blocks to dismantle:"},

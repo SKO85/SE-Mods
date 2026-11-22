@@ -185,6 +185,8 @@ namespace SKONanobotBuildAndRepairSystem
                     // BUG-120: power-cycle resets the broken-block caches (player's retry path).
                     _BrokenProjBuildKeys.Clear();
                     _ProjBuildSilentFailCount.Clear();
+                    _ProjBuildSkipUntil.Clear();
+                    if (State != null) State.ProjectedBlocksSkipped = 0;
                     _BrokenCacheOwnerId = _Welder != null ? _Welder.OwnerId : long.MinValue;
                     UpdateCustomInfo(true);
                 };

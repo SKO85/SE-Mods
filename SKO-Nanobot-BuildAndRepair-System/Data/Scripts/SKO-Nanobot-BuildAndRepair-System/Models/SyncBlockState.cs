@@ -26,6 +26,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private bool _Transporting;
         private bool _InventoryFull;
         private bool _LimitsExceeded;
+        private int _ProjectedBlocksSkipped;
         private bool _SafeZoneAllowsWelding;
         private bool _SafeZoneAllowsBuildingProjections;
         private bool _SafeZoneAllowsGrinding;
@@ -401,6 +402,21 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
         }
 
+        // BUG-261122.2: projected blocks currently skipped after failed builds (terminal info).
+        [ProtoMember(24)]
+        public int ProjectedBlocksSkipped
+        {
+            get { return _ProjectedBlocksSkipped; }
+            set
+            {
+                if (value != _ProjectedBlocksSkipped)
+                {
+                    _ProjectedBlocksSkipped = value;
+                    Changed = true;
+                }
+            }
+        }
+
         public TargetBlockDataHashList PossibleWeldTargets { get; private set; }
 
         [ProtoMember(30)]
@@ -643,6 +659,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _Transporting = newState.Transporting;
             _InventoryFull = newState.InventoryFull;
             _LimitsExceeded = newState.LimitsExceeded;
+            _ProjectedBlocksSkipped = newState.ProjectedBlocksSkipped;
             _CurrentTransportStartTime = MyAPIGateway.Session.ElapsedPlayTime - (newState.LastTransmitted - newState.CurrentTransportStartTime);
             _CurrentTransportTime = newState.CurrentTransportTime;
 

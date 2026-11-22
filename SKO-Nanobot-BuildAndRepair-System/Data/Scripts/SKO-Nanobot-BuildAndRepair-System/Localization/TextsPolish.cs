@@ -102,6 +102,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"Info_CurrentGrindEntity",          "Wybrany blok do rozbiórki:"},
             {"Info_InventoryFull",              "Ekwipunek magazynu jest pełny!"},
             {"Info_LimitReached",               "Osiągnięto limit PCU!"},
+            {"Info_ProjectedSkipped",           "Pominięte bloki projekcji: {0} (ponowna próba automatycznie)"},
             {"Info_DisabledByRemote",           "Wyłączone przez zdalne sterowanie!"},
             {"Info_BlocksToBuild",              "Bloki do zbudowania:"},
             {"Info_BlocksToGrind",              "Bloki do rozbiórki:"},

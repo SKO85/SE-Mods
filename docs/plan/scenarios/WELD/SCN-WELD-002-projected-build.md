@@ -7,12 +7,16 @@
   `SafeZoneAllowsBuildingProjections` true.
 - Variant B: a blueprint containing a DLC block the server owner lacks.
 - Variant C: a projected block whose placement is physically blocked (overlaps an existing block).
+- Variant E (game >= 1.211.018, survival): `PushComponentImmediately` on, BaR block inventory empty, stock only
+  in the cargo. Optional: blueprint already loaded while the BaR sits idle (cold start).
 ## Steps
 1. Enable the BaR; watch `Blocks to build` list projected blocks (name suffix marks projected).
 2. Let it run 120 s.
 3. Variant B: repeat with the DLC blueprint. Variant C: repeat with the overlapping blueprint.
 4. Variant D (survival, component accounting): note the cargo totals, let the BaR build and fully
    weld a 1-block heavy-armor projection, then hand-grind the block and collect the components.
+5. Variant E: run 120 s with DebugMode on (SP) and the default log level; then switch off the stock for one
+   component type, wait for the skip, restore it and wait past the skip expiry (BUG-261122.2).
 ## Expected outcome
 - All 20 projected blocks are materialised (`proj.Build`) then welded to full; the projector's
   remaining block count reaches 0; the rig grid gains 20 blocks.
@@ -25,11 +29,21 @@
 - D: components returned by grinding = components taken from cargo — no free creation component
   (BUG-261023.2 / PR #148). The `ServerDoWeld` profile line of the build shows
   `creationCharged=True` (False in creative, or when the engine took it from the welder inventory).
+- E: every projected block is built although the block inventory starts empty (BUG-261122.1: one creation
+  component is placed in the block inventory for `proj.Build`, the game takes it). Debug panel
+  `ProjBuild: noBlock=0`; no `projected build left no block; reason=builderInventoryEmpty` in the log;
+  `ServerDoWeld` profile `welderCompAtBuild>=1` on builds. Accounting as in D (no free and no double charge).
+  Skipped blocks are retried after the expiry, not only after a power cycle (BUG-261122.2). A new blueprint on
+  an idle BaR is picked up within one scan interval (BUG-261122.3).
 ## Perf envelope
 `ServerDoWeld` `buildMs` ≤ 40 per call (engine cost); `resolveMs` ≤ 5; steadyAvgMs ≤ 3.
 ## Coverage
 planned: ingame:S03
+unit:ProjectedBuildComponentTests.Lend_MovesOnePieceFromTheTransport_WhenTheBlockInventoryHasNone
+unit:ProjectedBuildComponentTests.Lend_FullBlockInventory_FailsWithoutLosingThePiece
+unit:ProjectedBuildComponentTests.Return_MovesTheUntakenPieceBackToTheTransport
+unit:ProjectedBuildComponentTests.SilentFailSkip_Expires_NreSkipStays_CountIsPublished
 ## Last verified
-never
+v2.5.6 build 261122.2 2026-11-22 — unit (lend/return + skip expiry; in-game steps not yet run)
 ## Related
-BUG-030, BUG-107, BUG-108, BUG-120, BUG-260610.35, BUG-261023.2 (GitHub PR #148), FEAT-260910.2
+BUG-030, BUG-107, BUG-108, BUG-120, BUG-260610.35, BUG-261023.2 (GitHub PR #148), BUG-261122.1..3 (GitHub #149, #150, PR #151), FEAT-260910.2

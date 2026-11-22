@@ -9,6 +9,7 @@ using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using VRage.Game;
 using VRage.Game.ModAPI;
@@ -183,6 +184,43 @@ namespace SKONanobotBuildAndRepairSystem
                 Logging.Instance.Write(Logging.Level.Error, "HasBuildableProjectorOnGrid: {0}", ex.Message);
             }
             return false;
+        }
+
+        // BUG-261122.3 diagnostic (profiling only): does a projector reporting BuildableBlocksCount 0
+        // hide projected blocks that CanBuild? The scan skips such projectors entirely.
+        private static readonly ConcurrentDictionary<long, TimeSpan> _projectorProbeLast = new ConcurrentDictionary<long, TimeSpan>();
+        private static readonly TimeSpan ProjectorProbeInterval = TimeSpan.FromSeconds(30);
+        private const int ProjectorProbeMaxBlocks = 5000;
+
+        private void ProbeProjectorBuildableCount(Sandbox.ModAPI.IMyProjector projector)
+        {
+            var profilerTs = MethodProfiler.Start();
+            if (profilerTs == 0L) return;
+
+            var projectorId = projector.EntityId;
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            TimeSpan last;
+            if (_projectorProbeLast.TryGetValue(projectorId, out last) && now - last < ProjectorProbeInterval) return;
+            _projectorProbeLast[projectorId] = now;
+
+            var checkedCount = 0;
+            var canBuildCount = 0;
+            var projectedGrid = projector.ProjectedGrid;
+            if (projectedGrid != null)
+            {
+                var blocks = GetBlocksFromCache(projectedGrid);
+                for (int i = 0; i < blocks.Count && checkedCount < ProjectorProbeMaxBlocks; i++)
+                {
+                    checkedCount++;
+                    if (blocks[i].CanBuild(false)) canBuildCount++;
+                }
+            }
+
+            var buildable = projector.BuildableBlocksCount;
+            var remaining = projector.RemainingBlocks;
+            MethodProfiler.StopAndLog("ProjectorProbe", profilerTs, () =>
+                string.Format("entityId={0};projectorId={1};buildable={2};remaining={3};checked={4};canBuild={5};stale={6}",
+                    _Welder.EntityId, projectorId, buildable, remaining, checkedCount, canBuildCount, buildable <= 0 && canBuildCount > 0));
         }
 
         private bool AsyncAddBlockIfWeldTarget(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, IMySlimBlock block, List<ClusterTargetCandidate> clusterWeldTargets, int maxTargets, bool skipRangeCheck)
@@ -763,6 +801,10 @@ namespace SKONanobotBuildAndRepairSystem
                                     }
                                 }
                             }
+                        }
+                        else if (MethodProfiler.IsRunning && projector.IsProjecting)
+                        {
+                            ProbeProjectorBuildableCount(projector);
                         }
                         continue;
                     }

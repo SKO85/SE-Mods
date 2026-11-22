@@ -26,6 +26,7 @@ namespace SKONanobotBuildAndRepairSystem
             var profilerTs = MethodProfiler.Start();
             // BUG-120: entitlement-keyed decisions don't carry across owners.
             EnsureBrokenCacheOwnerScope();
+            RefreshProjBuildSkips();
             welding = false;
             needWelding = false;
             transporting = false;
@@ -464,8 +465,8 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (isProjected)
                 {
-                    // BUG-115: persistently skip projected blocks where proj.Build threw NRE.
-                    if (target != null && _BrokenProjBuildKeys.Contains(GetBrokenBlockKey(target)))
+                    // BUG-115 / BUG-261122.2: skip projected blocks where proj.Build threw NRE or keeps failing.
+                    if (target != null && IsProjBuildSkipped(GetBrokenBlockKey(target)))
                     {
                         targetData.Ignore = true;
                         return false;
@@ -520,8 +521,34 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 _BrokenProjBuildKeys.Clear();
                 _ProjBuildSilentFailCount.Clear();
+                _ProjBuildSkipUntil.Clear();
                 _BrokenCacheOwnerId = currentOwner;
             }
+        }
+
+        // BUG-115 / BUG-261122.2: NRE skips are permanent, silent-fail skips last ProjBuildSkipDuration.
+        private bool IsProjBuildSkipped(string key)
+        {
+            if (key == null) return false;
+            if (_BrokenProjBuildKeys.Contains(key)) return true;
+            TimeSpan until;
+            return _ProjBuildSkipUntil.TryGetValue(key, out until) && MyAPIGateway.Session.ElapsedPlayTime < until;
+        }
+
+        // BUG-261122.2: drop expired skips and publish the skipped count to the terminal (synced state).
+        private void RefreshProjBuildSkips()
+        {
+            if (_ProjBuildSkipUntil.Count > 0)
+            {
+                var now = MyAPIGateway.Session.ElapsedPlayTime;
+                foreach (var entry in _ProjBuildSkipUntil)
+                {
+                    if (now >= entry.Value) _projBuildSkipExpired.Add(entry.Key);
+                }
+                for (int i = 0; i < _projBuildSkipExpired.Count; i++) _ProjBuildSkipUntil.Remove(_projBuildSkipExpired[i]);
+                _projBuildSkipExpired.Clear();
+            }
+            State.ProjectedBlocksSkipped = _BrokenProjBuildKeys.Count + _ProjBuildSkipUntil.Count;
         }
 
         // BUG-115 diagnostic: connected-player check (used only on the NRE warning path).
@@ -563,63 +590,32 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
-        /// Makes sure the block inventory holds one piece of the first component of a projected block, as the game
-        /// checks in survival before it builds. Takes the piece from the transport inventory. Returns false if the
-        /// piece is needed but cannot be placed (no piece in transport, no free volume). lent is true only if a
-        /// piece was moved and has to be returned by ServerReturnBuildComponent.
+        /// BUG-261122.1 (PR #151, Lejangt): SE 1.211.018 builds a projected block in survival only when the
+        /// builder's own inventory (block inventory 0) holds one of Components[0]. Moves one from the transport
+        /// if needed. Returns false when it is needed but could not be placed; lent is true when a piece moved.
         /// </summary>
-        private bool ServerLendBuildComponent(IMyInventory welderInventory, MyDefinitionId componentId, out bool lent)
+        private bool ServerLendBuildComponent(IMyInventory welderInventory, MyPhysicalItemDefinition component, out bool lent)
         {
             lent = false;
-            if (CreativeModeActive) return true; // game does not check the builder inventory in creative mode
+            if (CreativeModeActive) return true; // the game skips the check in creative
+            if (welderInventory == null) return false;
+            if (welderInventory.GetItemAmount(component.Id) >= 1) return true;
 
-            // A piece already in the block inventory satisfies the game's check, nothing to move.
-            if (welderInventory.GetItemAmount(componentId) >= 1) return true;
-
-            // Volume and mass limit of the block inventory (e.g. a full inventory) can refuse the piece.
-            if (welderInventory.MaxItemsAddable(1, componentId) < 1) return false;
-
-            _TempInventoryItems.Clear();
-            _TransportInventory.GetItems(_TempInventoryItems);
-            var srcIndex = -1;
-            for (int i = _TempInventoryItems.Count - 1; i >= 0; i--)
-            {
-                var srcItem = _TempInventoryItems[i];
-                if ((MyDefinitionId)srcItem.Type == componentId && srcItem.Amount >= 1)
-                {
-                    srcIndex = i;
-                    break;
-                }
-            }
-            _TempInventoryItems.Clear();
-            if (srcIndex < 0) return false;
-
-            lent = welderInventory.TransferItemFrom(_TransportInventory, srcIndex, null, true, 1, false);
+            var item = _TransportInventory.FindItem(component.Id);
+            if (item == null) return false;
+            // BUG-261023.5 verified move: a full or refusing block inventory moves nothing.
+            lent = MoveItemVerified(_TransportInventory, item.ItemId, component, welderInventory, 1) >= 1;
             return lent;
         }
 
         /// <summary>
-        /// Moves a piece lent by ServerLendBuildComponent back into the transport inventory if the game did not
-        /// consume it. Same remove/add pattern as ServerPickFromWelder.
+        /// BUG-261122.1: moves a lent piece the game did not take back into the transport (verified; if the
+        /// transport refuses, it stays in the block inventory and is picked again later).
         /// </summary>
-        private void ServerReturnBuildComponent(IMyInventory welderInventory, MyDefinitionId componentId)
+        private void ServerReturnBuildComponent(IMyInventory welderInventory, MyPhysicalItemDefinition component)
         {
-            _TempInventoryItems.Clear();
-            welderInventory.GetItems(_TempInventoryItems);
-            for (int i = _TempInventoryItems.Count - 1; i >= 0; i--)
-            {
-                var item = _TempInventoryItems[i];
-                if ((MyDefinitionId)item.Type == componentId && item.Amount >= 1)
-                {
-                    var itemId = item.ItemId;
-                    _TempInventoryItems.Clear();
-                    welderInventory.RemoveItems(itemId, 1);
-                    var physicalObjBuilder = (MyObjectBuilder_PhysicalObject)MyObjectBuilderSerializer.CreateNewObject(componentId);
-                    _TransportInventory.AddItems(1, physicalObjBuilder);
-                    return;
-                }
-            }
-            _TempInventoryItems.Clear();
+            var item = welderInventory.FindItem(component.Id);
+            if (item != null) MoveItemVerified(welderInventory, item.ItemId, component, _TransportInventory, 1);
         }
 
         private bool ServerDoWeld(TargetBlockData targetData)
@@ -633,6 +629,10 @@ namespace SKONanobotBuildAndRepairSystem
             var welding = false;
             var created = false;
             var creationCharged = false;
+            var buildAttempted = false;
+            var lentComponent = false;      // BUG-261122.1
+            var engineTookCreation = false; // BUG-261122.1
+            var welderCompAtBuild = -1f;    // BUG-261122.1 diagnostic
             float appliedWeldAmount = 0f;
             var target = targetData.Block;
             var hasIgnoreColor = ((Settings.Flags & SyncBlockSettings.Settings.UseIgnoreColor) != 0) && IsColorNearlyEquals(Settings.IgnoreColorPacked, target.GetColorMask());
@@ -642,7 +642,8 @@ namespace SKONanobotBuildAndRepairSystem
                 //New Block (Projected)
                 var cubeGridProjected = target.CubeGrid as MyCubeGrid;
                 var blockDefinition = target.BlockDefinition as MyCubeBlockDefinition;
-                var createCompId = blockDefinition.Components[0].Definition.Id;
+                var createCompDef = blockDefinition.Components[0].Definition;
+                var createCompId = createCompDef.Id;
                 tsFindItem = Stopwatch.GetTimestamp();
                 var item = _TransportInventory.FindItem(createCompId);
                 tsFindItem = Stopwatch.GetTimestamp() - tsFindItem;
@@ -676,16 +677,11 @@ namespace SKONanobotBuildAndRepairSystem
                                 return false;
                             }
 
-                            // SE 1.211 MyProjectorBase.BuildInternal aborts silently in survival unless the builder's
-                            // own inventory (here the block inventory 0) holds one piece of the first component.
-                            // BaR keeps its components in _TransportInventory, so one piece is lent to the block
-                            // inventory for the duration of Build and returned if the game did not consume it.
-                            var firstComponentId = blockDefinition.Components[0].Definition.Id;
-                            bool lentComponent;
-                            if (!ServerLendBuildComponent(welderInventory, firstComponentId, out lentComponent))
+                            // BUG-261122.1: the game builds only if the block inventory holds Components[0]
+                            // (SE 1.211.018); lend one from the transport for the call.
+                            if (!ServerLendBuildComponent(welderInventory, createCompDef, out lentComponent))
                             {
-                                // Block inventory has no room for the piece: do not call Build (it would fail
-                                // silently and count towards the permanent ignore), retry on a later tick.
+                                // No room for it: skip Build (it would only count towards the skip), retry later.
                                 EmitServerDoWeldProfile(profilerTs,
                                     targetData.Block != null ? targetData.Block.BlockDefinition.Id.SubtypeName : "null",
                                     true, false, false, false,
@@ -698,11 +694,13 @@ namespace SKONanobotBuildAndRepairSystem
                             }
 
                             // BUG-261023.2 (PR #148): the engine takes Components[0] from the builder's own
-                            // inventory only. Snapshot it, and skip the charge if a block already stands there.
+                            // inventory only. Snapshot it after the lend; no charge if a block already stands there.
                             var preGrid = cubeGridProjected.Projector.CubeGrid;
                             var builtBefore = preGrid.GetCubeBlock(preGrid.WorldToGridInteger(cubeGridProjected.GridIntegerToWorld(target.Position))) != null;
                             if (welderInventory != null)
                                 welderCreateBefore = welderInventory.GetItemAmount(createCompId);
+                            buildAttempted = true;
+                            welderCompAtBuild = (float)welderCreateBefore;
 
                             tsBuild = Stopwatch.GetTimestamp();
                             var proj = cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector;
@@ -716,7 +714,8 @@ namespace SKONanobotBuildAndRepairSystem
                             catch (NullReferenceException ex)
                             {
                                 tsBuild = Stopwatch.GetTimestamp() - tsBuild;
-                                if (lentComponent) ServerReturnBuildComponent(welderInventory, firstComponentId);
+                                if (lentComponent && welderInventory.GetItemAmount(createCompId) >= welderCreateBefore)
+                                    ServerReturnBuildComponent(welderInventory, createCompDef);
                                 targetData.Ignore = true;
                                 // BUG-115: persist the skip so background scans don't unset Ignore.
                                 var brokenKey = GetBrokenBlockKey(target);
@@ -764,15 +763,17 @@ namespace SKONanobotBuildAndRepairSystem
                             }
                             catch
                             {
-                                if (lentComponent) ServerReturnBuildComponent(welderInventory, firstComponentId);
+                                if (lentComponent && welderInventory.GetItemAmount(createCompId) >= welderCreateBefore)
+                                    ServerReturnBuildComponent(welderInventory, createCompDef);
                                 throw;
                             }
                             tsBuild = Stopwatch.GetTimestamp() - tsBuild;
-                            // If the game consumed the lent piece (MySpaceBuildComponent.TakeMaterialsFromBuilder),
-                            // nothing is left to return. Otherwise (Build refused, or creative tools build instantly
-                            // without consuming) give it back so no component is lost or created.
-                            if (lentComponent) ServerReturnBuildComponent(welderInventory, firstComponentId);
-                            chargeCreation = !CreativeModeActive && !builtBefore;
+                            // BUG-261122.1: the game took Components[0] from the block inventory (1.211.018 always
+                            // when it built; 1.210 when it was there). Return an untaken lent piece; charge the
+                            // transport only when the game took nothing (BUG-261023.2).
+                            engineTookCreation = welderInventory != null && welderInventory.GetItemAmount(createCompId) < welderCreateBefore;
+                            if (lentComponent && !engineTookCreation) ServerReturnBuildComponent(welderInventory, createCompDef);
+                            chargeCreation = !CreativeModeActive && !builtBefore && !engineTookCreation;
                         }
 
                         // BUG-105/108: instrument projected→physical block resolution.
@@ -802,10 +803,11 @@ namespace SKONanobotBuildAndRepairSystem
                                 targetData.Block = target;
                                 targetData.Attributes &= ~TargetBlockData.AttributeFlags.Projected;
                                 created = true;
+                                _projBuildCreated++;
 
                                 // BUG-261023.2: charge the creation component from the transport unless the
                                 // engine already took it from the welder inventory.
-                                if (chargeCreation && (welderInventory == null || welderInventory.GetItemAmount(createCompId) >= welderCreateBefore))
+                                if (chargeCreation)
                                 {
                                     var transportBefore = _TransportInventory.GetItemAmount(createCompId);
                                     if (transportBefore >= 1)
@@ -828,26 +830,34 @@ namespace SKONanobotBuildAndRepairSystem
                                 // BUG-120: proj.Build silent fail (likely DLC missing). Track per-block;
                                 // promote to persistent skip after PROJ_BUILD_MAX_SILENT_FAILS ticks.
                                 var brokenKey = GetBrokenBlockKey(targetData.Block);
+                                int silentFailCount = 0;
                                 if (brokenKey != null)
                                 {
-                                    int silentFailCount;
                                     _ProjBuildSilentFailCount.TryGetValue(brokenKey, out silentFailCount);
                                     silentFailCount++;
                                     if (silentFailCount >= PROJ_BUILD_MAX_SILENT_FAILS)
                                     {
+                                        // BUG-261122.2: skip for ProjBuildSkipDuration, then retry (was permanent).
                                         _ProjBuildSilentFailCount.Remove(brokenKey);
-                                        if (_BrokenProjBuildKeys.Add(brokenKey) && Logging.Instance.ShouldLog(Logging.Level.Event))
+                                        _ProjBuildSkipUntil[brokenKey] = MyAPIGateway.Session.ElapsedPlayTime + ProjBuildSkipDuration;
+                                        if (Logging.Instance.ShouldLog(Logging.Level.Event))
                                         {
                                             Logging.Instance.Write(Logging.Level.Event,
-                                                "BuildAndRepairSystemBlock {0}: proj.Build silently failed {1} times for block at {2}; ignored permanently for owner {3} (likely DLC-missing). Power-cycle the BaR or reassign ownership to retry.",
+                                                "BuildAndRepairSystemBlock {0}: proj.Build silently failed {1} times for block at {2}; skipped for {3} min for owner {4}. Power-cycle the BaR to retry now.",
                                                 Logging.BlockName(_Welder, Logging.BlockNameOptions.None),
-                                                PROJ_BUILD_MAX_SILENT_FAILS, brokenKey, _Welder.OwnerId);
+                                                PROJ_BUILD_MAX_SILENT_FAILS, brokenKey, ProjBuildSkipDuration.TotalMinutes, _Welder.OwnerId);
                                         }
                                     }
                                     else
                                     {
                                         _ProjBuildSilentFailCount[brokenKey] = silentFailCount;
                                     }
+                                }
+
+                                if (buildAttempted)
+                                {
+                                    _projBuildSilentFails++;
+                                    LogProjBuildSilentFail(targetData.Block, cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector, createCompId, welderCreateBefore, silentFailCount);
                                 }
                             }
                         }
@@ -946,8 +956,51 @@ namespace SKONanobotBuildAndRepairSystem
                 target != null && target.MaxIntegrity > 0f ? target.Integrity / target.MaxIntegrity : 0f,
                 targetData.Ignore,
                 targetData.Distance,
-                null, creationCharged);
+                null, creationCharged, welderCompAtBuild, lentComponent, engineTookCreation);
             return result;
+        }
+
+        /// <summary>
+        /// BUG-261122.1 diagnostic: proj.Build returned but no block appeared. SE 1.211.018 rejects
+        /// survival builds when the builder's own inventory (block inventory 0) lacks Components[0].
+        /// Logged at Error so default server logs show it; once per minute per BaR.
+        /// </summary>
+        private void LogProjBuildSilentFail(IMySlimBlock projected, Sandbox.ModAPI.IMyProjector proj, MyDefinitionId compId, MyFixedPoint inBlockInventory, int failsForBlock)
+        {
+            var reason = !CreativeModeActive && inBlockInventory < 1 ? "builderInventoryEmpty" : "unknown";
+            _projBuildLastFail = reason;
+
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            if (_projSilentFailLogLast != TimeSpan.MinValue && now - _projSilentFailLogLast < ProjSilentFailLogInterval)
+            {
+                _projSilentFailLogSuppressed++;
+                return;
+            }
+            if (!Logging.Instance.ShouldLog(Logging.Level.Error)) return;
+
+            var suppressed = _projSilentFailLogSuppressed;
+            _projSilentFailLogSuppressed = 0;
+            _projSilentFailLogLast = now;
+
+            string canBuild;
+            try { canBuild = proj != null && projected != null ? proj.CanBuild(projected, true).ToString() : "n/a"; }
+            catch (Exception ex) { canBuild = "ex:" + ex.GetType().Name; }
+
+            Logging.Instance.Write(Logging.Level.Error,
+                "BuildAndRepairSystemBlock {0}: projected build left no block; reason={1}; block={2}; firstComponent={3}; inBlockInventory={4}; inTransport={5}; creative={6}; canBuild={7}; projecting={8}; buildable={9}; remaining={10}; failsForBlock={11}; suppressedSinceLast={12}",
+                Logging.BlockName(_Welder, Logging.BlockNameOptions.None),
+                reason,
+                projected != null ? projected.BlockDefinition.Id.SubtypeName : "null",
+                compId.SubtypeName,
+                inBlockInventory,
+                _TransportInventory.GetItemAmount(compId),
+                CreativeModeActive,
+                canBuild,
+                proj != null && proj.IsProjecting,
+                proj != null ? proj.BuildableBlocksCount : -1,
+                proj != null ? proj.RemainingBlocks : -1,
+                failsForBlock,
+                suppressed);
         }
 
         /// <summary>
@@ -1755,7 +1808,7 @@ namespace SKONanobotBuildAndRepairSystem
             "stockpileMs={10:F3};mountMs={11:F3};deformMs={12:F3};" +
             "findItemMs={13:F3};limitsMs={14:F3};canContinueMs={15:F3};integrityCheckMs={16:F3};" +
             "assignMs={17:F3};weldAmount={18:F2};integrityRatio={19:F3};completed={20};" +
-            "distance={21:F1};earlyExit={22};creationCharged={23}";
+            "distance={21:F1};earlyExit={22};creationCharged={23};welderCompAtBuild={24};lent={25};engineTook={26}";
 
         private void EmitServerDoWeldProfile(long profilerTs,
             string blockSubtype, bool projected, bool created, bool welding, bool result,
@@ -1763,7 +1816,7 @@ namespace SKONanobotBuildAndRepairSystem
             double stockpileMs, double mountMs, double deformMs,
             double findItemMs, double limitsMs, double canContinueMs, double integrityCheckMs, double assignMs,
             float weldAmount, float integrityRatio, bool completed, double distance,
-            string earlyExit, bool creationCharged = false)
+            string earlyExit, bool creationCharged = false, float welderCompAtBuild = -1f, bool lent = false, bool engineTook = false)
         {
             if (profilerTs == 0L) return;
             var entityId = _Welder.EntityId;
@@ -1774,7 +1827,7 @@ namespace SKONanobotBuildAndRepairSystem
                     stockpileMs, mountMs, deformMs,
                     findItemMs, limitsMs, canContinueMs, integrityCheckMs, assignMs,
                     weldAmount, integrityRatio, completed, distance,
-                    earlyExit ?? string.Empty, creationCharged));
+                    earlyExit ?? string.Empty, creationCharged, welderCompAtBuild, lent, engineTook));
         }
     }
 }

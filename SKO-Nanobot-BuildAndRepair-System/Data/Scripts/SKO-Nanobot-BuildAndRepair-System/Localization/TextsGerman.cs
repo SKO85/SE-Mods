@@ -103,6 +103,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"Info_CurrentGrindEntity",          "Aktuell demontierter Block:"},
             {"Info_InventoryFull",              "Blockinventar ist voll!"},
             {"Info_LimitReached",               "PCU Limit erreicht!"},
+            {"Info_ProjectedSkipped",           "Übersprungene projizierte Blöcke: {0} (werden automatisch erneut versucht)"},
             {"Info_DisabledByRemote",           "Durch Fernbedienung deaktiviert!"},
             {"Info_BlocksToBuild",              "Zu schweißende Blöcke:"},
             {"Info_BlocksToGrind",              "Zu demontierende Blöcke:"},
