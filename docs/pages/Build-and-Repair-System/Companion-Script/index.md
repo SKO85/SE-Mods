@@ -59,7 +59,7 @@ Each element of the array is one group. A group links a set of Build and Repair 
 
 | Property          | Type            | Default    | Description |
 | ----------------- | --------------- | ---------- | ----------- |
-| `DisplayNames`    | `string[]`      | —          | Names of text panels or cockpit screens. Cockpit screens use the format `"BlockName[index]"`, e.g. `"Cockpit[0]"`. |
+| `DisplayNames`    | `string[]`      | —          | Names of text panels or cockpit screens. Cockpit screens use the format `"BlockName[index]"`, e.g. `"Bridge Cockpit[0]"` — give the cockpit its own name (or use a `[BaR:1@0]` tag instead): the game names every cockpit "Cockpit", so `"Cockpit[0]"` would pick whichever one it finds first, on any connected grid. |
 | `DisplayKinds`    | `DisplayKind[]` | `Status`   | Pages to cycle through on this display. See [Display Kinds](#display-kinds) below. |
 | `DisplayMaxLines` | `int`           | `19`       | Maximum lines shown for list pages. |
 | `DisplaySwitchTime` | `double`      | `5`        | Seconds between page switches. Set to `0` to show only the first page without cycling. |
@@ -110,7 +110,7 @@ static BuildAndRepairSystemQueuingGroup[] BuildAndRepairSystemQueuingGroups = {
       AssemblerGroupName = "AssemblerGroup1",
       Displays = new[] {
          new DisplayDefinition {
-            DisplayNames = new[] { "BuildAndRepairGroup1StatusPanel", "Cockpit[0]" },
+            DisplayNames = new[] { "BuildAndRepairGroup1StatusPanel" },
             DisplayKinds = new[] {
                DisplayKind.ShortStatus,
                DisplayKind.Status,

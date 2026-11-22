@@ -84,6 +84,8 @@ Update the script too — this release comes with a new version:
 - `info-only` mode stays on (it used to switch back off by itself).
 - Displays start on their first page, and every page shows up — long page times used to skip the last pages.
 - Auto-detection no longer picks up vanilla welders, and the script no longer crashes on servers that lock script control.
+- The script no longer takes over cockpit screens on its own. The old example setup listed "Cockpit[0]", which grabbed any cockpit still called "Cockpit" on all connected grids. To show it on a cockpit screen, add a tag to the cockpit's name, e.g. `Cockpit [BaR:1@0]`.
+- Display titles now count groups from 1 ("BaR Group 1"), the same as the `[BaR:1]` tags.
 
 ---
 

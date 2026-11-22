@@ -32,7 +32,9 @@ static BuildAndRepairSystemQueuingGroup[] BuildAndRepairSystemQueuingGroups = {
       AssemblerGroupName = "AssemblerGroup1",
       Displays = new [] {
          new DisplayDefinition {
-            DisplayNames = new [] { "BuildAndRepairGroup1StatusPanel", "Cockpit[0]" },
+            // Cockpit screens: tag the block, e.g. "Cockpit [BaR:1@0]" (a plain "Cockpit[0]" entry would take over
+            // every cockpit still called "Cockpit" on all connected grids).
+            DisplayNames = new [] { "BuildAndRepairGroup1StatusPanel" },
             DisplayKinds = new [] { DisplayKind.ShortStatus, DisplayKind.Status, DisplayKind.WeldTargets, DisplayKind.GrindTargets, DisplayKind.CollectTargets, DisplayKind.MissingItems, DisplayKind.BlockWeldPriority, DisplayKind.BlockGrindPriority },
             DisplayMaxLines = 19,
             DisplaySwitchTime = 4
@@ -233,7 +235,7 @@ public class BuildAndRepairAutoQueuing
             _GroupData[idx].Assemblers = InitAssemblerList(queuingGroup);
             _GroupData[idx].AssemblerBlocks = ResolveAssemblers(_GroupData[idx].Assemblers);
             _GroupData[idx].DisplayEntries = new List<DisplayEntry>();
-            var groupLabel = string.IsNullOrEmpty(queuingGroup != null ? queuingGroup.Name : null) ? "BaR Group " + idx : queuingGroup.Name;
+            var groupLabel = string.IsNullOrEmpty(queuingGroup != null ? queuingGroup.Name : null) ? "BaR Group " + (idx + 1) : queuingGroup.Name; // 1-based, like the [BaR:1] tags
 
             for (int d = 0; d < displays.Length; d++)
             {

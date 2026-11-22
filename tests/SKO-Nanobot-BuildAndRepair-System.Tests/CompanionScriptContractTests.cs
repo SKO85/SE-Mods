@@ -41,6 +41,19 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             Assert.True(missing.Count == 0, "used by Script.cs but not registered by the mod: " + string.Join(", ", missing));
         }
 
+        // Harness S81-S83 swap the group config between this marker and the next "\n};" — keep that block's shape.
+        [Fact]
+        public void GroupConfigBlock_HasTheShapeTheHarnessReplaces()
+        {
+            var script = File.ReadAllText(CompanionScriptHost.ScriptPath);
+            const string start = "static BuildAndRepairSystemQueuingGroup[] BuildAndRepairSystemQueuingGroups = {";
+            var at = script.IndexOf(start, System.StringComparison.Ordinal);
+            Assert.True(at >= 0, "group config marker not found");
+            var end = script.IndexOf("\n};", at, System.StringComparison.Ordinal);
+            Assert.True(end > at, "group config block not closed by a line starting with \"};\"");
+            Assert.Contains("BuildAndRepairGroup1", script.Substring(at, end - at));
+        }
+
         [Fact]
         public void HarnessS09_ChecksExactlyTheScriptProperties()
         {

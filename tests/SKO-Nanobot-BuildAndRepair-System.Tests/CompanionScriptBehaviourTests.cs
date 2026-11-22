@@ -364,6 +364,71 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             Assert.Equal(5, seen.Count);
         }
 
+        // Two queuing groups: each queues only into its own assemblers and titles its own displays.
+        [Fact]
+        public void TwoGroups_QueueIntoTheirOwnAssemblers_AndTitleTheirOwnDisplays()
+        {
+            CompanionScriptHost.SetGroups(
+                new GroupSpec { BarGroup = "BaRs A", AssemblerGroup = "Assemblers A", Displays = new[] { new DisplaySpec { Names = new[] { "Panel A" } } } },
+                new GroupSpec { BarGroup = "BaRs B", AssemblerGroup = "Assemblers B", Displays = new[] { new DisplaySpec { Names = new[] { "Panel B" } } } });
+            var run = new ScriptRun();
+            var barA = FakeBlocks.Bar("BaR A").Needs("SteelPlate", 5);
+            var barB = FakeBlocks.Bar("BaR B").Needs("Motor", 3);
+            run.Gts.Add(barA.Block);
+            run.Gts.Add(barB.Block);
+            var asmA = run.Gts.Add(FakeBlocks.Assembler("Assembler A"));
+            var asmB = run.Gts.Add(FakeBlocks.Assembler("Assembler B"));
+            run.Gts.Group("BaRs A", barA.Block);
+            run.Gts.Group("BaRs B", barB.Block);
+            run.Gts.Group("Assemblers A", asmA);
+            run.Gts.Group("Assemblers B", asmB);
+            var panelA = FakeBlocks.Lcd("Panel A");
+            var panelB = FakeBlocks.Lcd("Panel B");
+            run.Gts.Add(panelA.Block);
+            run.Gts.Add(panelB.Block);
+
+            run.Start().Run();
+
+            Assert.Equal(new[] { asmA.EntityId }, barA.Queued.Single().Item1);
+            Assert.Equal("SteelPlate", barA.Queued.Single().Item2.SubtypeName);
+            Assert.Equal(new[] { asmB.EntityId }, barB.Queued.Single().Item1);
+            Assert.Equal("Motor", barB.Queued.Single().Item2.SubtypeName);
+            Assert.StartsWith("BaR Group 1 (", panelA.Text);
+            Assert.StartsWith("BaR Group 2 (", panelB.Text);
+            Assert.Contains("Missing item kinds: 1", panelB.Text);
+        }
+
+        // Steam report (Nov 2026): the shipped config listed "Cockpit[0]", which took over every cockpit still named
+        // "Cockpit" (the game default) on all connected grids. Cockpits are now opted in with a tag only.
+        [Fact]
+        public void ShippedConfig_LeavesUntaggedCockpitsAlone()
+        {
+            CompanionScriptHost.ResetConfig(); // the script's own default groups
+            FakeBar bar; Sandbox.ModAPI.Ingame.IMyAssembler a1, a2;
+            var run = World(out bar, out a1, out a2);
+            var cockpit = FakeBlocks.Cockpit("Cockpit", 3);
+            run.Gts.Add(cockpit.Block);
+
+            run.Start().Run(times: 3);
+
+            Assert.All(cockpit.Surfaces, s => Assert.Equal(0, s.Writes));
+        }
+
+        // Steam report (Nov 2026): titles said "BaR Group 0" while tags address the same group as [BaR:1].
+        [Fact]
+        public void UnnamedGroup_TitleIsOneBased_LikeTheTags()
+        {
+            CompanionScriptHost.SetGroups(DefaultGroup(new DisplaySpec { Names = new[] { StatusPanel } }));
+            FakeBar bar; Sandbox.ModAPI.Ingame.IMyAssembler a1, a2;
+            var run = World(out bar, out a1, out a2);
+            var lcd = FakeBlocks.Lcd(StatusPanel);
+            run.Gts.Add(lcd.Block);
+
+            run.Start().Run();
+
+            Assert.StartsWith("BaR Group 1 (", lcd.Text);
+        }
+
         // ---------------------------------------------------------------- [BaR:..] tags and Custom Data
 
         [Fact]
