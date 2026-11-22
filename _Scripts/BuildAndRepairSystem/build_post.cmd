@@ -37,4 +37,14 @@ mkdir "%ModFolderOriginal%"
 xcopy "%ModFolder%" "%ModFolderOriginal%" /S /Y
 xcopy "%ProjectDir%\..\_Scripts\BuildAndRepairSystem\Original\" "%ModFolderOriginal%" /S /Y
 
+rem Companion PB script: keep the local in-game copy current, so publishing from the game uploads this version.
+rem modinfo.sbmi (Workshop link) is only copied when missing, never overwritten.
+set ScriptSource=%ProjectDir%\..\SKO-Nanobot-BuildAndRepair-System-Script
+set ScriptLocal=%appdata%\SpaceEngineers\IngameScripts\local\Nanobot-Build-And-Repair-System-Script
+if not exist "%ScriptLocal%" mkdir "%ScriptLocal%"
+copy /Y "%ScriptSource%\Script.cs" "%ScriptLocal%\Script.cs" >nul
+copy /Y "%ScriptSource%\metadata.mod" "%ScriptLocal%\metadata.mod" >nul
+copy /Y "%ScriptSource%\thumb.png" "%ScriptLocal%\thumb.png" >nul
+if not exist "%ScriptLocal%\modinfo.sbmi" copy "%ScriptSource%\modinfo.sbmi" "%ScriptLocal%\modinfo.sbmi" >nul
+
 exit /b 0
