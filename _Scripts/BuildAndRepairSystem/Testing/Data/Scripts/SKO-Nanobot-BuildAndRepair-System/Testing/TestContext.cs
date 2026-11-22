@@ -50,7 +50,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
     }
 
     /// <summary>ShieldController / ShieldEmitter are DefenseShields blocks (DSControlLarge, EmitterL — ships only); only spawn them when DS is loaded.</summary>
-    internal enum RigBlockKind { Armor, Conveyor, Battery, Stator, AdvancedStator, Hinge, Piston, Suspension, Connector, ShieldController, ShieldEmitter, Assembler, ProgrammableBlock, Lcd, CockpitSeat }
+    internal enum RigBlockKind { Armor, Conveyor, Battery, Stator, AdvancedStator, Hinge, Piston, Suspension, Connector, ShieldController, ShieldEmitter, Assembler, ProgrammableBlock, Lcd, CockpitSeat, Cargo, Sorter }
 
     /// <summary>One extra block of a rig.</summary>
     internal sealed class RigBlock

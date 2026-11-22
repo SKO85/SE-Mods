@@ -32,7 +32,11 @@ ingame:S02
 unit:MissingComponentsAggregateTests.WalksAtMost128TargetsPerCall_AndPublishesTheTotalOnce
 unit:MissingComponentsAggregateTests.StockOnHandIsSubtracted
 unit:MissingComponentsAggregateTests.SourcesAreWalkedInSlices_AfterTheTargets
+ingame:S84 (stock behind a blacklisting sorter stays missing)
+unit:MissingComponentsAggregateTests.SourceStockTheBarCannotPull_IsNotSubtracted
+
 ## Last verified
-v2.5.6 build 261023.1 2026-10-23 — unit (logic only; in-game steps not yet run)
+v2.5.6 build 261122.32 2026-11-22 — in game: S84 (sorter-blocked stock stays missing); unit green.
+
 ## Related
 BUG-260824.2 (GitHub #142 / #83), BUG-260909.1 (aggregate cost at scale), BUG-261023.1 (time slicing), FEAT-260910.2, BUG-261023.14

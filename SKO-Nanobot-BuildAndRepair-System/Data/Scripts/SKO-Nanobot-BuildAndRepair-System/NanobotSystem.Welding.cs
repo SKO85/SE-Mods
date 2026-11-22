@@ -1707,8 +1707,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                     // Subtract stock on hand; only the true shortfall is reported so the
                     // companion script doesn't queue components that are already in cargo.
-                    SubtractInventoryFromAggregateNeed(_Welder.GetInventory(0));
-                    SubtractInventoryFromAggregateNeed(_TransportInventory);
+                    SubtractInventoryFromAggregateNeed(_Welder.GetInventory(0), null);
+                    SubtractInventoryFromAggregateNeed(_TransportInventory, null);
 
                     _AggSourcesSnapshot.Clear();
                     lock (_PossibleSources)
@@ -1729,9 +1729,10 @@ namespace SKONanobotBuildAndRepairSystem
                 // Phase 2: connected sources, stopping as soon as the need is covered.
                 var sourceEnd = Math.Min(_AggCursor + MissingAggregateSourcesPerSlice, _AggSourcesSnapshot.Count);
                 var covered = !AggregateNeedAnyPositive();
+                var welderInventory = _Welder.GetInventory(0);
                 for (; !covered && _AggCursor < sourceEnd; _AggCursor++)
                 {
-                    SubtractInventoryFromAggregateNeed(_AggSourcesSnapshot[_AggCursor]);
+                    SubtractInventoryFromAggregateNeed(_AggSourcesSnapshot[_AggCursor], welderInventory);
                     sourcesWalked++;
                     covered = !AggregateNeedAnyPositive();
                 }
@@ -1812,7 +1813,11 @@ namespace SKONanobotBuildAndRepairSystem
             return false;
         }
 
-        private void SubtractInventoryFromAggregateNeed(IMyInventory srcInventory)
+        /// <summary>
+        /// Subtracts stock from the aggregate need. With reachTo set (connected sources), only items that can
+        /// actually be transferred to it count: a sorter can block a component the conveyor graph connects.
+        /// </summary>
+        private void SubtractInventoryFromAggregateNeed(IMyInventory srcInventory, IMyInventory reachTo)
         {
             if (srcInventory == null || srcInventory.ItemCount == 0) return;
             var owner = srcInventory.Owner as IMyEntity;
@@ -1826,6 +1831,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (item.Type.TypeId != typeof(MyObjectBuilder_Component).Name) continue;
                 int needed;
                 if (!_AggMissingNeed.TryGetValue(item.Type.SubtypeId, out needed) || needed <= 0) continue;
+                if (reachTo != null && !srcInventory.CanTransferItemTo(reachTo, item.Type)) continue;
                 _AggMissingNeed[item.Type.SubtypeId] = needed - (int)item.Amount;
             }
             _TempInventoryItems.Clear();

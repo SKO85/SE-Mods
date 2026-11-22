@@ -216,6 +216,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                     var lcd = Create<MyObjectBuilder_TextPanel>("LargeLCDPanel", pos, ownerId);
                     lcd.Enabled = true;
                     return lcd;
+                case RigBlockKind.Cargo:
+                    return Create<MyObjectBuilder_CargoContainer>(CargoSubtype, pos, ownerId);
+                case RigBlockKind.Sorter:
+                    // Default orientation: conveyor ports front/back (along Z).
+                    var sorter = Create<MyObjectBuilder_ConveyorSorter>("LargeBlockConveyorSorter", pos, ownerId);
+                    sorter.Enabled = true;
+                    return sorter;
                 case RigBlockKind.CockpitSeat:
                     return Create<MyObjectBuilder_Cockpit>("LargeBlockCockpitSeat", pos, ownerId);
                 case RigBlockKind.ShieldEmitter:

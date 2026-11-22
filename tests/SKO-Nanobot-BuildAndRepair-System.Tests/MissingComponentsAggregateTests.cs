@@ -41,10 +41,11 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             return block;
         }
 
-        private static IMyInventory Stock(string subtype, int amount)
+        private static IMyInventory Stock(string subtype, int amount, bool reachable = true)
         {
             var inv = Substitute.For<IMyInventory>();
             inv.ItemCount.Returns(1);
+            inv.CanTransferItemTo(Arg.Any<VRage.Game.ModAPI.Ingame.IMyInventory>(), Arg.Any<MyItemType>()).Returns(reachable);
             inv.When(i => i.GetItems(Arg.Any<List<MyInventoryItem>>(), Arg.Any<Func<MyInventoryItem, bool>>())).Do(ci =>
                 ci.Arg<List<MyInventoryItem>>().Add(new MyInventoryItem(MyItemType.MakeComponent(subtype), 1u, (MyFixedPoint)amount)));
             return inv;
@@ -197,6 +198,22 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             Run(system); // sources 32..39 → publish
             Assert.Equal(0, Field<int>(system, "_AggPhase"));
             Assert.Equal(260, Missing(system, "SteelPlate"));
+        }
+
+        // PR #152 review: a sorter can block a component between a connected source and the BaR; that stock
+        // must stay "missing", or the companion script never queues it and the build stalls.
+        [Fact]
+        public void SourceStockTheBarCannotPull_IsNotSubtracted()
+        {
+            var system = NewSystem(3000, 10, 20); // need 200
+            var sources = Field<List<IMyInventory>>(system, "_PossibleSources");
+            sources.Add(Stock("SteelPlate", 500, reachable: false)); // behind a sorter
+            sources.Add(Stock("SteelPlate", 50));
+
+            Run(system); // targets → phase 2
+            Run(system); // sources → publish
+            Assert.Equal(0, Field<int>(system, "_AggPhase"));
+            Assert.Equal(150, Missing(system, "SteelPlate"));
         }
 
         [Fact]

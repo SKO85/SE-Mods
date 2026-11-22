@@ -151,8 +151,9 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S79 | Weld speed: WorkSpeed 10 vs 1 ~10x, WeldingMultiplier 0.2 vs 0.1 ~2x | BUDGET-009 | ~40 s | 261122.28 — x9.4 / x2.0 |
 | S80 | Grind speed: WorkSpeed 10 vs 1 ~10x, GrindingMultiplier 0.2 vs 0.1 ~2x | BUDGET-009 | ~40 s | 261122.28 — x9.5 / x1.9 |
 | S81 | Companion script, two groups: each queues into its own assembler, titles its own LCD | API-002 | ~20 s | 261122.29 — A 100, B 0 |
-| S82 | Companion script, two assemblers: queue = missing, both used, no 0 items, stable 20 s | API-002 | ~35 s | 261122.29 — 100/100, 50+50, stable |
-| S83 | Companion script, stock in cargo: nothing queued while welding from stock | API-002 | 25 s | 261122.29 — nothing queued |
+| S82 | Companion script, two assemblers: queue = missing, both used, no 0 items, stable 20 s | API-002 | ~35 s | 261122.32 — 100/100, stable |
+| S83 | Companion script, stock in cargo: nothing queued while welding from stock | API-002 | 25 s | 261122.32 — nothing queued |
+| S84 | Sorter-blocked stock stays in the missing list (companion script keeps queuing) | WELD-005 | 20 s | 261122.32 — blocked 500 kept, 200 missing |
 
 ## Scenarios
 
@@ -525,6 +526,12 @@ One group with both assemblers. **Pass** total queued SteelPlate = what the BaRs
 ### S83
 One group, 500 SteelPlate per container, 30 damaged blocks at WorkSpeed 1, 25 s. **Pass** the BaR welds from stock and
 nothing is queued (Steam: components queued with thousands on the grid). **Records** `queuedMax`, `missingSteelMax`.
+
+### S84
+**Proves** BUG-261122.17: a cargo with 500 SteelPlate sits behind a sorter that blacklists SteelPlate (rig cargo
+(0,0,2) -> sorter (0,0,3) -> cargo (0,0,4)); the rig's own cargo is empty. **Layout checks** the cargo is
+conveyor-connected to the BaR and the sorter refuses SteelPlate (otherwise the scenario proves nothing). **Pass** the
+stock stays put, SteelPlate is reported missing (the companion script keeps queuing), aggregate max <= 2 ms.
 
 ## Building blocks for new scenarios
 

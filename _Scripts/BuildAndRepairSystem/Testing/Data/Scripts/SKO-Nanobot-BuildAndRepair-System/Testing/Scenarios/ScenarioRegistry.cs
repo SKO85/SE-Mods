@@ -89,7 +89,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S79_SpeedRatio("S80", true),
             new S81_CompanionGroups("S81", CompanionGroupsMode.TwoGroups),
             new S81_CompanionGroups("S82", CompanionGroupsMode.TwoAssemblers),
-            new S81_CompanionGroups("S83", CompanionGroupsMode.StockInCargo)
+            new S81_CompanionGroups("S83", CompanionGroupsMode.StockInCargo),
+            new S84_SorterBlockedStock()
         };
 
         public static ITestScenario Find(string id)
