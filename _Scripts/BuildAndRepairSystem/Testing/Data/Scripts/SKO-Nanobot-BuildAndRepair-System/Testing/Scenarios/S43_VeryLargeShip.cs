@@ -62,6 +62,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             ctx.Metric("welded", (long)welded);
             ctx.Metric("weldedPerSecond", welded / seconds);
             ctx.Check(welded > 0, "no welding progress on the large ship");
+            // Speed floor: ~70 % of the 2026-11-22 baseline (14.2 welds/s, dev PC).
+            ctx.Check(welded / seconds >= 10.0, "weldedPerSecond " + (welded / seconds).ToString("F1") + " below the floor of 10");
 
             ctx.CheckMethodAvgMax("UpdateBeforeSimulation10_100", 1.5);
             ctx.CheckMethodMaxMax("ServerDoWeld", 40.0);

@@ -70,10 +70,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S58_Shields("S61", ShieldMode.CheckOnMidGrind),
             new S58_Shields("S62", ShieldMode.OwnShieldWeld),
             new S58_Shields("S63", ShieldMode.FriendlyShieldWeld),
-            new S64_Load("S64", "large clusters", LoadWork.Weld, 2, 10),
-            new S64_Load("S65", "small clusters", LoadWork.Weld, 10, 2),
-            new S64_Load("S66", "large clusters", LoadWork.Grind, 2, 10),
-            new S64_Load("S67", "small clusters", LoadWork.Grind, 10, 2),
+            new S64_Load("S64", "large clusters", LoadWork.Weld, 2, 10, 42),
+            new S64_Load("S65", "small clusters", LoadWork.Weld, 10, 2, 43),
+            new S64_Load("S66", "large clusters", LoadWork.Grind, 2, 10, 27),
+            new S64_Load("S67", "small clusters", LoadWork.Grind, 10, 2, 26),
             new S64_Load("S68", "large clusters", LoadWork.Mixed, 2, 10),
             new S64_Load("S69", "small clusters", LoadWork.Mixed, 10, 2),
             new S64_Load("S70", "stress", LoadWork.Mixed, 4, 10),
@@ -82,7 +82,14 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S73_ProtectedGrid("S73", ProtectionMode.Indestructible),
             new S73_ProtectedGrid("S74", ProtectionMode.DamageHandler),
             new S75_LeavingTarget("S75", false),
-            new S75_LeavingTarget("S76", true)
+            new S75_LeavingTarget("S76", true),
+            new S77_WorkModeOrder("S77", WorkModes.WeldBeforeGrind),
+            new S77_WorkModeOrder("S78", WorkModes.GrindBeforeWeld),
+            new S79_SpeedRatio("S79", false),
+            new S79_SpeedRatio("S80", true),
+            new S81_CompanionGroups("S81", CompanionGroupsMode.TwoGroups),
+            new S81_CompanionGroups("S82", CompanionGroupsMode.TwoAssemblers),
+            new S81_CompanionGroups("S83", CompanionGroupsMode.StockInCargo)
         };
 
         public static ITestScenario Find(string id)

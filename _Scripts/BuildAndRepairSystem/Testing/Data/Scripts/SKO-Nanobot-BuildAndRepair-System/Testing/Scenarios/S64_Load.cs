@@ -55,8 +55,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         private long _diagSamples, _busySamples, _transportSamples, _transportIdleSamples, _sharedSamples, _listSizeSum;
         private double _distSum, _distMax;
 
-        public S64_Load(string id, string label, LoadWork work, int rigs, int barsPerRig)
+        private readonly double _minPerSecond;
+
+        /// <param name="minPerSecond">Speed floor (welded or ground blocks per second), 0 = none: ~70 % of the
+        /// 2026-11-22 baseline on the dev PC, so a throughput regression (like BUG-261122.14) fails.</param>
+        public S64_Load(string id, string label, LoadWork work, int rigs, int barsPerRig, double minPerSecond = 0)
         {
+            _minPerSecond = minPerSecond;
             _id = id;
             _label = label;
             _work = work;
@@ -266,6 +271,11 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
 
             ctx.Check(barCount == 0 || (double)worked / barCount >= 0.75, "only " + worked + "/" + barCount + " BaRs ever worked (targets in range for all)");
             ctx.Check(ctx.SimMin >= 0.5, "simMin<0.5");
+            if (_minPerSecond > 0)
+            {
+                var rate = (HasWeld ? weldedTotal : groundTotal) / seconds;
+                ctx.Check(rate >= _minPerSecond, (HasWeld ? "welded" : "ground") + " " + rate.ToString("F1") + "/s below the floor of " + _minPerSecond.ToString("F0") + "/s");
+            }
             ctx.Check(ctx.TickAvgMs <= 2.0, "tickAvgMs>2");
             ctx.Check(ctx.TickPeakMs <= 50.0, "tickPeakMs>50");
         }

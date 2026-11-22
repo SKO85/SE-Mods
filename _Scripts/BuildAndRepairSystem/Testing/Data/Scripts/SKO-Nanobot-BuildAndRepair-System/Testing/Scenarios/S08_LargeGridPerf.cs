@@ -94,6 +94,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             ctx.Metric("weldedPerSecond", welded / seconds);
             ctx.Metric("weldTargetsPeak", (long)_weldTargetsPeak);
             ctx.Check(welded > 0, "no welding progress in " + WindowSeconds + " s");
+            // Speed floor: ~70 % of the 2026-11-22 baseline (~16 welds/s, dev PC) — catches throughput regressions.
+            ctx.Check(welded / seconds >= 11.0, "weldedPerSecond " + (welded / seconds).ToString("F1") + " below the floor of 11");
             ctx.Check(_weldTargetsPeak > 0, "BaRs never saw the target grid (area / search mode?)");
 
             // Envelope from SCN-BUDGET-006 — starting points, tune from the first agg= lines.

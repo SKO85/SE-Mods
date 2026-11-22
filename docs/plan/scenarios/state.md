@@ -14,6 +14,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-CORE-001 | CORE | 1 | Idle → Welding → Idle state transitions on one damaged grid | unit:GridChangeHandlerTests; ingame:S01, S57, S72 | never |
 | SCN-CORE-002 | CORE | 2 | BoundingBox search mode: area size/offset clamps and Show Area | manual; ingame:S25; ingame:S75, S76 | never |
 | SCN-CORE-003 | CORE | 2 | No power / power restored / insufficient power | ingame:S19; ingame:S20 | never |
+| SCN-CORE-004 | CORE | 2 | Work-mode order when weld and grind work exist together | ingame:S77; ingame:S78 | 261122.28 in game |
 | SCN-CFG-001 | CFG | 1 | ModSettings.xml out-of-range values are clamped on load | unit:SyncModSettingsTests.ValidateAndClamp_ClampsEveryBoundedField | 261006.3 unit |
 | SCN-CFG-002 | CFG | 1 | Legacy settings migrate to version 7; deprecated GrindIfWeldGetStuck folded | unit:SyncModSettingsTests.AdjustSettings_MigratesOldVersion_AndIsIdempotent; unit:BlockSettingsLegacyLoadTests | 261006.3 unit |
 | SCN-CFG-003 | CFG | 2 | Admin restrictions and switches in ModSettings win over block settings | ingame:S46, S47, S48, S49, S50, S51, S52, S53; unit:BlockSettingsLimitsTests | never |
@@ -27,6 +28,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-BUDGET-006 | BUDGET | 4 | Large-grid performance envelope (3000+ blocks, 5 BaRs) | ingame:S08, S43 | never |
 | SCN-BUDGET-007 | BUDGET | 3 | Station vs ship standing still vs ship in motion, ShowArea off/on: cost and work | ingame:S28; ingame:S29; ingame:S30; ingame:S31; ingame:S32; ingame:S33 | 261122.8 in game |
 | SCN-BUDGET-008 | BUDGET | 3 | Many BaRs on target ships of mixed sizes: weld, grind, mixed; large vs small clusters | ingame:S64; ingame:S65; ingame:S66; ingame:S67; ingame:S68; ingame:S69; ingame:S70 | never |
+| SCN-BUDGET-009 | BUDGET | 2 | Speed settings (WorkSpeed, multipliers) and throughput floors | ingame:S79; ingame:S80 | 261122.28 in game |
 | SCN-WELD-001 | WELD | 1 | WeldOnly repairs damaged blocks and never grinds | ingame:S01, S26 | never |
 | SCN-WELD-002 | WELD | 2 | Projected block build incl. DLC-missing skip, expiring silent-fail skip, SE 1.211.018 builder-inventory lend | unit:ProjectedBuildComponentTests, ProjectorScanCacheTests; ingame:S03, S27, S42, S46 | 261122.3 unit |
 | SCN-WELD-003 | WELD | 2 | Weld options Full / Functional / Skeleton stop at the right integrity | ingame:S21, S22 | never |
@@ -51,7 +53,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-FX-001 | FX | 1 | Weld / grind particle and sound effects at block position, distance-culled | manual | never |
 | SCN-TERM-001 | TERM | 2 | Terminal controls, actions and sliders reflect fixed vs default mod settings | manual, unit | 261023.6 unit |
 | SCN-API-001 | API | 3 | PB scripting API incl. ScriptControlled and ScriptControllFixed lockdown | manual, unit:CompanionScriptContractTests; ingame:S09 | 261122.18 in game |
-| SCN-API-002 | API | 3 | Companion script: groups, assembler queuing, displays, tags, Custom Data, arguments | unit:CompanionScriptBehaviourTests; ingame:S71 | 261122.18 in game |
+| SCN-API-002 | API | 3 | Companion script: groups, assembler queuing, displays, tags, Custom Data, arguments | unit:CompanionScriptBehaviourTests; ingame:S71, S81, S82, S83 | 261122.29 in game |
 | SCN-NET-001 | NET | 4 | Dedicated server: client settings sync and per-sender rate limit | manual; unit:ProtoContractTests.ProtoMemberTags_AreUniquePerType | 261006.3 unit |
 | SCN-LOC-001 | LOC | 1 | Terminal labels render in EN / DE / PL / RU and DisableLocalization | manual; unit:LocalizationTests.Translation_HasExactlyTheEnglishKeys | 261006.3 unit |
 

@@ -44,6 +44,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public bool Indestructible;
         /// <summary>Terminal group holding every BaR of the rig; null = none.</summary>
         public string BarGroup;
+        /// <summary>Per-BaR terminal group (index = BaR), overrides BarGroup for that BaR; null entries = none.</summary>
+        public string[] BarGroups;
         public Vector3 AngularVelocity = Vector3.Zero;
     }
 

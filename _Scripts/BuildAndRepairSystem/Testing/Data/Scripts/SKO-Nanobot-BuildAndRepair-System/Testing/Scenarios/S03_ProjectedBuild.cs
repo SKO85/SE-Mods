@@ -109,7 +109,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             if (!_blueprintSet)
             {
                 // Loaded on a background task by the game; ready once it projects.
-                projector.SetProjectedGrid(BuildBlueprint(_rig.ProjectorPosition.Value));
+                projector.SetProjectedGrid(BuildBlueprint(_rig.ProjectorPosition.Value, Cells));
                 _blueprintSet = true;
                 return false;
             }
@@ -124,7 +124,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             return true;
         }
 
-        private static MyObjectBuilder_CubeGrid BuildBlueprint(Vector3I projectorPos)
+        /// <summary>Blueprint of the projector at the origin plus armor at the given rig cells (also used by the S00 warm-up).</summary>
+        internal static MyObjectBuilder_CubeGrid BuildBlueprint(Vector3I projectorPos, Vector3I[] cells)
         {
             // The projector itself is block 0 at the origin (like a ship blueprint of its own grid), so the
             // projection lines up with the rig: grid cell p shows at blueprint position p - projectorPos.
@@ -141,10 +142,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             projector.BlockOrientation = new SerializableBlockOrientation(Base6Directions.Direction.Forward, Base6Directions.Direction.Up);
             grid.CubeBlocks.Add(projector);
 
-            for (int i = 0; i < Cells.Length; i++)
+            for (int i = 0; i < cells.Length; i++)
             {
                 var block = MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_CubeBlock>("LargeBlockArmorBlock");
-                block.Min = Cells[i] - projectorPos;
+                block.Min = cells[i] - projectorPos;
                 block.BlockOrientation = new SerializableBlockOrientation(Base6Directions.Direction.Forward, Base6Directions.Direction.Up);
                 block.ColorMaskHSV = new SerializableVector3(0f, -1f, 0f);
                 grid.CubeBlocks.Add(block);

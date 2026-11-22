@@ -51,7 +51,7 @@ behaviour is not listed here (then also add/extend the `SCN-` catalogue entry).
 | Weld options (Full / Functional / Skeleton) | S01, S21, S22 |
 | Colours (ignore / grind) | S23, S24 |
 | Area, range, search mode (incl. targets leaving the area) | S25, S49, S75, S76 |
-| Work modes | S26, S48 |
+| Work modes (order: S77, S78) | S26, S48, S77, S78 |
 | Safe zones | S39, S40, S41, S42, S53 |
 | DefenseShields (skipped without DS) | S58, S59, S60, S61, S62, S63 |
 | Clusters, per-grid limit | S06, S07, S50, S54, S64–S70 |
@@ -59,8 +59,9 @@ behaviour is not listed here (then also add/extend the `SCN-` catalogue entry).
 | Admin restrictions and config switches | S25, S46–S53 |
 | Collecting floating objects | S10 |
 | Performance envelopes / measurements | S08, S28–S33, S43, S64–S70 |
+| Speed settings and throughput floors | S79, S80; floors in S08, S43, S64–S67 |
 | Many BaRs / load (weld, grind, mixed; large vs small clusters) | S64–S70 |
-| PB scripting API, companion script (unit: CompanionScriptBehaviourTests, CompanionScriptContractTests) | S09, S71 |
+| PB scripting API, companion script (unit: CompanionScriptBehaviourTests, CompanionScriptContractTests) | S09, S71, S81–S83 |
 
 ## Summary
 
@@ -68,10 +69,10 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 
 | ID | What it proves | Catalogue | Time | Last green |
 |---|---|---|---|---|
-| S00 | Warm-up (not a test): JIT the weld/grind/scan paths once per session | — | 3 s | 261122.11 |
+| S00 | Warm-up (not a test): JIT the weld/grind/scan/projector-build paths once per session | — | 3 s | 261122.11 |
 | S01 | One BaR repairs 10 damaged blocks from stocked cargo | CORE-001, WELD-001 | 3 s | 261122.8 |
 | S02 | Empty cargo: missing components reported, nothing welded, no spikes | WELD-005 | 20 s | 261122.8 |
-| S03 | Projector: 10 blocks built from an empty block inventory, charged once | WELD-002 | 3 s | 261122.20 |
+| S03 | Projector: 10 blocks built from an empty block inventory, charged once | WELD-002 | 3 s | 261122.28 — 10/10, slowest weld 0.8 ms |
 | S04 | Janitor (GrindOnly, NoOwnership) razes a derelict grid | GRIND-001 | 11 s | 261122.8 |
 | S05 | Two BaRs never weld the same or a foreign-claimed block | BUDGET-001 | 3 s | 261122.8 |
 | S06 | MaxSystemsPerTargetGrid=2 held with 4 BaRs, grid still finished | CLUSTER-002 | 9 s | 261122.8 |
@@ -139,12 +140,19 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S68 | Load mixed: 20 BaRs (2 x 10), own + derelict ships | BUDGET-008 | 57 s | 261122.16 — 13.6 + 13.6 /s |
 | S69 | Load mixed: 20 BaRs (10 x 2) | BUDGET-008 | 37 s | 261122.16 — 21.0 + 21.0 /s |
 | S70 | Stress mixed: 40 BaRs (4 x 10) | BUDGET-008 | 36 s | 261122.16 — 21.8 + 21.8 /s, 40 BaRs |
-| S71 | Companion script in a real PB: queuing, LCDs, info-only / queue, recompile | API-002 | 20 s | 261122.18 — queued in 3.7 s; info-only kept over recompile |
+| S71 | Companion script in a real PB: queuing, LCDs, info-only / queue, recompile | API-002 | 20 s | 261122.28 — tagged cockpit written |
 | S72 | Block frame added to a repaired grid (after 3 s and 30 s idle) is welded | CORE-001 | 39 s | 261122.20 — welded 2.8 s / 0.2 s after placing |
 | S73 | Protected grid: indestructible derelict is not ground (no grind call) | GRIND-006 | 20 s | 261122.25 — 0 grind calls |
 | S74 | Protected grid: damage-handler (plugin style) protection respected, no retry storm | GRIND-006 | 20 s | 261122.25 — 1 refused attempt, nothing ground |
 | S75 | Leaving target: own ship pushed out of the area is not welded from afar | CORE-002 | ~20 s | 261122.27 — no change after leaving |
 | S76 | Leaving target: derelict ship pushed out of the area is not ground from afar | CORE-002 | ~20 s | 261122.27 — no change after leaving |
+| S77 | Work mode WeldBeforeGrind: own blocks welded before the derelict is ground | CORE-004 | ~20 s | 261122.28 — welded 1.7 s, grinding from 1.9 s |
+| S78 | Work mode GrindBeforeWeld: derelict ground before own blocks are welded | CORE-004 | ~20 s | 261122.28 — ground 3.1 s, welding from 3.2 s |
+| S79 | Weld speed: WorkSpeed 10 vs 1 ~10x, WeldingMultiplier 0.2 vs 0.1 ~2x | BUDGET-009 | ~40 s | 261122.28 — x9.4 / x2.0 |
+| S80 | Grind speed: WorkSpeed 10 vs 1 ~10x, GrindingMultiplier 0.2 vs 0.1 ~2x | BUDGET-009 | ~40 s | 261122.28 — x9.5 / x1.9 |
+| S81 | Companion script, two groups: each queues into its own assembler, titles its own LCD | API-002 | ~20 s | 261122.29 — A 100, B 0 |
+| S82 | Companion script, two assemblers: queue = missing, both used, no 0 items, stable 20 s | API-002 | ~35 s | 261122.29 — 100/100, 50+50, stable |
+| S83 | Companion script, stock in cargo: nothing queued while welding from stock | API-002 | 25 s | 261122.29 — nothing queued |
 
 ## Scenarios
 
@@ -153,9 +161,10 @@ around them (conveyor-connected), a charged battery; damaged armor on top (`Dama
 noted). Separate target grids are 40 m-ish away. `WorkSpeed=10` unless noted (fast, so runs are short).
 
 ### S00
-Warm-up, not a test. 1-BaR rig with 5 damaged blocks plus a derelict 3-block grid; weld + janitor grind. Queued first
-in every session so the first real scenario does not pay the one-time JIT cost after a world load (S01 once measured
-38 ms there). No checks.
+Warm-up, not a test. 1-BaR rig with 5 damaged blocks, a projector building 2 projected armor blocks, plus a derelict
+3-block grid; weld + projector build + janitor grind. Queued first in every session so the first real scenario does not
+pay the one-time JIT cost after a world load (S01 once measured 38 ms there; the first projected build of a session
+76 ms in S03, full run 2026-11-22). No checks.
 
 ### S01
 **Proves** the basic repair loop. **Setup** 1 BaR, 10 damaged armor, 500 SteelPlate, Grids, WeldBeforeGrind, WeldFull.
@@ -196,7 +205,7 @@ blocks welded; `AsyncClusterScan` max ≤ 20 ms.
 **Proves / measures** the large-grid envelope (#143). **Setup** 5 BaRs, BoundingBox 200 m, 1000-block station
 (32 × 32), 180 s window. **Pass** progress, BaRs saw the grid, `UpdateBeforeSimulation10_100` avg ≤ 1.5 ms,
 `ServerDoWeld` avg ≤ 3 / max ≤ 40 ms, aggregate max ≤ 5 ms, tick avg ≤ 0.5 / peak ≤ 15 ms, sim ≥ 0.8, weld budget
-within cap. **Records** `weldedPerSecond` (~16/s). Run `x5` for stable numbers.
+within cap, `weldedPerSecond` >= 11 (speed floor). **Records** `weldedPerSecond` (~16/s). Run `x5` for stable numbers.
 
 ### S09
 **Proves** the PB API contract on a real BaR. **Setup** 1 BaR, 3 damaged armor, empty cargo, an assembler
@@ -424,7 +433,8 @@ welding has no shield check.
 ### S64
 **Measures / proves** load: 2 rigs x 10 BaRs (large clusters) on own damaged ships of 25 / 150 / 600 blocks (dynamic,
 in a row along X), WeldBeforeGrind, BoundingBox 200 m, 1000 SteelPlate per container, 75 s or until done.
-**Pass** every ship got welding, >= 75 % of BaRs worked, tick avg <= 2 ms / peak <= 50 ms, sim >= 0.5.
+**Pass** every ship got welding, >= 75 % of BaRs worked, tick avg <= 2 ms / peak <= 50 ms, sim >= 0.5, and the speed
+floor (blocks per second; S64 42, S65 43, S66 27, S67 26 — ~70 % of the 2026-11-22 baseline).
 **Records** `bars`, `rigs`, `clusters`, `barsWorked(Pct)`, `activePeak`, `weldedS/M/L`, `weldedPerSecond`, weld / grind /
 scan / cluster method stats, and (BUG-261122.14) `busyPct`, `transportPct`, `avgTargetDistM`, `avgListSize`,
 `sharedBlockSamples`. `test run S64-S67 detail` keeps per-call profiler logs.
@@ -482,6 +492,39 @@ ship (10 damaged armor, dynamic) 12 m away, WorkSpeed 1; once welding has starte
 
 ### S76
 S75 with a derelict ship and janitor grinding (GrindOnly, NoOwnership).
+
+### S77
+**Proves** WeldBeforeGrind order: 1 BaR (BoundingBox, janitor NoOwnership) with 6 damaged own blocks and a derelict
+6-block grid 20 m away. **Pass** both finished; the derelict loses integrity while own blocks still need welding in at
+most 1 sample (hand-over); grinding starts after welding finished (0.5 s slack). **Records** `firstWeldS`, `weldDoneS`,
+`firstGrindS`, `grindDoneS`, `outOfOrderSamples`.
+
+### S78
+S77 with GrindBeforeWeld: no welding while the derelict still has blocks.
+
+### S79
+**Proves** the speed settings work. One BaR, 40 damaged own blocks, WeldOnly; three phases with settings switched live
+(1 s settle each): A WorkSpeed 10 / WeldingMultiplier 0.1 (8 s), B WorkSpeed 1 / 0.1 (15 s), C WorkSpeed 10 / 0.2 (8 s).
+**Pass** A/B between 6 and 14 (~10), C/A between 1.5 and 2.5 (~2), no phase runs out of work. **Records** `rateWs10M01`,
+`rateWs1M01`, `rateWs10M02` (integrity per second), `ratioWorkSpeed`, `ratioMultiplier`.
+
+### S80
+S79 grinding a derelict 40-block grid 15 m away (GrindOnly, janitor NoOwnership, GrindingMultiplier).
+
+### S81
+**Proves** the companion script with several queuing groups. The harness swaps the script's group config (between
+`BuildAndRepairSystemQueuingGroups = {` and `};`, kept in shape by `CompanionScriptContractTests`) for two groups: BaR A
++ "S81 Assemblers A" + "S81 Panel A", BaR B (GrindOnly, needs nothing) + "S81 Assemblers B" + "S81 Panel B"; one rig
+with per-BaR terminal groups (`RigSpec.BarGroups`). **Pass** assembler A queues, assembler B gets nothing (no leak
+between groups), Panel A titled "BaR Group 1", Panel B "BaR Group 2". Skipped like S71.
+
+### S82
+One group with both assemblers. **Pass** total queued SteelPlate = what the BaRs miss, spread over both assemblers, no
+0-amount queue entries, unchanged after 20 s without production (Steam: "keeps queuing 0 item on repeat").
+
+### S83
+One group, 500 SteelPlate per container, 30 damaged blocks at WorkSpeed 1, 25 s. **Pass** the BaR welds from stock and
+nothing is queued (Steam: components queued with thousands on the grid). **Records** `queuedMax`, `missingSteelMax`.
 
 ## Building blocks for new scenarios
 

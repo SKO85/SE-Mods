@@ -54,7 +54,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                     var bar = Create<MyObjectBuilder_ShipWelder>(BarSubtype, new Vector3I(x, 0, 0), ownerId);
                     bar.Enabled = false; // switched on by the runner when the measured run starts
                     Add(grid, used, bar, 1, 1, 2);
-                    if (spec.BarGroup != null) AddToGroup(grid, spec.BarGroup, new Vector3I(x, 0, 0));
+                    var barGroup = spec.BarGroups != null && i < spec.BarGroups.Length ? spec.BarGroups[i] : spec.BarGroup;
+                    if (barGroup != null) AddToGroup(grid, barGroup, new Vector3I(x, 0, 0));
                     rig.BarPositions.Add(new Vector3I(x, 0, 0));
 
                     // side face fillers between/next to BaRs (x odd)

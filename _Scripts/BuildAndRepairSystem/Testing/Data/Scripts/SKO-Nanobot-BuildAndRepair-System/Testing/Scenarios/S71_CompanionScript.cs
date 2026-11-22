@@ -13,7 +13,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
     /// SCN-API-002: the companion script end to end, with its shipped configuration, in a real PB. Rig: BaR in
     /// group BuildAndRepairGroup1 with 5 damaged blocks and empty cargo, an assembler in AssemblerGroup1, an LCD
     /// "BuildAndRepairGroup1StatusPanel", a tagged LCD "Hangar LCD [BaR:1]" (Custom Data: Status page) and a
-    /// cockpit seat "Cockpit" (default display Cockpit[0]). Checks: missing SteelPlate is queued; the displays are
+    /// cockpit seat tagged "Cockpit [BaR:1@0]". Checks: missing SteelPlate is queued; the displays are
     /// written; "info-only" stops queuing, survives a recompile; "queue" resumes. Skipped when in-game scripts
     /// are disabled. The script text ships in the -Testing variant as Data/CompanionScript.txt.
     /// </summary>
@@ -69,7 +69,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             spec.Extra.Add(new RigBlock { Kind = RigBlockKind.ProgrammableBlock, Position = new Vector3I(3, 0, 0), Name = "S71 PB", Enabled = false, Program = _script ?? "", Tag = "pb" });
             spec.Extra.Add(new RigBlock { Kind = RigBlockKind.Lcd, Position = new Vector3I(3, 0, 1), Name = "BuildAndRepairGroup1StatusPanel", Tag = "status" });
             spec.Extra.Add(new RigBlock { Kind = RigBlockKind.Lcd, Position = new Vector3I(2, 0, 2), Name = "Hangar LCD [BaR:1]", Tag = "tagged" });
-            spec.Extra.Add(new RigBlock { Kind = RigBlockKind.CockpitSeat, Position = new Vector3I(3, 0, 2), Name = "Cockpit", Tag = "cockpit" });
+            spec.Extra.Add(new RigBlock { Kind = RigBlockKind.CockpitSeat, Position = new Vector3I(3, 0, 2), Name = "Cockpit [BaR:1@0]", Tag = "cockpit" });
             _rig = ctx.SpawnRig(spec);
         }
 
@@ -203,7 +203,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             if (_queuedAt < 0) return;
             ctx.Check(_statusLcdWritten, "LCD 'BuildAndRepairGroup1StatusPanel' not written");
             ctx.Check(_taggedShowsEnabled, "tagged LCD [BaR:1] does not show 'Auto-queuing ... Enabled (1 assembler)'");
-            ctx.Check(_cockpitWritten, "Cockpit[0] not written");
+            ctx.Check(_cockpitWritten, "tagged cockpit screen 0 not written");
             ctx.Check(_queuedDuringInfoOnly == 0, "queued " + _queuedDuringInfoOnly + " SteelPlate after 'info-only'");
             ctx.Check(_taggedShowsInfoOnly, "tagged LCD does not show 'Disabled (info-only)'");
             ctx.Check(_queuedAfterRecompile == 0, "info-only lost on recompile: " + _queuedAfterRecompile + " SteelPlate queued");

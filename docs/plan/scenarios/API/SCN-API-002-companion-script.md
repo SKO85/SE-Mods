@@ -17,7 +17,10 @@
 ## Coverage
 unit:CompanionScriptBehaviourTests
 ingame:S71
+ingame:S81
+ingame:S82
+ingame:S83
 ## Last verified
-v2.5.6 build 261122.18 2026-11-22 — unit (34 tests green); in game (S71): queued in 3.7 s, LCD / tag / Cockpit[0] written, info-only kept over recompile, queue resumed at once.
+v2.5.6 build 261122.29 2026-11-22 — in game: S71, S81 (groups separate), S82 (100 missing = 100 queued, 50+50, stable), S83 (stock: nothing queued); unit 37 green.
 ## Related
 SCN-API-001, BUG-261122.13
