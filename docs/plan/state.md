@@ -27,6 +27,7 @@ The scenario catalogue (`SCN-<AREA>-NNN`, permanent, coverage tracked per file) 
 | REVIEW-260511.1 | Major issue audit — safe-zone fail-open, swallowed exceptions, friendly-relations scaling, admin checks (5 findings, all triaged) | 2026-05-11 | v2.5.4 | Done |
 | REVIEW-261023.1 | Pre-release review of v2.5.6 (mod + companion script) + external PRs #147/#148 (14 findings → BUG-261023.1..14: 2 High, 5 Medium, 7 Low; 3 dismissed with reasons) | 2026-10-23 | v2.5.6 | Done |
 | REVIEW-261122.1 | SE 1.211.018 projection-welding regression — GitHub #149/#150 + PR #151 (8 findings → BUG-261122.1..4: 1 Critical, 1 High, 1 Medium, 1 Low; part 2 of the PR deferred/dismissed with reasons) | 2026-11-22 | v2.5.6 | Done |
+| REVIEW-261122.2 | Test coverage audit: features vs catalogue, unit tests and harness (14 findings to prioritise; companion script / PB API covered since 261122.17) | 2026-11-22 | v2.5.6 | TODO |
 
 ## Bugs
 
@@ -425,3 +426,9 @@ These were identified and fixed on the `fix/v2.5.1` branch — see MEMORY for de
 | BUG-261122.6 | Low | v2.5.6 | `NanobotSystem.Welding.cs:654,712` | TODO | REVIEW-261122.1 follow-up: world-limit pre-check uses the welder BuiltBy, the game's new 1.211 check uses the builtBy we pass (OwnerId) — verify with the diagnostics |
 | BUG-261122.7 | High | v2.5.6 | `NanobotSystem.Scanning.Block.cs:372`, `NanobotSystem.State.cs` (`IsBuiltByOwnerOrFaction`) | Done | Harness S06/S08 + likely GitHub #137: janitor NoOwnership grinds unowned blocks the BaR owner built (armor-only hulls) instead of welding them; weld side already checks BuiltBy |
 | BUG-261122.8 | Medium | v2.5.6 | `NanobotSystem.Update.cs:45-63` | TODO | ShowArea on moving BaRs reported to drop server performance; harness S28-S33: no mod-side cost (draw 0.004 ms/BaR/frame, no extra scans); render-side (GPU overdraw) hypothesis, needs reporter details |
+| BUG-261122.9 | Low | v2.5.6 | `NanobotSystem.Operations.cs:36`, `PowerHelper` | TODO | Harness S20: with welding demand far above supply the BaR still welds at near full speed (flickers between standby-powered and unpowered); power requirement not enforced |
+| BUG-261122.10 | Medium | v2.5.6 | `NanobotSystem.Scanning.Block.cs` (`_EmptyGridCache`), `DamageHandler` | Done | Harness S57: new damage on a grid recently found empty is ignored until `EmptyGridRescanDelaySeconds` (20 s) expires; fixed: damage stamps the grid (GridChangeHandler), ends the skip and the idle backoff |
+| BUG-261122.11 | Low | v2.5.6 | `NanobotSystem.Scanning.Block.cs` (`_EmptyGridCache`) | TODO | Hand-placed block frames on a grid found empty wait for the empty-grid skip (no damage event to end it, unlike BUG-261122.10) |
+| BUG-261122.12 | Medium | v2.5.6 | `NanobotSystem.State.cs` (`IsShieldProtected`) | TODO | Suspected from DS source: DS `IsBlockProtected` ignores the shield state, so an enemy grid with a switched-off / drained shield is never ground; harness S59 verifies |
+| BUG-261122.13 | Low | v2.5.6 | Companion script `RefreshDisplay` | TODO | Displays start on the second configured page (first refresh advances before drawing) |
+| BUG-261122.14 | Medium | v2.5.6 | Clustering / scan candidate sharing | TODO | Harness S64-S69: large clusters weld/grind 35-45 % slower than small clusters with the same BaR count |
