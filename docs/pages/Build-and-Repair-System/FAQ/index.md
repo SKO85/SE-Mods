@@ -392,6 +392,15 @@ Set <code>DisableParticleEffects</code> to <code>true</code> in <code>ModSetting
 </details>
 
 <details>
+<summary>How much power does the system need, and what happens when the grid can't supply it?</summary>
+<div>
+<p>By default a large-grid system needs <strong>50 kW</strong> on standby and <strong>200 kW</strong> while welding or grinding (small grid: half). Almost any grid covers that easily — one battery or small reactor is plenty.</p>
+<p>Admins can raise these with <code>MaximumRequiredElectricPowerStandby</code>, <code>MaximumRequiredElectricPowerWelding</code>, <code>MaximumRequiredElectricPowerGrinding</code> and <code>MaximumRequiredElectricPowerTransport</code> in <code>ModSettings.xml</code>.</p>
+<p>Good to know: with no power the system stops, but if the grid has <em>some</em> power yet less than the welding/grinding requirement, the system still keeps working at a good part of its normal speed. So a very high power requirement does not reliably slow it down. Making the speed follow the available power is planned for a later version.</p>
+</div>
+</details>
+
+<details>
 <summary>How do I disable reputation loss when grinding enemy or neutral grids?</summary>
 <div>
 Set <code>DecreaseFactionReputationOnGrinding</code> to <code>false</code> in <code>ModSettings.xml</code>. By default, grinding grids belonging to other factions or NPCs causes a reputation penalty, matching manual grinding behaviour.
