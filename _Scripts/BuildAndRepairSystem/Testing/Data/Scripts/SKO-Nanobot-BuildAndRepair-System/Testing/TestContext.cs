@@ -40,6 +40,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         /// <summary>World direction of the grid's Forward (-Z); Up stays world Up.</summary>
         public Vector3 Forward = Vector3.Forward;
         public Vector3 LinearVelocity = Vector3.Zero;
+        /// <summary>Grid DestructibleBlocks = false (admin / plugin protection).</summary>
+        public bool Indestructible;
         /// <summary>Terminal group holding every BaR of the rig; null = none.</summary>
         public string BarGroup;
         public Vector3 AngularVelocity = Vector3.Zero;
@@ -159,6 +161,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             rig.Grid = entity as IMyCubeGrid;
             if (rig.Grid == null) throw new Exception("SpawnRig(" + spec.Name + "): grid did not spawn");
             _spawned.Add(entity);
+            FollowSplits(rig.Grid);
             Rigs.Add(rig);
             return rig;
         }
@@ -368,7 +371,23 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         /// <summary>Registers an entity created at runtime (e.g. a rotor head subgrid) for teardown.</summary>
         public void TrackSpawned(IMyEntity entity)
         {
-            if (entity != null && !_spawned.Contains(entity)) _spawned.Add(entity);
+            if (entity == null || _spawned.Contains(entity)) return;
+            _spawned.Add(entity);
+            FollowSplits(entity as IMyCubeGrid);
+        }
+
+        // Grinding / damage can split a test grid; the broken-off part gets a default name and would outlive the
+        // teardown (S61 left the shield emitter behind). Track it and name it so the leftover cleanup finds it too.
+        private void FollowSplits(IMyCubeGrid grid)
+        {
+            if (grid != null) grid.OnGridSplit += OnTestGridSplit;
+        }
+
+        private void OnTestGridSplit(IMyCubeGrid original, IMyCubeGrid split)
+        {
+            if (split == null) return;
+            try { split.CustomName = "NanobotTest-split-" + split.EntityId; } catch { }
+            TrackSpawned(split);
         }
 
         /// <summary>Sum of one component subtype over every inventory of the rig: cargos, BaR blocks and BaR transports.</summary>

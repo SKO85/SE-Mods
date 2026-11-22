@@ -77,7 +77,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S64_Load("S68", "large clusters", LoadWork.Mixed, 2, 10),
             new S64_Load("S69", "small clusters", LoadWork.Mixed, 10, 2),
             new S64_Load("S70", "stress", LoadWork.Mixed, 4, 10),
-            new S71_CompanionScript()
+            new S71_CompanionScript(),
+            new S72_PlacedFrame(),
+            new S73_ProtectedGrid("S73", ProtectionMode.Indestructible),
+            new S73_ProtectedGrid("S74", ProtectionMode.DamageHandler)
         };
 
         public static ITestScenario Find(string id)

@@ -9,6 +9,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
 using VRageMath;
 
 namespace SKONanobotBuildAndRepairSystem.Testing
@@ -69,6 +71,15 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             string error;
             if (!ResolveOriginAndOwner(steamId, out ownerId, out origin, out error)) return error;
 
+            // Test grids left in the world (e.g. saved by an autosave mid-run) would be spawned into: remove them.
+            var removed = RemoveLeftoverTestGrids();
+            // Anything else in the spawn area would be hit by the rigs (physics explosion): refuse instead.
+            var blockers = BlockersInSpawnArea(origin);
+            if (blockers != null)
+                return string.Format(CultureInfo.InvariantCulture,
+                    "Spawn area not clear ({0:F0} m around {1:F0},{2:F0},{3:F0}): {4}. Move away, or set another origin with /nanobars test origin <x> <y> <z>.",
+                    SpawnClearRadius, origin.X, origin.Y, origin.Z, blockers);
+
             _steamId = steamId;
             _ownerId = ownerId;
             _origin = origin;
@@ -84,8 +95,65 @@ namespace SKONanobotBuildAndRepairSystem.Testing
 
             OpenLog();
             return string.Format(CultureInfo.InvariantCulture,
-                "Queued {0} scenario run(s), session {1}. Origin {2:F0},{3:F0},{4:F0}. Results in {5}{1}.log",
-                _queue.Count, _session, origin.X, origin.Y, origin.Z, LogPrefix);
+                "{6}Queued {0} scenario run(s), session {1}. Origin {2:F0},{3:F0},{4:F0}. Results in {5}{1}.log",
+                _queue.Count, _session, origin.X, origin.Y, origin.Z, LogPrefix,
+                removed > 0 ? "Removed " + removed + " leftover test grid(s). " : "");
+        }
+
+        // ---------------------------------------------------------------- spawn-area safety
+
+        /// <summary>Every rig is named "NanobotTest-..." (RigBuilder); the load scenarios reach ~130 m from the origin.</summary>
+        private const string TestGridPrefix = "NanobotTest-";
+        private const double SpawnClearRadius = 150.0;
+        private static readonly HashSet<IMyEntity> _entityScratch = new HashSet<IMyEntity>();
+        private static readonly List<IMyCubeGrid> _groupScratch = new List<IMyCubeGrid>();
+
+        private static bool IsTestGrid(IMyEntity entity)
+        {
+            var name = entity != null ? entity.DisplayName : null;
+            return name != null && name.StartsWith(TestGridPrefix, StringComparison.Ordinal);
+        }
+
+        /// <summary>Closes leftover test grids and everything attached to them (rotor heads, docked test ships).</summary>
+        private static int RemoveLeftoverTestGrids()
+        {
+            _entityScratch.Clear();
+            MyAPIGateway.Entities.GetEntities(_entityScratch, e => e is IMyCubeGrid && IsTestGrid(e));
+            var closed = new HashSet<long>();
+            foreach (var entity in _entityScratch)
+            {
+                var grid = entity as IMyCubeGrid;
+                if (grid == null || grid.Closed || grid.MarkedForClose) continue;
+                _groupScratch.Clear();
+                MyAPIGateway.GridGroups.GetGroup(grid, GridLinkTypeEnum.Logical, _groupScratch);
+                if (_groupScratch.Count == 0) _groupScratch.Add(grid);
+                foreach (var member in _groupScratch)
+                {
+                    if (member == null || member.Closed || member.MarkedForClose || !closed.Add(member.EntityId)) continue;
+                    member.Close();
+                }
+            }
+            _entityScratch.Clear();
+            _groupScratch.Clear();
+            return closed.Count;
+        }
+
+        /// <summary>Names of non-test grids within SpawnClearRadius of the origin (null when clear).</summary>
+        private static string BlockersInSpawnArea(Vector3D origin)
+        {
+            var sphere = new BoundingSphereD(origin, SpawnClearRadius);
+            var hits = MyAPIGateway.Entities.GetTopMostEntitiesInSphere(ref sphere);
+            var names = new List<string>();
+            var more = 0;
+            foreach (var entity in hits)
+            {
+                var grid = entity as IMyCubeGrid;
+                if (grid == null || grid.Closed || grid.MarkedForClose || IsTestGrid(grid)) continue;
+                if (names.Count < 5) names.Add(string.IsNullOrEmpty(grid.DisplayName) ? grid.EntityId.ToString() : grid.DisplayName);
+                else more++;
+            }
+            if (names.Count == 0) return null;
+            return string.Join(", ", names) + (more > 0 ? " (+" + more + " more)" : "");
         }
 
         public static string Status()

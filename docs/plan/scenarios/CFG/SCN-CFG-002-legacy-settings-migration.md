@@ -21,6 +21,7 @@ n/a
 ## Coverage
 unit:SyncModSettingsTests.AdjustSettings_MigratesOldVersion_AndIsIdempotent
 unit:SyncModSettingsTests.ValidateAndClamp_FoldsDeprecatedGrindIfWeldGetStuck
+unit:BlockSettingsLegacyLoadTests
 ## Last verified
 v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
 ## Related

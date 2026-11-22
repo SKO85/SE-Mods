@@ -27,6 +27,7 @@
 ingame:S01
 ingame:S57
 unit:GridChangeHandlerTests
+ingame:S72
 ## Last verified
 never
 ## Related

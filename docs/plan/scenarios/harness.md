@@ -16,6 +16,10 @@ Code: `_Scripts/BuildAndRepairSystem/Testing/Data/Scripts/SKO-Nanobot-BuildAndRe
 - `/nanobars test clear` — delete old results. `/nanobars test list` — show the registry.
 - `/nanobars test run <id|id,id|id-id|all> [xN]` — e.g. `S03`, `S03,S20`, `S28-S33`, `S01-S05 x3`. Ranges follow the
   `test list` order. A hidden warm-up (`S00`) runs first in every session; each scenario posts a start line in chat.
+- Spawn safety: at the start of a run, leftover test grids (`NanobotTest-*` and anything attached, e.g. saved by an
+  autosave mid-run) are removed; any other grid within 150 m of the origin stops the run with its name (move away or
+  use `test origin`) — spawning into a grid makes the physics explode. Parts that split off a test grid while
+  grinding are tracked and named `NanobotTest-split-*`, so they are removed with the scenario.
 - Scenarios that cannot run in the world (e.g. DefenseShields not loaded, no pirate faction) are reported as
   `SKIPPED` with the reason (`pass=skipped` in the log) and count as neither pass nor fail.
 - `/nanobars test status`, `/nanobars test abort`, `/nanobars test origin <x> <y> <z>|reset` (default: 300 m in front of you).
@@ -34,9 +38,10 @@ behaviour is not listed here (then also add/extend the `SCN-` catalogue entry).
 | Area | Scenarios |
 |---|---|
 | Welding basics (repair, stock, shortage, state) | S01, S02, S57 |
-| Damage detection / re-damage (BUG-261122.10; hand-placed frames BUG-261122.11 not yet) | S57 |
+| Damage detection / re-damage / placed frames (BUG-261122.10, .11) | S57, S72 |
 | Projector building, component accounting, blockers | S03, S27, S42, S46 |
-| Grinding / janitor | S04, S11–S13, S16, S17, S45, S47 |
+| Grinding / janitor | S04, S11–S13, S16, S17, S45, S47, S73, S74 |
+| Protected grids (indestructible, plugin protection) | S73, S74 |
 | Grind order (far / near / smallest) | S11, S12, S13 |
 | Priority lists (order, disabled classes) | S14, S15, S16 |
 | Ownership and relations (own, own-built unowned, derelict, pirates) | S17, S06, S08, S44, S45 |
@@ -66,7 +71,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S00 | Warm-up (not a test): JIT the weld/grind/scan paths once per session | — | 3 s | 261122.11 |
 | S01 | One BaR repairs 10 damaged blocks from stocked cargo | CORE-001, WELD-001 | 3 s | 261122.8 |
 | S02 | Empty cargo: missing components reported, nothing welded, no spikes | WELD-005 | 20 s | 261122.8 |
-| S03 | Projector: 10 blocks built from an empty block inventory, charged once | WELD-002 | 3 s | 261122.11 |
+| S03 | Projector: 10 blocks built from an empty block inventory, charged once | WELD-002 | 3 s | 261122.20 |
 | S04 | Janitor (GrindOnly, NoOwnership) razes a derelict grid | GRIND-001 | 11 s | 261122.8 |
 | S05 | Two BaRs never weld the same or a foreign-claimed block | BUDGET-001 | 3 s | 261122.8 |
 | S06 | MaxSystemsPerTargetGrid=2 held with 4 BaRs, grid still finished | CLUSTER-002 | 9 s | 261122.8 |
@@ -121,12 +126,12 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S55 | Blocks claimed while welded, none left claimed afterwards | BUDGET-001 | 7 s | 261122.13 |
 | S56 | Welding BaR switched off: claim released, other BaR finishes | BUDGET-001 | 22 s | 261122.13 |
 | S57 | Repaired blocks damaged again (twice) are detected and repaired | CORE-001 | 41 s | 261122.16 — detected 2.4 s / 1.5 s |
-| S58 | DS: pirate ship with its shield up is not ground | ZONE-001 | ~40 s | not yet |
-| S59 | DS: pirate ship with its shield switched off is ground (BUG-261122.12) | ZONE-001 | ~45 s | not yet |
-| S60 | DS: ShieldCheckEnabled=false grinds through a raised shield | ZONE-001 | ~35 s | not yet |
-| S61 | DS: shield check switched on mid-grind stops the grinding | ZONE-001 | ~45 s | not yet |
-| S62 | DS: BaR ship inside its own shield welds its own blocks | ZONE-001 | ~30 s | not yet |
-| S63 | DS: friendly ship with its shield up is welded from outside | ZONE-001 | ~30 s | not yet |
+| S58 | DS: pirate ship with its shield up is not ground | ZONE-001 | ~40 s | 261122.20 — shield up in 0.5 s, 10/10 left |
+| S59 | DS: pirate ship with its shield switched off is ground (BUG-261122.12) | ZONE-001 | ~45 s | 261122.22 — ground in 6.7 s with the shield down |
+| S60 | DS: ShieldCheckEnabled=false grinds through a raised shield | ZONE-001 | ~35 s | 261122.25 — ground in 7.7 s |
+| S61 | DS: shield check switched on mid-grind stops the grinding | ZONE-001 | ~45 s | 261122.25 — 0 lost after the switch |
+| S62 | DS: BaR ship inside its own shield welds its own blocks | ZONE-001 | ~30 s | 261122.20 — 6/6 welded, IsShielded |
+| S63 | DS: friendly ship with its shield up is welded from outside | ZONE-001 | ~30 s | 261122.20 — 6/6 welded |
 | S64 | Load weld: 20 BaRs (2 x 10) on ships of 25/150/600 blocks | BUDGET-008 | 22 s | 261122.16 — 35.9 welds/s, 2 clusters |
 | S65 | Load weld: 20 BaRs (10 x 2) | BUDGET-008 | 14 s | 261122.16 — 55.7 welds/s, 10 clusters |
 | S66 | Load grind: 20 BaRs (2 x 10) on derelicts of 25/150/600 blocks | BUDGET-008 | 38 s | 261122.16 — 20.4 ground/s |
@@ -135,6 +140,9 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S69 | Load mixed: 20 BaRs (10 x 2) | BUDGET-008 | 37 s | 261122.16 — 21.0 + 21.0 /s |
 | S70 | Stress mixed: 40 BaRs (4 x 10) | BUDGET-008 | 36 s | 261122.16 — 21.8 + 21.8 /s, 40 BaRs |
 | S71 | Companion script in a real PB: queuing, LCDs, info-only / queue, recompile | API-002 | 20 s | 261122.18 — queued in 3.7 s; info-only kept over recompile |
+| S72 | Block frame added to a repaired grid (after 3 s and 30 s idle) is welded | CORE-001 | 39 s | 261122.20 — welded 2.8 s / 0.2 s after placing |
+| S73 | Protected grid: indestructible derelict is not ground (no grind call) | GRIND-006 | 20 s | 261122.25 — 0 grind calls |
+| S74 | Protected grid: damage-handler (plugin style) protection respected, no retry storm | GRIND-006 | 20 s | 261122.25 — 1 refused attempt, nothing ground |
 
 ## Scenarios
 
@@ -391,13 +399,15 @@ shield is online (ready timeout 120 s). **Pass** nothing ground in 20 s. **Recor
 
 ### S59
 S58, then the controller is switched off (functional, shield down) before the run. **Pass** the ship is ground.
-**Known:** expected to fail until BUG-261122.12 — DS `IsBlockProtected` ignores the shield state.
+Failed on 261122.20 (DS `IsBlockProtected` ignores the shield state) — BUG-261122.12, fixed in 261122.21, green since.
 
 ### S60
 S58 with `ShieldCheckEnabled=false`: **Pass** ground through the raised shield.
 
 ### S61
-S58 with `ShieldCheckEnabled=false`, WorkSpeed 1, `GrindingMultiplier` 0.1; as soon as grinding starts the check is
+S58 with `ShieldCheckEnabled=false`, WorkSpeed 1 (slow cycle; not GrindingMultiplier, which also slows the transport),
+a 20-block ship, and the BaR grinding armor only (other grind classes disabled — grinding the shield's own controller /
+batteries took the shield down first); as soon as grinding starts the check is
 switched on. **Pass** no further integrity loss from 3 s after the switch (BUG-260612.13 grind-time recheck).
 **Records** `switchedAtS`, `integrityLostAfterGrace`.
 
@@ -445,6 +455,21 @@ tagged LCD ("Enabled (1 assembler)") and Cockpit[0] written; after `info-only` n
 shows "Disabled (info-only)"; still nothing after `Recompile()` (mode kept in Storage); `queue` resumes within 15 s.
 **Skipped** when in-game scripts are disabled. **Records** `queuedAtS`, `queuedSteel`, `storageAfterInfoOnly`,
 `queuedAfterRecompile`, `requeueS`. Its tick peak (~300 ms, sim 0.72) is the game compiling the script on `Recompile()`, called from the harness tick — not mod cost.
+
+### S72
+**Proves** BUG-261122.11: a block added to a fully repaired grid is noticed. **Setup** 1 BaR, 3 damaged armor, stock;
+once repaired, an armor frame (5 %) is added with `grid.AddBlock` (like a hand-placed block) 3 s after the repair,
+and another after a 30 s idle. **Pass** welding starts within `TargetsUpdateInterval` + 3 s (8 s) and each frame is
+welded to full. **Records** `frameNDetectS`, `frameNWeldedS`.
+
+### S73
+**Proves** an indestructible grid (`DestructibleBlocks = false`, `RigSpec.Indestructible`) is not ground: derelict
+10-block row 25 m away, GrindOnly, janitor NoOwnership, 20 s. **Pass** nothing ground and ServerDoGrind never called.
+
+### S74
+**Proves** BUG-261122.15: a protection plugin's damage handler is respected. The harness registers a BeforeDamage
+handler (once per session, inert unless a grid is listed) that zeroes grind damage on the target. **Pass** nothing ground
+and at most 3 grind attempts in 20 s (refused grid skipped 30 s). **Records** `grindCalls`, `handlerRefusals`.
 
 ## Building blocks for new scenarios
 

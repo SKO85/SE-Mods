@@ -11,12 +11,12 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 
 | ID | Area | Tier | Title | Coverage | Last verified |
 |---|---|---|---|---|---|
-| SCN-CORE-001 | CORE | 1 | Idle → Welding → Idle state transitions on one damaged grid | unit:GridChangeHandlerTests; ingame:S01, S57 | never |
+| SCN-CORE-001 | CORE | 1 | Idle → Welding → Idle state transitions on one damaged grid | unit:GridChangeHandlerTests; ingame:S01, S57, S72 | never |
 | SCN-CORE-002 | CORE | 2 | BoundingBox search mode: area size/offset clamps and Show Area | manual; ingame:S25 | never |
 | SCN-CORE-003 | CORE | 2 | No power / power restored / insufficient power | ingame:S19; ingame:S20 | never |
 | SCN-CFG-001 | CFG | 1 | ModSettings.xml out-of-range values are clamped on load | unit:SyncModSettingsTests.ValidateAndClamp_ClampsEveryBoundedField | 261006.3 unit |
-| SCN-CFG-002 | CFG | 1 | Legacy settings migrate to version 7; deprecated GrindIfWeldGetStuck folded | unit:SyncModSettingsTests.AdjustSettings_MigratesOldVersion_AndIsIdempotent | 261006.3 unit |
-| SCN-CFG-003 | CFG | 2 | Admin restrictions and switches in ModSettings win over block settings | ingame:S46, S47, S48, S49, S50, S51, S52, S53 | never |
+| SCN-CFG-002 | CFG | 1 | Legacy settings migrate to version 7; deprecated GrindIfWeldGetStuck folded | unit:SyncModSettingsTests.AdjustSettings_MigratesOldVersion_AndIsIdempotent; unit:BlockSettingsLegacyLoadTests | 261006.3 unit |
+| SCN-CFG-003 | CFG | 2 | Admin restrictions and switches in ModSettings win over block settings | ingame:S46, S47, S48, S49, S50, S51, S52, S53; unit:BlockSettingsLimitsTests | never |
 | SCN-CHAT-001 | CHAT | 1 | /nanobars config set/get round trip and bounds rejection | unit:ConfigCommandTests.SetGetRoundTrip_AndBoundsRejection | 261006.3 unit |
 | SCN-CHAT-002 | CHAT | 4 | Dedicated server: admin command forwarding and response routing | manual | never |
 | SCN-BUDGET-001 | BUDGET | 1 | Block assignment TTL: a claimed block is released to another BaR | unit:TtlCacheTests; ingame:S05, S51, S55, S56 | 261006.3 unit |
@@ -39,6 +39,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-GRIND-003 | GRIND | 2 | Grind order: near / far / smallest-grid first, ignore priority order | unit:QuickSelectTests.MatchesSortForKSmallest_RandomInputs; ingame:S11, S12, S13 | 261006.3 unit |
 | SCN-GRIND-004 | GRIND | 2 | Raze queue and mech / dismount per-tick throttles | unit:PerTickBudgetTests | 261006.3 unit |
 | SCN-GRIND-005 | GRIND | 2 | Grind colour grinds painted blocks on the own grid | ingame:S24 | never |
+| SCN-GRIND-006 | GRIND | 2 | Protected grids are not ground (indestructible, immune, damage-handler protection) | unit:GrindDamageVetoTests; ingame:S73, S74 | 261122.25 in game |
 | SCN-COLLECT-001 | COLLECT | 2 | Floating objects inside area only, CollectIfIdle, component class priority | manual, ingame:S10, unit | 261023.2 unit |
 | SCN-INV-001 | INV | 2 | Source scan via conveyors, pull cursor rotation, push-targets-full backoff | manual | never |
 | SCN-INV-002 | INV | 2 | Push-immediately flags and inventory-full pause | manual | never |
@@ -46,7 +47,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-CLUSTER-001 | CLUSTER | 3 | Coordinator election and shared scan results for co-located BaRs | ingame:S07 | never |
 | SCN-CLUSTER-002 | CLUSTER | 3 | MaxSystemsPerTargetGrid saturation (strictly greater-than) and secondary task | unit:GridSaturationTrackerTests; ingame:S06, S50, S54 | 261006.3 unit |
 | SCN-CLUSTER-003 | CLUSTER | 3 | Fair-share target truncation across grids | planned: unit:TruncateGridAwareTests (second wave) | never |
-| SCN-ZONE-001 | ZONE | 3 | Safe zones and DefenseShields block weld / grind / build; characters protected | manual; ingame:S39, S40, S41, S42, S53, S58-S63 | never |
+| SCN-ZONE-001 | ZONE | 3 | Safe zones and DefenseShields block weld / grind / build; characters protected | manual; unit:ShieldProtectionTests; ingame:S39, S40, S41, S42, S53, S58-S63 | never |
 | SCN-FX-001 | FX | 1 | Weld / grind particle and sound effects at block position, distance-culled | manual | never |
 | SCN-TERM-001 | TERM | 2 | Terminal controls, actions and sliders reflect fixed vs default mod settings | manual, unit | 261023.6 unit |
 | SCN-API-001 | API | 3 | PB scripting API incl. ScriptControlled and ScriptControllFixed lockdown | manual, unit:CompanionScriptContractTests; ingame:S09 | 261122.18 in game |

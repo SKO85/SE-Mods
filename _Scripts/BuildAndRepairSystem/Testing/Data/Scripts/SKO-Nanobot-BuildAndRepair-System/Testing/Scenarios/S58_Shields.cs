@@ -1,4 +1,5 @@
 using Sandbox.ModAPI;
+using SKONanobotBuildAndRepairSystem.Handlers;
 using VRageMath;
 
 namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
@@ -28,6 +29,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
     internal sealed class S58_Shields : TestScenarioBase
     {
         private const int GrindBlocks = 10;
+        private const int MidGrindBlocks = 20;
         private const int WeldBlocks = 6;
         private const double ShieldUpWindow = 20.0;
         private const double MidGrindGrace = 3.0;
@@ -50,6 +52,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         private double _integrityStart = -1;
         private double _switchedAt = -1;
         private double _integrityAfterGrace = -1;
+        private float[] _graceIntegrity;
+        private int _outsideAtSwitch = -1;
 
         public S58_Shields(string id, ShieldMode mode)
         {
@@ -95,13 +99,14 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         public override void Setup(TestContext ctx)
         {
             _onlineAt = _downAt = _integrityStart = _switchedAt = _integrityAfterGrace = -1;
+            _graceIntegrity = null;
+            _outsideAtSwitch = -1;
             _reported = _probed = false;
             _probeStatus = "";
             var slow = _mode == ShieldMode.CheckOnMidGrind;
             ctx.SetModSettings(s =>
             {
-                s.Welder.WorkSpeed = slow ? 1 : 10;
-                if (slow) s.Welder.GrindingMultiplier = 0.1f;
+                s.Welder.WorkSpeed = slow ? 1 : 10; // S61: slow cycle (GrindingMultiplier would also slow the transport)
                 s.ShieldCheckEnabled = _mode != ShieldMode.CheckDisabled && _mode != ShieldMode.CheckOnMidGrind;
                 s.Welder.AllowedGrindJanitorRelations |= AutoGrindRelation.Enemies;
             });
@@ -119,7 +124,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             }
 
             _bar = ctx.SpawnRig(new RigSpec { Name = _id, Bars = 1 });
-            var n = Weld ? WeldBlocks : GrindBlocks;
+            var n = Weld ? WeldBlocks : (slow ? MidGrindBlocks : GrindBlocks);
             var ship = new RigSpec
             {
                 Name = _id + (Enemy ? "-enemy" : "-friendly"),
@@ -152,6 +157,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 s.AreaOffset = Vector3.Zero;
                 s.AreaSize = new Vector3(200f, 200f, 200f);
             });
+
+            // S61: grind armor only — grinding the shield's controller / emitter / batteries (farthest first) took the
+            // shield down before the check was switched on.
+            if (_mode == ShieldMode.CheckOnMidGrind)
+                foreach (var bar in _bar.Bars)
+                    for (int c = (int)BlockClass.AutoRepairSystem; c <= (int)BlockClass.MergeBlock; c++)
+                        bar.ScriptSetGrindEnabled(c, c == (int)BlockClass.ArmorBlock);
         }
 
         private IMyFunctionalBlock Controller()
@@ -230,10 +242,44 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 {
                     ctx.SetModSettings(s => { s.ShieldCheckEnabled = true; });
                     _switchedAt = ctx.RunSeconds;
+                    _outsideAtSwitch = 0;
+                    foreach (var b in _shieldRig.Targets)
+                        if (b != null && !b.IsDestroyed && !Mod.Shield.IsBlockProtected(b)) _outsideAtSwitch++;
                 }
                 return;
             }
-            if (_integrityAfterGrace < 0 && ctx.RunSeconds >= _switchedAt + MidGrindGrace) _integrityAfterGrace = integrity;
+            if (_integrityAfterGrace < 0 && ctx.RunSeconds >= _switchedAt + MidGrindGrace)
+            {
+                _integrityAfterGrace = integrity;
+                var t = _shieldRig.Targets;
+                _graceIntegrity = new float[t.Count];
+                for (int i = 0; i < t.Count; i++) _graceIntegrity[i] = t[i] != null && !t[i].IsDestroyed ? t[i].Integrity : -1f;
+            }
+        }
+
+        // S61 diagnostics: blocks that lost integrity after the grace — inside the shield (DS) / protected for the BaR.
+        private string MidGrindDiagnosis(TestContext ctx)
+        {
+            if (_graceIntegrity == null) return "no grace snapshot";
+            int lost = 0, removed = 0, inside = 0, barProtected = 0;
+            var bar = _bar.Bars.Count > 0 ? _bar.Bars[0] : null;
+            var t = _shieldRig.Targets;
+            for (int i = 0; i < t.Count && i < _graceIntegrity.Length; i++)
+            {
+                if (_graceIntegrity[i] < 0) continue;
+                var b = t[i];
+                var still = b != null && !b.IsDestroyed && b.CubeGrid != null && !b.CubeGrid.Closed && b.CubeGrid.GetCubeBlock(b.Position) == b;
+                if (!still) { removed++; continue; }
+                if (b.Integrity >= _graceIntegrity[i] - 0.01f) continue;
+                lost++;
+                if (Mod.Shield.IsBlockProtected(b)) inside++;
+                if (bar != null && bar.IsShieldProtected(b)) barProtected++;
+            }
+            var current = bar != null ? bar.State.CurrentGrindingBlock : null;
+            var currentInfo = current == null ? "none"
+                : current.Position + (Mod.Shield.IsBlockProtected(current) ? " inside" : " outside") + (bar.IsShieldProtected(current) ? "/protected" : "/not-protected");
+            return "outsideAtSwitch=" + _outsideAtSwitch + ", lostAfterGrace=" + lost + " (inside " + inside + ", barProtected " + barProtected +
+                "), removedAfterGrace=" + removed + ", grindingAtEnd=" + currentInfo + ", gridShieldOnline=" + Mod.Shield.GridShieldOnline(_shieldRig.Grid);
         }
 
         public override bool IsComplete(TestContext ctx)
@@ -247,7 +293,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                     return ScenarioUtil.AllGone(ctx, _shieldRig, _shieldRig.Targets) || ctx.RunSeconds >= 30;
                 case ShieldMode.CheckOnMidGrind:
                     if (ScenarioUtil.AllGone(ctx, _shieldRig, _shieldRig.Targets)) return true;
-                    return _switchedAt >= 0 ? ctx.RunSeconds >= _switchedAt + MidGrindGrace + MidGrindWatch : ctx.RunSeconds >= 40;
+                    return _switchedAt >= 0 ? ctx.RunSeconds >= _switchedAt + MidGrindGrace + MidGrindWatch : ctx.RunSeconds >= 60;
                 default:
                     return ctx.CountFullIntegrity(_shieldRig.Targets) == _shieldRig.Targets.Count || ctx.RunSeconds >= 30;
             }
@@ -285,9 +331,11 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                     var lostAfter = _integrityAfterGrace >= 0 ? _integrityAfterGrace - integrity : -1;
                     ctx.Metric("switchedAtS", _switchedAt);
                     ctx.Metric("integrityLostAfterGrace", lostAfter);
+                    var diagnosis = gone ? "ship gone" : MidGrindDiagnosis(ctx);
+                    ctx.Metric("diagnosis", diagnosis.Replace(';', ',').Replace('=', ':'));
                     ctx.Check(_switchedAt >= 0, "grinding through the shield never started (check off)");
                     ctx.Check(!gone, "ship fully ground before the shield check took effect");
-                    ctx.Check(lostAfter >= 0 && lostAfter < 0.01, "still grinding " + MidGrindGrace + " s after the shield check was switched on (lost " + lostAfter + ")");
+                    ctx.Check(lostAfter >= 0 && lostAfter < 0.01, "still grinding " + MidGrindGrace + " s after the shield check was switched on (lost " + lostAfter + "; " + diagnosis + ")");
                     break;
                 default:
                     var welded = ctx.CountFullIntegrity(targets);

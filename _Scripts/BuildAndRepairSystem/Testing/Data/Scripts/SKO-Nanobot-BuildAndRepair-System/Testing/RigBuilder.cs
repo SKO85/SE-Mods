@@ -35,7 +35,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 grid.AngularVelocity = spec.AngularVelocity;
             }
             grid.CreatePhysics = true;
-            grid.DestructibleBlocks = true;
+            grid.DestructibleBlocks = !spec.Indestructible;
             grid.PersistentFlags = MyPersistentEntityFlags2.InScene | MyPersistentEntityFlags2.CastShadows;
             grid.PositionAndOrientation = new MyPositionAndOrientation(position, spec.Forward, Vector3.Up);
             grid.DisplayName = "NanobotTest-" + spec.Name;

@@ -27,6 +27,7 @@ ingame:S50
 ingame:S51
 ingame:S52
 ingame:S53
+unit:BlockSettingsLimitsTests
 ## Last verified
 never
 ## Related
