@@ -26,8 +26,11 @@ namespace SKONanobotBuildAndRepairSystem.Extensions
 
         /// <summary>
         /// Is the block damaged/incomplete and worth repairing under the given weld mode.
+        /// BUG-260610.5: allowMutate gates the ResetSkeleton side effect — engine
+        /// skeleton/bone calls are main-thread only, so the background scan passes
+        /// false (pure read) and only the weld loop passes true.
         /// </summary>
-        public static bool NeedRepair(this IMySlimBlock target, AutoWeldOptions weldMode)
+        public static bool NeedRepair(this IMySlimBlock target, AutoWeldOptions weldMode, bool allowMutate)
         {
             if (target == null) return false;
             if (target.IsDestroyed) return false;
@@ -43,15 +46,18 @@ namespace SKONanobotBuildAndRepairSystem.Extensions
 
             if (target.MaxDeformation > MinDeformation)
             {
-                target.ResetSkeleton();
-                // MaxDeformation is bugged in-game and doesn't reset until restart/full removal,
-                // so don't tell BaR to weld for this case.
+                if (allowMutate) target.ResetSkeleton();
+                // MaxDeformation is bugged in-game and doesn't reset until restart/full
+                // removal, so never a weld target. BUG-260827.1: the BUG-260824.7 attempt
+                // to flag these in the scan flooded the target list with unweldable
+                // phantoms (welding stalled, ResetSkeleton churn) — the scan enqueues
+                // them to SkeletonResetHandler for a budgeted main-thread reset instead.
                 return false;
             }
 
             if (target.HasDeformation)
             {
-                target.ResetSkeleton();
+                if (allowMutate) target.ResetSkeleton();
                 // HasDeformation is reliable (heavy though) — tell BaR to weld.
                 return true;
             }

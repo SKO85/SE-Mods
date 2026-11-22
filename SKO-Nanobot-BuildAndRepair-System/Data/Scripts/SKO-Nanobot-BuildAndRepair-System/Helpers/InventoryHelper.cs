@@ -19,73 +19,10 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
             concurrencyLevel: 4,
             capacity: 2048);
 
-        // BUG-142: cache for CanTransferItemTo (key includes component for sorter filters).
-        public struct TransferKey : IEquatable<TransferKey>
-        {
-            public readonly long SrcEntityId;
-            public readonly long DstEntityId;
-            public readonly int ComponentHash;
-
-            public TransferKey(long srcEntityId, long dstEntityId, int componentHash)
-            {
-                SrcEntityId = srcEntityId;
-                DstEntityId = dstEntityId;
-                ComponentHash = componentHash;
-            }
-
-            public bool Equals(TransferKey other)
-            {
-                return SrcEntityId == other.SrcEntityId
-                    && DstEntityId == other.DstEntityId
-                    && ComponentHash == other.ComponentHash;
-            }
-
-            public override bool Equals(object obj)
-            {
-                if (!(obj is TransferKey)) return false;
-                return Equals((TransferKey)obj);
-            }
-
-            public override int GetHashCode()
-            {
-                unchecked
-                {
-                    var hash = 17;
-                    hash = hash * 31 + SrcEntityId.GetHashCode();
-                    hash = hash * 31 + DstEntityId.GetHashCode();
-                    hash = hash * 31 + ComponentHash;
-                    return hash;
-                }
-            }
-        }
-
-        private static readonly TtlCache<TransferKey, bool> TransferCache = new TtlCache<TransferKey, bool>(
-            defaultTtl: TimeSpan.FromSeconds(60),
-            comparer: null,
-            concurrencyLevel: 4,
-            capacity: 4096);
-
-        public static int TransferCacheCount { get { return TransferCache.Count; } }
-
-        /// <summary>BUG-142: cached wrapper around IMyInventory.CanTransferItemTo.</summary>
-        public static bool CanTransferItemToCached(this IMyInventory srcInventory, IMyInventory dstInventory, MyDefinitionId componentId)
-        {
-            if (srcInventory == null || dstInventory == null) return false;
-            var srcOwner = srcInventory.Owner as IMyEntity;
-            var dstOwner = dstInventory.Owner as IMyEntity;
-            if (srcOwner == null || dstOwner == null)
-                return srcInventory.CanTransferItemTo(dstInventory, componentId);
-
-            var key = new TransferKey(srcOwner.EntityId, dstOwner.EntityId, componentId.SubtypeId.GetHashCode());
-            bool cached;
-            if (TransferCache.TryGet(key, out cached))
-                return cached;
-
-            var result = srcInventory.CanTransferItemTo(dstInventory, componentId);
-            TransferCache.Set(key, result);
-            return result;
-        }
-
+        // BUG-142's TransferCache (cached CanTransferItemTo wrapper) removed in
+        // BUG-260610.36: it had no callers, and its key dropped the component TypeId
+        // (Ore/Ingot collisions) — deleted rather than fixed so nobody adopts a
+        // latently broken cache.
         // BUG-133: SourceHasComponentCache retired (PullFromSourcesOnePass made FindItem unused).
 
         public static bool AddIfConnectedToInventory(this IMyTerminalBlock terminalBlock, IMyShipWelder welder, List<IMyInventory> possibleSources, HashSet<IMyInventory> possibleSourcesSet)
@@ -177,7 +114,6 @@ namespace SKONanobotBuildAndRepairSystem.Helpers
         public static void Cleanup()
         {
             ConnectionCache.CleanupExpired();
-            TransferCache.CleanupExpired();
         }
     }
 }

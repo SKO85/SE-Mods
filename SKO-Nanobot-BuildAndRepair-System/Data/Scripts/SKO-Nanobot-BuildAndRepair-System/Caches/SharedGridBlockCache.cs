@@ -47,6 +47,34 @@ namespace SKONanobotBuildAndRepairSystem.Caches
         }
 
         /// <summary>
+        /// BUG-261122.4: filtered variant for the scan's fat-block traversals, with the same BUG-149
+        /// guard (keeps the partial list instead of aborting the whole cluster scan).
+        /// </summary>
+        public static void GetBlocks(IMyCubeGrid grid, List<IMySlimBlock> blocks, Func<IMySlimBlock, bool> filter)
+        {
+            var profilerTs = MethodProfiler.Start();
+            var partial = false;
+            try
+            {
+                grid.GetBlocks(blocks, filter);
+            }
+            catch (InvalidOperationException)
+            {
+                partial = true;
+            }
+            finally
+            {
+                if (profilerTs != 0L)
+                {
+                    var _partial = partial;
+                    var _count = blocks.Count;
+                    MethodProfiler.StopAndLog("SharedGridBlockCache.GetBlocksFiltered", profilerTs, () =>
+                        string.Format("gridId={0};partial={1};count={2}", grid.EntityId, _partial, _count));
+                }
+            }
+        }
+
+        /// <summary>
         /// No-op. Retained for API compatibility with Mod.cs cleanup calls.
         /// </summary>
         public static void Cleanup()

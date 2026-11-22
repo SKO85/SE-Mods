@@ -7,6 +7,7 @@ using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using VRage.Game;
 using VRage.Game.ModAPI;
@@ -31,6 +32,8 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByAssign = 0;
             var skippedByScript = 0;
             var skippedByDestroyed = 0;
+            var skippedByRefused = 0;
+            var skippedByOutOfArea = 0;
             var iterationsExamined = 0;
             var loopSkipped = false;
             var tsLockAcquire = 0L;
@@ -74,6 +77,9 @@ namespace SKONanobotBuildAndRepairSystem
                     if (targetData.Block == null) { skippedByNullBlock++; continue; }
                     if (targetData.Block.CubeGrid == null) { skippedByNullBlock++; continue; }
                     if (targetData.Block.FatBlock != null && targetData.Block.FatBlock.Closed) { skippedByClosedFatBlock++; continue; }
+
+                    // BUG-261122.15: grinding this grid was refused (protection plugin / mod) — skip it for a while.
+                    if (_grindRefusedGrids.Count > 0 && IsGrindRefused(targetData.Block.CubeGrid.EntityId)) { skippedByRefused++; continue; }
 
                     if (Settings.CurrentPickedGrindingBlock == null)
                     {
@@ -164,16 +170,45 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
+            // BUG-261122.16: the area check is scan-time only — a target whose grid moved (ship flying off, ground-off
+            // piece flung away) is dropped from this BaR's list instead of being ground from afar.
+            if (chosenGrindTarget != null && !IsTargetInArea(chosenGrindTarget.Block))
+            {
+                ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
+                lock (State.PossibleGrindTargets)
+                {
+                    if (State.PossibleGrindTargets.Remove(chosenGrindTarget)) State.PossibleGrindTargets.RebuildHash();
+                }
+                chosenGrindTarget = null;
+                skippedByOutOfArea++;
+            }
+            // BUG-260612.13: zones/shields are otherwise enforced only at scan time —
+            // a shield raised or zone enabled around the target mid-operation kept it
+            // being ground off the stale list for up to a scan cycle. Both checks are
+            // cheap here (DS dictionary lookup; zone verdict cached 15 s per block).
+            if (chosenGrindTarget != null
+                && (IsShieldProtected(chosenGrindTarget.Block)
+                    || SafeZoneHandler.IsProtectedFromGrinding(chosenGrindTarget.Block, _Welder)))
+            {
+                ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
+                chosenGrindTarget = null;
+            }
+
             if (chosenGrindTarget != null)
             {
                 // OPT 3: Global grind budget — cap ServerDoGrind calls per tick (count + time).
                 if (!Mod.TryClaimGrindSlot())
                 {
-                    ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
+                    // BUG-261023.8: budget deferral, not a failure — keep the claim and report
+                    // the block (like BUG-154 for welding) so the current block / grid count
+                    // don't flicker and no other BaR takes it between ticks.
+                    needGrinding = true;
+                    currentGrindingBlock = chosenGrindTarget.Block;
                 }
                 else
                 {
                     var grindTs = Stopwatch.GetTimestamp();
+                    _grindJanitorDone = false;
                     grinding = ServerDoGrind(chosenGrindTarget, out transporting);
                     Mod.ReportGrindTime((Stopwatch.GetTimestamp() - grindTs) * 1000.0 / Stopwatch.Frequency);
 
@@ -194,40 +229,20 @@ namespace SKONanobotBuildAndRepairSystem
                         var grindBlock = chosenGrindTarget.Block;
                         if (grindBlock != null && grindBlock.IsFullyDismounted)
                         {
-                            lock (State.PossibleGrindTargets)
-                            {
-                                if (State.PossibleGrindTargets.Remove(chosenGrindTarget))
-                                {
-                                    State.PossibleGrindTargets.ChangeHash();
-                                }
-                            }
-
-                            // BUG-260511.19: propagate the removal to other cluster members
-                            // so they don't walk past this block as a closed-FatBlock entry
-                            // between scans. At WorkSpeed=10 with 20 active BaRs, ~120
-                            // blocks/s are destroyed cluster-wide and the dead-entry
-                            // accumulation rate exceeds the per-BaR list size before the
-                            // next scan rebuilds — that's the "1 BaR grinding while others
-                            // sit idle" pattern.
-                            var cluster = AssignedCluster;
-                            if (cluster != null && grindBlock.CubeGrid != null)
-                            {
-                                var gid = grindBlock.CubeGrid.EntityId;
-                                var pos = grindBlock.Position;
-                                var members = cluster.Members;
-                                for (int m = 0; m < members.Count; m++)
-                                {
-                                    var other = members[m];
-                                    if (other != null && other != this)
-                                    {
-                                        other.RemoveGrindTargetByPosition(gid, pos);
-                                    }
-                                }
-                            }
+                            RemoveGrindTargetEverywhere(chosenGrindTarget);
                         }
                     }
                     else
                     {
+                        // BUG-260612.10: a janitor target ground to its Disable/Hack
+                        // threshold is FINISHED, not failed — leaving it listed made the
+                        // picker re-claim it and burn a shared grind slot every tick
+                        // until the next scan evicted it.
+                        if (_grindJanitorDone)
+                        {
+                            RemoveGrindTargetEverywhere(chosenGrindTarget);
+                        }
+
                         // Grinding failed — release assignment regardless of reason so other BaRs aren't starved.
                         ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
                     }
@@ -235,7 +250,8 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // Faction reputation when grinding for not owned grids.
-            if (Mod.Settings.DecreaseFactionReputationOnGrinding && currentGrindingBlock != null)
+            // BUG-260612.34: CubeGrid null-guarded like the same block's check above.
+            if (Mod.Settings.DecreaseFactionReputationOnGrinding && currentGrindingBlock != null && currentGrindingBlock.CubeGrid != null)
             {
                 if (currentGrindingBlock.OwnerId != Welder.OwnerId && currentGrindingBlock.CubeGrid.EntityId != Welder.CubeGrid.EntityId)
                 {
@@ -267,11 +283,76 @@ namespace SKONanobotBuildAndRepairSystem
                     var _skippedByScript = skippedByScript;
                     var _skippedByDestroyed = skippedByDestroyed;
                     var _loopSkipped = loopSkipped;
+                    var _skippedByRefused = skippedByRefused;
+                    var _skippedByOutOfArea = skippedByOutOfArea;
                     MethodProfiler.StopAndLog("ServerTryGrinding", profilerTs, () =>
-                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15}",
+                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15};skipRefused={16};droppedOutOfArea={17}",
                             _Welder.EntityId, _grinding, _needGrinding, _transporting, _targetCount,
                             State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none",
-                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped));
+                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped, _skippedByRefused, _skippedByOutOfArea));
+                }
+            }
+        }
+
+        // BUG-261122.15: grids whose grind a damage handler refused (protection plugin / mod), per BaR, main thread.
+        private readonly Dictionary<long, TimeSpan> _grindRefusedGrids = new Dictionary<long, TimeSpan>();
+        private static readonly TimeSpan GrindRefusedSkip = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// BUG-261122.15: vanilla grinders raise BeforeDamage so plugins / mods can veto or reduce grinding; the
+        /// original mod could not ("not available in modding"). False when the damage was zeroed: that grid is
+        /// then skipped by this BaR for GrindRefusedSkip (one event per grid per period, not one per tick).
+        /// </summary>
+        private bool RaiseGrindDamage(IMySlimBlock target, ref MyDamageInformation info)
+        {
+            var damageSystem = MyAPIGateway.Session.DamageSystem;
+            if (damageSystem == null) return true;
+            damageSystem.RaiseBeforeDamageApplied(target, ref info);
+            if (info.Amount > 0f) return true;
+            if (target.CubeGrid != null) _grindRefusedGrids[target.CubeGrid.EntityId] = Mod.NowPlayTime + GrindRefusedSkip;
+            return false;
+        }
+
+        private bool IsGrindRefused(long gridId)
+        {
+            TimeSpan until;
+            if (!_grindRefusedGrids.TryGetValue(gridId, out until)) return false;
+            if (Mod.NowPlayTime < until) return true;
+            _grindRefusedGrids.Remove(gridId);
+            return false;
+        }
+
+        /// <summary>
+        /// Drops a finished grind target from this BaR's list and, via
+        /// BUG-260511.19's removal propagation, from every cluster member's list so
+        /// pickers stop walking it between scans. Used for fully-dismounted blocks
+        /// and (BUG-260612.10) janitor targets that reached their threshold.
+        /// </summary>
+        private void RemoveGrindTargetEverywhere(TargetBlockData targetData)
+        {
+            lock (State.PossibleGrindTargets)
+            {
+                if (State.PossibleGrindTargets.Remove(targetData))
+                {
+                    // BUG-260610.33: RebuildHash so CurrentCount tracks the removal.
+                    State.PossibleGrindTargets.RebuildHash();
+                }
+            }
+
+            var grindBlock = targetData.Block;
+            var cluster = AssignedCluster;
+            if (cluster != null && grindBlock != null && grindBlock.CubeGrid != null)
+            {
+                var gid = grindBlock.CubeGrid.EntityId;
+                var pos = grindBlock.Position;
+                var members = cluster.Members;
+                for (int m = 0; m < members.Count; m++)
+                {
+                    var other = members[m];
+                    if (other != null && other != this)
+                    {
+                        other.RemoveGrindTargetByPosition(gid, pos);
+                    }
                 }
             }
         }
@@ -298,11 +379,13 @@ namespace SKONanobotBuildAndRepairSystem
                 if ((Settings.GrindJanitorOptions & AutoGrindOptions.DisableOnly) != 0 && target.FatBlock != null && integrityRatio < criticalIntegrityRatio)
                 {
                     //Block allready out of order -> stop grinding and switch to next
+                    _grindJanitorDone = true; // BUG-260612.10: finished, not failed.
                     return false;
                 }
                 if ((Settings.GrindJanitorOptions & AutoGrindOptions.HackOnly) != 0 && target.FatBlock != null && integrityRatio < ownershipIntegrityRatio)
                 {
                     //Block allready hacked -> stop grinding and switch to next
+                    _grindJanitorDone = true; // BUG-260612.10: finished, not failed.
                     return false;
                 }
             }
@@ -363,6 +446,26 @@ namespace SKONanobotBuildAndRepairSystem
 
             if (!emptying || isEmpty)
             {
+                MyDamageInformation damageInfo = new MyDamageInformation(false, damage, MyDamageType.Grind, _Welder.EntityId);
+
+                // BUG-261122.15: raise BeforeDamage like vanilla grinders, so protection plugins / mods can veto it.
+                if (target.UseDamageSystem && !RaiseGrindDamage(target, ref damageInfo))
+                {
+                    EmitServerDoGrindProfile(profilerTs,
+                        target.BlockDefinition.Id.SubtypeName,
+                        (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
+                        false, false,
+                        target.Integrity / target.MaxIntegrity,
+                        tsEmpty * 1000.0 / tsFreq, 0.0, 0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0,
+                        damage, targetData.Distance, 0.0,
+                        "grindRefused");
+                    Mod.RefundGrindSlot();
+                    return false;
+                }
+
                 // BUG-106: gate full dismount on the global budget before DecreaseMountLevel.
                 if (integrityRatio <= 0f && !Mod.TryClaimDismountSlot())
                 {
@@ -377,10 +480,11 @@ namespace SKONanobotBuildAndRepairSystem
                         0.0, 0.0, 0.0, 0.0,
                         damage, targetData.Distance, 0.0,
                         "dismountSlot");
+                    // BUG-260612.11: no grind ran — return the slot claimed by the
+                    // caller so dismount-gate bounces don't drain the fleet budget.
+                    Mod.RefundGrindSlot();
                     return false;
                 }
-
-                MyDamageInformation damageInfo = new MyDamageInformation(false, damage, MyDamageType.Grind, _Welder.EntityId);
 
                 if (target.UseDamageSystem)
                 {
@@ -415,36 +519,12 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (fullyDismounted)
                 {
-                    // OPT 1: Mechanical blocks (pistons, rotors, hinges) cause 100-380ms spikes
-                    // when destroyed because they detach subgrids. Cap to 1 destruction per tick globally.
-                    tsMark = Stopwatch.GetTimestamp();
-                    if (target.FatBlock is Sandbox.ModAPI.IMyMechanicalConnectionBlock || target.FatBlock is Sandbox.ModAPI.IMyAttachableTopBlock)
-                    {
-                        if (!Mod.TryClaimMechanicalGrindSlot())
-                        {
-                            tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
-                            // Log even on early-return so the cost shows up in the profile.
-                            EmitServerDoGrindProfile(profilerTs,
-                                target != null ? target.BlockDefinition.Id.SubtypeName : "null",
-                                (targetData.Attributes & TargetBlockData.AttributeFlags.Autogrind) != 0,
-                                false, true, 0f,
-                                tsEmpty * 1000.0 / tsFreq,
-                                tsFriendly * 1000.0 / tsFreq,
-                                friendlyIter,
-                                tsMountLevel * 1000.0 / tsFreq,
-                                tsMoveItems * 1000.0 / tsFreq,
-                                tsDismountCheck * 1000.0 / tsFreq,
-                                0.0,
-                                tsMechCheck * 1000.0 / tsFreq,
-                                0.0,
-                                0.0, 0.0, 0.0, 0.0,
-                                damage, targetData.Distance, 0.0,
-                                "mechSlot");
-                            return false;
-                        }
-                    }
-                    tsMechCheck = Stopwatch.GetTimestamp() - tsMark;
-
+                    // BUG-260612.20: the mechanical one-per-tick cap (OPT 1) moved into
+                    // RazeQueueHandler.Process, where the expensive raze actually runs.
+                    // Failing the grind HERE — after DecreaseMountLevel already did the
+                    // work — reported a completed grind as failure: state flicker,
+                    // assignment release, and the list removal + cluster propagation
+                    // were skipped for exactly the expensive block class.
                     tsMark = Stopwatch.GetTimestamp();
                     // BUG-127: defer raze to the batched RazeQueueHandler.
                     RazeQueueHandler.Enqueue(target);

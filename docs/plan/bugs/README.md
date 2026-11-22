@@ -24,10 +24,13 @@ Track code bugs found during review or internal testing.
 [Once identified]
 ## Fix
 [Once resolved — file:line reference]
+## Scenario
+[SCN-<AREA>-NNN added or updated by this fix, or `no scenario: <reason>`]
 ```
 
 ## Rules
 
 - Fixes must be performance-conscious. This mod runs every tick in a game loop — avoid allocations, LINQ in hot paths, and unnecessary complexity.
 - Do not over-engineer fixes. Fix the bug with the minimum change needed. No refactoring, no abstractions, no "while we're here" improvements.
+- Every fixed bug names the scenario it adds or updates in `## Scenario` (see `docs/plan/scenarios/README.md`); a fix that cannot be expressed as a scenario is itself a review finding.
 - Move tickets from `TODO/` to `DONE/` when status becomes `Fixed` or `Won't Fix`. Delete tickets that are obsolete or no longer reproducible — do not park them in `DONE/` with a misleading status.

@@ -9,6 +9,7 @@ using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Profiling;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using VRage.Game;
 using VRage.Game.ModAPI;
@@ -78,16 +79,8 @@ namespace SKONanobotBuildAndRepairSystem
             if (projectorGrid == null)
                 return false;
 
-            var zone = SafeZoneHandler.GetIntersectingSafeZone(projectorGrid);
-            if (zone != null && zone.Enabled)
-            {
-                var buildAllowed = zone.IsActionAllowed(
-                    SafeZoneHandler.CastProhibit(MySessionComponentSafeZones.AllowedActions, SafeZoneHandler.SafeZoneAction.BuildingProjections), 0L);
-                if (!buildAllowed)
-                    return true;
-            }
-
-            return false;
+            // BUG-260612.6: any intersecting zone that prohibits building blocks it.
+            return SafeZoneHandler.AnyIntersectingZoneProhibits(projectorGrid, SafeZoneHandler.SafeZoneAction.BuildingProjections);
         }
 
         /// <summary>
@@ -102,6 +95,7 @@ namespace SKONanobotBuildAndRepairSystem
 
         private bool HasBuildableProjectorOnGrid()
         {
+            _coldStartGridIds.Clear();
             try
             {
                 // BUG-132: use logical grid-group's typed projector lookup instead of per-block BFS.
@@ -114,6 +108,7 @@ namespace SKONanobotBuildAndRepairSystem
                         _projectorScratch.Clear();
                         terminalSystem.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, _buildableProjectorFilter);
                         var found = _projectorScratch.Count > 0;
+                        RecordProjectorGrids(_coldStartGridIds);
                         _projectorScratch.Clear();
                         if (found) return true;
                     }
@@ -124,6 +119,18 @@ namespace SKONanobotBuildAndRepairSystem
                 // free-floating grids share no terminal system, so we still need an entity walk.
                 if (Settings.SearchMode == SearchModes.BoundingBox)
                 {
+                    // BUG-260610.29: this walk (entity query + terminal enumeration per
+                    // grid in range) is MAIN-thread work that used to run every second
+                    // per idle coordinator. Throttle it and serve the cached verdict in
+                    // between. Own-grid projectors are still caught by Phase 1 above at
+                    // the full 1 s cadence.
+                    var now = Mod.NowPlayTime;
+                    if (now.Subtract(_lastProjectorPhase2Check) < ProjectorPhase2CheckInterval)
+                        return _lastProjectorPhase2Result;
+                    _lastProjectorPhase2Check = now;
+                    _lastProjectorPhase2Result = false;
+                    _coldStartPhase2GridIds.Clear();
+
                     var ownGroupGridIds = new HashSet<long>();
                     if (helper != null && _Welder.CubeGrid != null)
                     {
@@ -144,11 +151,9 @@ namespace SKONanobotBuildAndRepairSystem
                     var areaBox = new MyOrientedBoundingBoxD(Settings.CorrectedAreaBoundingBox, emitterMatrix);
                     var aabb = areaBox.GetAABB();
 
-                    List<IMyEntity> entities;
-                    lock (MyAPIGateway.Entities)
-                    {
-                        entities = MyAPIGateway.Entities.GetTopMostEntitiesInBox(ref aabb);
-                    }
+                    // BUG-260610.29: shared 4 s entity cache instead of a direct
+                    // GetTopMostEntitiesInBox under the global entities lock.
+                    var entities = SharedEntityCache.GetEntitiesInBox(ref aabb);
                     if (entities != null)
                     {
                         foreach (var entity in entities)
@@ -164,16 +169,92 @@ namespace SKONanobotBuildAndRepairSystem
                                     _projectorScratch.Clear();
                                     nearbyTerminal.GetBlocksOfType<Sandbox.ModAPI.IMyProjector>(_projectorScratch, _buildableProjectorFilter);
                                     var found = _projectorScratch.Count > 0;
+                                    RecordProjectorGrids(_coldStartPhase2GridIds);
                                     _projectorScratch.Clear();
-                                    if (found) return true;
+                                    if (found)
+                                    {
+                                        _lastProjectorPhase2Result = true;
+                                        return true;
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // BUG-260610.29: was a silent catch — recurring failures here were invisible.
+                Logging.Instance.Write(Logging.Level.Error, "HasBuildableProjectorOnGrid: {0}", ex.Message);
+            }
             return false;
+        }
+
+        // BUG-261122.3: remember the grids of the projectors in _projectorScratch.
+        private static void RecordProjectorGrids(List<long> gridIds)
+        {
+            for (int i = 0; i < _projectorScratch.Count; i++)
+            {
+                var grid = _projectorScratch[i].CubeGrid;
+                if (grid != null && !gridIds.Contains(grid.EntityId)) gridIds.Add(grid.EntityId);
+            }
+        }
+
+        /// <summary>
+        /// BUG-261122.3: the cold-start rescan must not take the empty-grid fast path (or reuse a stale
+        /// scan-cache entry) for the grids whose projector fired; both were written while the projector
+        /// still read BuildableBlocksCount 0.
+        /// </summary>
+        private void DropColdStartGridCaches()
+        {
+            TimeSpan dummy;
+            for (int i = 0; i < _coldStartGridIds.Count; i++)
+            {
+                _EmptyGridCache.TryRemove(_coldStartGridIds[i], out dummy);
+                GridScanCache.Invalidate(_coldStartGridIds[i]);
+            }
+            for (int i = 0; i < _coldStartPhase2GridIds.Count; i++)
+            {
+                _EmptyGridCache.TryRemove(_coldStartPhase2GridIds[i], out dummy);
+                GridScanCache.Invalidate(_coldStartPhase2GridIds[i]);
+            }
+        }
+
+        // BUG-261122.3 diagnostic (profiling only): does a projector reporting BuildableBlocksCount 0
+        // hide projected blocks that CanBuild? The scan skips such projectors entirely.
+        private static readonly ConcurrentDictionary<long, TimeSpan> _projectorProbeLast = new ConcurrentDictionary<long, TimeSpan>();
+        private static readonly TimeSpan ProjectorProbeInterval = TimeSpan.FromSeconds(30);
+        private const int ProjectorProbeMaxBlocks = 5000;
+
+        private void ProbeProjectorBuildableCount(Sandbox.ModAPI.IMyProjector projector)
+        {
+            var profilerTs = MethodProfiler.Start();
+            if (profilerTs == 0L) return;
+
+            var projectorId = projector.EntityId;
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            TimeSpan last;
+            if (_projectorProbeLast.TryGetValue(projectorId, out last) && now - last < ProjectorProbeInterval) return;
+            _projectorProbeLast[projectorId] = now;
+
+            var checkedCount = 0;
+            var canBuildCount = 0;
+            var projectedGrid = projector.ProjectedGrid;
+            if (projectedGrid != null)
+            {
+                var blocks = GetBlocksFromCache(projectedGrid);
+                for (int i = 0; i < blocks.Count && checkedCount < ProjectorProbeMaxBlocks; i++)
+                {
+                    checkedCount++;
+                    if (blocks[i].CanBuild(false)) canBuildCount++;
+                }
+            }
+
+            var buildable = projector.BuildableBlocksCount;
+            var remaining = projector.RemainingBlocks;
+            MethodProfiler.StopAndLog("ProjectorProbe", profilerTs, () =>
+                string.Format("entityId={0};projectorId={1};buildable={2};remaining={3};checked={4};canBuild={5};stale={6}",
+                    _Welder.EntityId, projectorId, buildable, remaining, checkedCount, canBuildCount, buildable <= 0 && canBuildCount > 0));
         }
 
         private bool AsyncAddBlockIfWeldTarget(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, IMySlimBlock block, List<ClusterTargetCandidate> clusterWeldTargets, int maxTargets, bool skipRangeCheck)
@@ -218,7 +299,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                 // BUG-112: NeedRepair first short-circuits for full-integrity blocks
                 // before the more expensive IsRelationAllowed4Welding engine call.
-                if (block.NeedRepair(Settings.WeldOptions) &&
+                // BUG-260610.5: allowMutate=false — background thread, pure read only.
+                if (block.NeedRepair(Settings.WeldOptions, false) &&
                    (!useIgnoreColor || !IsColorNearlyEquals(ignoreColor, colorMask)) && (!useGrindColor || !IsColorNearlyEquals(grindColor, colorMask)) &&
                    BlockWeldPriority.GetEnabled(block) &&
                    IsRelationAllowed4Welding(block))
@@ -231,6 +313,26 @@ namespace SKONanobotBuildAndRepairSystem
                             clusterWeldTargets.Add(new ClusterTargetCandidate(block, 0));
                             return true;
                         }
+                    }
+                }
+                else if (Settings.WeldOptions != AutoWeldOptions.WeldSkeleton
+                    && !block.IsDestroyed
+                    && block.Integrity >= block.GetRequiredIntegrity(Settings.WeldOptions)
+                    && block.MaxDeformation > SlimBlockExtensions.MinDeformation
+                    && (!useIgnoreColor || !IsColorNearlyEquals(ignoreColor, colorMask)) && (!useGrindColor || !IsColorNearlyEquals(grindColor, colorMask))
+                    && BlockWeldPriority.GetEnabled(block)
+                    && IsRelationAllowed4Welding(block))
+                {
+                    // BUG-260827.1: deformation-only block (integrity fine, dented) —
+                    // never a weld target (MaxDeformation is engine-bugged and doesn't
+                    // reset), queue a budgeted main-thread skeleton reset instead so
+                    // dents still get repaired. BUG-261023.3: same filters as weld
+                    // targets (skeleton mode, colors, priority); the drain re-checks
+                    // HasDeformation because MaxDeformation stays latched.
+                    double distance;
+                    if (skipRangeCheck || block.IsInRange(ref areaBox, out distance))
+                    {
+                        SkeletonResetHandler.Enqueue(block);
                     }
                 }
             }
@@ -255,16 +357,21 @@ namespace SKONanobotBuildAndRepairSystem
                 return false;
 
             var autoGrind = autoGrindRelation != 0 && BlockGrindPriority.GetEnabled(block);
+            // BUG-260612.15: the own-shield off-grid gate now covers ALL grinding —
+            // it sat inside the autogrind branch only, so color-grind escaped it
+            // while the info panel claimed grinding was disabled.
+            if (State.IsShielded && block.CubeGrid.EntityId != Welder.CubeGrid.EntityId)
+            {
+                return false;
+            }
+
             if (autoGrind)
             {
-                if (block.CubeGrid.EntityId != Welder.CubeGrid.EntityId && State.IsShielded)
-                {
-                    return false;
-                }
-
                 var relation = block.GetUserRelationToOwner(_Welder.OwnerId);
+                // BUG-261122.7: unowned blocks the owner (or faction) built are theirs, not debris
+                // (an armor-only hull has no owner) — same rule as the weld side.
                 autoGrind =
-                   (relation == MyRelationsBetweenPlayerAndBlock.NoOwnership && ((autoGrindRelation & AutoGrindRelation.NoOwnership) != 0)) ||
+                   (relation == MyRelationsBetweenPlayerAndBlock.NoOwnership && ((autoGrindRelation & AutoGrindRelation.NoOwnership) != 0) && !IsBuiltByOwnerOrFaction(block)) ||
                    (relation == MyRelationsBetweenPlayerAndBlock.Enemies && ((autoGrindRelation & AutoGrindRelation.Enemies) != 0)) ||
                    (relation == MyRelationsBetweenPlayerAndBlock.Neutral && ((autoGrindRelation & AutoGrindRelation.Neutral) != 0));
             }
@@ -346,7 +453,7 @@ namespace SKONanobotBuildAndRepairSystem
                 hash = (hash ^ (State.SafeZoneAllowsGrinding ? 1 : 0)) * 16777619;
                 hash = (hash ^ (State.SafeZoneAllowsBuildingProjections ? 1 : 0)) * 16777619;
                 // BUG-260511.11: shield state — AsyncAddBlockIfGrindTarget rejects
-                // off-grid autogrind when shielded (line 260), so a shield toggle
+                // off-grid autogrind when shielded, so a shield toggle
                 // within the GridScanCache TTL would otherwise leave the cached
                 // candidate list reflecting the old shield state.
                 hash = (hash ^ (State.IsShielded ? 1 : 0)) * 16777619;
@@ -460,11 +567,21 @@ namespace SKONanobotBuildAndRepairSystem
             // If so, skip expensive target checks and only traverse connections
             // so newly docked ships are still discovered.
             var emptyDelay = Mod.Settings.EmptyGridRescanDelaySeconds;
+            var rescanAfterDamage = false;
             if (emptyDelay > 0)
             {
                 TimeSpan emptyTime;
-                if (_EmptyGridCache.TryGetValue(gridEntityId, out emptyTime)
-                    && playTime.Subtract(emptyTime).TotalSeconds < emptyDelay)
+                var skipEmpty = _EmptyGridCache.TryGetValue(gridEntityId, out emptyTime)
+                    && playTime.Subtract(emptyTime).TotalSeconds < emptyDelay;
+
+                // BUG-261122.10: damage since the empty mark ends the skip.
+                if (skipEmpty && GridChangeHandler.ChangedSince(gridEntityId, emptyTime))
+                {
+                    skipEmpty = false;
+                    rescanAfterDamage = true;
+                }
+
+                if (skipEmpty)
                 {
                     // FEAT-073: Only iterate fat blocks for connection discovery.
                     // Connection blocks (mechanical, attachable, connector) always have
@@ -476,7 +593,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var fatBlocks = RentFatBlocksList();
                     try
                     {
-                        cubeGrid.GetBlocks(fatBlocks, _fatBlockFilter);
+                        SharedGridBlockCache.GetBlocks(cubeGrid, fatBlocks, _fatBlockFilter); // BUG-261122.4
                         for (int i = 0; i < fatBlocks.Count; i++)
                         {
                             if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
@@ -557,7 +674,7 @@ namespace SKONanobotBuildAndRepairSystem
                 int fatNewCount;
                 try
                 {
-                    cubeGrid.GetBlocks(fatBlocks, _fatBlockFilter);
+                    SharedGridBlockCache.GetBlocks(cubeGrid, fatBlocks, _fatBlockFilter); // BUG-261122.4
                     fatNewCount = fatBlocks.Count;
                     for (int i = 0; i < fatBlocks.Count; i++)
                     {
@@ -589,6 +706,17 @@ namespace SKONanobotBuildAndRepairSystem
             if (cacheEligible)
             {
                 paramsHash = ComputeScanParamsHash(useIgnoreColor, ignoreColor, useGrindColor, grindColor, autoGrindRelation, autoGrindOptions);
+                // BUG-260612.7: grind filtering is home-grid-dependent (own-grid blocks
+                // skip the shield checks and the off-grid autogrind gate), so a scan of
+                // the scanner's OWN grid must never share cache entries with off-grid
+                // scanners of the same grid — that inverted shield protection in both
+                // directions. Fold the own/other bit into the hash; same-grid cluster
+                // members keep sharing (identical exemptions), off-grid scanners keep
+                // sharing with each other.
+                if (_Welder != null && _Welder.CubeGrid != null && _Welder.CubeGrid.EntityId == gridEntityId)
+                {
+                    unchecked { paramsHash = (paramsHash ^ 0x5A17) * 16777619; }
+                }
                 var cached = GridScanCache.TryGet(gridEntityId, paramsHash);
                 if (cached != null)
                 {
@@ -630,7 +758,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var fatBlocksHit = RentFatBlocksList();
                     try
                     {
-                        cubeGrid.GetBlocks(fatBlocksHit, _fatBlockFilter);
+                        SharedGridBlockCache.GetBlocks(cubeGrid, fatBlocksHit, _fatBlockFilter); // BUG-261122.4
                         for (int i = 0; i < fatBlocksHit.Count; i++)
                         {
                             if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
@@ -720,6 +848,10 @@ namespace SKONanobotBuildAndRepairSystem
                                 }
                             }
                         }
+                        else if (MethodProfiler.IsRunning && projector.IsProjecting)
+                        {
+                            ProbeProjectorBuildableCount(projector);
+                        }
                         continue;
                     }
                 }
@@ -782,13 +914,14 @@ namespace SKONanobotBuildAndRepairSystem
                 var _grindCapSkipped = grindCapSkipped;
                 var _weldAddedHere = weldAfter - weldBefore;
                 var _grindAddedHere = grindAfter - grindBefore;
+                var _rescanAfterDamage = rescanAfterDamage;
                 MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
-                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};weldAdded={5};grindAdded={6};weldCapSkip={7};grindCapSkip={8};skipRange={9};clusterMembers={10}",
+                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};weldAdded={5};grindAdded={6};weldCapSkip={7};grindCapSkip={8};skipRange={9};clusterMembers={10};rescanAfterDamage={11}",
                         _Welder.EntityId, _gridEid, newBlocks.Count,
                         clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
                         clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
                         _weldAddedHere, _grindAddedHere, _weldCapSkipped, _grindCapSkipped,
-                        blockSkipRange, _clusterMembers));
+                        blockSkipRange, _clusterMembers, _rescanAfterDamage));
 
                 // Report per-grid scan cost for profile summary.
                 var gridMs = (double)(endTs - profilerTs) / System.Diagnostics.Stopwatch.Frequency * 1000.0;

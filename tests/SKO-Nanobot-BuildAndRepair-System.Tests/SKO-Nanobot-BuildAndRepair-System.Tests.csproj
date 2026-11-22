@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Out-of-game unit tests for the BaR mod (FEAT-260910.3).
+    - Runs against the compiled mod assembly + the Space Engineers assemblies from $(SpaceEngineersBin).
+    - Needs no changes to mod code: engine statics (MyAPIGateway.*, MyLog.Default) are injected
+      with fakes and private members are reached via reflection (allowed here, not in mod code).
+    - Building this project builds the mod through the ProjectReference, which runs the mod's
+      normal post-build deploy to %AppData% — same as any mod build.
+    - Local only: the SE assemblies are licensed and cannot be used on a hosted CI runner.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>SKONanobotBuildAndRepairSystem.Tests</AssemblyName>
+    <RootNamespace>SKONanobotBuildAndRepairSystem.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <!-- SE assemblies target AnyCPU/AMD64 mixes; silence the processor-architecture mismatch warning. -->
+    <ResolveAssemblyReferenceIgnoreTargetFrameworkAttributeVersionMismatch>true</ResolveAssemblyReferenceIgnoreTargetFrameworkAttributeVersionMismatch>
+    <NoWarn>$(NoWarn);MSB3270;MSB3277</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Lets the test assembly find the SE folder at runtime (assembly resolve fallback). -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>SpaceEngineersBin</_Parameter1>
+      <_Parameter2>$(SpaceEngineersBin)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>RepoRoot</_Parameter1>
+      <_Parameter2>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..'))</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\SKO-Nanobot-BuildAndRepair-System\Data\Scripts\SKO-Nanobot-BuildAndRepair-System\SKO-Nanobot-BuildAndRepair-System.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="VRage"><HintPath>$(SpaceEngineersBin)\VRage.dll</HintPath></Reference>
+    <Reference Include="VRage.Game"><HintPath>$(SpaceEngineersBin)\VRage.Game.dll</HintPath></Reference>
+    <Reference Include="VRage.Library"><HintPath>$(SpaceEngineersBin)\VRage.Library.dll</HintPath></Reference>
+    <Reference Include="VRage.Math"><HintPath>$(SpaceEngineersBin)\VRage.Math.dll</HintPath></Reference>
+    <Reference Include="VRage.Scripting"><HintPath>$(SpaceEngineersBin)\VRage.Scripting.dll</HintPath></Reference>
+    <Reference Include="Sandbox.Common"><HintPath>$(SpaceEngineersBin)\Sandbox.Common.dll</HintPath></Reference>
+    <Reference Include="Sandbox.Game"><HintPath>$(SpaceEngineersBin)\Sandbox.Game.dll</HintPath></Reference>
+    <Reference Include="ProtoBuf.Net"><HintPath>$(SpaceEngineersBin)\ProtoBuf.Net.dll</HintPath></Reference>
+    <Reference Include="ProtoBuf.Net.Core"><HintPath>$(SpaceEngineersBin)\ProtoBuf.Net.Core.dll</HintPath></Reference>
+    <!-- Companion script compile check: the game's own Roslyn (CompanionScriptTests). -->
+    <Reference Include="Microsoft.CodeAnalysis"><HintPath>$(SpaceEngineersBin)\Microsoft.CodeAnalysis.dll</HintPath></Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp"><HintPath>$(SpaceEngineersBin)\Microsoft.CodeAnalysis.CSharp.dll</HintPath></Reference>
+  </ItemGroup>
+
+</Project>

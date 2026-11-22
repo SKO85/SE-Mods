@@ -82,6 +82,16 @@ namespace SKONanobotBuildAndRepairSystem.Managers
         }
 
         /// <summary>
+        /// BUG-260610.35: returns one claimed slot when the work it was claimed for
+        /// turned out not to run (e.g. a downstream gate rejected it). Count only —
+        /// no ms was spent. Same-tick, main-thread use only.
+        /// </summary>
+        public void Refund()
+        {
+            if (_thisTick > 0) _thisTick--;
+        }
+
+        /// <summary>
         /// Resets the peak usage counter. Called from the HUD reset path.
         /// </summary>
         public void ResetStats()

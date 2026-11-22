@@ -1,4 +1,4 @@
-﻿// Version: v2.5.4 - 22.05.2026
+﻿// Version: v2.5.6 - 22.11.2026
 // Compatible with: SKO Nanobot Build and Repair System (Maintained) v2.5.0+
 // This script only works with SKO's maintained versions of the mod.
 // It will NOT work with the original mod by Dummy08.
@@ -7,7 +7,7 @@ static double UpdateIntervalAssemblerQueues = 0.1; //Update every x seconds (0=a
 static double UpdateIntervalGrinding = 0.1; //Update every x seconds (0=as fast as possible, 0.5=every 500ms, ..) 
 
 // Configure groups below. Full docs:
-// https://sko85.github.io/SE-Mods/pages/Build-and-Repair-System/Companion-Script/
+// https://sko85.github.io/SE-Mods/Build-and-Repair-System/Companion-Script/
 //
 // LCDs can also be auto-attached via a [BaR:group] tag in the block name, e.g.
 //   "Hangar LCD [BaR:1]"           -> group 1
@@ -32,7 +32,9 @@ static BuildAndRepairSystemQueuingGroup[] BuildAndRepairSystemQueuingGroups = {
       AssemblerGroupName = "AssemblerGroup1",
       Displays = new [] {
          new DisplayDefinition {
-            DisplayNames = new [] { "BuildAndRepairGroup1StatusPanel", "Cockpit[0]" },
+            // Cockpit screens: tag the block, e.g. "Cockpit [BaR:1@0]" (a plain "Cockpit[0]" entry would take over
+            // every cockpit still called "Cockpit" on all connected grids).
+            DisplayNames = new [] { "BuildAndRepairGroup1StatusPanel" },
             DisplayKinds = new [] { DisplayKind.ShortStatus, DisplayKind.Status, DisplayKind.WeldTargets, DisplayKind.GrindTargets, DisplayKind.CollectTargets, DisplayKind.MissingItems, DisplayKind.BlockWeldPriority, DisplayKind.BlockGrindPriority },
             DisplayMaxLines = 19,
             DisplaySwitchTime = 4
@@ -61,13 +63,24 @@ public Program()
 {
     Runtime.UpdateFrequency = UpdateFrequency.Update100;
     _AutoQueuing = new BuildAndRepairAutoQueuing(this);
+    // The info-only mode is remembered across world reloads and recompiles.
+    _AutoQueuing.SetInfoOnly(Storage == "info-only");
 }
 
 void Main(string arg)
 {
-    var infoOnly = arg != null && arg.Trim().Equals("info-only", StringComparison.OrdinalIgnoreCase);
-    _AutoQueuing.SetInfoOnly(infoOnly);
+    // Automatic runs pass an empty argument, so only an explicit argument switches the mode:
+    // "info-only" stops assembler queuing, "queue" turns it back on.
+    var command = arg != null ? arg.Trim() : string.Empty;
+    if (command.Equals("info-only", StringComparison.OrdinalIgnoreCase)) SetInfoOnly(true);
+    else if (command.Equals("queue", StringComparison.OrdinalIgnoreCase)) SetInfoOnly(false);
     _AutoQueuing.Handle();
+}
+
+void SetInfoOnly(bool infoOnly)
+{
+    _AutoQueuing.SetInfoOnly(infoOnly);
+    Storage = infoOnly ? "info-only" : string.Empty;
 }
 
 public class BuildAndRepairSystemQueuingGroup
@@ -176,6 +189,17 @@ public class BuildAndRepairAutoQueuing
         _IsInit = false;
         InitializationResultMessage = string.Empty;
 
+        // Page rotation survives the periodic re-init (it restarted every ~30 s, so later pages never showed).
+        var previousEntries = new Dictionary<string, DisplayEntry>();
+        if (_GroupData != null)
+        {
+            foreach (var g in _GroupData)
+            {
+                if (g == null || g.DisplayEntries == null) continue;
+                foreach (var e in g.DisplayEntries) if (e != null && e.Key != null) previousEntries[e.Key] = e;
+            }
+        }
+
         if (BuildAndRepairSystemQueuingGroups == null)
         {
             _GroupData = new BuildAndRepairSystemQueuingGroupData[0];
@@ -209,8 +233,9 @@ public class BuildAndRepairAutoQueuing
                 _GroupData[idx].RepairSystems.SetProgram(_Program);
             }
             _GroupData[idx].Assemblers = InitAssemblerList(queuingGroup);
+            _GroupData[idx].AssemblerBlocks = ResolveAssemblers(_GroupData[idx].Assemblers);
             _GroupData[idx].DisplayEntries = new List<DisplayEntry>();
-            var groupLabel = string.IsNullOrEmpty(queuingGroup != null ? queuingGroup.Name : null) ? "BaR Group " + idx : queuingGroup.Name;
+            var groupLabel = string.IsNullOrEmpty(queuingGroup != null ? queuingGroup.Name : null) ? "BaR Group " + (idx + 1) : queuingGroup.Name; // 1-based, like the [BaR:1] tags
 
             for (int d = 0; d < displays.Length; d++)
             {
@@ -221,7 +246,7 @@ public class BuildAndRepairAutoQueuing
                     var empty = new StatusAndLogDisplay(_Program, groupLabel, null, null);
                     empty.Clear();
                     empty.UpdateDisplay();
-                    _GroupData[idx].DisplayEntries.Add(new DisplayEntry { EffectiveSettings = displayDef, Display = empty });
+                    AddDisplayEntry(_GroupData[idx], new DisplayEntry { EffectiveSettings = displayDef, Display = empty, Key = idx + ":e:" + d }, previousEntries);
                     continue;
                 }
 
@@ -236,7 +261,7 @@ public class BuildAndRepairAutoQueuing
                     ApplyDisplayDefinitionToStatusDisplay(statusDisplay, effective);
                     statusDisplay.Clear();
                     statusDisplay.UpdateDisplay();
-                    _GroupData[idx].DisplayEntries.Add(new DisplayEntry { EffectiveSettings = effective, Display = statusDisplay });
+                    AddDisplayEntry(_GroupData[idx], new DisplayEntry { EffectiveSettings = effective, Display = statusDisplay, Key = idx + ":n:" + name }, previousEntries);
                 }
             }
 
@@ -251,7 +276,7 @@ public class BuildAndRepairAutoQueuing
                     ApplyDisplayDefinitionToStatusDisplay(statusDisplay, effective);
                     statusDisplay.Clear();
                     statusDisplay.UpdateDisplay();
-                    _GroupData[idx].DisplayEntries.Add(new DisplayEntry { EffectiveSettings = effective, Display = statusDisplay });
+                    AddDisplayEntry(_GroupData[idx], new DisplayEntry { EffectiveSettings = effective, Display = statusDisplay, Key = idx + ":t:" + tp.Block.EntityId + "@" + tp.SurfaceIndex }, previousEntries);
                 }
             }
 
@@ -259,6 +284,19 @@ public class BuildAndRepairAutoQueuing
         }
 
         _IsInit = true;
+    }
+
+    private static void AddDisplayEntry(BuildAndRepairSystemQueuingGroupData group, DisplayEntry entry, Dictionary<string, DisplayEntry> previous)
+    {
+        DisplayEntry old;
+        if (previous != null && entry.Key != null && previous.TryGetValue(entry.Key, out old) && old.Started)
+        {
+            var kinds = entry.EffectiveSettings != null && entry.EffectiveSettings.DisplayKinds != null ? entry.EffectiveSettings.DisplayKinds.Length : 0;
+            entry.Started = true;
+            entry.DisplayKindIdx = old.DisplayKindIdx < kinds ? old.DisplayKindIdx : 0;
+            entry.NextSwitchTime = old.NextSwitchTime;
+        }
+        group.DisplayEntries.Add(entry);
     }
 
     private T InitHandler<T>(BuildAndRepairSystemQueuingGroup queuingGroup) where T : EntityHandler, new()
@@ -290,7 +328,8 @@ public class BuildAndRepairAutoQueuing
             }
         }
 
-        // Fallback: auto-detect BaR blocks by probing for known properties.
+        // Fallback: auto-detect BaR blocks by subtype, then probe for known properties.
+        // (The mod adds its properties to every ship welder, so the probe alone also matches vanilla welders.)
         if (handler == null || handler.Count == 0)
         {
             try
@@ -300,6 +339,7 @@ public class BuildAndRepairAutoQueuing
                     var auto = new RepairSystemHandler();
                     auto.Init(_Program.GridTerminalSystem, (IMyShipWelder blk) =>
                     {
+                        if (!blk.BlockDefinition.SubtypeName.Contains("NanobotBuildAndRepairSystem")) return false;
                         try
                         {
                             var _ = blk.GetValueBool("BuildAndRepair.ScriptControlled");
@@ -332,6 +372,18 @@ public class BuildAndRepairAutoQueuing
         }
 
         return handler;
+    }
+
+    private List<IMyAssembler> ResolveAssemblers(List<long> ids)
+    {
+        if (ids == null) return null;
+        var blocks = new List<IMyAssembler>();
+        foreach (var id in ids)
+        {
+            var assembler = _Program.GridTerminalSystem.GetBlockWithId(id) as IMyAssembler;
+            if (assembler != null) blocks.Add(assembler);
+        }
+        return blocks;
     }
 
     private List<long> InitAssemblerList(BuildAndRepairSystemQueuingGroup queuingGroup)
@@ -739,6 +791,8 @@ public class DisplayEntry
     public StatusAndLogDisplay Display;
     public int DisplayKindIdx;
     public double NextSwitchTime;
+    public bool Started;
+    public string Key;
 }
 
 public class BuildAndRepairSystemQueuingGroupData
@@ -746,6 +800,7 @@ public class BuildAndRepairSystemQueuingGroupData
     public BuildAndRepairSystemQueuingGroup Settings { get; set; }
     public RepairSystemHandler RepairSystems { get; set; }
     public List<long> Assemblers { get; set; }
+    public List<IMyAssembler> AssemblerBlocks { get; set; }
     public List<DisplayEntry> DisplayEntries { get; set; }
     public bool InfoOnly { get; set; }
 
@@ -762,10 +817,27 @@ public class BuildAndRepairSystemQueuingGroupData
             {
                 if (item.Value > 0)
                 {
-                    RepairSystems.EnsureQueued(Assemblers, item.Key, item.Value);
+                    // The missing list is already net of components sitting in connected assembler
+                    // outputs, and EnsureQueued subtracts that output stock again - add it back so the
+                    // assemblers don't under-queue.
+                    RepairSystems.EnsureQueued(Assemblers, item.Key, item.Value + AssemblerOutputAmount(item.Key));
                 }
             }
         }
+    }
+
+    private int AssemblerOutputAmount(VRage.Game.MyDefinitionId itemId)
+    {
+        if (AssemblerBlocks == null) return 0;
+        var itemType = (MyItemType)itemId;
+        var amount = 0;
+        foreach (var assembler in AssemblerBlocks)
+        {
+            // Same assemblers EnsureQueued counts: in Assembly mode.
+            if (assembler == null || assembler.Closed || assembler.Mode != MyAssemblerMode.Assembly || assembler.OutputInventory == null) continue;
+            amount += (int)assembler.OutputInventory.GetItemAmount(itemType);
+        }
+        return amount;
     }
 
     public void RefreshDisplay(double elapsedTime)
@@ -782,7 +854,14 @@ public class BuildAndRepairSystemQueuingGroupData
             display.Clear();
             if (settings.DisplayKinds == null || settings.DisplayKinds.Length == 0 || RepairSystems == null) continue;
 
-            if (elapsedTime > entry.NextSwitchTime)
+            // First refresh shows the first page; rotate only after SwitchTime.
+            if (!entry.Started)
+            {
+                entry.Started = true;
+                entry.DisplayKindIdx = 0;
+                entry.NextSwitchTime = elapsedTime + settings.DisplaySwitchTime;
+            }
+            else if (elapsedTime > entry.NextSwitchTime)
             {
                 entry.DisplayKindIdx = (entry.DisplayKindIdx + 1) % settings.DisplayKinds.Length;
                 entry.NextSwitchTime = elapsedTime + settings.DisplaySwitchTime;
@@ -1036,7 +1115,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.AllowBuild", value);
+            SetValueBoolSafe("BuildAndRepair.AllowBuild", value);
         }
     }
 
@@ -1048,7 +1127,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue<long>("BuildAndRepair.Mode", (long)value);
+            SetValueSafe<long>("BuildAndRepair.Mode", (long)value);
         }
     }
 
@@ -1060,7 +1139,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue<long>("BuildAndRepair.WorkMode", (long)value);
+            SetValueSafe<long>("BuildAndRepair.WorkMode", (long)value);
         }
     }
 
@@ -1072,7 +1151,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.UseIgnoreColor", value);
+            SetValueBoolSafe("BuildAndRepair.UseIgnoreColor", value);
         }
     }
 
@@ -1084,7 +1163,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue<Vector3>("BuildAndRepair.IgnoreColor", value);
+            SetValueSafe<Vector3>("BuildAndRepair.IgnoreColor", value);
         }
     }
 
@@ -1096,7 +1175,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.UseGrindColor", value);
+            SetValueBoolSafe("BuildAndRepair.UseGrindColor", value);
         }
     }
 
@@ -1108,7 +1187,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue<Vector3>("BuildAndRepair.GrindColor", value);
+            SetValueSafe<Vector3>("BuildAndRepair.GrindColor", value);
         }
     }
 
@@ -1120,7 +1199,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.GrindJanitorEnemies", value);
+            SetValueBoolSafe("BuildAndRepair.GrindJanitorEnemies", value);
         }
     }
 
@@ -1132,7 +1211,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.GrindJanitorNotOwned", value);
+            SetValueBoolSafe("BuildAndRepair.GrindJanitorNotOwned", value);
         }
     }
 
@@ -1144,7 +1223,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.GrindJanitorNeutrals", value);
+            SetValueBoolSafe("BuildAndRepair.GrindJanitorNeutrals", value);
         }
     }
 
@@ -1156,7 +1235,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.GrindJanitorOptionDisableOnly", value);
+            SetValueBoolSafe("BuildAndRepair.GrindJanitorOptionDisableOnly", value);
         }
     }
 
@@ -1168,7 +1247,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.GrindJanitorOptionHackOnly", value);
+            SetValueBoolSafe("BuildAndRepair.GrindJanitorOptionHackOnly", value);
         }
     }
 
@@ -1181,7 +1260,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue<long>("BuildAndRepair.WeldMode", value);
+            SetValueSafe<long>("BuildAndRepair.WeldMode", value);
         }
     }
 
@@ -1194,7 +1273,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaWidth", value);
+            SetValueFloatSafe("BuildAndRepair.AreaWidth", value);
         }
     }
 
@@ -1206,7 +1285,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaOffsetLeftRight", value);
+            SetValueFloatSafe("BuildAndRepair.AreaOffsetLeftRight", value);
         }
     }
 
@@ -1218,7 +1297,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaHeight", value);
+            SetValueFloatSafe("BuildAndRepair.AreaHeight", value);
         }
     }
 
@@ -1230,7 +1309,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaOffsetUpDown", value);
+            SetValueFloatSafe("BuildAndRepair.AreaOffsetUpDown", value);
         }
     }
 
@@ -1242,7 +1321,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaDepth", value);
+            SetValueFloatSafe("BuildAndRepair.AreaDepth", value);
         }
     }
 
@@ -1254,7 +1333,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueFloat("BuildAndRepair.AreaOffsetFrontBack", value);
+            SetValueFloatSafe("BuildAndRepair.AreaOffsetFrontBack", value);
         }
     }
 
@@ -1263,6 +1342,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var list = GetValue<MemorySafeList<string>>("BuildAndRepair.WeldPriorityList");
+            if (list == null) return null;
             var blockList = new MemorySafeList<ClassState<BlockClass>>();
             foreach (var item in list)
             {
@@ -1286,7 +1366,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetWeldPriority");
-            return getPriority((int)blockClass);
+            return getPriority != null ? getPriority((int)blockClass) : int.MaxValue;
         }
         else return int.MaxValue;
     }
@@ -1295,8 +1375,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetWeldPriority");
-            setPriority((int)blockClass, prio);
+            try
+            {
+                var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetWeldPriority");
+                if (setPriority != null) setPriority((int)blockClass, prio);
+            }
+            catch { }
         }
     }
 
@@ -1305,7 +1389,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetWeldEnabled");
-            return getEnabled((int)blockClass);
+            return getEnabled != null ? getEnabled((int)blockClass) : false;
         }
         else return false;
     }
@@ -1314,8 +1398,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetWeldEnabled");
-            setEnabled((int)blockClass, enabled);
+            try
+            {
+                var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetWeldEnabled");
+                if (setEnabled != null) setEnabled((int)blockClass, enabled);
+            }
+            catch { }
         }
     }
 
@@ -1324,6 +1412,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var list = GetValue<MemorySafeList<string>>("BuildAndRepair.GrindPriorityList");
+            if (list == null) return null;
             var blockList = new MemorySafeList<ClassState<BlockClass>>();
             foreach (var item in list)
             {
@@ -1347,7 +1436,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetGrindPriority");
-            return getPriority((int)blockClass);
+            return getPriority != null ? getPriority((int)blockClass) : int.MaxValue;
         }
         else return int.MaxValue;
     }
@@ -1356,8 +1445,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetGrindPriority");
-            setPriority((int)blockClass, prio);
+            try
+            {
+                var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetGrindPriority");
+                if (setPriority != null) setPriority((int)blockClass, prio);
+            }
+            catch { }
         }
     }
 
@@ -1366,7 +1459,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetGrindEnabled");
-            return getEnabled((int)blockClass);
+            return getEnabled != null ? getEnabled((int)blockClass) : false;
         }
         else return false;
     }
@@ -1375,8 +1468,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetGrindEnabled");
-            setEnabled((int)blockClass, enabled);
+            try
+            {
+                var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetGrindEnabled");
+                if (setEnabled != null) setEnabled((int)blockClass, enabled);
+            }
+            catch { }
         }
     }
 
@@ -1385,6 +1482,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var list = GetValue<MemorySafeList<string>>("BuildAndRepair.ComponentClassList");
+            if (list == null) return null;
             var compList = new MemorySafeList<ClassState<ComponentClass>>();
             foreach (var item in list)
             {
@@ -1408,7 +1506,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getPriority = GetValue<Func<int, int>>("BuildAndRepair.GetCollectPriority");
-            return getPriority((int)compClass);
+            return getPriority != null ? getPriority((int)compClass) : int.MaxValue;
         }
         else return int.MaxValue;
     }
@@ -1417,8 +1515,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetCollectPriority");
-            setPriority((int)compClass, prio);
+            try
+            {
+                var setPriority = entity.GetValue<Action<int, int>>("BuildAndRepair.SetCollectPriority");
+                if (setPriority != null) setPriority((int)compClass, prio);
+            }
+            catch { }
         }
     }
 
@@ -1427,7 +1529,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         if (_Entities.Count > 0)
         {
             var getEnabled = GetValue<Func<int, bool>>("BuildAndRepair.GetCollectEnabled");
-            return getEnabled((int)compClass);
+            return getEnabled != null ? getEnabled((int)compClass) : false;
         }
         else return false;
     }
@@ -1436,8 +1538,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         foreach (var entity in _Entities)
         {
-            var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetCollectEnabled");
-            setEnabled((int)compClass, enabled);
+            try
+            {
+                var setEnabled = entity.GetValue<Action<int, bool>>("BuildAndRepair.SetCollectEnabled");
+                if (setEnabled != null) setEnabled((int)compClass, enabled);
+            }
+            catch { }
         }
     }
 
@@ -1449,7 +1555,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.CollectIfIdle", value);
+            SetValueBoolSafe("BuildAndRepair.CollectIfIdle", value);
         }
     }
 
@@ -1461,7 +1567,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.PushIngotOreImmediately", value);
+            SetValueBoolSafe("BuildAndRepair.PushIngotOreImmediately", value);
         }
     }
 
@@ -1485,11 +1591,12 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
     {
         get
         {
-            return _Entities.Count > 0 ? _Entities[0].GetValueBool("BuildAndRepair.ScriptControlled") : false;
+            // Property is not registered on servers with ScriptControllFixed — safe read.
+            return _Entities.Count > 0 ? GetValue<bool>("BuildAndRepair.ScriptControlled") : false;
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValueBool("BuildAndRepair.ScriptControlled", value);
+            SetValueBoolSafe("BuildAndRepair.ScriptControlled", value);
         }
     }
 
@@ -1498,7 +1605,9 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         var missingItems = new MemorySafeDictionary<VRage.Game.MyDefinitionId, int>();
         foreach (var entity in _Entities)
         {
-            var dict = entity.GetValue<MemorySafeDictionary<VRage.Game.MyDefinitionId, int>>("BuildAndRepair.MissingComponents");
+            MemorySafeDictionary<VRage.Game.MyDefinitionId, int> dict = null;
+            try { dict = entity.GetValue<MemorySafeDictionary<VRage.Game.MyDefinitionId, int>>("BuildAndRepair.MissingComponents"); }
+            catch { }
             // Take max across overlapping systems, don't sum (they report the same items).
             if (dict != null && dict.Count > 0)
             {
@@ -1538,6 +1647,32 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         return default(T);
     }
 
+    // Safe setters: properties the mod publishes read-only (fixed server settings,
+    // ScriptControllFixed) throw on SetValue — treat as no-op per entity.
+    private void SetValueSafe<T>(string propertyName, T value)
+    {
+        foreach (var entity in _Entities)
+        {
+            try { entity.SetValue<T>(propertyName, value); } catch { }
+        }
+    }
+
+    private void SetValueBoolSafe(string propertyName, bool value)
+    {
+        foreach (var entity in _Entities)
+        {
+            try { entity.SetValueBool(propertyName, value); } catch { }
+        }
+    }
+
+    private void SetValueFloatSafe(string propertyName, float value)
+    {
+        foreach (var entity in _Entities)
+        {
+            try { entity.SetValueFloat(propertyName, value); } catch { }
+        }
+    }
+
     public IMySlimBlock CurrentPickedTarget
     {
         get
@@ -1546,7 +1681,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue("BuildAndRepair.CurrentPickedTarget", value);
+            SetValueSafe("BuildAndRepair.CurrentPickedTarget", value);
         }
     }
 
@@ -1567,7 +1702,7 @@ public class RepairSystemHandler : EntityHandler<IMyShipWelder>
         }
         set
         {
-            foreach (var entity in _Entities) entity.SetValue("BuildAndRepair.CurrentPickedGrindTarget", value);
+            SetValueSafe("BuildAndRepair.CurrentPickedGrindTarget", value);
         }
     }
 

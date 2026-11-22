@@ -45,7 +45,10 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
-        public void SettingsChanged()
+        /// <param name="forceRescan">BUG-261023.9: true for mod-level changes (they can alter the scan
+        /// without changing this BaR's settings); otherwise the immediate rescan only fires when the
+        /// scan-relevant settings key changed.</param>
+        public void SettingsChanged(bool forceRescan = false)
         {
             if (Mod.SettingsValid)
             {
@@ -86,9 +89,13 @@ namespace SKONanobotBuildAndRepairSystem
             // assignment held by this BaR — the multi-action wrapper may have claimed
             // several blocks in one cycle, and we want the next scan to pick from the
             // freshly sorted list with no carryover.
+            var scanKeyChanged = true;
             if (_Welder != null && _Welder.CubeGrid != null)
             {
                 var newClusterHash = ScanClusterCoordinator.ComputeClusterKeyHash(this);
+                var scanKey = ComputeSettingsScanKey(newClusterHash);
+                scanKeyChanged = scanKey != _lastSettingsScanKey;
+                _lastSettingsScanKey = scanKey;
                 if (_lastClusterKeyHash != 0 && newClusterHash != _lastClusterKeyHash)
                 {
                     State.CurrentWeldingBlock = null;
@@ -101,7 +108,27 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             // FEAT-080: settings changed — force immediate rescan, bypassing FEAT-075 debounce.
-            TriggerImmediateRescan("settingsChanged", true);
+            // BUG-261023.9: not when only e.g. a script's CurrentPicked*Block moved (the picker
+            // reads it directly) — that forced a full rescan on every pick.
+            if (forceRescan || scanKeyChanged)
+                TriggerImmediateRescan("settingsChanged", true);
+        }
+
+        /// <summary>
+        /// BUG-261023.9: hash of everything a per-BaR settings change can alter in the scan result —
+        /// the cluster key plus area and all flags.
+        /// </summary>
+        internal int ComputeSettingsScanKey(int clusterKeyHash)
+        {
+            unchecked
+            {
+                var s = Settings;
+                var hash = clusterKeyHash;
+                hash = (hash ^ (int)s.Flags) * 16777619;
+                hash = (hash ^ s.AreaSize.GetHashCode()) * 16777619;
+                hash = (hash ^ s.AreaOffset.GetHashCode()) * 16777619;
+                return hash;
+            }
         }
 
         /// <summary>
@@ -124,6 +151,14 @@ namespace SKONanobotBuildAndRepairSystem
                 return;
             }
 
+            // BUG-260610.6: validate everything that can early-return BEFORE the block
+            // is registered or events are subscribed. Update10_100 retries Init() until
+            // _IsInit is true; registering/subscribing first meant each retry stacked
+            // another handler and left a half-initialized entry (no _TransportInventory)
+            // visible to Mod.SettingsChanged's fan-out.
+            var welderInventory = _Welder.GetInventory(0);
+            if (welderInventory == null) return;
+
             // Register this block to the nanobot systems.
             Mod.NanobotSystems.TryAdd(Entity.EntityId, this);
 
@@ -140,27 +175,41 @@ namespace SKONanobotBuildAndRepairSystem
             // Initialize controls.
             Mod.InitControls();
 
-            _onEnabledChanged += (block) =>
+            // BUG-260610.6: create the handlers once (=, not +=) and make the event
+            // subscription idempotent (unsubscribe-then-subscribe is a no-op when not
+            // subscribed), so a retried Init() can never stack duplicate invocations.
+            if (_onEnabledChanged == null)
             {
-                // BUG-120: power-cycle resets the broken-block caches (player's retry path).
-                _BrokenProjBuildKeys.Clear();
-                _ProjBuildSilentFailCount.Clear();
-                _BrokenCacheOwnerId = _Welder != null ? _Welder.OwnerId : long.MinValue;
-                UpdateCustomInfo(true);
-            };
+                _onEnabledChanged = (block) =>
+                {
+                    // BUG-120: power-cycle resets the broken-block caches (player's retry path).
+                    _BrokenProjBuildKeys.Clear();
+                    _ProjBuildSilentFailCount.Clear();
+                    _ProjBuildSkipUntil.Clear();
+                    if (State != null) State.ProjectedBlocksSkipped = 0;
+                    _BrokenCacheOwnerId = _Welder != null ? _Welder.OwnerId : long.MinValue;
+                    UpdateCustomInfo(true);
+                };
+            }
 
-            _onIsWorkingChanged += (block) =>
+            if (_onIsWorkingChanged == null)
             {
-                UpdateCustomInfo(true);
-            };
+                _onIsWorkingChanged = (block) =>
+                {
+                    UpdateCustomInfo(true);
+                };
+            }
 
+            _Welder.EnabledChanged -= _onEnabledChanged;
             _Welder.EnabledChanged += _onEnabledChanged;
+            _Welder.IsWorkingChanged -= _onIsWorkingChanged;
             _Welder.IsWorkingChanged += _onIsWorkingChanged;
 
             // Set transport Inventory.
-            var welderInventory = _Welder.GetInventory(0);
-            if (welderInventory == null) return;
-            _TransportInventory = new Sandbox.Game.MyInventory((float)welderInventory.MaxVolume / MyAPIGateway.Session.BlocksInventorySizeMultiplier, Vector3.MaxValue, MyInventoryFlags.CanSend);
+            // BUG-260827.2: explicit maxMass — current SE builds leave the short
+            // constructor's mass constraint at 0, making CanItemsBeAdded/adds refuse
+            // everything on this detached inventory (welding starved completely).
+            _TransportInventory = new Sandbox.Game.MyInventory((float)welderInventory.MaxVolume / MyAPIGateway.Session.BlocksInventorySizeMultiplier, float.MaxValue, Vector3.MaxValue, MyInventoryFlags.CanSend);
 
             // BUG-018: seed InventoryFull from current welder volume on world reload.
             if ((float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
@@ -214,12 +263,10 @@ namespace SKONanobotBuildAndRepairSystem
                     while (spin.ElapsedTicks < pollSpacingTicks) { }
                 }
 
-                if (_Welder != null)
-                {
-                    _Welder.AppendingCustomInfo -= AppendingCustomInfo;
-                    if (_onEnabledChanged != null) _Welder.EnabledChanged -= _onEnabledChanged;
-                    if (_onIsWorkingChanged != null) _Welder.IsWorkingChanged -= _onIsWorkingChanged;
-                }
+                // BUG-260612.27: best-effort return of in-flight transport items to the
+                // welder inventory (which the engine drops as loot on destruction) —
+                // Close used to silently delete the load of a BaR destroyed mid-grind.
+                try { ServerEmptyTransportInventory(false); } catch { }
 
                 // Stop effects
                 State.CurrentTransportTarget = null;
@@ -230,6 +277,14 @@ namespace SKONanobotBuildAndRepairSystem
                 // BUG-160: release grid-count contribution before tear-down (setter Dec's count).
                 State.CurrentWeldingBlock = null;
                 State.CurrentGrindingBlock = null;
+
+                // BUG-260610.12: release every TTL block claim held by this BaR (the
+                // multi-action wrapper can hold several) so other BaRs aren't blocked
+                // for up to AssignmentTtlSeconds after this system is destroyed.
+                if (Mod.Settings.AssignToSystemEnabled && _Welder != null)
+                {
+                    BlockSystemAssigningHandler.ReleaseAllForSystem(_Welder.EntityId);
+                }
 
                 _Effects.UpdateEffects(this);
                 _Effects.Close(this);
@@ -243,6 +298,7 @@ namespace SKONanobotBuildAndRepairSystem
                 _TempPossibleWeldTargets?.Clear();
                 _TempPossibleGrindTargets?.Clear();
                 _TempPossibleFloatingTargets?.Clear();
+                _TempCollectTargets.Clear(); // BUG-260612.22
                 _TempPossibleSources?.Clear();
                 _TempPossiblePushTargets?.Clear();
                 _TempMissingComponents?.Clear();
@@ -262,13 +318,28 @@ namespace SKONanobotBuildAndRepairSystem
 
                 _DelayWatch?.Stop();
 
-                // Remove system from list.
-                NanobotSystem removed;
-                Mod.NanobotSystems.TryRemove(Entity.EntityId, out removed);
-
                 // Save settings.
                 Settings.Save(Entity, Mod.ModGuid);
             }
+
+            // BUG-260610.6: must run even when Init() never completed —
+            // AppendingCustomInfo is subscribed in the public Init(), and a private
+            // Init() that early-returned may already have registered the block and
+            // subscribed the enabled/working handlers.
+            if (_Welder != null)
+            {
+                _Welder.AppendingCustomInfo -= AppendingCustomInfo;
+                if (_onEnabledChanged != null) _Welder.EnabledChanged -= _onEnabledChanged;
+                if (_onIsWorkingChanged != null) _Welder.IsWorkingChanged -= _onIsWorkingChanged;
+            }
+
+            // Remove system from list.
+            if (Entity != null)
+            {
+                NanobotSystem removed;
+                Mod.NanobotSystems.TryRemove(Entity.EntityId, out removed);
+            }
+
             base.Close();
         }
 

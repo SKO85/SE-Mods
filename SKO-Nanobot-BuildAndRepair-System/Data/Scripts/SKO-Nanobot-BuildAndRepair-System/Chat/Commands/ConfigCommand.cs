@@ -1,8 +1,9 @@
-using SKONanobotBuildAndRepairSystem.Handlers;
+﻿using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Models;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 namespace SKONanobotBuildAndRepairSystem.Chat.Commands
@@ -36,12 +37,17 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                         catch { return string.Format("Expected one of: {0}", string.Join(", ", Enum.GetNames(typeof(Logging.Level)))); }
                     },
                     string.Join("|", Enum.GetNames(typeof(Logging.Level)))),
+                // BUG-260610.30: bounds must match the model clamps (ValidateAndClamp) —
+                // a looser command min let the server keep a value every client clamps
+                // away on receive, permanently diverging server and client settings.
                 IntSetting("Range",
                     () => Mod.Settings.Range,
-                    v => { Mod.Settings.Range = v; }, 1, 1000),
+                    v => { Mod.Settings.Range = v; }, NanobotSystem.WELDER_RANGE_MIN_IN_M, NanobotSystem.WELDER_RANGE_MAX_IN_M),
+                // BUG-260610.42: max must match the model clamp (WELDER_OFFSET_MAX_IN_M);
+                // the command refused values a hand-edited ModSettings.xml legitimately holds.
                 IntSetting("MaximumOffset",
                     () => Mod.Settings.MaximumOffset,
-                    v => { Mod.Settings.MaximumOffset = v; }, 0, 1000),
+                    v => { Mod.Settings.MaximumOffset = v; }, 0, NanobotSystem.WELDER_OFFSET_MAX_IN_M),
                 IntSetting("MaxBackgroundTasks",
                     () => Mod.Settings.MaxBackgroundTasks,
                     v => { Mod.Settings.MaxBackgroundTasks = v; }, 1, 10),
@@ -107,6 +113,16 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
                 IntSetting("WorkSpeed",
                     () => Mod.Settings.Welder.WorkSpeed,
                     v => { Mod.Settings.Welder.WorkSpeed = v; }, 1, 10),
+                EnumSetting("LanguageOverride",
+                    () => string.IsNullOrEmpty(Mod.Settings.LanguageOverride) ? "none" : Mod.Settings.LanguageOverride,
+                    v =>
+                    {
+                        var code = (v ?? "").Trim().ToLowerInvariant();
+                        if (code == "none" || code == "game") code = "";
+                        if (code != "" && code != "ko") return "Unknown language code. Accepted: none, ko. Takes effect on world reload / rejoin.";
+                        Mod.Settings.LanguageOverride = code;
+                        return null;
+                    }, "none|ko (applies on reload)"),
             };
 
             _lookup = new Dictionary<string, SettingEntry>(StringComparer.OrdinalIgnoreCase);
@@ -412,11 +428,13 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             {
                 Name = name,
                 TypeLabel = label,
-                Get = () => getter().ToString("F2"),
+                Get = () => getter().ToString("F2", CultureInfo.InvariantCulture),
                 Set = s =>
                 {
                     float v;
-                    if (!float.TryParse(s, out v)) return "Expected a number";
+                    // BUG-260610.20: default-culture parse treats "2.5" as 25 on
+                    // comma-decimal server locales (de-DE etc.) — silently in-range.
+                    if (!float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v)) return "Expected a number";
                     if (v < min || v > max) return string.Format("Value must be between {0} and {1}", min, max);
                     setter(v);
                     return null;

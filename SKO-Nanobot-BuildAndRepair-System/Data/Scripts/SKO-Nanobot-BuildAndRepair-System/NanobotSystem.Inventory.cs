@@ -19,15 +19,21 @@ namespace SKONanobotBuildAndRepairSystem
         // mixed with the count; detects container swaps that leave the count unchanged.
         private long ComputePushTargetsSignature()
         {
-            long sig = _PossiblePushTargets.Count;
-            for (int i = 0; i < _PossiblePushTargets.Count; i++)
+            // BUG-260612.9: the background scan swaps this list under its lock —
+            // iterate under the same lock (a Clear between the Count check and the
+            // indexer threw inside the main work loop).
+            lock (_PossiblePushTargets)
             {
-                var inv = _PossiblePushTargets[i];
-                if (inv == null) continue;
-                var owner = inv.Owner as IMyEntity;
-                if (owner != null) sig ^= owner.EntityId;
+                long sig = _PossiblePushTargets.Count;
+                for (int i = 0; i < _PossiblePushTargets.Count; i++)
+                {
+                    var inv = _PossiblePushTargets[i];
+                    if (inv == null) continue;
+                    var owner = inv.Owner as IMyEntity;
+                    if (owner != null) sig ^= owner.EntityId;
+                }
+                return sig;
             }
-            return sig;
         }
 
         /// <summary>
@@ -107,17 +113,37 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             anyAttempted = true;
                             anyPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || anyPushed;
-                            _TryAutoPushInventoryLast = lastPush;
                             processed++;
                         }
                         srcItemIndex--;
                     }
+
+                    // BUG-260612.28: advance the interval timestamp whenever the walk
+                    // ran — gating it on `eligible` made an all-ineligible inventory
+                    // re-walk every tick.
+                    _TryAutoPushInventoryLast = lastPush;
+
+                    if (anyAttempted) _PushAttemptedSinceWrap = true;
+                    if (anyPushed) _PushAnySinceWrap = true;
 
                     if (srcItemIndex < 0)
                     {
                         // Walked to the bottom: wrap cursor to the top for the next call so
                         // older items at higher indices get their turn.
                         _PushItemCursor = itemCount - 1;
+
+                        // BUG-016/BUG-260612.26: mark targets full only after a FULL pass
+                        // over the inventory attempted pushes and moved nothing — the old
+                        // per-call verdict (4-item sample) stalled pushing in
+                        // 4-item/15 s drips when the head items were sorter-blocked.
+                        if (_PushAttemptedSinceWrap && !_PushAnySinceWrap)
+                        {
+                            _PushTargetsFull = true;
+                            _PushTargetsFullSignature = ComputePushTargetsSignature();
+                            _PushTargetsFullSince = MyAPIGateway.Session.ElapsedPlayTime;
+                        }
+                        _PushAttemptedSinceWrap = false;
+                        _PushAnySinceWrap = false;
                     }
                     else
                     {
@@ -126,15 +152,7 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 _TempInventoryItems.Clear();
 
-                // BUG-016: mark targets full when an attempt moved nothing
-                // (cleared on successful push or push-target signature change).
-                if (anyAttempted && !anyPushed)
-                {
-                    _PushTargetsFull = true;
-                    _PushTargetsFullSignature = ComputePushTargetsSignature();
-                    _PushTargetsFullSince = MyAPIGateway.Session.ElapsedPlayTime;
-                }
-                else if (anyPushed)
+                if (anyPushed)
                 {
                     _PushTargetsFull = false;
                 }
@@ -179,7 +197,33 @@ namespace SKONanobotBuildAndRepairSystem
                         {
                             if (MyAPIGateway.Session.ElapsedPlayTime.Subtract(_TryPushInventoryLast).TotalSeconds > 5 && welderInventory.MaxVolume - welderInventory.CurrentVolume < _TransportInventory.CurrentVolume * 1.5f)
                             {
-                                if (!welderInventory.PushComponents(_PossiblePushTargets, null))
+                                // BUG-260612.25: push only item types whose Push* flag is
+                                // enabled — the old push-everything call could push out
+                                // components the welder needs for welding when only e.g.
+                                // PushIngotOreImmediately was on. Full-inventory pass, so
+                                // the full-set verdict below stays sound.
+                                var overflowAttempted = false;
+                                var overflowPushed = false;
+                                _TempInventoryItems.Clear();
+                                welderInventory.GetItems(_TempInventoryItems);
+                                for (int srcItemIndex = _TempInventoryItems.Count - 1; srcItemIndex >= 0; srcItemIndex--)
+                                {
+                                    var srcItem = _TempInventoryItems[srcItemIndex];
+                                    bool eligible;
+                                    if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Ore).Name || srcItem.Type.TypeId == typeof(MyObjectBuilder_Ingot).Name)
+                                        eligible = (Settings.Flags & SyncBlockSettings.Settings.PushIngotOreImmediately) != 0;
+                                    else if (srcItem.Type.TypeId == typeof(MyObjectBuilder_Component).Name)
+                                        eligible = (Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0;
+                                    else
+                                        eligible = (Settings.Flags & SyncBlockSettings.Settings.PushItemsImmediately) != 0;
+                                    if (!eligible) continue;
+
+                                    overflowAttempted = true;
+                                    overflowPushed = welderInventory.PushComponents(_PossiblePushTargets, null, srcItemIndex, srcItem) || overflowPushed;
+                                }
+                                _TempInventoryItems.Clear();
+
+                                if (overflowAttempted && !overflowPushed)
                                 {
                                     // BUG-016: Mark push targets as full to avoid retrying every tick.
                                     _PushTargetsFull = true;
@@ -187,7 +231,7 @@ namespace SKONanobotBuildAndRepairSystem
                                     _PushTargetsFullSince = MyAPIGateway.Session.ElapsedPlayTime;
                                     _TryPushInventoryLast = MyAPIGateway.Session.ElapsedPlayTime;
                                 }
-                                else
+                                else if (overflowPushed)
                                 {
                                     _PushTargetsFull = false;
                                 }
@@ -225,7 +269,11 @@ namespace SKONanobotBuildAndRepairSystem
                 empty = _TransportInventory.Empty();
             }
 
-            State.InventoryFull = !empty;
+            // BUG-260612.12: State.InventoryFull is owned by CheckAndUpdateInventoryFull
+            // (welder-block latch with 100%/90% hysteresis). The unconditional
+            // `= !empty` write here cleared that latch mid-tick — one grind op then ran
+            // against a full welder and the per-tick flag flips churned state sync.
+            // The work flows gate on transport volume directly, so no write is needed.
             if (profilerTs != 0L)
             {
                 MethodProfiler.StopAndLog("ServerEmptyTransportInventory", profilerTs, () =>
@@ -249,6 +297,7 @@ namespace SKONanobotBuildAndRepairSystem
             var itemsExamined = 0;
             var transferAttempts = 0;
             var transfersSucceeded = 0;
+            var fallbackMoves = 0;
             var tsGetItems = 0L;
             var tsGetItemById = 0L;
             var tsTransfer = 0L;
@@ -264,7 +313,11 @@ namespace SKONanobotBuildAndRepairSystem
                     inventoriesScanned++;
                     if (srcInventory.Empty()) { inventoriesEmpty++; continue; }
 
-                    if (remainingVolume <= 0) return true; //No more transport volume
+                    // BUG-260612.8: a non-empty inventory provably exists here — the old
+                    // bare return left isEmpty at its initial true, letting grind raze
+                    // loot-filled containers and collect delete looted corpses whenever
+                    // the transport inventory was full at entry.
+                    if (remainingVolume <= 0) { isEmpty = false; return true; } //No more transport volume
 
                     _TempInventoryItems.Clear();
                     // BUG-146: gate Stopwatch on profilerTs so it's zero-cost when off.
@@ -289,11 +342,20 @@ namespace SKONanobotBuildAndRepairSystem
                         transferAttempts++;
                         tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                         var transferred = dstInventory.TransferItemFrom(srcInventory, srcItemIndex, null, true, maxpossibleAmount, false);
+                        var movedAmount = maxpossibleAmount;
+                        if (!transferred)
+                        {
+                            // BUG-261023.5: the engine refused; engine capacity checks are unreliable on
+                            // the detached transport (BUG-260827.2), so retry as a verified move.
+                            movedAmount = MoveItemVerified(srcInventory, srcItem.ItemId, definition, dstInventory, maxpossibleAmount);
+                            transferred = movedAmount > 0;
+                            if (transferred) fallbackMoves++;
+                        }
                         if (tsMark != 0L) tsTransfer += Stopwatch.GetTimestamp() - tsMark;
                         if (transferred)
                         {
                             transfersSucceeded++;
-                            remainingVolume -= (float)maxpossibleAmount * definition.Volume;
+                            remainingVolume -= (float)movedAmount * definition.Volume;
                             running = true;
 
                             if (remainingVolume <= 0)
@@ -327,14 +389,51 @@ namespace SKONanobotBuildAndRepairSystem
                     var _itemsExamined = itemsExamined;
                     var _transferAttempts = transferAttempts;
                     var _transfersSucceeded = transfersSucceeded;
+                    var _fallbackMoves = fallbackMoves;
                     var _isEmptyResult = isEmpty;
                     var _running = running;
                     MethodProfiler.StopAndLog("EmptyBlockInventories", profilerTs, () =>
-                        string.Format("entityId={0};inventoryCount={1};invScanned={2};invEmpty={3};itemsExamined={4};transferAttempts={5};transferSucceeded={6};isEmpty={7};running={8};getItemsMs={9:F3};getItemByIdMs={10:F3};transferMs={11:F3}",
+                        string.Format("entityId={0};inventoryCount={1};invScanned={2};invEmpty={3};itemsExamined={4};transferAttempts={5};transferSucceeded={6};isEmpty={7};running={8};getItemsMs={9:F3};getItemByIdMs={10:F3};transferMs={11:F3};fallbackMoves={12}",
                             _entityId, _inventoryCount, _inventoriesScanned, _inventoriesEmpty, _itemsExamined, _transferAttempts, _transfersSucceeded, _isEmptyResult, _running,
-                            _getItemsMs, _getItemByIdMs, _transferMs));
+                            _getItemsMs, _getItemByIdMs, _transferMs, _fallbackMoves));
                 }
             }
+        }
+
+        /// <summary>
+        /// BUG-261023.5: add to an inventory and return the amount that actually landed
+        /// (engine capacity checks are not trusted on the detached transport, BUG-260827.2).
+        /// </summary>
+        private static MyFixedPoint AddItemsVerified(IMyInventory dstInventory, MyFixedPoint amount, MyObjectBuilder_PhysicalObject content)
+        {
+            var id = content.GetId();
+            var before = dstInventory.GetItemAmount(id);
+            dstInventory.AddItems(amount, content);
+            var added = dstInventory.GetItemAmount(id) - before;
+            return added > amount ? amount : added;
+        }
+
+        /// <summary>
+        /// BUG-261023.5: move up to `amount` of one source item into dstInventory: clamp to the
+        /// real volume headroom, add first, then remove from the source only what landed.
+        /// </summary>
+        private static MyFixedPoint MoveItemVerified(IMyInventory srcInventory, uint itemId, MyPhysicalItemDefinition definition, IMyInventory dstInventory, MyFixedPoint amount)
+        {
+            var item = srcInventory.GetItemByID(itemId);
+            var content = item != null ? item.Content as MyObjectBuilder_PhysicalObject : null;
+            if (content == null) return MyFixedPoint.Zero;
+            if (amount > item.Amount) amount = item.Amount;
+            if (definition.Volume > 0f)
+            {
+                var fits = (MyFixedPoint)(((float)dstInventory.MaxVolume - (float)dstInventory.CurrentVolume) / definition.Volume);
+                if (amount > fits) amount = fits;
+            }
+            if (definition.HasIntegralAmounts) amount = MyFixedPoint.Floor(amount);
+            if (amount <= 0) return MyFixedPoint.Zero;
+
+            var added = AddItemsVerified(dstInventory, amount, content);
+            if (added > 0) srcInventory.RemoveItems(itemId, added);
+            return added;
         }
 
         // BUG-133: PullComponents retired; see PullFromSourcesOnePass in Welding.cs.

@@ -47,6 +47,7 @@ namespace SKONanobotBuildAndRepairSystem
         public const float GRINDER_AMOUNT_PER_SECOND = 6f;
         public const float WELDER_SOUND_VOLUME = 2f;
 
+        // BUG-261023.4: back to the released 512 (1024 slipped in unmeasured; scales scan, truncation and aggregate).
         private const int MaxPossibleWeldTargets = 512;
         private const int MaxPossibleGrindTargets = 256;
         private const int MaxPossibleFloatingTargets = 16;
@@ -54,8 +55,8 @@ namespace SKONanobotBuildAndRepairSystem
         private const int TransmitStateMinIntervalSeconds = 1;
         private const int TransmitStateMaxIntervalSeconds = 4;
         private const int TransmitSettingsIntervalSeconds = 1;
-
-        public const int COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY = 50;
+        // BUG-260612.23: COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY (50) removed — it was
+        // unreachable (the floating list is capped at MaxPossibleFloatingTargets).
 
         public static readonly MyDefinitionId ElectricityId = new MyDefinitionId(typeof(VRage.Game.ObjectBuilders.Definitions.MyObjectBuilder_GasProperties), "Electricity");
         internal bool CreativeModeActive = false;
@@ -79,6 +80,12 @@ namespace SKONanobotBuildAndRepairSystem
         private long _PushTargetsFullSignature;
         private TimeSpan _PushTargetsFullSince;
 
+        // BUG-260612.26: push attempts/successes accumulated across calls until the
+        // chunked-push cursor wraps — the "all targets full" verdict needs a FULL
+        // inventory pass, not a 4-item sample of possibly sorter-blocked head items.
+        private bool _PushAttemptedSinceWrap;
+        private bool _PushAnySinceWrap;
+
         // BUG-162: round-robin cursor for ServerTryPushInventory chunking across ticks.
         private int _PushItemCursor = 0;
 
@@ -90,6 +97,23 @@ namespace SKONanobotBuildAndRepairSystem
         private bool _weldLoopExhausted = false;
         private long _weldExhaustedAtHash;
         private TimeSpan _weldExhaustedAtTime;
+
+        /// <summary>
+        /// BUG-260610.10: set by ServerDoWeld when the proj-build budget gate
+        /// (Mod.TryClaimProjBuildSlot) rejected the build this tick. Lets the weld
+        /// loop distinguish "budget-deferred" from "can't weld" so a buildable
+        /// projected block is retried next tick instead of being parked in the
+        /// 15 s global failure cooldown. Main-thread only.
+        /// </summary>
+        private bool _projBuildSlotDeferred = false;
+
+        /// <summary>
+        /// BUG-260612.10: set by ServerDoGrind when a janitor DisableOnly/HackOnly
+        /// target reached its threshold — finished, not failed. The caller removes it
+        /// from the lists instead of letting the picker re-claim it (and burn a grind
+        /// slot) every tick until the next scan. Main-thread only.
+        /// </summary>
+        private bool _grindJanitorDone = false;
 
         /// <summary>FEAT-076: same as _weldLoopExhausted, for the grind loop.</summary>
         private bool _grindLoopExhausted = false;
@@ -159,7 +183,11 @@ namespace SKONanobotBuildAndRepairSystem
                         && t.Block.Position.Z == position.Z)
                     {
                         State.PossibleGrindTargets.RemoveAt(i);
-                        State.PossibleGrindTargets.ChangeHash();
+                        // BUG-260610.33: RebuildHash (not ChangeHash) so CurrentCount is
+                        // refreshed too — a stale too-high count costs the idle fast-path
+                        // and saturation gates until the next scan. Already under the lock,
+                        // low rate, so the rebuild is cheap.
+                        State.PossibleGrindTargets.RebuildHash();
                         return;
                     }
                 }
@@ -174,10 +202,19 @@ namespace SKONanobotBuildAndRepairSystem
         private List<IMyInventory> _TempPossibleSources = new List<IMyInventory>();
         private List<IMyInventory> _TempPossiblePushTargets = new List<IMyInventory>();
 
+        // BUG-260610.22: main-thread pick buffer for the collect loop — targets are
+        // selected under the State.PossibleFloatingTargets lock, the engine work
+        // (inventory transfers, entity deletion) then runs outside it. Cleared after
+        // each pass so entity references aren't pinned between ticks.
+        private readonly List<TargetEntityData> _TempCollectTargets = new List<TargetEntityData>();
+
         // Locality-aware grind sorting: after destroying a block, prefer nearby blocks
         // within the same distance band. Set on main thread, read on background scan thread.
+        // BUG-260612.33: flag is volatile and always written AFTER the position, so a
+        // scan thread seeing true also sees a complete (possibly stale, never torn-
+        // and-trusted) position. Sort hint only, so stale is fine.
         internal Vector3D _LastGrindWorldPosition;
-        internal bool _HasLastGrindPosition;
+        internal volatile bool _HasLastGrindPosition;
 
         // Snapshot of cluster member area centers; null on solo scans.
         private List<Vector3D> _ClusterMemberAreaCenters;
@@ -185,6 +222,27 @@ namespace SKONanobotBuildAndRepairSystem
         // BUG-096: snapshot of each member's working-area OBB so SortAndCapGridCandidates
         // can drop unreachable candidates before farthest-first sorting.
         private List<MyOrientedBoundingBoxD> _ClusterMemberAreaBoxes;
+
+        // BUG-260610.13: cluster-membership snapshot taken on the MAIN thread in
+        // StartAsyncClusterScan and read by the background AsyncClusterScan.
+        // RebuildClusters mutates cluster.Members (~2 s cadence) on the main thread,
+        // so the background scan must never iterate the live list. Single scan in
+        // flight per BaR (re-entry guard), so reuse is safe.
+        private readonly List<NanobotSystem> _ScanMemberSnapshot = new List<NanobotSystem>();
+
+        // BUG-260610.29: projector cold-start tuning. The buildable-projector check's
+        // BoundingBox phase does an entity query + per-grid terminal enumeration on
+        // the MAIN thread, so it is throttled (cached verdict in between), and the
+        // idle-backoff reset is one-shot per buildable observation so a projector
+        // that stays buildable-but-unworkable can't defeat the FEAT-071 backoff
+        // forever. Re-armed when the projector reads non-buildable again.
+        private bool _projectorColdStartArmed = true;
+        private TimeSpan _lastProjectorPhase2Check;
+        private bool _lastProjectorPhase2Result;
+        private static readonly TimeSpan ProjectorPhase2CheckInterval = TimeSpan.FromSeconds(5);
+        // BUG-261122.3: grids whose projector made the check fire (phase 2 list lives with its cached verdict).
+        private readonly List<long> _coldStartGridIds = new List<long>();
+        private readonly List<long> _coldStartPhase2GridIds = new List<long>();
 
         // BUG-110: reusable scan-thread pools (eliminate per-scan allocations).
         private List<IMyCubeGrid> _ScanGridsBuffer;
@@ -213,6 +271,16 @@ namespace SKONanobotBuildAndRepairSystem
         private Dictionary<IMySlimBlock, double> _sortCandidateDistances = new Dictionary<IMySlimBlock, double>();
         private Dictionary<IMySlimBlock, int> _sortCandidatePriorities = new Dictionary<IMySlimBlock, int>();
 
+        // BUG-260610.31: server-side rate limit for MSGID_BLOCK_SETTINGS_FROM_CLIENT.
+        // Legit clients gate sends on a 1 s transmit timer; anything faster is dropped
+        // by NetworkMessagingHandler to stop spam from costing an XML save + broadcast
+        // per message. Server main thread only.
+        // BUG-260824.8: rate-limit window per sender, not per block — a shared window
+        // silently dropped a second player's concurrent terminal change.
+        internal Dictionary<ulong, TimeSpan> _lastClientSettingsAppliedBySender = new Dictionary<ulong, TimeSpan>();
+        // BUG-261023.10: per-sender window for block data requests (server side).
+        internal Dictionary<ulong, TimeSpan> _lastDataRequestBySender = new Dictionary<ulong, TimeSpan>();
+
         // Precomputed per-tick set of grid IDs definitely over MaxSystemsPerTargetGrid.
         // Rebuilt by _gridSaturation.Rebuild(), used as fast-path in IsGridOverSystemLimit().
         private readonly GridSaturationTracker _gridSaturation = new GridSaturationTracker();
@@ -220,13 +288,28 @@ namespace SKONanobotBuildAndRepairSystem
         // BUG-115: persistent skip set for projected blocks that threw NRE in proj.Build.
         private readonly HashSet<string> _BrokenProjBuildKeys = new HashSet<string>();
 
-        // BUG-120: silent proj.Build failure counter; promoted to _BrokenProjBuildKeys
+        // BUG-120: silent proj.Build failure counter; promoted to _ProjBuildSkipUntil
         // after PROJ_BUILD_MAX_SILENT_FAILS consecutive failures.
         private readonly Dictionary<string, int> _ProjBuildSilentFailCount = new Dictionary<string, int>();
         private const int PROJ_BUILD_MAX_SILENT_FAILS = 3;
 
+        // BUG-261122.2: silent-fail skips expire (key -> retry time) instead of lasting until a power cycle.
+        private readonly Dictionary<string, TimeSpan> _ProjBuildSkipUntil = new Dictionary<string, TimeSpan>();
+        private readonly List<string> _projBuildSkipExpired = new List<string>();
+        private static readonly TimeSpan ProjBuildSkipDuration = TimeSpan.FromMinutes(5);
+
         // BUG-120: owner the broken-block caches are scoped to; cleared on owner change.
         private long _BrokenCacheOwnerId = long.MinValue;
+
+        // BUG-261122.1 diagnostics: projected-build outcomes (debug panel) and the throttled
+        // log for builds that left no block.
+        private int _projBuildCreated;
+        private int _projBuildSilentFails;
+        private string _projBuildLastFail;
+        private TimeSpan _projSilentFailLogLast = TimeSpan.MinValue;
+        private int _projSilentFailLogSuppressed;
+        private bool _projUnknownFailLogged; // BUG-261122.5: first unexplained failure per BaR logs at Error
+        private static readonly TimeSpan ProjSilentFailLogInterval = TimeSpan.FromSeconds(60);
 
         /// <summary>
         /// Tracks grids that were scanned and had no weld/grind targets.
@@ -266,6 +349,18 @@ namespace SKONanobotBuildAndRepairSystem
         private VRage.Game.ModAPI.IMyInventory _LastSuccessfulSource;
         // BUG-136: round-robin cursor for the capped source walk.
         private int _NextPullSourceIdx;
+
+        // BUG-260824.2: aggregate missing-components rebuild (cadence marker + reusable buffers).
+        private TimeSpan _NextMissingAggregateAt;
+        // BUG-261023.1: time-sliced pass state (0 idle, 1 targets, 2 sources).
+        private int _AggPhase;
+        private int _AggCursor;
+        private bool _AggPhaseSeeded;
+        private Extensions.IntegrityLevel _AggLevel;
+        private List<TargetBlockData> _AggTargetsSnapshot = new List<TargetBlockData>();
+        private Dictionary<string, int> _AggMissingNeed = new Dictionary<string, int>();
+        private Dictionary<string, int> _AggPerBlockMissing = new Dictionary<string, int>();
+        private List<IMyInventory> _AggSourcesSnapshot = new List<IMyInventory>();
 
         private int _UpdateEffectsInterval;
         private bool _UpdateCustomInfoNeeded;
@@ -352,6 +447,50 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
+        // BUG-261023.6: PB scripting setters honour the admin locks and write the list through
+        // to Settings like the terminal does (saved, synced, cluster re-keyed via SettingsChanged).
+        internal void ScriptSetWeldPriority(int itemKey, int prio)
+        {
+            if (Mod.Settings.Welder.PriorityFixed) return;
+            BlockWeldPriority.SetPriority(itemKey, prio);
+            Settings.WeldPriority = BlockWeldPriority.GetEntries();
+        }
+
+        internal void ScriptSetWeldEnabled(int itemKey, bool enabled)
+        {
+            if (Mod.Settings.Welder.PriorityFixed) return;
+            BlockWeldPriority.SetEnabled(itemKey, enabled);
+            Settings.WeldPriority = BlockWeldPriority.GetEntries();
+        }
+
+        internal void ScriptSetGrindPriority(int itemKey, int prio)
+        {
+            if (Mod.Settings.Welder.PriorityFixed) return;
+            BlockGrindPriority.SetPriority(itemKey, prio);
+            Settings.GrindPriority = BlockGrindPriority.GetEntries();
+        }
+
+        internal void ScriptSetGrindEnabled(int itemKey, bool enabled)
+        {
+            if (Mod.Settings.Welder.PriorityFixed) return;
+            BlockGrindPriority.SetEnabled(itemKey, enabled);
+            Settings.GrindPriority = BlockGrindPriority.GetEntries();
+        }
+
+        internal void ScriptSetCollectPriority(int itemKey, int prio)
+        {
+            if (Mod.Settings.Welder.CollectPriorityFixed) return;
+            ComponentCollectPriority.SetPriority(itemKey, prio);
+            Settings.ComponentCollectPriority = ComponentCollectPriority.GetEntries();
+        }
+
+        internal void ScriptSetCollectEnabled(int itemKey, bool enabled)
+        {
+            if (Mod.Settings.Welder.CollectPriorityFixed) return;
+            ComponentCollectPriority.SetEnabled(itemKey, enabled);
+            Settings.ComponentCollectPriority = ComponentCollectPriority.GetEntries();
+        }
+
         public IMyShipWelder Welder
         { get { return _Welder; } }
 
@@ -417,19 +556,23 @@ namespace SKONanobotBuildAndRepairSystem
         /// the full cluster key string every second.
         /// </summary>
         internal int _lastClusterKeyHash;
+        // BUG-261023.9: last ComputeSettingsScanKey seen by SettingsChanged.
+        private int _lastSettingsScanKey;
 
         // Shared release helper for the weld/grind loops; second overload preserves
         // tsAssignOps profiler timing at call sites that aggregate it.
-        private static void ReleaseAssignmentIfEnabled(IMySlimBlock block)
+        // BUG-260612.17: owner-checked — a stale lock-on (TTL expired, block claimed
+        // by another BaR) must not delete the other BaR's claim.
+        private void ReleaseAssignmentIfEnabled(IMySlimBlock block)
         {
-            if (Mod.Settings.AssignToSystemEnabled) block.ReleaseFromSystem();
+            if (Mod.Settings.AssignToSystemEnabled) block.ReleaseFromSystem(_Welder.EntityId);
         }
 
-        private static void ReleaseAssignmentIfEnabled(IMySlimBlock block, bool profilerEnabled, ref long tsAssignOps)
+        private void ReleaseAssignmentIfEnabled(IMySlimBlock block, bool profilerEnabled, ref long tsAssignOps)
         {
             if (!Mod.Settings.AssignToSystemEnabled) return;
             var ts = profilerEnabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
-            block.ReleaseFromSystem();
+            block.ReleaseFromSystem(_Welder.EntityId);
             if (ts != 0L) tsAssignOps += System.Diagnostics.Stopwatch.GetTimestamp() - ts;
         }
     }

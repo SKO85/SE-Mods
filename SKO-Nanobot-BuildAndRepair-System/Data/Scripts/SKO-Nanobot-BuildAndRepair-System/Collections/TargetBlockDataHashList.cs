@@ -13,11 +13,17 @@ namespace SKONanobotBuildAndRepairSystem.Collections
         {
             var result = new List<SyncTargetEntityData>();
             var idx = 0;
-            foreach (var item in this)
+            // BUG-260610.7: invoked on the main thread during state serialization
+            // while the background scan clears/refills this list under the same
+            // lock — enumerate under it too, like RebuildHash and all other readers.
+            lock (this)
             {
-                result.Add(new SyncTargetEntityData() { Entity = SyncEntityId.GetSyncId(item.Block), Distance = item.Distance });
-                idx++;
-                if (idx >= SyncBlockState.MaxSyncItems) break;
+                foreach (var item in this)
+                {
+                    result.Add(new SyncTargetEntityData() { Entity = SyncEntityId.GetSyncId(item.Block), Distance = item.Distance });
+                    idx++;
+                    if (idx >= SyncBlockState.MaxSyncItems) break;
+                }
             }
             return result;
         }

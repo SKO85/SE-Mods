@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Test-only build settings. Lives under tests/ so it applies to the test project only;
+    the mod's csproj and its absolute SE references are untouched.
+    Override the Space Engineers Bin64 path per machine with the SPACEENGINEERS_BIN
+    environment variable or: dotnet test -p:SpaceEngineersBin=<path>
+  -->
+  <PropertyGroup>
+    <SpaceEngineersBin Condition="'$(SpaceEngineersBin)' == ''">$(SPACEENGINEERS_BIN)</SpaceEngineersBin>
+    <SpaceEngineersBin Condition="'$(SpaceEngineersBin)' == ''">E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64</SpaceEngineersBin>
+  </PropertyGroup>
+</Project>

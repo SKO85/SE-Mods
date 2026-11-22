@@ -187,9 +187,18 @@ namespace SKONanobotBuildAndRepairSystem.Models
         [ProtoMember(43), XmlElement]
         public int MaxWeldMsPerTick { get; set; }
 
+        /// <summary>
+        /// FEAT-261006.1: force a mod-text language regardless of the game language.
+        /// Empty = game language. Supported: "ko" (Korean; the game has no Korean UI
+        /// language, so it can only be chosen here). Applies on world (re)load.
+        /// </summary>
+        [ProtoMember(44), XmlElement]
+        public string LanguageOverride { get; set; }
+
         public SyncModSettings()
         {
             DisableLocalization = false;
+            LanguageOverride = "";
             LogLevel = Logging.Level.Error; //Default
             MaxBackgroundTasks = Mod.MaxBackgroundTasks_Default;
             TargetsUpdateInterval = TimeSpan.FromSeconds(5);
@@ -299,6 +308,11 @@ namespace SKONanobotBuildAndRepairSystem.Models
         public static bool ValidateAndClamp(SyncModSettings settings)
         {
             var adjusted = false;
+
+            // FEAT-261006.1: only known override codes survive; anything else = game language.
+            var lang = (settings.LanguageOverride ?? "").Trim().ToLowerInvariant();
+            if (lang != "" && lang != "ko") { lang = ""; adjusted = true; }
+            if (lang != settings.LanguageOverride) settings.LanguageOverride = lang;
 
             if (settings.MaxBackgroundTasks > Mod.MaxBackgroundTasks_Max)
             {

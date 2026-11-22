@@ -1,4 +1,5 @@
 using Sandbox.ModAPI;
+using System.Globalization;
 
 namespace SKONanobotBuildAndRepairSystem.Chat.Commands
 {
@@ -25,7 +26,8 @@ namespace SKONanobotBuildAndRepairSystem.Chat.Commands
             }
 
             float simValue;
-            if (!float.TryParse(args[1], out simValue))
+            // BUG-260610.20: invariant culture — "0.5" parses as 5 on comma-decimal locales.
+            if (!float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out simValue))
                 return ChatCommandResult.Error("Invalid value. Usage: /nanobars sim <0.1-1.0|reset>");
 
             if (simValue < 0.1f || simValue > 1.0f)

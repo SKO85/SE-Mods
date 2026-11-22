@@ -8,9 +8,10 @@
     <!-- Set to true to disable localisation and force English for all players. -->
     <DisableLocalization>false</DisableLocalization>
 
-    <!-- How much detail is written to the game log.
-         Values: Error, Warning, Info, Debug.
-         Use Debug only when troubleshooting — it generates a large amount of output. -->
+    <!-- How much detail is written to the mod log.
+         Values: Error, Event, Info, Verbose, Communication, All.
+         Use anything above Error only when troubleshooting — it generates a large
+         amount of output. -->
     <LogLevel>Error</LogLevel>
 
     <!-- Maximum working range in metres. Blocks, projections, and floating objects outside
@@ -45,6 +46,10 @@
 
         <!-- Grinding speed multiplier. 1 = default speed, 2 = double, 0.5 = half. -->
         <GrindingMultiplier>1</GrindingMultiplier>
+
+        <!-- How often Build and Repair operations run, from 1 (slowest) to 10 (fastest).
+             Independent of the multipliers above, which control work done per operation. -->
+        <WorkSpeed>1</WorkSpeed>
 
         <!-- Space-separated list of search modes available to players in the terminal.
              Remove a value to hide that mode entirely.
@@ -160,15 +165,17 @@
         <!-- When true, the sound volume setting is locked server-wide. -->
         <SoundVolumeFixed>false</SoundVolumeFixed>
 
-        <!-- Default sound volume for the block. Range: 0.0 (silent) – 1.0 (full volume). -->
+        <!-- Default sound volume for the block. Range: 0 (silent) – 2 (maximum).
+             The default of 1 shows as 50% on the terminal slider. -->
         <SoundVolumeDefault>1</SoundVolumeDefault>
 
         <!-- When true, the Script Control option is locked server-wide and players cannot
-             enable script-controlled mode from the terminal. -->
-        <ScriptControlFixed>false</ScriptControlFixed>
+             enable script-controlled mode from the terminal.
+             Note: the element name has a double "l" for backwards compatibility. -->
+        <ScriptControllFixed>false</ScriptControllFixed>
 
         <!-- Space-separated list of effect types the system may produce. Remove an entry to
-             disable that effect globally — players will not be able to enable it from the terminal.
+             disable that effect globally for every block.
              Values: WeldingVisualEffect, WeldingSoundEffect, GrindingVisualEffect,
              GrindingSoundEffect, TransportVisualEffect. -->
         <AllowedEffects>WeldingVisualEffect WeldingSoundEffect GrindingVisualEffect
@@ -210,7 +217,7 @@
 
     <!-- Maximum number of Build and Repair blocks that may work on the same target grid
          simultaneously. Prevents many systems piling onto one grid while nearby grids are
-         ignored. Defaults to 10 on dedicated servers and 20 in local/listen-server games
+         ignored. Defaults to 10 in multiplayer sessions and 20 in single-player games
          when omitted; setting it here overrides whichever default applies. Range: 1–100. -->
     <MaxSystemsPerTargetGrid>20</MaxSystemsPerTargetGrid>
 
@@ -239,9 +246,17 @@
     <MaxGrindsPerTick>0</MaxGrindsPerTick>
 
     <!-- Maximum number of weld operations across all blocks per tick. 0 = automatic
-         (scales with block count). Higher values allow faster welding but risk frame
-         spikes when the engine weld call is heavy on a tick. Range: 0–100. -->
+         (scales with block count, min 5, max 10). Higher values allow faster welding
+         but risk frame spikes when the engine weld call is heavy on a tick. Range: 0–100. -->
     <MaxWeldsPerTick>0</MaxWeldsPerTick>
+
+    <!-- Time budget in milliseconds for grind work per tick across all blocks. Caps total
+         grinding time per tick so engine spikes can't stall a frame. Range: 1–100. -->
+    <MaxGrindMsPerTick>8</MaxGrindMsPerTick>
+
+    <!-- Time budget in milliseconds for weld work per tick across all blocks. Same role
+         as MaxGrindMsPerTick for welding. Range: 1–100. -->
+    <MaxWeldMsPerTick>8</MaxWeldMsPerTick>
 
     <!-- How long (seconds) a block assignment reservation is held before expiring.
          Prevents two systems from targeting the same block. Lower = faster recycling
@@ -253,5 +268,5 @@
          is placed on a global fail-cooldown for this many seconds. Other Build and
          Repair systems skip the cooldowned block, so many systems don't all bounce
          off the same un-weldable target each tick. 0 disables the feature. Range: 0–30. -->
-    <BlockFailureCooldownSeconds>4</BlockFailureCooldownSeconds>
+    <BlockFailureCooldownSeconds>15</BlockFailureCooldownSeconds>
 </SyncModSettings>

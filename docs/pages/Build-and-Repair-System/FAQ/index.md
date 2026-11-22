@@ -57,7 +57,7 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
 <details>
 <summary>Does it work with DLC blocks?</summary>
 <div>
-<p>Yes. As of v2.5.4, the Build and Repair system no longer performs its own DLC entitlement check — the projector already enforces DLC at projection time, so any block that has been projected is by definition allowed to be built. Removing the redundant check also fixes an offline-mode issue where projected DLC blocks were skipped because the offline DLC table was empty (BUG-104).</p>
+<p>Yes. As of v2.5.4, the Build and Repair system no longer performs its own DLC ownership check — the projector already enforces DLC at projection time. Removing the redundant check also fixed an offline-mode issue where projected DLC blocks were wrongly skipped. If the game itself refuses to build a block because the owner is missing the required DLC, the system detects the failed attempts and skips that block instead of retrying it forever.</p>
 </div>
 </details>
 
@@ -72,18 +72,18 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
 <details>
 <summary>What blocks can the system pull components from and push items to?</summary>
 <div>
-<p>The system scans for <strong>source inventories</strong> (to pull components for welding) and <strong>push targets</strong> (to offload items after grinding or when the inventory is full). Both use the same set of supported block types. The block must be connected to the Build and Repair block via the <strong>conveyor network</strong>.</p>
-<p><strong>Supported block types:</strong></p>
+<p>The system scans for <strong>source inventories</strong> (to pull components for welding) and <strong>push targets</strong> (to offload items after grinding or when the inventory is full). The block must be connected to the Build and Repair block via the <strong>conveyor network</strong>.</p>
+<p><strong>Pull sources:</strong></p>
 <ul>
   <li>Cargo Containers</li>
   <li>Connectors</li>
   <li>Conveyor Sorters</li>
   <li>Assemblers</li>
-  <li>Refineries</li>
   <li>Ship Grinders</li>
-  <li>Ship Welders (excluding other Build and Repair blocks, to prevent circular transfers)</li>
+  <li>Ship Welders (the block never pulls from itself)</li>
   <li>Cryo Chambers</li>
 </ul>
+<p><strong>Push targets:</strong> Cargo Containers and Refineries.</p>
 <p>Blocks on connected grids (via connectors, pistons, rotors) are also included as long as they are reachable through the conveyor system. The system rescans for sources and push targets every 30 seconds.</p>
 </div>
 </details>
@@ -326,7 +326,7 @@ It has been replaced with the <strong>Weld mode</strong> dropdown in the termina
 <details>
 <summary>How do I run the built-in profiler?</summary>
 <div>
-<p>The profiler is an admin-only tool accessed through chat commands. <code>/nanobars profile start [seconds]</code> starts a session (auto-stops after the given seconds, default 120); <code>/nanobars profile stop</code> ends it and writes the logs.</p>
+<p>The profiler is an admin-only tool accessed through chat commands. <code>/nanobars profile start [seconds]</code> starts a session (auto-stops after the given seconds, default 300 = 5 minutes; use 0 to disable auto-stop); <code>/nanobars profile stop</code> ends it and writes the logs.</p>
 <p>For the full command list, log file locations, and tips on what to share when reporting performance issues, see <a href="../Debug-and-Diagnostics/#built-in-profiler">Debug &amp; Diagnostics → Built-in Profiler</a>.</p>
 </div>
 </details>
@@ -384,10 +384,19 @@ Set <code>DisableParticleEffects</code> to <code>true</code> in <code>ModSetting
 <div>
 <p>Use the following settings in <code>ModSettings.xml</code>:</p>
 <ul>
-  <li><code>MaxSystemsPerTargetGrid</code> — the maximum number of systems allowed to work on the same target grid simultaneously. Defaults to <code>20</code> in local and listen-server games and <code>10</code> on dedicated servers. Setting this in the config file overrides whichever default applies.</li>
+  <li><code>MaxSystemsPerTargetGrid</code> — the maximum number of systems allowed to work on the same target grid simultaneously. Defaults to <code>20</code> in single-player games and <code>10</code> in any multiplayer session (hosted or dedicated). Setting this in the config file overrides whichever default applies.</li>
   <li><code>DisableLimitSystemsPerTargetGrid</code> — set to <code>true</code> to remove the limit entirely.</li>
 </ul>
 <p>This prevents many systems piling onto a single grid while others nearby are ignored.</p>
+</div>
+</details>
+
+<details>
+<summary>How much power does the system need, and what happens when the grid can't supply it?</summary>
+<div>
+<p>By default a large-grid system needs <strong>50 kW</strong> on standby and <strong>200 kW</strong> while welding or grinding (small grid: half). Almost any grid covers that easily — one battery or small reactor is plenty.</p>
+<p>Admins can raise these with <code>MaximumRequiredElectricPowerStandby</code>, <code>MaximumRequiredElectricPowerWelding</code>, <code>MaximumRequiredElectricPowerGrinding</code> and <code>MaximumRequiredElectricPowerTransport</code> in <code>ModSettings.xml</code>.</p>
+<p>Good to know: with no power the system stops, but if the grid has <em>some</em> power yet less than the welding/grinding requirement, the system still keeps working at a good part of its normal speed. So a very high power requirement does not reliably slow it down. Making the speed follow the available power is planned for a later version.</p>
 </div>
 </details>
 

@@ -24,7 +24,7 @@ This is the single largest contributor to the v2.5.0+ performance improvements o
 
 ## How Clustering Works
 
-The coordinator is built around a **cluster key** — a deterministic fingerprint of every setting that affects what a scan finds. Two BaRs with the same key would produce the same candidate list (ignoring per-block range and distance), so they can safely share one scan.
+The coordinator is built around a **cluster key** — a summary of every setting that affects what a scan finds. Two BaRs with the same key would produce the same candidate list (ignoring per-block range and distance), so they can safely share one scan.
 
 The cluster key is derived from:
 
@@ -38,7 +38,7 @@ The cluster key is derived from:
 - Weld options (e.g. `Weld to Functional` vs `Weld to Full`).
 - Safe-Zone permission state (whether welding / grinding is currently allowed at the BaR's position).
 
-Once per cycle, every BaR's settings are hashed into a numeric cluster-key hash. If no hash has changed since the last cycle, the rebuild is skipped entirely (FEAT-072 fast path — no string allocation, no dictionary churn). When something does change, the full string keys are recomputed and BaRs are grouped by exact key match.
+Once per cycle, every BaR's settings are condensed into a compact numeric key. If no key has changed since the last cycle, the rebuild is skipped entirely. When something does change, the full keys are recomputed and BaRs are grouped by exact key match.
 
 Every group becomes one cluster. **Even single-BaR groups are tracked as clusters** — the per-BaR code path is identical whether the BaR is alone or in a group of fifty.
 
@@ -46,7 +46,7 @@ Every group becomes one cluster. **Even single-BaR groups are tracked as cluster
 
 ## Coordinator Election
 
-For each cluster, the coordinator is elected as the **member with the lowest Welder EntityId** — a deterministic, parameter-free choice that gives stable results across rebuilds. The current coordinator is preferred if it is still a valid member, so the role does not flap when other members join or leave.
+For each cluster, the coordinator is elected as the **member with the lowest block EntityId** — a deterministic, parameter-free choice. Because the lowest-ID member stays the same as long as it remains a valid member, the role does not flap when other members join or leave.
 
 The coordinator runs the next scan; the other members read the shared result. The coordinator-only fields the result holds (target lists, source lists, projector state) are republished atomically when the scan finishes, so members never see a half-built result.
 
@@ -67,15 +67,15 @@ So even though the scan is shared, each BaR still has its own targets, its own l
 
 ## Re-Election & Stability
 
-The cluster set is rebuilt periodically on the main thread (called from `Mod.RebuildSourcesAndTargetsTimer()`). Re-election happens when:
+The cluster set is rebuilt periodically. Re-election happens when:
 
 - A BaR is added (placed) or removed (deleted, disabled, unfunctional).
 - A relevant terminal setting changes — the BaR's hash differs from its last hash.
 - The current coordinator stops being a valid member (turned off, disabled, ownership changed).
 
-If the rebuild detects no changes (system count unchanged, every hash matches), it returns early — this is the common case once a base has stabilised, and costs essentially nothing per cycle.
+If the rebuild detects no changes (system count unchanged, every key matches), it returns early — this is the common case once a base has stabilised, and costs essentially nothing per cycle.
 
-When a BaR's setting toggle reshuffles it into a different cluster, any pending forced-rescan flag on the toggling BaR is propagated to the new cluster's coordinator so the new sort order takes effect on the next scan rather than waiting up to 60 s for the saturated-skip gate to expire (BUG-260501.1, v2.5.4).
+When a BaR's setting toggle reshuffles it into a different cluster, any pending forced-rescan request on the toggling BaR is handed to the new cluster's coordinator, so the new sort order takes effect on the next scan instead of waiting up to a minute.
 
 ---
 
@@ -83,7 +83,7 @@ When a BaR's setting toggle reshuffles it into a different cluster, any pending 
 
 Two BaRs share a cluster when:
 
-1. They are mounted on the **same logical grid** (connected via merge / connector / piston / rotor — anything that resolves to the same `CubeGrid.EntityId` after `MyAPIGateway.Multiplayer` connects).
+1. They are mounted on the **same grid**. This means the same physical cube grid — blocks joined by merge blocks count as one grid, but parts attached via connectors, pistons, or rotors are separate grids, so BaRs on different sub-grids of the same ship land in different clusters.
 2. They have the **same owner ID** and the same `Use Conveyor System` flag.
 3. They have **identical scan-relevant settings** (work mode, search mode, the cluster-relevant flags listed above, priority lists, colors, grind janitor, weld options).
 4. They are at the **same Safe-Zone permission state** — a BaR inside a no-weld Safe Zone gets a separate cluster from one outside, because their weld permissions differ.
@@ -148,15 +148,15 @@ There is **no terminal control** for clustering — it is automatic. The relevan
 <details>
 <summary>I changed a setting and the new sort order took up to a minute to apply.</summary>
 <div>
-This was a real bug (BUG-260501.1) in versions before v2.5.4. When a setting toggle reshuffled the BaR into a different cluster, the new cluster's coordinator was not told to do an immediate rescan and the saturated-skip gate could suppress the scan for up to 60 seconds. Fixed in v2.5.4 — the forced-rescan flag is now propagated across cluster reshuffle. Update to v2.5.4 or later.
+This was a real bug in versions before v2.5.4. When a setting toggle reshuffled the BaR into a different cluster, the new cluster's coordinator was not told to do an immediate rescan, and the scan could be suppressed for up to 60 seconds. Fixed in v2.5.4 — update to v2.5.4 or later.
 </div>
 </details>
 
 <details>
 <summary>One BaR in my cluster is doing all the scanning and seems to lag more.</summary>
 <div>
-<p>That is the elected coordinator — it runs the scan for the entire cluster. The cost is on the background scan thread, not the main game thread, so it should not affect sim-speed. If it does, lower <code>MaxBackgroundTasks</code> in <code>ModSettings.xml</code> to limit parallel scans across the server.</p>
-<p>The coordinator role rotates only when the current coordinator stops being a valid member (turned off, disabled, removed). To rotate manually, briefly disable the current coordinator — the next-lowest-EntityId member is elected.</p>
+<p>That is the elected coordinator — it runs the scan for the entire cluster. The scan runs in the background, not in the main game update, so it should not affect sim-speed. If it does, lower <code>MaxBackgroundTasks</code> in <code>ModSettings.xml</code> to limit parallel scans across the server.</p>
+<p>The coordinator role moves only when the current coordinator stops being a valid member (turned off, disabled, removed) — the next-lowest-ID member then takes over. Note that re-enabling the original block hands the role back to it, since election always picks the lowest-ID valid member.</p>
 </div>
 </details>
 

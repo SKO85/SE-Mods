@@ -1,4 +1,4 @@
-namespace SKONanobotBuildAndRepairSystem.Localization
+﻿namespace SKONanobotBuildAndRepairSystem.Localization
 {
     using Sandbox.ModAPI;
     using SKONanobotBuildAndRepairSystem.Utils;
@@ -103,6 +103,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public static readonly MyStringId Info_CurrentGrindEntity;
         public static readonly MyStringId Info_InventoryFull;
         public static readonly MyStringId Info_LimitReached;
+        public static readonly MyStringId Info_ProjectedSkipped;
 
         public static readonly MyStringId Info_BlocksToBuild;
 
@@ -121,10 +122,15 @@ namespace SKONanobotBuildAndRepairSystem.Localization
         public const int TextDefaultMaxTooltipLength = 50;
         static Texts()
         {
-            var language = Mod.DisableLocalization ? MyLanguagesEnum.English : MyAPIGateway.Session.Config.Language;
-            Logging.Instance.Write(Logging.Level.Error, "Localization: Disabled={0} Language={1}", Mod.DisableLocalization, language);
+            var disabled = Mod.DisableLocalization || Mod.Settings.DisableLocalization;
+            var language = disabled ? MyLanguagesEnum.English : MyAPIGateway.Session.Config.Language;
+            // FEAT-261006.1: LanguageOverride picks dictionaries the game language can't (Korean).
+            var languageOverride = disabled ? "" : (Mod.Settings.LanguageOverride ?? "");
+            Logging.Instance.Write(Logging.Level.Error, "Localization: Disabled={0} Language={1} Override={2}", disabled, language, languageOverride);
 
-            var texts = LocalizationHelper.GetTexts(language, GetDictionaries(), Logging.Instance);
+            var texts = languageOverride == "ko"
+                ? LocalizationHelper.Merge(TextsEnglish.Dictionary, TextsKorean.Dictionary)
+                : LocalizationHelper.GetTexts(language, GetDictionaries(), Logging.Instance);
             ModeSettings_Headline = LocalizationHelper.GetStringId(texts, "ModeSettings_Headline");
             SearchMode = LocalizationHelper.GetStringId(texts, "SearchMode");
             SearchMode_Tooltip = LocalizationHelper.GetStringId(texts, "SearchMode_Tooltip", TextDefaultMaxTooltipLength);
@@ -221,6 +227,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             Info_CurrentGrindEntity = LocalizationHelper.GetStringId(texts, "Info_CurrentGrindEntity");
             Info_InventoryFull = LocalizationHelper.GetStringId(texts, "Info_InventoryFull");
             Info_LimitReached = LocalizationHelper.GetStringId(texts, "Info_LimitReached");
+            Info_ProjectedSkipped = LocalizationHelper.GetStringId(texts, "Info_ProjectedSkipped");
             Info_BlocksToBuild = LocalizationHelper.GetStringId(texts, "Info_BlocksToBuild");
             Info_BlocksToGrind = LocalizationHelper.GetStringId(texts, "Info_BlocksToGrind");
             Info_ItemsToCollect = LocalizationHelper.GetStringId(texts, "Info_ItemsToCollect");

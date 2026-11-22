@@ -69,6 +69,17 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             _cache.TryRemove(gridId, out removed);
         }
 
+        /// <summary>
+        /// BUG-261122.10: drops the grid's entry if it found nothing, so a scan right after new damage does not
+        /// reuse a pre-damage "empty" result (which would re-arm the empty-grid skip).
+        /// </summary>
+        public static void InvalidateIfEmpty(long gridId)
+        {
+            Entry entry;
+            if (_cache.TryGetValue(gridId, out entry) && entry.WeldCandidates == null && entry.GrindCandidates == null)
+                _cache.TryRemove(gridId, out entry);
+        }
+
         public static void Clear()
         {
             _cache.Clear();

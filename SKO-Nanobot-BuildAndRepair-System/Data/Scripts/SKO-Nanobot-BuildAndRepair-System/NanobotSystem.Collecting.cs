@@ -27,31 +27,58 @@ namespace SKONanobotBuildAndRepairSystem
             CheckAndUpdateInventoryFull();
             if (State.InventoryFull) return;
 
+            // BUG-260610.22: pick targets under the lock, run the engine work
+            // (inventory transfers, entity deletion — ms-scale) OUTSIDE it. The
+            // background scan publish blocks on this lock, so a slow collect tick
+            // used to stall a scan worker — the same contention BUG-135/BUG-137
+            // removed for the weld and grind loops.
+            _TempCollectTargets.Clear();
             lock (State.PossibleFloatingTargets)
             {
-                TargetEntityData collectingFirstTarget = null;
-                var collectingCount = 0;
                 foreach (var targetData in State.PossibleFloatingTargets)
                 {
                     if (targetData.Entity != null && !targetData.Ignore)
                     {
-                        needCollecting = true;
-                        var added = ServerDoCollectFloating(targetData, out transporting, ref collectingFirstTarget);
-                        if (targetData.Ignore) State.PossibleFloatingTargets.ChangeHash();
-                        collecting |= added;
-                        if (added) collectingCount++;
-                        if (transporting || collectingCount >= COLLECT_FLOATINGOBJECTS_SIMULTANEOUSLY)
-                        {
-                            break; //Max Inventorysize reached or max simultaneously floating object reached
-                        }
+                        _TempCollectTargets.Add(targetData);
                     }
                 }
-                if (collecting && !transporting) ServerDoCollectFloating(null, out transporting, ref collectingFirstTarget); //Starttransport if pending
+            }
+
+            var anyIgnored = false;
+            TargetEntityData collectingFirstTarget = null;
+            for (var i = 0; i < _TempCollectTargets.Count; i++)
+            {
+                var targetData = _TempCollectTargets[i];
+                // BUG-260612.21: a scan swap mid-loop can orphan snapshot entries —
+                // skip entities that closed since the pick.
+                if (targetData.Entity == null || targetData.Entity.Closed || targetData.Entity.MarkedForClose)
+                    continue;
+                needCollecting = true;
+                var added = ServerDoCollectFloating(targetData, out transporting, ref collectingFirstTarget);
+                if (targetData.Ignore) anyIgnored = true;
+                collecting |= added;
+                // BUG-260612.23: the old 50-target cap was unreachable (the floating
+                // list is capped at 16 at scan-apply) — the volume gate is the real cap.
+                if (transporting)
+                {
+                    break; //Max Inventorysize reached
+                }
+            }
+            if (collecting && !transporting) ServerDoCollectFloating(null, out transporting, ref collectingFirstTarget); //Starttransport if pending
+
+            if (anyIgnored)
+            {
+                lock (State.PossibleFloatingTargets)
+                {
+                    State.PossibleFloatingTargets.ChangeHash();
+                }
             }
 
             }
             finally
             {
+                // BUG-260612.22: exception-safe — the buffer must not pin entity refs.
+                _TempCollectTargets.Clear();
                 if (profilerTs != 0L)
                 {
                     var _collecting = collecting;
@@ -138,6 +165,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var remainingVolume = _MaxTransportVolume - (double)dstInventory.CurrentVolume;
 
                 var definition = MyDefinitionManager.Static.GetPhysicalItemDefinition(floating.Item.Content.GetId());
+                if (definition == null) return running;
                 var startAmount = floating.Item.Amount;
 
                 var maxremainAmount = (MyFixedPoint)(remainingVolume / definition.Volume);
@@ -145,19 +173,25 @@ namespace SKONanobotBuildAndRepairSystem
                 if (definition.HasIntegralAmounts) maxpossibleAmount = MyFixedPoint.Floor(maxpossibleAmount);
                 if (maxpossibleAmount > 0)
                 {
-                    if (maxpossibleAmount >= floating.Item.Amount)
+                    // BUG-260612.24/BUG-261023.5: add first and verify (CanItemsBeAdded is not
+                    // trusted on the detached transport, BUG-260827.2), then take only what
+                    // landed from the floating object — a refused add can't destroy items.
+                    var added = AddItemsVerified(dstInventory, maxpossibleAmount, floating.Item.Content);
+                    if (added <= 0)
+                    {
+                        return running;
+                    }
+
+                    if (added >= floating.Item.Amount)
                     {
                         MyFloatingObjects.RemoveFloatingObject(floating);
                         isEmpty = true;
                     }
                     else
                     {
-                        floating.Item.Amount = floating.Item.Amount - maxpossibleAmount;
+                        floating.Item.Amount = floating.Item.Amount - added;
                         floating.RefreshDisplayName();
                     }
-
-                    dstInventory.AddItems(maxpossibleAmount, floating.Item.Content);
-                    remainingVolume -= (float)maxpossibleAmount * definition.Volume;
 
                     running = true;
                 }

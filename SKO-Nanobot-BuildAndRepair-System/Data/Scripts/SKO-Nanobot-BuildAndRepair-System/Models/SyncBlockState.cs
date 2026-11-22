@@ -26,6 +26,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private bool _Transporting;
         private bool _InventoryFull;
         private bool _LimitsExceeded;
+        private int _ProjectedBlocksSkipped;
         private bool _SafeZoneAllowsWelding;
         private bool _SafeZoneAllowsBuildingProjections;
         private bool _SafeZoneAllowsGrinding;
@@ -38,6 +39,16 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private List<SyncTargetEntityData> _PossibleFloatingTargetsSync;
         private IMySlimBlock _CurrentWeldingBlock;
         private IMySlimBlock _CurrentGrindingBlock;
+
+        // BUG-260610.21: effective grid id currently counted in Mod.GridSystemCount
+        // for each lock-on (0 = none). Cached so the decrement key always matches the
+        // increment key, even if the block's projector resolution changes meanwhile.
+        private long _weldCountedGridId;
+        private long _grindCountedGridId;
+
+        // BUG-260612.1: exposed so self-subtraction uses the exact counted keys.
+        internal long WeldCountedGridId { get { return _weldCountedGridId; } }
+        internal long GrindCountedGridId { get { return _grindCountedGridId; } }
 
         private Vector3D? _CurrentTransportTarget;
         private Vector3D? _LastTransportTarget;
@@ -183,14 +194,20 @@ namespace SKONanobotBuildAndRepairSystem.Models
 
                     // BUG-160: count-once-per-grid (skip Inc/Dec when the other lock already
                     // pins this grid so weld+grind on the same grid contributes +1, not +2).
+                    // BUG-260610.21: count by the EFFECTIVE grid id (projector parent for
+                    // projected blocks) — the id the MaxSystemsPerTargetGrid checks query;
+                    // counting the projected grid id let unlimited BaRs lock onto one
+                    // projection during component transport. The counted id is cached so
+                    // the decrement always matches the increment even if the projector
+                    // closes while locked on.
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
-                        if (oldGridId != newGridId)
+                        var newCountedId = NanobotSystem.GetEffectiveGridId(value);
+                        if (_weldCountedGridId != newCountedId)
                         {
-                            var otherGridId = (_CurrentGrindingBlock != null && _CurrentGrindingBlock.CubeGrid != null)
-                                ? _CurrentGrindingBlock.CubeGrid.EntityId : 0L;
-                            if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
-                            if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
+                            if (_weldCountedGridId != 0L && _weldCountedGridId != _grindCountedGridId) Mod.DecrementGridCount(_weldCountedGridId);
+                            if (newCountedId != 0L && newCountedId != _grindCountedGridId) Mod.IncrementGridCount(newCountedId);
+                            _weldCountedGridId = newCountedId;
                         }
                     }
                     _CurrentWeldingBlock = value;
@@ -230,15 +247,16 @@ namespace SKONanobotBuildAndRepairSystem.Models
                     var newPos = value != null ? value.Position : default(Vector3I);
                     var samePhysicalBlock = oldGridId != 0L && oldGridId == newGridId && oldPos == newPos;
 
-                    // BUG-160: count-once-per-grid (see CurrentWeldingBlock above).
+                    // BUG-160: count-once-per-grid; BUG-260610.21: effective-id counting
+                    // with cached counted id (see CurrentWeldingBlock above).
                     if (MyAPIGateway.Session != null && MyAPIGateway.Session.IsServer)
                     {
-                        if (oldGridId != newGridId)
+                        var newCountedId = NanobotSystem.GetEffectiveGridId(value);
+                        if (_grindCountedGridId != newCountedId)
                         {
-                            var otherGridId = (_CurrentWeldingBlock != null && _CurrentWeldingBlock.CubeGrid != null)
-                                ? _CurrentWeldingBlock.CubeGrid.EntityId : 0L;
-                            if (oldGridId != 0L && oldGridId != otherGridId) Mod.DecrementGridCount(oldGridId);
-                            if (newGridId != 0L && newGridId != otherGridId) Mod.IncrementGridCount(newGridId);
+                            if (_grindCountedGridId != 0L && _grindCountedGridId != _weldCountedGridId) Mod.DecrementGridCount(_grindCountedGridId);
+                            if (newCountedId != 0L && newCountedId != _weldCountedGridId) Mod.IncrementGridCount(newCountedId);
+                            _grindCountedGridId = newCountedId;
                         }
                     }
                     _CurrentGrindingBlock = value;
@@ -379,6 +397,21 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 if (value != _LimitsExceeded)
                 {
                     _LimitsExceeded = value;
+                    Changed = true;
+                }
+            }
+        }
+
+        // BUG-261122.2: projected blocks currently skipped after failed builds (terminal info).
+        [ProtoMember(24)]
+        public int ProjectedBlocksSkipped
+        {
+            get { return _ProjectedBlocksSkipped; }
+            set
+            {
+                if (value != _ProjectedBlocksSkipped)
+                {
+                    _ProjectedBlocksSkipped = value;
                     Changed = true;
                 }
             }
@@ -595,6 +628,26 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _fullSyncCounter = FullSyncInterval; // Next transmit will be full
         }
 
+        /// <summary>
+        /// BUG-260610.17: full snapshot for targeted (request-reply) sends. Must NOT
+        /// consume the delta-sync bookkeeping (Changed, list hashes, full-sync
+        /// counter) — that state tracks the broadcast stream to ALL clients; a
+        /// per-client reply consuming it suppressed a pending broadcast and made the
+        /// next broadcast skip lists the other clients never received.
+        /// </summary>
+        internal SyncBlockState GetTransmitFull()
+        {
+            _MissingComponentsSync = null;
+            _PossibleWeldTargetsSync = null;
+            _PossibleGrindTargetsSync = null;
+            _PossibleFloatingTargetsSync = null;
+            ExcludedLists = 0;
+            // Time anchor for the receiver's transport math; only side effect on the
+            // broadcast stream is delaying the next periodic send by < 1 s.
+            LastTransmitted = MyAPIGateway.Session.ElapsedPlayTime;
+            return this;
+        }
+
         internal void AssignReceived(SyncBlockState newState)
         {
             _Ready = newState.Ready;
@@ -606,6 +659,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _Transporting = newState.Transporting;
             _InventoryFull = newState.InventoryFull;
             _LimitsExceeded = newState.LimitsExceeded;
+            _ProjectedBlocksSkipped = newState.ProjectedBlocksSkipped;
             _CurrentTransportStartTime = MyAPIGateway.Session.ElapsedPlayTime - (newState.LastTransmitted - newState.CurrentTransportStartTime);
             _CurrentTransportTime = newState.CurrentTransportTime;
 

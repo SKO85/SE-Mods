@@ -1,4 +1,4 @@
-using Sandbox.ModAPI;
+﻿using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
@@ -12,12 +12,16 @@ namespace SKONanobotBuildAndRepairSystem.Localization
     {
         public static Dictionary<string, string> GetTexts(MyLanguagesEnum language, Dictionary<MyLanguagesEnum, Dictionary<string, string>> translations, Logging log = null)
         {
-            var texts = new Dictionary<string, string>();
-
             var fallbackTranslation = translations[MyLanguagesEnum.English];
             Dictionary<string, string> requestedTranslation;
             if (language == MyLanguagesEnum.English || !translations.TryGetValue(language, out requestedTranslation)) requestedTranslation = null;
+            return Merge(fallbackTranslation, requestedTranslation);
+        }
 
+        /// <summary>English fallback overlaid with the requested dictionary (null = English only).</summary>
+        public static Dictionary<string, string> Merge(Dictionary<string, string> fallbackTranslation, Dictionary<string, string> requestedTranslation)
+        {
+            var texts = new Dictionary<string, string>();
             foreach (var kv in fallbackTranslation)
             {
                 string translation;

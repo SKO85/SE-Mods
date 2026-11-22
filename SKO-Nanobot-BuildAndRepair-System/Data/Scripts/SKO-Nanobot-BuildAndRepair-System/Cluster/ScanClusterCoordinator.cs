@@ -83,10 +83,16 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                 }
                 _lastSystemCount = systemCount;
 
-                // Clear previous clusters
+                // Clear previous clusters.
+                // BUG-260610.13: cluster objects are reused across rebuilds while the
+                // background scan path snapshots Members under this same lock — guard
+                // every mutation so a snapshot never reads a list mid-clear/refill.
                 foreach (var cluster in _clusters.Values)
                 {
-                    cluster.Members.Clear();
+                    lock (cluster.Members)
+                    {
+                        cluster.Members.Clear();
+                    }
                 }
 
                 // Group systems by cluster key
@@ -109,7 +115,11 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                         cluster = new ScanCluster(key);
                         _clusters[key] = cluster;
                     }
-                    cluster.Members.Add(system);
+                    // BUG-260610.13: see the clear loop above.
+                    lock (cluster.Members)
+                    {
+                        cluster.Members.Add(system);
+                    }
                 }
 
                 // Assign clusters (including single-member clusters)
@@ -217,6 +227,11 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
                 // Safe zone state
                 hash = (hash ^ (system.State.SafeZoneAllowsWelding ? 1 : 0)) * 16777619;
                 hash = (hash ^ (system.State.SafeZoneAllowsGrinding ? 1 : 0)) * 16777619;
+                // BUG-260612.16: keep the cluster key in sync with the scan-params hash —
+                // mixed-permission members otherwise inherit the coordinator's filtering
+                // (projected welds into prohibited zones; off-grid autogrind exemptions).
+                hash = (hash ^ (system.State.SafeZoneAllowsBuildingProjections ? 1 : 0)) * 16777619;
+                hash = (hash ^ (system.State.IsShielded ? 1 : 0)) * 16777619;
 
                 return hash;
             }
@@ -265,8 +280,11 @@ namespace SKONanobotBuildAndRepairSystem.Cluster
             key += "|" + (system.Welder.UseConveyorSystem ? "1" : "0");
 
             // BUG-053: safe-zone state in the cluster key (refreshed before RebuildClusters).
+            // BUG-260612.16: building-projections + shield state added (parity with the hash).
             key += "|SZ" + (system.State.SafeZoneAllowsWelding ? "1" : "0")
-                 + (system.State.SafeZoneAllowsGrinding ? "1" : "0");
+                 + (system.State.SafeZoneAllowsGrinding ? "1" : "0")
+                 + (system.State.SafeZoneAllowsBuildingProjections ? "1" : "0")
+                 + (system.State.IsShielded ? "1" : "0");
 
             return key;
         }

@@ -1,4 +1,4 @@
-namespace SKONanobotBuildAndRepairSystem
+﻿namespace SKONanobotBuildAndRepairSystem
 {
     using DefenseShields;
     using Sandbox.ModAPI;
@@ -79,9 +79,15 @@ namespace SKONanobotBuildAndRepairSystem
         public const int MaxProjBuildsPerTickDefault = 3;
         private static readonly PerTickBudget _projBuildBudget = new PerTickBudget(MaxProjBuildsPerTickDefault);
 
+        // BUG-261023.1: missing-components aggregate slices per tick (all BaRs).
+        public const int MaxAggregateSlicesPerTickDefault = 4;
+        private static readonly PerTickBudget _aggregateSliceBudget = new PerTickBudget(MaxAggregateSlicesPerTickDefault);
+
         public static bool TryClaimMechanicalGrindSlot() { return _mechanicalGrindBudget.TryClaim(); }
         public static bool TryClaimDismountSlot() { return _dismountBudget.TryClaim(); }
         public static bool TryClaimProjBuildSlot() { return _projBuildBudget.TryClaim(); }
+        public static void RefundProjBuildSlot() { _projBuildBudget.Refund(); }
+        public static bool TryClaimAggregateSlice() { return _aggregateSliceBudget.TryClaim(); }
 
         // --- OPT 2: BaR update staggering ---
         // Distributes ServerTryWeldingGrindingCollecting() calls across StaggerGroupCount groups
@@ -138,6 +144,11 @@ namespace SKONanobotBuildAndRepairSystem
         // Controlled via /nanobars sim <value|reset> command (admin-only).
         public static float? SimSpeedOverride = null;
 
+        // FEAT-260910.2: scenario test harness seam. Assigned by the Testing overlay's
+        // session component; null in the release variant.
+        public static Action TestTick;
+        public static Func<string[], ulong, Chat.ChatCommandResult> TestCommand;
+
         public static float GetEffectiveSimSpeed()
         {
             if (SimSpeedOverride.HasValue) return SimSpeedOverride.Value;
@@ -187,6 +198,14 @@ namespace SKONanobotBuildAndRepairSystem
 
         public static bool TryClaimGrindSlot() { return _grindBudget.TryClaim(); }
         public static bool TryClaimWeldSlot() { return _weldBudget.TryClaim(); }
+
+        // BUG-260610.35: refund when the proj-build gate rejects after the weld slot
+        // was already claimed — no weld/build ran, so the budget shouldn't be debited.
+        public static void RefundWeldSlot() { _weldBudget.Refund(); }
+
+        // BUG-260612.11: same for grinding — the dismount gate can reject after the
+        // grind slot was claimed, before any grind work ran.
+        public static void RefundGrindSlot() { _grindBudget.Refund(); }
 
         /// <summary>Called after each ServerDoGrind to accumulate time spent grinding this tick.</summary>
         public static void ReportGrindTime(double ms) { _grindBudget.ReportTime(ms); }
@@ -313,6 +332,9 @@ namespace SKONanobotBuildAndRepairSystem
             // Register Damage Handler.
             DamageHandler.Register();
 
+            // BUG-261122.11: blocks added to a grid end its empty-grid skip.
+            GridChangeHandler.Register();
+
             // Register Network Messaging Handler.
             NetworkMessagingHandler.Register();
 
@@ -337,6 +359,15 @@ namespace SKONanobotBuildAndRepairSystem
         {
             if (SettingsValid)
             {
+                // BUG-260612.5: the Shield API was only created at world init, so
+                // enabling ShieldCheckEnabled via config set/reload yielded zero
+                // protection until restart. Create it on demand here (mirrors Init).
+                if (Settings.ShieldCheckEnabled && Shield == null)
+                {
+                    Shield = new ShieldApi();
+                    Shield.Load();
+                }
+
                 // BUG-260511.21: simpler, more robust recovery on ANY mod-level
                 // settings change — clear the assignment cache and reset the
                 // per-BaR loop-exhausted flags on every BaR. Previously these
@@ -367,7 +398,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // Trigger settings changed for all nanobots first.
                 foreach (var entry in NanobotSystems)
                 {
-                    entry.Value.SettingsChanged();
+                    entry.Value.SettingsChanged(true);
                 }
 
                 // Init terminal controls after settings have changed for all nanobots.
@@ -399,11 +430,10 @@ namespace SKONanobotBuildAndRepairSystem
                 var bar = pair.Value;
                 if (bar == null || bar.State == null) continue;
 
-                var weldBlock = bar.State.CurrentWeldingBlock;
-                var grindBlock = bar.State.CurrentGrindingBlock;
-
-                var weldGridId = (weldBlock != null && weldBlock.CubeGrid != null) ? weldBlock.CubeGrid.EntityId : 0L;
-                var grindGridId = (grindBlock != null && grindBlock.CubeGrid != null) ? grindBlock.CubeGrid.EntityId : 0L;
+                // BUG-261006.1: use the counted effective ids (GridSystemCount keys), not
+                // block.CubeGrid — a razed lock-on has no grid, a projected one has the wrong one.
+                var weldGridId = bar.State.WeldCountedGridId;
+                var grindGridId = bar.State.GrindCountedGridId;
 
                 var weldOver = weldGridId != 0L && overLimitGrids.Contains(weldGridId);
                 var grindOver = grindGridId != 0L && overLimitGrids.Contains(grindGridId);
@@ -438,8 +468,33 @@ namespace SKONanobotBuildAndRepairSystem
             }
         }
 
+        /// <summary>
+        /// BUG-260610.1: statics survive world unload, but session play-time restarts
+        /// per world. Any static holding an ElapsedPlayTime/frame value from the old
+        /// world keeps every "now - last >= interval" gate false in the next world
+        /// (until its play time catches up): no scans, no periodic maintenance,
+        /// frozen auto-stagger, leaked sim-speed override. Reset them all here.
+        /// </summary>
+        private static void ResetSessionState()
+        {
+            NowPlayTime = TimeSpan.Zero;
+            _LastSourcesAndTargetsUpdateTimer = TimeSpan.Zero;
+            _LastSyncModDataRequestSend = TimeSpan.Zero;
+            _cachedAutoStagger = -1;
+            _cachedAutoStaggerFrame = int.MinValue;
+            SimSpeedOverride = null;
+            PeriodicMaintenanceScheduler.ResetSessionState();
+            GridOwnershipCacheHandler.ResetSessionState();
+            FriendlyRelationsHandler.ResetSessionState();
+        }
+
         protected override void UnloadData()
         {
+            // BUG-260610.15: stop the background queue first — purge pending actions
+            // (they must not run against a world being torn down, nor survive into the
+            // next world) and make workers exit instead of picking up more work.
+            try { BackgroundTaskQueue.BeginShutdown(); } catch { }
+
             // Wait until background tasks finish (with timeout to prevent game freeze).
             // Stopwatch-based ~1 ms spin between checks: System.Threading.Sleep is
             // prohibited by the SE sandbox, but the previous lock+poll loop ran with no
@@ -476,6 +531,7 @@ namespace SKONanobotBuildAndRepairSystem
 
             // Unregister Datamage Handler.
             try { DamageHandler.Unregister(); } catch { }
+            try { GridChangeHandler.Unregister(); } catch { }
 
             // Clear block assigned handler.
             try { BlockSystemAssigningHandler.Clear(); } catch { }
@@ -489,6 +545,29 @@ namespace SKONanobotBuildAndRepairSystem
             // Clear shared caches.
             try { SharedGridBlockCache.Clear(); } catch { }
             try { SharedEntityCache.Clear(); } catch { }
+
+            // BUG-260610.11: clear remaining static handler state holding game-object
+            // references or session-clock TTL entries — statics survive into the next
+            // world (stale raze targets, wrong ownership on EntityId collision,
+            // phantom grid saturation, pinned object graphs).
+            try { FriendlyRelationsHandler.Clear(); } catch { }
+            try { RazeQueueHandler.Clear(); } catch { }
+            try { SkeletonResetHandler.Clear(); } catch { }
+            try { GridOwnershipCacheHandler.Clear(); } catch { }
+            try { GridSystemCount.Clear(); } catch { }
+            try { BlockPriorityHandling.GetItemKeyCache.Clear(); } catch { }
+            try { GridScanCache.Clear(); } catch { }
+            try { GridChangeHandler.Clear(); } catch { }
+
+            // FEAT-260910.2: drop the harness hooks; the Testing component re-assigns on next load.
+            TestTick = null;
+            TestCommand = null;
+
+            // BUG-260610.1: reset session-relative static timers/overrides.
+            try { ResetSessionState(); } catch { }
+
+            // BUG-260610.15: re-arm the background queue for the next session.
+            try { BackgroundTaskQueue.Reset(); } catch { }
 
             // Close the profiler to release any open log files.
             try { MethodProfiler.Close(); } catch { }
@@ -556,8 +635,17 @@ namespace SKONanobotBuildAndRepairSystem
                         // BUG-127: tick the deferred raze handler (internally throttled).
                         RazeQueueHandler.Process();
 
+                        // BUG-260827.1: main-thread skeleton resets for dented blocks.
+                        SkeletonResetHandler.Process();
+
                         // BUG-130: shared friendly-damage map cleanup (internally throttled).
                         CleanupFriendlyDamage();
+
+                        // BUG-261122.10: grid damage stamps (internally throttled).
+                        GridChangeHandler.Cleanup(now);
+
+                        // FEAT-260910.2: scenario test harness (Testing variant only).
+                        if (TestTick != null) TestTick();
                     }
 
                     // If the Settings is not yet valid, sync the settings between clients and server.

@@ -3,24 +3,23 @@ layout: default
 title: "Release Notes – v2.4.4"
 parent: Release Notes
 grand_parent: Build and Repair System
-nav_order: 5
+nav_order: 7
 ---
 
 # Release Notes – v2.4.4
 
 - Release date: 1 March 2026
-- Notes: N/A
+- Notes: Bug fix release — less server load, block settings that actually stick, and a tidier info panel.
 
 ---
 
 ## Bug Fixes
 
-- **Performance:** Scanning for target blocks and source containers is now skipped entirely when the Build and Repair block is disabled, reducing unnecessary server load.
-- **Performance:** Improved how nearby entities are sorted, which reduces server lag when many systems are active in the same area.
-- **Sync:** Block settings now correctly persist after a server restart or when a player relogs, instead of occasionally resetting to defaults.
-- **Control Panel:** Removed spurious `(none)` and `(NULL)` entries that appeared in the info panel during welding, grinding, and item collection.
-- **Welding List:** Fixed inconsistent sorting and unreliable display of missing items in the welding target list.
-- **Sound Effects:** Welding, grinding, and waiting sounds now play at the Build and Repair block's location rather than at the player's position.
-- **Welding/Idle State:** Reduced unnecessary switching between Welding and Idle states.
+- **Less server load:** Turned-off BaR blocks no longer scan for targets and containers at all, and sorting nearby objects is cheaper — noticeably less lag when many systems are active in the same area.
+- **Settings that stick:** Block settings no longer occasionally reset to defaults after a server restart or a relog.
+- **Cleaner info panel:** Removed the stray `(none)` and `(NULL)` entries that showed up during welding, grinding and item collection.
+- **Welding list:** Fixed inconsistent sorting and unreliable display of missing items in the welding target list.
+- **Sounds in the right place:** Welding, grinding and waiting sounds now play at the BaR block instead of following you around.
+- **Less status flicker:** Reduced unnecessary switching between Welding and Idle states.
 
-  > **Known limitation:** When welding a projected grid where the first block is placed with only a single component, the block briefly enters an Idle state for 1–2 seconds while waiting to collect the remaining components before resuming. Further improvement is planned.
+  > **Known limitation:** When welding a projected grid where the first block is placed with only a single component, the block briefly shows Idle for 1–2 seconds while waiting to collect the remaining components, then resumes. Further improvement is planned.

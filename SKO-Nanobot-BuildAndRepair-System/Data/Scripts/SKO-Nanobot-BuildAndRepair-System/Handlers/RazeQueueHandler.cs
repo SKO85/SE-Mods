@@ -19,6 +19,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         public const int ProcessIntervalTicks = 10;
 
         private static int _tickCounter;
+        // BUG-261023.13: throttled error logging for a drain that keeps throwing.
+        private static readonly TimeSpan ErrorLogInterval = TimeSpan.FromSeconds(60);
+        private static bool _errorLogged;
+        private static TimeSpan _lastErrorLogged;
+        private static int _errorsSinceLog;
 
         // BUG-260511.10: queue entry pairs the block with its precomputed dedup
         // key so Process can free the key even if target.CubeGrid has gone null
@@ -61,6 +66,21 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         }
 
         /// <summary>
+        /// BUG-260610.11: purge queued blocks on world unload — leftover entries
+        /// would raze dead-world blocks (or, with EntityId reuse, the wrong grid)
+        /// in the next session. Called from Mod.UnloadData (main thread).
+        /// </summary>
+        public static void Clear()
+        {
+            _queue.Clear();
+            _pendingKeys.Clear();
+            _batchByGrid.Clear();
+            _tickCounter = 0;
+            _errorLogged = false;
+            _errorsSinceLog = 0;
+        }
+
+        /// <summary>
         /// Tick-gated batched drain (call once per main-thread tick).
         /// BUG-145: per-call profiling for the engine RazeBlocks cost.
         /// </summary>
@@ -82,19 +102,24 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
             try
             {
-                // BUG-260522.1: count every DEQUEUE toward the budget, not just
-                // successful batch-adds. The old loop only `processed++`'d after
-                // a block passed all validity checks; stale entries (null,
-                // re-welded, missing grid) hit `continue` without counting, so
-                // a single Process() call could dequeue an unbounded number of
-                // stale entries and monopolize the main thread under common
-                // post-combat / post-repair cleanup conditions.
+                // BUG-260522.1: count every consuming DEQUEUE toward the budget, not
+                // just successful batch-adds — stale entries (null, re-welded,
+                // missing grid) must not let one drain monopolize the main thread.
+                // BUG-260824.12: mech-slot deferrals are the exception — they re-enqueue
+                // and used to (a) burn the budget on guaranteed-failing retries and
+                // (b) get re-dequeued within the SAME drain. Deferrals no longer count
+                // toward `processed`; `dequeues < queueDepthAtEntry` gives every entry
+                // at most one look per drain, and after the first failed claim later
+                // mech blocks defer without re-claiming.
                 var processed = 0;
-                while (processed < MaxRazesPerDrainDefault)
+                var dequeues = 0;
+                var mechDeferred = 0;
+                var mechSlotSpent = false;
+                while (processed < MaxRazesPerDrainDefault && dequeues < queueDepthAtEntry)
                 {
                     if (_queue.Count == 0) break;
                     var entry = _queue.Dequeue();
-                    processed++;
+                    dequeues++;
 
                     // BUG-260511.10: free the dedup slot up front, before any
                     // continue path, so a vanished grid / null block can't strand
@@ -102,13 +127,30 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     _pendingKeys.Remove(entry.Key);
 
                     var target = entry.Block;
-                    if (target == null) { skippedNullTarget++; continue; }
+                    if (target == null) { skippedNullTarget++; processed++; continue; }
                     var grid = target.CubeGrid;
-                    if (grid == null) { skippedNullGrid++; continue; }
+                    if (grid == null) { skippedNullGrid++; processed++; continue; }
                     // Skip blocks that have been welded back up or razed elsewhere.
-                    if (target.FatBlock != null && target.FatBlock.Closed) { skippedClosedFat++; continue; }
+                    if (target.FatBlock != null && target.FatBlock.Closed) { skippedClosedFat++; processed++; continue; }
                     // Slim armor: IsDestroyed flips false on re-weld; don't undo it.
-                    if (!target.IsDestroyed) { skippedNotDestroyed++; continue; }
+                    if (!target.IsDestroyed) { skippedNotDestroyed++; processed++; continue; }
+
+                    // BUG-260612.20: mechanical blocks (pistons/rotors/hinges) detach
+                    // subgrids on raze (100-380 ms spikes) — the OPT 1 one-per-tick cap
+                    // lives here now, where the raze actually happens, instead of
+                    // failing ServerDoGrind after the grind work already ran.
+                    if (target.FatBlock is Sandbox.ModAPI.IMyMechanicalConnectionBlock
+                            || target.FatBlock is Sandbox.ModAPI.IMyAttachableTopBlock)
+                    {
+                        if (mechSlotSpent || !Mod.TryClaimMechanicalGrindSlot())
+                        {
+                            mechSlotSpent = true;
+                            Enqueue(target);
+                            mechDeferred++;
+                            continue;
+                        }
+                    }
+                    processed++;
 
                     List<Vector3I> positions;
                     if (!_batchByGrid.TryGetValue(grid, out positions))
@@ -162,19 +204,31 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     var _gridsTouched = gridsTouched;
                     var _totalRazed = totalRazed;
                     var _queueDepthAfter = _queue.Count;
+                    var _mechDeferred = mechDeferred;
                     MethodProfiler.StopAndLog("RazeQueueHandler.Process", profilerTs, () =>
-                        string.Format("queueAtEntry={0};drained={1};totalRazed={2};gridsTouched={3};queueAfter={4};skipNullTarget={5};skipNullGrid={6};skipClosedFat={7};skipNotDestroyed={8};drainMs={9:F3};razeMs={10:F3};maxPerGridMs={11:F3}",
+                        string.Format("queueAtEntry={0};drained={1};totalRazed={2};gridsTouched={3};queueAfter={4};skipNullTarget={5};skipNullGrid={6};skipClosedFat={7};skipNotDestroyed={8};mechDeferred={9};drainMs={10:F3};razeMs={11:F3};maxPerGridMs={12:F3}",
                             _queueDepthAtEntry, _drained, _totalRazed, _gridsTouched, _queueDepthAfter,
                             _skippedNullTarget, _skippedNullGrid, _skippedClosedFat, _skippedNotDestroyed,
-                            _drainMs, _razeMs, _maxPerGridMs));
+                            _mechDeferred, _drainMs, _razeMs, _maxPerGridMs));
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 if (profilerTs != 0L)
                 {
                     MethodProfiler.StopAndLog("RazeQueueHandler.Process", profilerTs, () =>
                         string.Format("queueAtEntry={0};exception=true", queueDepthAtEntry));
+                }
+
+                // BUG-261023.13: log it — first failure, then at most once a minute with a count.
+                _errorsSinceLog++;
+                var now = Mod.NowPlayTime;
+                if (!_errorLogged || now - _lastErrorLogged >= ErrorLogInterval)
+                {
+                    try { Logging.Instance.Write(Logging.Level.Error, "RazeQueueHandler.Process failed ({0}x since last report): {1}", _errorsSinceLog, ex); } catch { }
+                    _errorLogged = true;
+                    _lastErrorLogged = now;
+                    _errorsSinceLog = 0;
                 }
             }
             finally

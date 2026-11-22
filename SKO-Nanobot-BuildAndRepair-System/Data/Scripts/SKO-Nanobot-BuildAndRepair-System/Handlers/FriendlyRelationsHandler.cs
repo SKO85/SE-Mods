@@ -38,6 +38,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static TimeSpan _LastDamageCleanup = TimeSpan.Zero;
 
         /// <summary>
+        /// BUG-260610.1: _LastDamageCleanup holds session play-time and survives
+        /// world unload — reset so the reap timer works in the next session.
+        /// Called from Mod.UnloadData.
+        /// </summary>
+        public static void ResetSessionState()
+        {
+            _LastDamageCleanup = TimeSpan.Zero;
+        }
+
+        /// <summary>
         /// Snapshot list of BaRs whose welder considers `ownerId` friendly. Returns false
         /// (and a null `friendlies`) if the cache hasn't yet been built for this owner.
         /// </summary>
@@ -55,6 +65,60 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             var snapshot = _OwnersByOwner;
             return snapshot.TryGetValue(ownerId, out owners);
+        }
+
+        // BUG-260824.4: memoized entries for attackers who own no BaR (not keys of the
+        // rebuilt cache). Invalidated whenever Rebuild swaps in a new snapshot.
+        private static readonly object _ComputedLock = new object();
+        private static readonly Dictionary<long, List<long>> _ComputedOwners = new Dictionary<long, List<long>>();
+        private static Dictionary<long, List<long>> _ComputedSnapshotSource;
+
+        /// <summary>
+        /// BUG-260824.4: resolve friendly welder-owners for ANY attacker. The rebuilt
+        /// cache only has welder owners as keys, so a BaR-less faction member never got
+        /// friendly-damage suppression (BaR instantly re-welded whatever they ground).
+        /// Misses are computed against the live welders once and memoized until the next
+        /// Rebuild swap (~15 s), keeping per-damage-event cost at a dictionary lookup.
+        /// </summary>
+        public static bool TryGetOrComputeOwnersForOwner(long attackerId, out List<long> owners)
+        {
+            var snapshot = _OwnersByOwner;
+            if (snapshot.TryGetValue(attackerId, out owners)) return true;
+
+            lock (_ComputedLock)
+            {
+                if (_ComputedSnapshotSource == snapshot && _ComputedOwners.TryGetValue(attackerId, out owners))
+                    return owners != null;
+            }
+
+            List<long> computed = null;
+            var seenOwners = new HashSet<long>();
+            foreach (var entry in Mod.NanobotSystems)
+            {
+                var system = entry.Value;
+                var welder = system != null ? system.Welder : null;
+                if (welder == null) continue;
+                var welderOwnerId = welder.OwnerId;
+                if (welderOwnerId == 0 || !seenOwners.Add(welderOwnerId)) continue;
+                var relation = welder.GetUserRelationToOwner(attackerId);
+                if (MyRelationsBetweenPlayerAndBlockExtensions.IsFriendly(relation))
+                {
+                    if (computed == null) computed = new List<long>();
+                    computed.Add(welderOwnerId);
+                }
+            }
+
+            lock (_ComputedLock)
+            {
+                if (_ComputedSnapshotSource != snapshot)
+                {
+                    _ComputedOwners.Clear();
+                    _ComputedSnapshotSource = snapshot;
+                }
+                _ComputedOwners[attackerId] = computed;
+            }
+            owners = computed;
+            return computed != null;
         }
 
         /// <summary>BUG-130: mark friendly damage for the welder-owner (one shared entry).</summary>
@@ -155,6 +219,26 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
             _BaRsByOwner = newCache;
             _OwnersByOwner = newOwnerCache;
+        }
+
+        /// <summary>
+        /// BUG-260610.11: drop all NanobotSystem/IMySlimBlock references on world
+        /// unload — statics survive into the next session. Called from Mod.UnloadData.
+        /// </summary>
+        public static void Clear()
+        {
+            _BaRsByOwner = new Dictionary<long, List<NanobotSystem>>();
+            _OwnersByOwner = new Dictionary<long, List<long>>();
+            lock (_ComputedLock)
+            {
+                _ComputedOwners.Clear();
+                _ComputedSnapshotSource = null;
+            }
+            lock (_DamageLock)
+            {
+                _DamageByOwner.Clear();
+                _DamageReapBuffer.Clear();
+            }
         }
     }
 }

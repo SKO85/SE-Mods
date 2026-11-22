@@ -59,7 +59,7 @@ Each element of the array is one group. A group links a set of Build and Repair 
 
 | Property          | Type            | Default    | Description |
 | ----------------- | --------------- | ---------- | ----------- |
-| `DisplayNames`    | `string[]`      | —          | Names of text panels or cockpit screens. Cockpit screens use the format `"BlockName[index]"`, e.g. `"Cockpit[0]"`. |
+| `DisplayNames`    | `string[]`      | —          | Names of text panels or cockpit screens. Cockpit screens use the format `"BlockName[index]"`, e.g. `"Bridge Cockpit[0]"` — give the cockpit its own name (or use a `[BaR:1@0]` tag instead): the game names every cockpit "Cockpit", so `"Cockpit[0]"` would pick whichever one it finds first, on any connected grid. |
 | `DisplayKinds`    | `DisplayKind[]` | `Status`   | Pages to cycle through on this display. See [Display Kinds](#display-kinds) below. |
 | `DisplayMaxLines` | `int`           | `19`       | Maximum lines shown for list pages. |
 | `DisplaySwitchTime` | `double`      | `5`        | Seconds between page switches. Set to `0` to show only the first page without cycling. |
@@ -110,7 +110,7 @@ static BuildAndRepairSystemQueuingGroup[] BuildAndRepairSystemQueuingGroups = {
       AssemblerGroupName = "AssemblerGroup1",
       Displays = new[] {
          new DisplayDefinition {
-            DisplayNames = new[] { "BuildAndRepairGroup1StatusPanel", "Cockpit[0]" },
+            DisplayNames = new[] { "BuildAndRepairGroup1StatusPanel" },
             DisplayKinds = new[] {
                DisplayKind.ShortStatus,
                DisplayKind.Status,
@@ -363,7 +363,9 @@ Both the name tag and Custom Data are read at init and again on the periodic ~30
 
 ## info-only Mode
 
-To display status without queuing any components into assemblers, set the Programmable Block **argument** to `info-only` and rerun the script.
+To display status without queuing any components into assemblers, run the Programmable Block with the **argument** `info-only` (Run button in the terminal, or a toolbar/timer action with that argument).
+
+The mode is remembered — also after reloading the world or recompiling the script — until you run the Programmable Block with the argument `queue`, which turns assembler queuing back on.
 
 ---
 

@@ -1,4 +1,4 @@
-using Sandbox.ModAPI;
+﻿using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Models;
 using System;
 using System.Collections.Generic;
@@ -46,6 +46,36 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
             public double WarmupTotalMs;
             public long SteadyCalls;
             public double SteadyTotalMs;
+        }
+
+        /// <summary>FEAT-260910.2: copy-out of one method's aggregate for the test harness.</summary>
+        public struct MethodStatsSnapshot
+        {
+            public long Calls;
+            public long SteadyCalls;
+            public double TotalMs;
+            public double MinMs;
+            public double MaxMs;
+            public double SteadyTotalMs;
+            public double AvgMs { get { return Calls > 0 ? TotalMs / Calls : 0.0; } }
+            public double SteadyAvgMs { get { return SteadyCalls > 0 ? SteadyTotalMs / SteadyCalls : 0.0; } }
+        }
+
+        internal static bool TryGetMethodStats(string methodName, out MethodStatsSnapshot snapshot)
+        {
+            snapshot = new MethodStatsSnapshot();
+            lock (_syncRoot)
+            {
+                MethodStats stats;
+                if (!_methodStats.TryGetValue(methodName, out stats)) return false;
+                snapshot.Calls = stats.Calls;
+                snapshot.SteadyCalls = stats.SteadyCalls;
+                snapshot.TotalMs = stats.TotalMs;
+                snapshot.MinMs = stats.MinMs == double.MaxValue ? 0.0 : stats.MinMs;
+                snapshot.MaxMs = stats.MaxMs == double.MinValue ? 0.0 : stats.MaxMs;
+                snapshot.SteadyTotalMs = stats.SteadyTotalMs;
+            }
+            return true;
         }
 
         // --- Per-grid cost tracking ---
@@ -743,6 +773,12 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
 
             lock (_syncRoot)
             {
+                // BUG-260610.26: an in-flight StopAndLog can get here after
+                // StopSession/CloseInternal cleared _writers — creating a writer now
+                // would truncate the just-finalized session log and leak the writer.
+                if (!_isRunning)
+                    return null;
+
                 TextWriter writer;
                 if (_writers.TryGetValue(methodName, out writer))
                     return writer;
@@ -867,6 +903,22 @@ namespace SKONanobotBuildAndRepairSystem.Profiling
                 return string.Format("Session '{0}' not found. Use /nanobars profile clear all to clear everything.", sessionNameOrAll);
 
             return string.Format("Cleared {0} session(s).", cleared);
+        }
+
+        /// <summary>
+        /// Clears every session whose name starts with prefix (test harness: "test-"). Returns the count.
+        /// </summary>
+        internal static int ClearSessionsWithPrefix(string prefix)
+        {
+            if (_isRunning || MyAPIGateway.Utilities == null) return 0;
+            var count = 0;
+            foreach (var session in ReadSessionIndex())
+            {
+                if (!session.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                ClearSession(session);
+                count++;
+            }
+            return count;
         }
 
         /// <summary>

@@ -1,4 +1,5 @@
 using Sandbox.Game.Entities;
+using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Extensions;
 using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Profiling;
@@ -69,10 +70,15 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (Mod.Settings.ShieldCheckEnabled && slimBlock != null && Mod.Shield != null && Mod.Shield.IsReady)
                 {
-                    if (slimBlock.CubeGrid.EntityId == Welder.CubeGrid.EntityId)
+                    var grid = slimBlock.CubeGrid;
+                    if (grid.EntityId == Welder.CubeGrid.EntityId)
                         return false;
 
-                    return Mod.Shield.IsBlockProtected(slimBlock);
+                    // BUG-261122.12: DS IsBlockProtected only tests the block against the grid's shield ellipsoid,
+                    // also when that shield is off / lowered / drained — require it to be up. The grid state is
+                    // memoised (scans walk blocks grid by grid), so grids without a raised shield cost one DS call
+                    // per grid instead of one per block.
+                    return IsGridShieldOnline(grid) && Mod.Shield.IsBlockProtected(slimBlock);
                 }
             }
             catch (Exception ex)
@@ -81,6 +87,41 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// BUG-261122.16: execution-time area check for the target chosen this cycle (the scan checks only when it
+        /// lists). Same box as the scan; one transform + oriented-box test, no allocation.
+        /// </summary>
+        internal bool IsTargetInArea(IMySlimBlock block)
+        {
+            if (block == null || block.CubeGrid == null || _Welder == null) return false;
+            var emitterMatrix = _Welder.WorldMatrix;
+            emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
+            var areaBox = new MyOrientedBoundingBoxD(Settings.CorrectedAreaBoundingBox, emitterMatrix);
+            double distance;
+            return block.IsInRange(ref areaBox, out distance);
+        }
+
+        // BUG-261122.12: last grid's shield state, swapped as one object (scan thread + main-thread grind check).
+        private sealed class ShieldGridMemo
+        {
+            public long GridId;
+            public bool Online;
+            public TimeSpan Until;
+        }
+
+        private ShieldGridMemo _shieldGridMemo;
+        private static readonly TimeSpan ShieldGridMemoTtl = TimeSpan.FromSeconds(1);
+
+        private bool IsGridShieldOnline(IMyCubeGrid grid)
+        {
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            var memo = _shieldGridMemo;
+            if (memo != null && memo.GridId == grid.EntityId && now < memo.Until) return memo.Online;
+            var online = Mod.Shield.GridShieldOnline(grid);
+            _shieldGridMemo = new ShieldGridMemo { GridId = grid.EntityId, Online = online, Until = now + ShieldGridMemoTtl };
+            return online;
         }
 
         public bool IsWelderShielded()
@@ -115,14 +156,23 @@ namespace SKONanobotBuildAndRepairSystem
                 // that haven't reached OwnershipIntegrityRatio). Fall back to checking
                 // who placed the block — allow welding if the builder is the BaR owner
                 // or a faction member. This avoids welding derelict/NPC grids.
-                var builtBy = block.BuiltBy;
-                if (builtBy <= 0) return false;
-                if (builtBy == _Welder.OwnerId) return true;
-                var builderRelation = MyIDModule.GetRelationPlayerBlock(builtBy, _Welder.OwnerId, MyOwnershipShareModeEnum.Faction);
-                return builderRelation == MyRelationsBetweenPlayerAndBlock.Owner
-                    || builderRelation == MyRelationsBetweenPlayerAndBlock.FactionShare;
+                return IsBuiltByOwnerOrFaction(block);
             }
             return true;
+        }
+
+        /// <summary>
+        /// An unowned block placed by the BaR owner or a faction member counts as the owner's.
+        /// Shared by the weld rule and the janitor NoOwnership rule (BUG-261122.7).
+        /// </summary>
+        internal bool IsBuiltByOwnerOrFaction(IMySlimBlock block)
+        {
+            var builtBy = block.BuiltBy;
+            if (builtBy <= 0) return false;
+            if (builtBy == _Welder.OwnerId) return true;
+            var builderRelation = MyIDModule.GetRelationPlayerBlock(builtBy, _Welder.OwnerId, MyOwnershipShareModeEnum.Faction);
+            return builderRelation == MyRelationsBetweenPlayerAndBlock.Owner
+                || builderRelation == MyRelationsBetweenPlayerAndBlock.FactionShare;
         }
 
         private static bool IsColorNearlyEquals(uint colorA, Vector3 colorB)

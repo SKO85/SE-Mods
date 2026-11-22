@@ -150,10 +150,9 @@ namespace SKONanobotBuildAndRepairSystem
                 customInfo.Append(string.Format("Sources: {0} | Push Targets: {1}{2}", sourceCount, pushTargetCount, Environment.NewLine));
 
                 // BUG-160 diagnostics: live BaR-on-grid counts for the current weld/grind grids.
-                var weldGridId = (State.CurrentWeldingBlock != null && State.CurrentWeldingBlock.CubeGrid != null)
-                    ? State.CurrentWeldingBlock.CubeGrid.EntityId : 0L;
-                var grindGridId = (State.CurrentGrindingBlock != null && State.CurrentGrindingBlock.CubeGrid != null)
-                    ? State.CurrentGrindingBlock.CubeGrid.EntityId : 0L;
+                // BUG-260610.21: use the effective grid id — the key the counter is kept under.
+                var weldGridId = GetEffectiveGridId(State.CurrentWeldingBlock);
+                var grindGridId = GetEffectiveGridId(State.CurrentGrindingBlock);
                 int weldGridCount = 0, grindGridCount = 0;
                 if (weldGridId != 0L) Mod.GridSystemCount.TryGetValue(weldGridId, out weldGridCount);
                 if (grindGridId != 0L) Mod.GridSystemCount.TryGetValue(grindGridId, out grindGridCount);
@@ -163,6 +162,12 @@ namespace SKONanobotBuildAndRepairSystem
                     maxPerGrid,
                     grindGridId != 0L ? grindGridCount.ToString() : "-",
                     maxPerGrid,
+                    Environment.NewLine));
+
+                // BUG-261122.1 diagnostics: projected builds that worked / left no block / are skipped.
+                customInfo.Append(string.Format("ProjBuild: built={0} noBlock={1} skipped={2}{3}{4}",
+                    _projBuildCreated, _projBuildSilentFails, _BrokenProjBuildKeys.Count + _ProjBuildSkipUntil.Count,
+                    _projBuildLastFail != null ? " | last=" + _projBuildLastFail : "",
                     Environment.NewLine));
 
                 var cluster = AssignedCluster;
@@ -216,7 +221,8 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 if (State.IsShielded)
                 {
-                    customInfo.Append($"[color=#FFFFFF00]Shields Active[/color]: Grinding disabled!");
+                    // BUG-260612.15: text matches the actual rule — own-grid grinding still works.
+                    customInfo.Append($"[color=#FFFFFF00]Shields Active[/color]: Grinding limited to own grid!");
                     customInfo.Append(Environment.NewLine);
                 }
 
@@ -260,6 +266,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                 if (State.InventoryFull) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_InventoryFull}[/color]{Environment.NewLine + Environment.NewLine}");
                 if (State.LimitsExceeded) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_LimitReached}[/color]{Environment.NewLine + Environment.NewLine}");
+                // BUG-261122.2: projected blocks on the (expiring) skip list after failed builds.
+                if (State.ProjectedBlocksSkipped > 0) customInfo.Append($"[color=#FFFFFF00]{string.Format(Texts.Info_ProjectedSkipped.String, State.ProjectedBlocksSkipped)}[/color]{Environment.NewLine + Environment.NewLine}");
 
                 var cnt = 0;
                 lock (State.MissingComponents)

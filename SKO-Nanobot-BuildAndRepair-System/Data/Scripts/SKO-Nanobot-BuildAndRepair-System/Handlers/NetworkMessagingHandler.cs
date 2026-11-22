@@ -14,6 +14,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static ushort MSGID_MOD_DATAREQUEST = 40000;
         private static ushort MSGID_MOD_SETTINGS = 40001;
         private static ushort MSGID_BLOCK_DATAREQUEST = 40100;
+        private const double DataRequestMinIntervalSeconds = 2.0;
         private static ushort MSGID_BLOCK_SETTINGS_FROM_SERVER = 40102;
         private static ushort MSGID_BLOCK_SETTINGS_FROM_CLIENT = 40103;
         private static ushort MSGID_BLOCK_STATE_FROM_SERVER = 40104;
@@ -56,7 +57,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         public static void Unregister()
         {
-            if (!_registered || MyAPIGateway.Multiplayer == null || MyAPIGateway.Utilities == null)
+            if (!_registered)
+                return;
+
+            // BUG-260824.3: reset the latch BEFORE the gateway guards — a bare return
+            // with the flag stuck true made the next world's Register() a no-op
+            // (same pattern as BUG-260610.27 in DamageHandler/SafeZoneHandler).
+            _registered = false;
+
+            if (MyAPIGateway.Multiplayer == null || MyAPIGateway.Utilities == null || MyAPIGateway.Session == null)
                 return;
 
             if (MyAPIGateway.Session.IsServer)
@@ -87,8 +96,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
-                var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModDataRequest>(data);
-                MsgModSettingsSend(msgRcv.SteamId);
+                // BUG-260610.19: reply to the tamper-proof transport sender, not the
+                // client-controlled payload SteamId — a forged payload could direct
+                // unsolicited traffic at arbitrary players.
+                MsgModSettingsSend(sender);
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "ServerMsgDataRequestReceived: {0}", ex.Message); }
         }
@@ -102,13 +113,26 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 NanobotSystem system;
                 if (Mod.NanobotSystems.TryGetValue(msgRcv.EntityId, out system))
                 {
-                    MsgBlockSettingsSend(msgRcv.SteamId, system);
-                    system.State.ForceFullTransmit();
-                    MsgBlockStateSend(msgRcv.SteamId, system);
+                    // BUG-261023.10: each request costs two full serializations — drop repeats per
+                    // (block, sender). No global cap: clients send one request per BaR on stream-in
+                    // and never retry, so a cap would leave BaRs without data on big bases.
+                    var now = MyAPIGateway.Session.ElapsedPlayTime;
+                    TimeSpan lastRequest;
+                    if (system._lastDataRequestBySender.TryGetValue(sender, out lastRequest)
+                        && (now - lastRequest).TotalSeconds < DataRequestMinIntervalSeconds) return;
+                    system._lastDataRequestBySender[sender] = now;
+
+                    // BUG-260610.19: reply to the tamper-proof transport sender, not the
+                    // client-controlled payload SteamId.
+                    MsgBlockSettingsSend(sender, system);
+                    // BUG-260610.17: no ForceFullTransmit here — the targeted send below
+                    // is intrinsically full (GetTransmitFull) and must not touch the
+                    // broadcast delta-sync state.
+                    MsgBlockStateSend(sender, system);
                 }
                 else
                 {
-                    if (Logging.Instance.ShouldLog(Logging.Level.Error)) Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockDataRequestReceived for unknown system SteamId{0} EntityId={1}", msgRcv.SteamId, msgRcv.EntityId);
+                    if (Logging.Instance.ShouldLog(Logging.Level.Error)) Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncBlockDataRequestReceived for unknown system SteamId{0} EntityId={1}", sender, msgRcv.EntityId);
                 }
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "ServerMsgBlockDataRequestReceived: {0}", ex.Message); }
@@ -154,7 +178,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         // risk of clobbering _adminBroadcastPlayers mid-iteration).
         private static readonly List<IMyPlayer> _adminCheckPlayers = new List<IMyPlayer>();
 
-        private static bool IsRemoteAdmin(ulong steamId)
+        // BUG-260610.2: resolve the connected player behind a transport sender id.
+        // Main thread only (shares the _adminCheckPlayers scratch list).
+        private static IMyPlayer TryGetPlayerBySteamId(ulong steamId)
         {
             _adminCheckPlayers.Clear();
             MyAPIGateway.Players.GetPlayers(_adminCheckPlayers);
@@ -162,20 +188,25 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             {
                 for (var i = 0; i < _adminCheckPlayers.Count; i++)
                 {
-                    var player = _adminCheckPlayers[i];
-                    if (player.SteamUserId == steamId)
+                    if (_adminCheckPlayers[i].SteamUserId == steamId)
                     {
-                        // BUG-260502.3: use the shared canonical helper instead of an
-                        // inline copy of the REF-4 pattern.
-                        return SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel);
+                        return _adminCheckPlayers[i];
                     }
                 }
-                return false;
+                return null;
             }
             finally
             {
                 _adminCheckPlayers.Clear();
             }
+        }
+
+        private static bool IsRemoteAdmin(ulong steamId)
+        {
+            // BUG-260502.3: use the shared canonical helper instead of an
+            // inline copy of the REF-4 pattern.
+            var player = TryGetPlayerBySteamId(steamId);
+            return player != null && SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel);
         }
 
         #endregion Server Message Received Handlers
@@ -186,6 +217,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
+                // BUG-260610.3: mod messages can be relayed client->client; only the
+                // server may push mod settings.
+                if (!fromServer) return;
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModSettings>(data);
                 SyncModSettings.AdjustSettings(msgRcv.Settings);
                 // BUG-093: clamp on the broadcast path too (server-mutated settings may bypass Load).
@@ -205,6 +239,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
+                // BUG-260610.3: only the server may push block state.
+                if (!fromServer) return;
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgBlockState>(data);
 
                 NanobotSystem system;
@@ -230,6 +266,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
+                // BUG-260610.3: only the server may push command responses
+                // (chat lines / mission screens).
+                if (!fromServer) return;
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModCommandResponse>(data);
 
                 if (msgRcv.UseMissionScreen)
@@ -259,6 +298,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
+                // BUG-260610.3: on clients, only accept settings pushed by the server.
+                // The server branch below must keep accepting client messages
+                // (fromServer is false for those).
+                if (!fromServer && !MyAPIGateway.Session.IsServer) return;
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgBlockSettings>(data);
 
                 NanobotSystem system;
@@ -266,6 +309,39 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     if (MyAPIGateway.Session.IsServer)
                     {
+                        // BUG-260610.2: validate the tamper-proof sender against the block
+                        // before applying anything. Admins may edit any block; everyone
+                        // else goes through the engine's own ownership/share gate
+                        // (HasPlayerAccess) — owner, faction share, share-all and unowned
+                        // blocks pass, exactly like the vanilla terminal client-side, so
+                        // legit players are never rejected. Checked before the rate limit
+                        // so a forger can't consume the owner's send window.
+                        var senderPlayer = TryGetPlayerBySteamId(sender);
+                        var senderAllowed = senderPlayer != null
+                            && (Utils.UtilsPlayer.IsAdminLevel(senderPlayer.PromoteLevel)
+                                || system.Welder.HasPlayerAccess(senderPlayer.IdentityId));
+                        if (!senderAllowed)
+                        {
+                            if (Logging.Instance.ShouldLog(Logging.Level.Error))
+                            {
+                                Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: rejected block settings from sender={0} for EntityId={1} (no access)", sender, msgRcv.EntityId);
+                            }
+                            return;
+                        }
+
+                        // BUG-260610.31: rate limit. Legit clients send at most once per
+                        // second (IsTransmitNeeded gate); each accepted message costs a
+                        // synchronous XML save + broadcast, so drop floods.
+                        // BUG-260824.8: keyed per (block, sender) — a per-block window
+                        // silently dropped a second player's concurrent change (their
+                        // client clears its dirty bit on transmit, so it never resends).
+                        var now = MyAPIGateway.Session.ElapsedPlayTime;
+                        TimeSpan lastApplied;
+                        if (system._lastClientSettingsAppliedBySender.TryGetValue(sender, out lastApplied)
+                            && (now - lastApplied).TotalMilliseconds < 500) return;
+                        system._lastClientSettingsAppliedBySender[sender] = now;
+
+                        SyncBlockSettings.KeepLockedPriorities(msgRcv.Settings, system.Settings);
                         system.Settings.AssignReceived(msgRcv.Settings, system.BlockWeldPriority, system.BlockGrindPriority, system.ComponentCollectPriority);
                         system.SettingsChanged();
                         system.Settings.Save(system.Entity, Mod.ModGuid);
@@ -479,7 +555,10 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 var msgSnd = new MsgBlockState();
                 msgSnd.EntityId = system.Entity.EntityId;
-                msgSnd.State = system.State.GetTransmit();
+                // BUG-260610.17: targeted sends use the non-consuming full snapshot so a
+                // single client's request can't eat the dirty flag / delta hashes that
+                // gate the broadcast to everyone else.
+                msgSnd.State = steamId == 0 ? system.State.GetTransmit() : system.State.GetTransmitFull();
 
                 var bytes = MyAPIGateway.Utilities.SerializeToBinary(msgSnd);
 
@@ -506,8 +585,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                             system.Entity.EntityId, steamId, payloadBytes));
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                // BUG-260610.41: this was a silent catch — serialization/send failures
+                // (clients quietly stop receiving state) left no trace while every other
+                // send helper logs.
+                Logging.Instance.Write(Logging.Level.Error, "MsgBlockStateSend: {0}", ex.Message);
                 if (profilerTs != 0L)
                 {
                     MethodProfiler.StopAndLog("MsgBlockStateSend", profilerTs);

@@ -212,11 +212,15 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         }
 
         /// <summary>
-        ///
+        /// BUG-260610.39: level-less overload now routes through the Error gate.
+        /// It used to bypass level filtering entirely — every existing caller is an
+        /// init/error path (so behaviour is unchanged with the default Error level),
+        /// but a future caller assuming filtering would have produced unconditional
+        /// per-frame disk writes.
         /// </summary>
         public void Write(string msg, params Object[] args)
         {
-            Write(string.Format(msg, args));
+            Write(Level.Error, msg, args);
         }
 
         /// <summary>

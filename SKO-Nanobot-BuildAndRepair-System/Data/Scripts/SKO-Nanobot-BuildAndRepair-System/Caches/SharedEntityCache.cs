@@ -23,15 +23,27 @@ namespace SKONanobotBuildAndRepairSystem.Caches
             new ConcurrentDictionary<long, CachedEntityEntry>();
 
         /// <summary>
-        /// Gets entities in the given bounding box, using the shared cache with quantized position keys.
+        /// Gets entities in the given bounding box, using the shared cache with quantized
+        /// position + extent keys. BUG-260610.8/BUG-260824.6: a hit requires the cached
+        /// box to fully CONTAIN the requested box — the quantized-key check alone let
+        /// boxes differing by up to 50 m per axis share results, hiding entities in the
+        /// difference shell. A containing box yields a superset list; callers filter by
+        /// their precise area downstream, so a superset is always safe.
         /// </summary>
         public static List<IMyEntity> GetEntitiesInBox(ref BoundingBoxD areaBoundingBox)
         {
             var profilerTs = MethodProfiler.Start();
             var session = MyAPIGateway.Session;
             if (session == null) return new List<IMyEntity>();
-            var center = areaBoundingBox.Center;
-            var key = QuantizePosition(center);
+            var posKey = QuantizeToCells(areaBoundingBox.Center);
+            var extentKey = QuantizeToCells(areaBoundingBox.HalfExtents);
+            long key;
+            unchecked
+            {
+                // Slot key mixes position and extents; exactness is guaranteed by the
+                // containment verification on hit, not by this mix.
+                key = posKey * 0x100000001B3L ^ extentKey;
+            }
             var now = session.ElapsedPlayTime;
             var cacheHit = false;
 
@@ -39,14 +51,16 @@ namespace SKONanobotBuildAndRepairSystem.Caches
             {
                 CachedEntityEntry entry;
                 if (_cache.TryGetValue(key, out entry)
-                    && (now - entry.Timestamp).TotalSeconds < CacheTtlSeconds)
+                    && (now - entry.Timestamp).TotalSeconds < CacheTtlSeconds
+                    && entry.Box.Contains(areaBoundingBox) == ContainmentType.Contains)
                 {
                     cacheHit = true;
                     // Return a copy — caller may modify the list (sorting, etc).
                     return new List<IMyEntity>(entry.Entities);
                 }
 
-                // Cache miss — call the API.
+                // Cache miss — call the API. The new (possibly larger) box overwrites the
+                // slot, so same-cell smaller requests hit it afterwards.
                 List<IMyEntity> entities;
                 lock (MyAPIGateway.Entities)
                 {
@@ -55,6 +69,7 @@ namespace SKONanobotBuildAndRepairSystem.Caches
 
                 var newEntry = new CachedEntityEntry();
                 newEntry.Timestamp = now;
+                newEntry.Box = areaBoundingBox;
                 newEntry.Entities = entities ?? new List<IMyEntity>();
 
                 _cache[key] = newEntry;
@@ -75,25 +90,23 @@ namespace SKONanobotBuildAndRepairSystem.Caches
         }
 
         /// <summary>
-        /// Quantizes a 3D position to a grid of QuantizeSize metres, producing a stable hash key.
-        /// Nearby BaRs (within 50m) will get the same key.
+        /// Quantizes a 3D vector to QuantizeSize-metre cells and bit-packs the three cell
+        /// coords into one long (21 bits each — exact for |coord| up to ~52,000 km, far
+        /// beyond any SE world). BUG-260610.8: the previous multiplicative hash collided
+        /// systematically (e.g. cells (qx, qy+1, qz-31) and (qx, qy, qz) shared a key).
+        /// Nearby positions (within one 50 m cell) still share a key by design.
         /// </summary>
-        private static long QuantizePosition(Vector3D pos)
+        private static long QuantizeToCells(Vector3D v)
         {
-            // Quantize each axis to the nearest grid cell.
-            int qx = (int)Math.Floor(pos.X / QuantizeSize);
-            int qy = (int)Math.Floor(pos.Y / QuantizeSize);
-            int qz = (int)Math.Floor(pos.Z / QuantizeSize);
+            int qx = (int)Math.Floor(v.X / QuantizeSize);
+            int qy = (int)Math.Floor(v.Y / QuantizeSize);
+            int qz = (int)Math.Floor(v.Z / QuantizeSize);
 
-            // Pack into a single long using bit shifts. Each coord gets ~21 bits.
-            // This handles coords up to ~1,000,000m which is more than sufficient.
             unchecked
             {
-                long hash = 17;
-                hash = hash * 31 + qx;
-                hash = hash * 31 + qy;
-                hash = hash * 31 + qz;
-                return hash;
+                return ((long)((uint)qx & 0x1FFFFF) << 42)
+                     | ((long)((uint)qy & 0x1FFFFF) << 21)
+                     | (long)((uint)qz & 0x1FFFFF);
             }
         }
 
@@ -134,6 +147,9 @@ namespace SKONanobotBuildAndRepairSystem.Caches
         internal class CachedEntityEntry
         {
             public TimeSpan Timestamp;
+            // BUG-260824.6: the exact queried box; a hit requires it to contain the
+            // requested box (slot collisions and smaller cached boxes are misses).
+            public BoundingBoxD Box;
             public List<IMyEntity> Entities;
         }
     }

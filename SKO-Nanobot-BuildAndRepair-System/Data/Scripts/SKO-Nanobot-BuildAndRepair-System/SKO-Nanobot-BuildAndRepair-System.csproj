@@ -133,6 +133,7 @@
     <Compile Include="Localization\TextsRussian.cs" />
     <Compile Include="Localization\TextsGerman.cs" />
     <Compile Include="Localization\TextsEnglish.cs" />
+    <Compile Include="Localization\TextsKorean.cs" />
     <Compile Include="Caches\TtlCache.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="Chat\ChatHandler.cs" />
@@ -146,10 +147,12 @@
     <Compile Include="Chat\Commands\VersionCommand.cs" />
     <Compile Include="Handlers\ComponentPriorityHandling.cs" />
     <Compile Include="Handlers\DamageHandler.cs" />
+    <Compile Include="Handlers\GridChangeHandler.cs" />
     <Compile Include="Handlers\FriendlyRelationsHandler.cs" />
     <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />
     <Compile Include="Handlers\NetworkMessagingHandler.cs" />
     <Compile Include="Handlers\RazeQueueHandler.cs" />
+    <Compile Include="Handlers\SkeletonResetHandler.cs" />
     <Compile Include="Helpers\PowerHelper.cs" />
     <Compile Include="Extensions\SlimBlockExtensions.cs" />
     <Compile Include="Localization\LocalizationHelper.cs" />
@@ -218,6 +221,12 @@
     <Compile Include="Managers\BackgroundTaskQueue.cs" />
     <Compile Include="Managers\PerTickBudget.cs" />
     <Compile Include="Managers\PeriodicMaintenanceScheduler.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- FEAT-260910.2: scenario test harness. Compiled with the mod for IDE/C# 6 checks, deployed only to the -Testing variant by build_post.cmd. -->
+    <Compile Include="..\..\..\..\_Scripts\BuildAndRepairSystem\Testing\Data\Scripts\SKO-Nanobot-BuildAndRepair-System\Testing\**\*.cs">
+      <Link>Testing\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

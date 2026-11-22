@@ -60,6 +60,11 @@ namespace SKONanobotBuildAndRepairSystem
                 }
                 else
                 {
+                    // BUG-260824.2: aggregate missing-components rebuild (cadence-gated,
+                    // also clears the list when targets/welding go away so no stale
+                    // "Missing Components" state survives idling).
+                    ServerTryRebuildMissingComponentsAggregate(playTime);
+
                     // FEAT-039: skip sub-method dispatch for idle BaRs.
                     var isIdleNoWork = State.PossibleWeldTargets.CurrentCount == 0
                         && State.PossibleGrindTargets.CurrentCount == 0
@@ -112,7 +117,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                     transportBlocked = transporting;
                     // BUG-103: don't gate work dispatch on the cosmetic transport timer.
-                    State.MissingComponents.Clear();
+                    // BUG-260824.2: no per-tick MissingComponents.Clear() — the list is
+                    // owned by ServerTryRebuildMissingComponentsAggregate above.
                     State.LimitsExceeded = false;
 
                     var diagTs = MethodProfiler.Start();
@@ -156,7 +162,6 @@ namespace SKONanobotBuildAndRepairSystem
                             MultiGrind(ref grinding, ref needGrinding, ref transporting, ref currentGrindingBlock);
                             break;
                     }
-                    State.MissingComponents.RebuildHash();
 
                     if (((Settings.Flags & SyncBlockSettings.Settings.ComponentCollectIfIdle) != 0) && !transporting && !welding && !grinding)
                         ServerTryCollectingFloatingTargets(out collecting, out needCollecting, out transporting);
@@ -179,6 +184,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                 State.MissingComponents.Clear();
                 State.MissingComponents.RebuildHash();
+                AbortMissingComponentsAggregate();
             }
 
             if (!(welding || grinding || collecting || transporting) && _TransportInventory.CurrentVolume > 0)
@@ -319,6 +325,13 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void MultiWeld(ref bool welding, ref bool needWelding, ref bool transporting, ref IMySlimBlock currentWeldingBlock)
         {
+            // BUG-260612.13: execution-time gate — zone protection was scan-time only,
+            // so a zone activating around the BaR kept it welding off the stale target
+            // list for up to a scan cycle. Flag refreshes every ~2 s.
+            // BUG-261122.19: per operation — a zone may allow building projections but not welding;
+            // the chosen target is checked in ServerTryWelding (IsWeldTargetAllowedByZone).
+            if (!State.SafeZoneAllowsWelding && !State.SafeZoneAllowsBuildingProjections) return;
+
             for (int i = 0; i < MaxActionsPerCycle; i++)
             {
                 bool w, nw, t;
@@ -347,6 +360,9 @@ namespace SKONanobotBuildAndRepairSystem
         /// </summary>
         private void MultiGrind(ref bool grinding, ref bool needGrinding, ref bool transporting, ref IMySlimBlock currentGrindingBlock)
         {
+            // BUG-260612.13: execution-time gate (see MultiWeld).
+            if (!State.SafeZoneAllowsGrinding) return;
+
             for (int i = 0; i < MaxActionsPerCycle; i++)
             {
                 bool g, ng, t;
@@ -376,17 +392,19 @@ namespace SKONanobotBuildAndRepairSystem
                 return 0;
 
             // BUG-160: each BaR contributes +1 per grid; subtract at most 1 here.
-            var myWeldBlock = State.CurrentWeldingBlock;
-            var myWeldGridId = (myWeldBlock != null && myWeldBlock.CubeGrid != null) ? myWeldBlock.CubeGrid.EntityId : 0L;
-            if (myWeldGridId == gridEntityId)
+            // BUG-260612.1: compare against the EXACT counted keys (effective grid
+            // ids cached by the lock-on setters) — the raw CubeGrid.EntityId differs
+            // for projected lock-ons, so the BaR counted itself and self-evicted at
+            // the per-grid limit.
+            var myWeldGridId = State.WeldCountedGridId;
+            if (myWeldGridId != 0L && myWeldGridId == gridEntityId)
             {
                 count--;
             }
             else
             {
-                var myGrindBlock = State.CurrentGrindingBlock;
-                var myGrindGridId = (myGrindBlock != null && myGrindBlock.CubeGrid != null) ? myGrindBlock.CubeGrid.EntityId : 0L;
-                if (myGrindGridId == gridEntityId) count--;
+                var myGrindGridId = State.GrindCountedGridId;
+                if (myGrindGridId != 0L && myGrindGridId == gridEntityId) count--;
             }
 
             return count;
@@ -485,8 +503,10 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// BUG-164: resolve to the projector's parent grid for projected blocks so the
         /// limit check uses the same grid the post-materialization Inc fires on.
+        /// BUG-260610.21: internal — SyncBlockState's lock-on setters count
+        /// Mod.GridSystemCount by the same effective id the limit checks query.
         /// </summary>
-        private static long GetEffectiveGridId(IMySlimBlock block)
+        internal static long GetEffectiveGridId(IMySlimBlock block)
         {
             if (block == null || block.CubeGrid == null) return 0L;
             var myCubeGrid = block.CubeGrid as Sandbox.Game.Entities.MyCubeGrid;
@@ -583,6 +603,7 @@ namespace SKONanobotBuildAndRepairSystem
             hash = hash * 31 + (State.Transporting ? 1 : 0);
             hash = hash * 31 + (State.InventoryFull ? 1 : 0);
             hash = hash * 31 + (State.LimitsExceeded ? 1 : 0);
+            hash = hash * 31 + State.ProjectedBlocksSkipped; // BUG-261122.2
             hash = hash * 31 + State.PossibleWeldTargets.CurrentHash;
             hash = hash * 31 + State.PossibleGrindTargets.CurrentHash;
             hash = hash * 31 + State.PossibleFloatingTargets.CurrentHash;

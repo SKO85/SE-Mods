@@ -33,14 +33,14 @@ Both versions are functionally identical. They only differ in the resources requ
 - **Creative Mode** — welds and builds blocks without requiring components in inventory
 - **Priority Lists** — configure which block types to weld or grind first, with Enable All / Disable All buttons
 - **Ignore Priority Order (Grinding)** — optionally bypass the grind priority list and target the nearest grind block instead
-- **Inventory Sources** — pulls components from Cargo, Connectors, Sorters, Grinders, Cryo Chambers, and Refineries; pushes excess items back to the same block types
+- **Inventory Sources** — pulls components from Cargo Containers, Connectors, Sorters, Assemblers, Grinders, Welders, and Cryo Chambers; pushes excess items to Cargo Containers and Refineries
 - **Weld Mode** — choose how far blocks are welded: Weld to Full (100%), Weld to Functional Only (stops at functional threshold), or Weld to Skeleton (places projected blocks only, never repairs)
 - **Work Modes** — choose between Weld Before Grind, Grind Before Weld, Weld Only, or Grind Only; in Weld Before Grind and Grind Before Weld modes, if no actionable targets exist for the primary mode the system now falls through to the secondary mode instead of going idle
 - **Cluster Scan Coordinator** — blocks sharing the same working area elect a single coordinator to scan for targets, eliminating redundant scans across the cluster; the role is automatically re-elected if the coordinator is disabled or removed
 - **System Limit** — limit how many Build and Repair blocks may work on the same grid simultaneously
 - **Safe Zone Support** — respects Safe Zone rules before taking any action
 - **Shields Support** — skips targets protected by the Shields mod
-- **DLC Aware** — skips projected blocks requiring DLC the owner does not have
+- **DLC Aware** — projected blocks that cannot be built because the owner is missing the required DLC are detected and skipped instead of being retried forever
 - **Plugin Aware** — skips grids protected by server plugins (e.g. `!protect` from ALE PCU Transferrer)
 - **Debug Mode** — config option that shows extra diagnostic information (scan timings, target counts, internal state) in the terminal custom info panel for testing and debugging
 - **Sim-Speed Adaptive** — automatically throttles operations when server sim speed drops, helping the server recover without manual intervention
@@ -77,10 +77,10 @@ Full support for the [Defence Shields](https://steamcommunity.com/workshop/filed
 - Build resources increased to make the block appropriately expensive to obtain.
 - Grids in preview mode are skipped until fully placed.
 - Indestructible and immune grids are correctly excluded from grinding.
-- Components can be pulled from Cargo Containers, Connectors, Sorters, Grinders, Cryo Chambers, and Refineries.
+- Components can be pulled from Cargo Containers, Connectors, Sorters, Assemblers, Grinders, Welders, and Cryo Chambers.
 - Power is no longer drained when welding a projected block is not possible.
 - Block settings now persist correctly after a server restart or relog.
-- DLC ownership is checked before attempting to build a projected block.
+- Projected blocks that cannot be built due to missing DLC are detected and skipped.
 - Multiplayer network updates reduced for better performance in large sessions.
 
 ---

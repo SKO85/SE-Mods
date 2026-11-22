@@ -572,6 +572,21 @@ namespace SKONanobotBuildAndRepairSystem.Models
             Changed = (Changed & ~2u);
         }
 
+        /// <summary>Rewrites names from older saves before deserializing.</summary>
+        public static string MigrateLegacyXml(string data)
+        {
+            if (data == null) return null;
+            //Fix changed names
+            data = data.Replace("GrindColorNearFirst", "GrindNearFirst");
+
+            // FEAT-034 backward compat: old [Flags] AutoWeldOptions serialized 0 as ""
+            // and FunctionalOnly as "FunctionalOnly". Map to new enum names.
+            data = data.Replace("<WeldOptions></WeldOptions>", "<WeldOptions>WeldFull</WeldOptions>");
+            data = data.Replace("<WeldOptions />", "<WeldOptions>WeldFull</WeldOptions>");
+            data = data.Replace("<WeldOptions>FunctionalOnly</WeldOptions>", "<WeldOptions>WeldFunctional</WeldOptions>");
+            return data;
+        }
+
         public static SyncBlockSettings Load(NanobotSystem system, Guid guid, BlockPriorityHandling blockWeldPriority, BlockPriorityHandling blockGrindPriority, ComponentPriorityHandling componentCollectPriority)
         {
             var storage = system.Entity.Storage;
@@ -581,15 +596,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             {
                 try
                 {
-                    //Fix changed names
-                    data = data.Replace("GrindColorNearFirst", "GrindNearFirst");
-
-                    // FEAT-034 backward compat: old [Flags] AutoWeldOptions serialized 0 as ""
-                    // and FunctionalOnly as "FunctionalOnly". Map to new enum names.
-                    data = data.Replace("<WeldOptions></WeldOptions>", "<WeldOptions>WeldFull</WeldOptions>");
-                    data = data.Replace("<WeldOptions />", "<WeldOptions>WeldFull</WeldOptions>");
-                    data = data.Replace("<WeldOptions>FunctionalOnly</WeldOptions>", "<WeldOptions>WeldFunctional</WeldOptions>");
-
+                    data = MigrateLegacyXml(data);
                     settings = MyAPIGateway.Utilities.SerializeFromXML<SyncBlockSettings>(data);
                     if (settings != null)
                     {
@@ -622,6 +629,22 @@ namespace SKONanobotBuildAndRepairSystem.Models
             componentCollectPriority.SetEntries(settings.ComponentCollectPriority);
             settings.Changed = 0;
             return settings;
+        }
+
+        /// <summary>
+        /// BUG-261023.6: server side — while the admin locks are on, a client's settings message
+        /// can't change the priority lists; the current lists are kept.
+        /// </summary>
+        internal static void KeepLockedPriorities(SyncBlockSettings received, SyncBlockSettings current)
+        {
+            if (received == null || current == null) return;
+            if (Mod.Settings.Welder.PriorityFixed)
+            {
+                received.WeldPriority = current.WeldPriority;
+                received.GrindPriority = current.GrindPriority;
+            }
+            if (Mod.Settings.Welder.CollectPriorityFixed)
+                received.ComponentCollectPriority = current.ComponentCollectPriority;
         }
 
         public void AssignReceived(SyncBlockSettings newSettings, BlockPriorityHandling weldPriority, BlockPriorityHandling grindPriority, ComponentPriorityHandling componentCollectPriority)
@@ -693,9 +716,31 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
         }
 
+        // BUG-260610.18: NaN/Infinity guard for float fields received from the network.
+        private static float SanitizeFinite(float value, float fallback)
+        {
+            return (float.IsNaN(value) || float.IsInfinity(value)) ? fallback : value;
+        }
+
         public void CheckLimits(NanobotSystem system, bool init)
         {
             var scale = (system != null && system.Welder != null ? (system.Welder.BlockDefinition.SubtypeName.Contains("Large") ? 1f : 2f) : 1f);
+
+            // BUG-260610.18: these values arrive from clients over the network. NaN
+            // compares false against every bound (slipping through all clamps below)
+            // and a negative AreaSize passes the upper-bound-only checks — either
+            // poisons RecalcAreaBoundigBox and scanning. Sanitize before clamping:
+            // non-finite offsets fall back to 0; non-finite sizes fall back to
+            // float.MaxValue (clamped to MaximumRange below) and sizes are floored
+            // at 1 m so the box can never invert.
+            AreaOffset = new Vector3(
+                SanitizeFinite(AreaOffset.X, 0f),
+                SanitizeFinite(AreaOffset.Y, 0f),
+                SanitizeFinite(AreaOffset.Z, 0f));
+            AreaSize = new Vector3(
+                Math.Max(1f, SanitizeFinite(AreaSize.X, float.MaxValue)),
+                Math.Max(1f, SanitizeFinite(AreaSize.Y, float.MaxValue)),
+                Math.Max(1f, SanitizeFinite(AreaSize.Z, float.MaxValue)));
 
             if (Mod.Settings.Welder.AreaOffsetFixed || init)
             {
