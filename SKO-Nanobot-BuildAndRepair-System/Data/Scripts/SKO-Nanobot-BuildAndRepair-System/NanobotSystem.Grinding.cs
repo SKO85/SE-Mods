@@ -33,6 +33,7 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByScript = 0;
             var skippedByDestroyed = 0;
             var skippedByRefused = 0;
+            var skippedByOutOfArea = 0;
             var iterationsExamined = 0;
             var loopSkipped = false;
             var tsLockAcquire = 0L;
@@ -169,6 +170,18 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
             }
+            // BUG-261122.16: the area check is scan-time only — a target whose grid moved (ship flying off, ground-off
+            // piece flung away) is dropped from this BaR's list instead of being ground from afar.
+            if (chosenGrindTarget != null && !IsTargetInArea(chosenGrindTarget.Block))
+            {
+                ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
+                lock (State.PossibleGrindTargets)
+                {
+                    if (State.PossibleGrindTargets.Remove(chosenGrindTarget)) State.PossibleGrindTargets.RebuildHash();
+                }
+                chosenGrindTarget = null;
+                skippedByOutOfArea++;
+            }
             // BUG-260612.13: zones/shields are otherwise enforced only at scan time —
             // a shield raised or zone enabled around the target mid-operation kept it
             // being ground off the stale list for up to a scan cycle. Both checks are
@@ -271,11 +284,12 @@ namespace SKONanobotBuildAndRepairSystem
                     var _skippedByDestroyed = skippedByDestroyed;
                     var _loopSkipped = loopSkipped;
                     var _skippedByRefused = skippedByRefused;
+                    var _skippedByOutOfArea = skippedByOutOfArea;
                     MethodProfiler.StopAndLog("ServerTryGrinding", profilerTs, () =>
-                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15};skipRefused={16}",
+                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15};skipRefused={16};droppedOutOfArea={17}",
                             _Welder.EntityId, _grinding, _needGrinding, _transporting, _targetCount,
                             State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none",
-                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped, _skippedByRefused));
+                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped, _skippedByRefused, _skippedByOutOfArea));
                 }
             }
         }

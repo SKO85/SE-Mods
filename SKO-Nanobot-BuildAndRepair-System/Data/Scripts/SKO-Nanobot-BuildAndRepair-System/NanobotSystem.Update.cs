@@ -94,6 +94,25 @@ namespace SKONanobotBuildAndRepairSystem
         }
 
         /// <summary>
+        /// Stagger groups for one BaR (it fires every Nth WorkSpeed cycle).
+        /// - Solo BaR: mod-wide stagger capped at 2 (BUG-102: every 3rd cycle feels sluggish; the saving only matters
+        ///   with many dozens of isolated BaRs).
+        /// - Any cluster: 1 group (BUG-261122.14: clusters of 6+ used min(modWide, size - 3), so the usual BaR farm ran at
+        ///   a third of the speed of the same BaRs in small clusters; heavy work is capped by the per-tick budgets).
+        /// - Server under load (sim &lt; 0.9): up to the mod-wide stagger.
+        /// </summary>
+        internal static int ResolveEffectiveGroups(int clusterSize, int modWideStagger, float simSpeed)
+        {
+            var groups = clusterSize <= 1 ? Math.Min(modWideStagger, 2) : 1;
+            if (simSpeed < 0.9f)
+            {
+                var simPenalty = (int)Math.Ceiling((1.0 - simSpeed) * modWideStagger);
+                groups = Math.Min(modWideStagger, groups + simPenalty);
+            }
+            return groups;
+        }
+
+        /// <summary>
         /// True when the cluster coordinator has seen IdleScansBeforeBackoff or more
         /// consecutive empty scans AND this BaR is not holding any active state
         /// (no scan targets, no transport in flight, no buffered inventory). Used by
@@ -194,32 +213,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var cycleDivisor = 100 / workSpeed;
                     var cycle = MyAPIGateway.Session.GameplayFrameCounter / cycleDivisor;
                     clusterSize = AssignedCluster != null ? AssignedCluster.Members.Count : 1;
-                    var modWideStagger = Mod.GetEffectiveStaggerGroupCount();
-                    if (clusterSize == 1)
-                    {
-                        // BUG-102: isolated BaRs use mod-wide stagger, but cap at 2 —
-                        // a single BaR firing only every 3rd cycle (WorkSpeed=10 → 2 fires/sec
-                        // instead of 6) feels visibly sluggish to the player, and the CPU
-                        // saving from 3-way vs. 2-way staggering of solo BaRs is minor
-                        // unless the world has many dozens of isolated BaRs.
-                        effectiveGroups = Math.Min(modWideStagger, 2);
-                    }
-                    else if (clusterSize < 6)
-                    {
-                        // Small cluster: shared scan amortizes the work. Collapse to 1 group.
-                        effectiveGroups = 1;
-                    }
-                    else
-                    {
-                        effectiveGroups = Math.Min(modWideStagger, clusterSize - 3);
-                    }
-
-                    var simSpeed = Mod.GetEffectiveSimSpeed();
-                    if (simSpeed < 0.9f)
-                    {
-                        var simPenalty = (int)Math.Ceiling((1.0 - simSpeed) * modWideStagger);
-                        effectiveGroups = Math.Min(modWideStagger, effectiveGroups + simPenalty);
-                    }
+                    effectiveGroups = ResolveEffectiveGroups(clusterSize, Mod.GetEffectiveStaggerGroupCount(), Mod.GetEffectiveSimSpeed());
 
                     // Idle cadence stretch: less frequent wrapper firing during cluster idle backoff.
                     var idleStretched = false;

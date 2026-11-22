@@ -89,6 +89,20 @@ namespace SKONanobotBuildAndRepairSystem
             return false;
         }
 
+        /// <summary>
+        /// BUG-261122.16: execution-time area check for the target chosen this cycle (the scan checks only when it
+        /// lists). Same box as the scan; one transform + oriented-box test, no allocation.
+        /// </summary>
+        internal bool IsTargetInArea(IMySlimBlock block)
+        {
+            if (block == null || block.CubeGrid == null || _Welder == null) return false;
+            var emitterMatrix = _Welder.WorldMatrix;
+            emitterMatrix.Translation = Vector3D.Transform(Settings.CorrectedAreaOffset, emitterMatrix);
+            var areaBox = new MyOrientedBoundingBoxD(Settings.CorrectedAreaBoundingBox, emitterMatrix);
+            double distance;
+            return block.IsInRange(ref areaBox, out distance);
+        }
+
         // BUG-261122.12: last grid's shield state, swapped as one object (scan thread + main-thread grind check).
         private sealed class ShieldGridMemo
         {

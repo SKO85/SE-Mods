@@ -41,6 +41,7 @@ namespace SKONanobotBuildAndRepairSystem
             var componentFailures = 0;
             var totalComponentChecks = 0;
             var lookingForNextChecked = 0;
+            var droppedOutOfArea = false;
             var lockOnFound = false;
             var weldSkipped = false;
             // BUG-122: lock-acquire vs in-lock timers (background scan contention).
@@ -325,6 +326,19 @@ namespace SKONanobotBuildAndRepairSystem
                 if (tsBeforeLock != 0L) tsInLock = Stopwatch.GetTimestamp() - tsAfterAcquire;
             }
 
+            // BUG-261122.16: the area check is scan-time only — a target whose grid moved out of the area is dropped
+            // from this BaR's list instead of being welded from afar (one box test per chosen target).
+            if (chosenTarget != null && !IsTargetInArea(chosenTarget.Block))
+            {
+                ReleaseAssignmentIfEnabled(chosenTarget.Block);
+                lock (State.PossibleWeldTargets)
+                {
+                    if (State.PossibleWeldTargets.Remove(chosenTarget)) State.PossibleWeldTargets.RebuildHash();
+                }
+                chosenTarget = null;
+                droppedOutOfArea = true;
+            }
+
             // BUG-135: deferred weld work runs outside the lock so the inventory pull
             // spike doesn't block scan publish, saturation check, or RebuildHash.
             if (chosenTarget != null)
@@ -443,14 +457,15 @@ namespace SKONanobotBuildAndRepairSystem
                     var _assignOpsMs = tsAssignOps * 1000.0 / tsFreq;
                     var _gridLimitMs = tsGridLimit * 1000.0 / tsFreq;
                     var _priorityMs = tsPriority * 1000.0 / tsFreq;
+                    var _droppedOutOfArea = droppedOutOfArea;
                     MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};skipFailCooldown={14};componentFails={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3};assignOpsMs={22:F3};gridLimitMs={23:F3};priorityMs={24:F3}",
+                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};skipFailCooldown={14};componentFails={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3};assignOpsMs={22:F3};gridLimitMs={23:F3};priorityMs={24:F3};droppedOutOfArea={25}",
                             _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
                             State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
                             _hadLockOn, _lockOnFound, _lockOnLost,
                             _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _skippedByFailCooldown, _componentFailures,
                             _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount,
-                            _lockAcquireMs, _inLockMs, _assignOpsMs, _gridLimitMs, _priorityMs));
+                            _lockAcquireMs, _inLockMs, _assignOpsMs, _gridLimitMs, _priorityMs, _droppedOutOfArea));
                 }
             }
         }
