@@ -269,6 +269,14 @@ It has been replaced with the <strong>Weld mode</strong> dropdown in the termina
 </details>
 
 <details>
+<summary>My BaRs build a projection while I'm around, but stop when I log off or fly away. Why?</summary>
+<div>
+<p>That's the game, not the BaR. To save performance, Space Engineers switches a projection off when no player is near the projector's grid. The projected blocks are simply gone until someone comes back, so the BaR has nothing to build. The BaR itself keeps running and still repairs damaged blocks.</p>
+<p>As soon as a player is back in range, the projection reappears and the BaR picks it up again within a few seconds. To keep a big build going, stay near it (or leave a character nearby on servers that allow that).</p>
+</div>
+</details>
+
+<details>
 <summary>My BaR is not welding the wreck (or unconnected ship) sitting next to it. Why?</summary>
 <div>
 <p>The BaR's <strong>Search Mode</strong> defaults to <strong>Walk</strong>, which only sees grids that are part of the same logical group as the BaR — i.e. connected via connectors, pistons, rotors, or mergers. Anything sitting in space near the BaR but not actually attached to it is invisible in Walk mode.</p>
