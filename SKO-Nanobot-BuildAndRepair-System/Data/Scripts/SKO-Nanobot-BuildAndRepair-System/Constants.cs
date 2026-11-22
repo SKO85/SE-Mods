@@ -2,7 +2,7 @@
 {
     public static class Constants
     {
-        public const string ModVersion = "2.5.6";
+        public const string ModVersion = "2.5.7";
 
         // BuildId — bumped before every build. Format: "YYMMDD.N" where YYMMDD is
         // today's date and N is an auto-incrementing sequence for that day, starting
@@ -10,6 +10,6 @@
         // reset to today's date with N=1. Surfaced in the debug HUD, /nanobars
         // version, /nanobars -help, and the profiler summary header so we can
         // confirm which build produced a given diagnostic.
-        public const string BuildId = "261122.36";
+        public const string BuildId = "261123.1";
     }
 }
