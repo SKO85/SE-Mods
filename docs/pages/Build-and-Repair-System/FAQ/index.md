@@ -150,6 +150,13 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
 ## Block Seems Stuck
 
 <details>
+<summary>Since the Warfare 3 update (game version 1.211) my BaRs build only part of a projection, or none of it. What's wrong?</summary>
+<div>
+<p>The game update changed how projected blocks are built, which broke projection building in older versions of the mod: BaRs stood idle next to buildable projected blocks, but finished any block you started by hand. <strong>Update to v2.5.6 or newer</strong>, which works with the new game version. Also update the companion script if you use it.</p>
+</div>
+</details>
+
+<details>
 <summary>The Build and Repair block is not doing anything. What should I check?</summary>
 <div>
 <p>Work through this checklist:</p>
@@ -308,6 +315,25 @@ It has been replaced with the <strong>Weld mode</strong> dropdown in the termina
   <li>Check for <strong>obstructions</strong> — a wheel or misaligned component is a common culprit. Remove the obstruction, let the system weld the rest, then weld the blocked component manually or via the system afterwards.</li>
   <li>If you are using a plugin such as <strong>Multi-Grid-Projector</strong>, try disabling it and testing again. Plugins that patch game API calls can affect welding behaviour in unexpected ways.</li>
 </ul>
+</div>
+</details>
+
+<details>
+<summary>My BaRs stopped welding certain kinds of blocks (armor, lights, connectors, antennas…) but weld everything else. Why?</summary>
+<div>
+<p>When whole <em>types</em> of blocks are skipped, it's almost always one of these:</p>
+<ul>
+  <li><strong>The block type is unticked in the BaR's weld priority list.</strong> An unticked class is never welded. Note that the classes are broad: <em>Armor</em> also covers piston tops and other simple blocks, <em>Communication</em> covers antennas. Open the BaR's terminal, check the weld priority list, or press <strong>Reset All Settings</strong> to turn everything back on. BaRs pasted from a blueprint keep the settings they were saved with.</li>
+  <li><strong>You hit a block or PCU limit.</strong> The BaR's info panel then says the limit is reached, and new blocks of that type can't be built at all, by hand or by BaR. Free up blocks or raise the limit in the world settings.</li>
+  <li><strong>A server plugin blocks it</strong> (see the build limiter question above).</li>
+</ul>
+</div>
+</details>
+
+<details>
+<summary>Why are several blocks half-built instead of one finished?</summary>
+<div>
+<p>With several BaRs working, each one claims its own block so they don't get in each other's way, and each pulls the components for its block. When your stock runs out, you'll see a few partly built blocks instead of one finished one. They're completed as soon as components arrive (for example from your assemblers).</p>
 </div>
 </details>
 
@@ -493,11 +519,25 @@ Open the block's terminal and click <strong>Reset All Settings</strong>. This re
 <p>The companion script runs on a Programmable Block and handles automatic assembler queuing and multi-display status output for one or more Build and Repair System groups. It can show current weld/grind targets, missing components, and transport status on LCD panels or cockpit screens.</p>
 <p><strong>Setup:</strong></p>
 <ol>
-  <li>Place a Programmable Block on your grid.</li>
-  <li>Open the script from the Steam Workshop link above and paste it into the Programmable Block editor.</li>
-  <li>Edit the <code>BuildAndRepairSystemQueuingGroups</code> array at the top of the script to match your block and assembler names or group names.</li>
-  <li>Compile and run the script. It updates automatically on every 100-tick cycle.</li>
+  <li>Subscribe to the script on the Steam Workshop (link above).</li>
+  <li>Place a Programmable Block on your grid, open its terminal, click <strong>Edit</strong> and then <strong>Browse Scripts</strong>, and load the script from the Workshop list. (Can't subscribe? Copy the code from <code>SKO-Nanobot-BuildAndRepair-System-Script/Script.cs</code> in this repository and paste it into the editor.)</li>
+  <li>Put your BaRs in a block group called <code>BuildAndRepairGroup1</code> and your assemblers in a group called <code>AssemblerGroup1</code> (or change the names at the top of the script). Don't add the Programmable Block itself to these groups.</li>
+  <li>For a status screen, name an LCD <code>BuildAndRepairGroup1StatusPanel</code>.</li>
+  <li>Check and run the script. It updates automatically every 100 ticks.</li>
 </ol>
+</div>
+</details>
+
+<details>
+<summary>The companion script runs but doesn't queue anything in my assemblers. What should I check?</summary>
+<div>
+<ul>
+  <li>Are the block groups named exactly as in the script (default <code>BuildAndRepairGroup1</code> and <code>AssemblerGroup1</code>, case matters)?</li>
+  <li>Are the assemblers set to <strong>Assembly</strong> (not Disassembly), and on the same or a connected grid?</li>
+  <li>Does the BaR actually miss something? If the parts are already in your cargo, nothing is queued; that's intended.</li>
+  <li>Give it a few seconds, then recompile the script (or reload the world) after changing groups.</li>
+  <li>Use the latest mod <em>and</em> script together (v2.5.6 or newer); older versions could queue wrong amounts or 0.</li>
+</ul>
 </div>
 </details>
 
