@@ -567,11 +567,21 @@ namespace SKONanobotBuildAndRepairSystem
             // If so, skip expensive target checks and only traverse connections
             // so newly docked ships are still discovered.
             var emptyDelay = Mod.Settings.EmptyGridRescanDelaySeconds;
+            var rescanAfterDamage = false;
             if (emptyDelay > 0)
             {
                 TimeSpan emptyTime;
-                if (_EmptyGridCache.TryGetValue(gridEntityId, out emptyTime)
-                    && playTime.Subtract(emptyTime).TotalSeconds < emptyDelay)
+                var skipEmpty = _EmptyGridCache.TryGetValue(gridEntityId, out emptyTime)
+                    && playTime.Subtract(emptyTime).TotalSeconds < emptyDelay;
+
+                // BUG-261122.10: damage since the empty mark ends the skip.
+                if (skipEmpty && GridChangeHandler.ChangedSince(gridEntityId, emptyTime))
+                {
+                    skipEmpty = false;
+                    rescanAfterDamage = true;
+                }
+
+                if (skipEmpty)
                 {
                     // FEAT-073: Only iterate fat blocks for connection discovery.
                     // Connection blocks (mechanical, attachable, connector) always have
@@ -904,13 +914,14 @@ namespace SKONanobotBuildAndRepairSystem
                 var _grindCapSkipped = grindCapSkipped;
                 var _weldAddedHere = weldAfter - weldBefore;
                 var _grindAddedHere = grindAfter - grindBefore;
+                var _rescanAfterDamage = rescanAfterDamage;
                 MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
-                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};weldAdded={5};grindAdded={6};weldCapSkip={7};grindCapSkip={8};skipRange={9};clusterMembers={10}",
+                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};weldAdded={5};grindAdded={6};weldCapSkip={7};grindCapSkip={8};skipRange={9};clusterMembers={10};rescanAfterDamage={11}",
                         _Welder.EntityId, _gridEid, newBlocks.Count,
                         clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
                         clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
                         _weldAddedHere, _grindAddedHere, _weldCapSkipped, _grindCapSkipped,
-                        blockSkipRange, _clusterMembers));
+                        blockSkipRange, _clusterMembers, _rescanAfterDamage));
 
                 // Report per-grid scan cost for profile summary.
                 var gridMs = (double)(endTs - profilerTs) / System.Diagnostics.Stopwatch.Frequency * 1000.0;

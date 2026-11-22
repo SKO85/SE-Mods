@@ -552,6 +552,7 @@
             try { GridSystemCount.Clear(); } catch { }
             try { BlockPriorityHandling.GetItemKeyCache.Clear(); } catch { }
             try { GridScanCache.Clear(); } catch { }
+            try { GridChangeHandler.Clear(); } catch { }
 
             // FEAT-260910.2: drop the harness hooks; the Testing component re-assigns on next load.
             TestTick = null;
@@ -634,6 +635,9 @@
 
                         // BUG-130: shared friendly-damage map cleanup (internally throttled).
                         CleanupFriendlyDamage();
+
+                        // BUG-261122.10: grid damage stamps (internally throttled).
+                        GridChangeHandler.Cleanup(now);
 
                         // FEAT-260910.2: scenario test harness (Testing variant only).
                         if (TestTick != null) TestTick();

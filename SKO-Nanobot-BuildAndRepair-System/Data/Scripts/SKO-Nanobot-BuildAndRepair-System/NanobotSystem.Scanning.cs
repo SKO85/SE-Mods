@@ -2,6 +2,7 @@ using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using SKONanobotBuildAndRepairSystem.Cluster;
 using SKONanobotBuildAndRepairSystem.Extensions;
+using SKONanobotBuildAndRepairSystem.Handlers;
 using SKONanobotBuildAndRepairSystem.Helpers;
 using SKONanobotBuildAndRepairSystem.Caches;
 using SKONanobotBuildAndRepairSystem.Models;
@@ -77,6 +78,25 @@ namespace SKONanobotBuildAndRepairSystem
             _LastTargetsUpdate = TimeSpan.Zero;
         }
 
+        /// <summary>BUG-261122.10: true when a grid this BaR found empty has been damaged since.</summary>
+        internal bool HasDamageOnEmptyGrid()
+        {
+            var ts = MethodProfiler.Start();
+            var damagedGrid = 0L;
+            foreach (var kvp in _EmptyGridCache)
+            {
+                if (GridChangeHandler.ChangedSince(kvp.Key, kvp.Value)) { damagedGrid = kvp.Key; break; }
+            }
+            if (ts != 0L)
+            {
+                var _damagedGrid = damagedGrid;
+                var _emptyGrids = _EmptyGridCache.Count;
+                MethodProfiler.StopAndLog("HasDamageOnEmptyGrid", ts, () =>
+                    string.Format("entityId={0};emptyGrids={1};damagedGrid={2}", _Welder.EntityId, _emptyGrids, _damagedGrid));
+            }
+            return damagedGrid != 0L;
+        }
+
         public void UpdateSourcesAndTargetsTimer()
         {
             // Block is off — skip scanning. Reset initial-scan flag so a scan
@@ -129,6 +149,16 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     _projectorColdStartArmed = true;
                 }
+            }
+
+            // BUG-261122.10: new damage on a grid this idle coordinator found empty ends the
+            // idle backoff (back to TargetsUpdateInterval; the scan then skips the empty mark).
+            if (coordinator == this
+                && _consecutiveEmptyScans >= IdleScansBeforeBackoff
+                && GridChangeHandler.Count > 0
+                && HasDamageOnEmptyGrid())
+            {
+                _consecutiveEmptyScans = 0;
             }
 
             // FEAT-071: longer scan interval after consecutive empty scans; members

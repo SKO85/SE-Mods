@@ -79,9 +79,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             try
             {
+                var targetBlock = target as IMySlimBlock;
+
+                // BUG-261122.10: a damaged grid must not stay in the empty-grid skip.
+                if (targetBlock != null && info.Amount > 0 && targetBlock.CubeGrid != null)
+                    GridChangeHandler.MarkChanged(targetBlock.CubeGrid.EntityId, MyAPIGateway.Session.ElapsedPlayTime);
+
                 if (info.Type == MyDamageType.Grind && info.Amount > 0)
                 {
-                    var targetBlock = target as IMySlimBlock;
                     if (targetBlock != null)
                     {
                         IMyEntity attackerEntity;

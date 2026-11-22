@@ -147,6 +147,7 @@
     <Compile Include="Chat\Commands\VersionCommand.cs" />
     <Compile Include="Handlers\ComponentPriorityHandling.cs" />
     <Compile Include="Handlers\DamageHandler.cs" />
+    <Compile Include="Handlers\GridChangeHandler.cs" />
     <Compile Include="Handlers\FriendlyRelationsHandler.cs" />
     <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />
     <Compile Include="Handlers\NetworkMessagingHandler.cs" />
