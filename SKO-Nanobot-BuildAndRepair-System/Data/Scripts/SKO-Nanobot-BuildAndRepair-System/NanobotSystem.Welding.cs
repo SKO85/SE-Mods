@@ -39,6 +39,8 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByAssign = 0;
             var skippedByFailCooldown = 0;
             var componentFailures = 0;
+            // BUG-261123.1: failure marks are shared only within this BaR's supply (logical grid group).
+            var supplyGroup = _Welder.CubeGrid != null ? (object)_Welder.CubeGrid.GetGridGroup(GridLinkTypeEnum.Logical) : null;
             var totalComponentChecks = 0;
             var lookingForNextChecked = 0;
             var droppedOutOfArea = false;
@@ -164,7 +166,7 @@ namespace SKONanobotBuildAndRepairSystem
                     // could lock onto a globally starved block and burn a guaranteed
                     // weld-slot claim + pull walk on it next tick.
                     if (!isLockOnBlock
-                        && BlockFailureCooldownHandler.IsOnCooldown(targetData.Block))
+                        && BlockFailureCooldownHandler.IsOnCooldown(targetData.Block, supplyGroup))
                     {
                         skippedByFailCooldown++;
                         needWelding = true;
@@ -421,8 +423,8 @@ namespace SKONanobotBuildAndRepairSystem
 
                     ReleaseAssignmentIfEnabled(chosenTarget.Block, profilerTs != 0L, ref tsAssignOps);
 
-                    // Park the failed block in the global cooldown so other BaRs skip it.
-                    BlockFailureCooldownHandler.MarkFailed(chosenTarget.Block);
+                    // Park the failed block so BaRs sharing this supply skip it (BUG-261123.1).
+                    BlockFailureCooldownHandler.MarkFailed(chosenTarget.Block, supplyGroup);
 
                     componentFailures++;
                 }

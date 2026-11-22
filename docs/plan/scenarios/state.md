@@ -36,6 +36,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-WELD-005 | WELD | 2 | Missing components aggregate over all weld targets | ingame:S02, S84, unit | 261122.32 in game |
 | SCN-WELD-006 | WELD | 2 | Dented full-integrity blocks get a budgeted skeleton reset, once | manual, unit | 261023.3 unit |
 | SCN-WELD-007 | WELD | 2 | Mechanical subgrid (rotor head) is repaired in Grids mode, not ground by the janitor | ingame:S18, S34, S35, S36, S37, S38, S44 | never |
+| SCN-WELD-008 | WELD | 2 | A starved BaR does not stop a stocked BaR elsewhere from repairing the same grid | ingame:S86; unit:BlockFailureCooldownTests | 261123.7 in game |
 | SCN-GRIND-001 | GRIND | 1 | GrindOnly with NoOwnership grinds only unowned grids | ingame:S04, S17; unit:JanitorOwnershipTests | never |
 | SCN-GRIND-002 | GRIND | 2 | Janitor relation matrix × DisableOnly / HackOnly | manual; ingame:S17, S45 | never |
 | SCN-GRIND-003 | GRIND | 2 | Grind order: near / far / smallest-grid first, ignore priority order | unit:QuickSelectTests.MatchesSortForKSmallest_RandomInputs; ingame:S11, S12, S13 | 261006.3 unit |

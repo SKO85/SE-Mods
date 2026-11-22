@@ -155,6 +155,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S83 | Companion script, stock in cargo: nothing queued while welding from stock | API-002 | 25 s | 261122.32 — nothing queued |
 | S84 | Sorter-blocked stock stays in the missing list (companion script keeps queuing) | WELD-005 | 20 s | 261122.32 — blocked 500 kept, 200 missing |
 | S85 | Safe zone without Welding, with BuildingProjections: projections placed, not welded further | ZONE-001 | ~20 s | 261122.36 — 10 placed, 0 welded, 750 + 240 + 10 = 1000 |
+| S86 | A starved BaR does not stop a stocked BaR on another ship from repairing its grid | WELD-008 | ~20 s | 261123.7 — 10/10 in 3.4 s (5/10 in 45 s before the fix) |
 
 ## Scenarios
 
@@ -539,6 +540,11 @@ stock stays put, SteelPlate is reported missing (the companion script keeps queu
 **Pass** all 10 projected blocks placed, none welded further, SteelPlate conserved (rig + the placed blocks'
 construction stockpiles, plus the mounted creation plates = stock: the build may stockpile the BaR's ready components).
 Run with admin creative tools and "ignore safe zones" off (creative tools build instantly; the bypass welds). Counterparts: S39 (no welding, real blocks), S42 (no building projections).
+
+### S86
+**Proves** BUG-261123.1: ship A (BaR, 10 damaged blocks, empty cargo) and ship B 25 m away (BaR in Fly mode,
+500 SteelPlate, no damage), not connected. **Pass** B repairs all of A's blocks within 45 s. **Records** `firstWeldS`,
+`doneS`, ship A's BaR state (expected MissingComponents).
 
 ## Building blocks for new scenarios
 
