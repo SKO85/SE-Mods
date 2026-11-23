@@ -44,10 +44,10 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88 |
 | `@projection` | Projector building, incl. admin and safe-zone rules | S03, S27, S42, S46, S85 |
 | `@subgrids` | Rotors, pistons, hinges, wheels, connectors, ships in flight | S18, S34-S38, S44, S45 |
-| `@grind` | Grinding: janitor, order, colours, protection, leaving targets | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76 |
+| `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89 |
 | `@zone` | Safe zones | S39-S42, S53, S85 |
 | `@shields` | DefenseShields (skipped without the mod) | S58-S63 |
-| `@inventory` | Component sources, sorter, empty cargo | S02, S84, S87, S88 |
+| `@inventory` | Component sources, sorter, empty cargo, push targets | S02, S84, S87-S89 |
 | `@claims` | Block claims, per-grid limit, BaRs sharing work | S05, S06, S50, S51, S54-S56, S86 |
 | `@cluster` | Cluster coordination and the per-grid limit | S06, S07, S50, S54 |
 | `@perf` | Load, large grids, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70 |
@@ -184,6 +184,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S86 | A starved BaR does not stop a stocked BaR on another ship from repairing its grid | WELD-008 | ~20 s | 261123.7 — 10/10 in 3.4 s (5/10 in 45 s before the fix) |
 | S87 | Source: components only in a docked ship's cargo are used for welding | INV-001 | ~15 s | 261123.10 — 5/5 in 2.5 s, 100 plates from the docked ship |
 | S88 | Source: components only in an assembler's output are used for welding | INV-001 | ~10 s | 261123.10 — 5/5, assembler at (0,0,3) |
+| S89 | Push targets full: BaR pauses without losing ore, resumes once space is freed | INV-001, INV-002 | ~60 s | 261123.15 — full reported, 124155 kg iron kept, done 15 s after freeing |
 
 ## Scenarios
 
@@ -584,6 +585,14 @@ rig blocks welded within 40 s and SteelPlate taken from the ship cargo.
 The large assembler has conveyor ports on some faces only, so three candidates are placed (rig cells (2,0,0), (0,0,3),
 (1,0,3)); the first connected to the BaR is stocked (`sourceCandidate`). **Layout check** (none connected = fail) and
 **Pass** as S87.
+
+### S89
+**Proves** the push-targets-full path. Rig: BaR (GrindOnly, janitor NoOwnership, PushIngotOreImmediately), every rig
+container filled with stone (volume-based fill, 3 passes). Three single-container derelicts 25 m away (no armor next to
+them, so nothing splits off), each full of iron ore. Records `worldMaxFloatingObjects`, `barMaxVolume`, iron per
+location at the end and at the first loss. **Pass** the BaR reports a full
+inventory while nothing can be pushed (first 30 s), resumes after two rig containers are emptied at 30 s and grinds the
+container within 120 s; iron ore (derelict + rig + BaR + transport) is never below the starting amount.
 
 ## Building blocks for new scenarios
 

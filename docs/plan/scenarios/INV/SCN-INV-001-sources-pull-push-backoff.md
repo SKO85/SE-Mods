@@ -26,8 +26,10 @@
 manual
 ingame:S87
 ingame:S88
+ingame:S89
+
 ## Last verified
-v2.5.7 build 261123.10 2026-11-23 — in game: S87 (docked ship cargo), S88 (assembler output).
+v2.5.7 build 261123.15 2026-11-23 — in game: S89 (push targets full / freed, no ore lost), S87, S88.
 
 ## Related
 BUG-007, BUG-011, BUG-016, BUG-090, BUG-119, BUG-126, BUG-129, BUG-148, FEAT-006, FEAT-011

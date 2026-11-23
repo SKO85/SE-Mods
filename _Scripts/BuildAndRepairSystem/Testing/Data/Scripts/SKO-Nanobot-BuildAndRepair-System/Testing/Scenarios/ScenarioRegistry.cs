@@ -94,7 +94,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S03_ProjectedBuild("S85", ProjectionMode.ZoneForbidsWelding),
             new S86_StarvedNeighbour(),
             new S87_Sources("S87", SourceKind.DockedShipCargo),
-            new S87_Sources("S88", SourceKind.AssemblerOutput)
+            new S87_Sources("S88", SourceKind.AssemblerOutput),
+            new S89_PushTargetsFull()
         };
 
         /// <summary>
@@ -107,10 +108,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new ScenarioGroup("weld", "Welding: repair, weld options, colours, docked ships, sources", "S01,S02,S03,S18,S21,S22,S23,S26,S27,S34,S35,S36,S37,S38,S42,S44,S46,S72,S84,S86,S87,S88"),
             new ScenarioGroup("projection", "Projector building, incl. admin and safe-zone rules", "S03,S27,S42,S46,S85"),
             new ScenarioGroup("subgrids", "Rotors, pistons, hinges, wheels, connectors, ships in flight", "S18,S34,S35,S36,S37,S38,S44,S45"),
-            new ScenarioGroup("grind", "Grinding: janitor, order, colours, protection, leaving targets", "S04,S11,S12,S13,S16,S17,S24,S45,S73,S74,S76"),
+            new ScenarioGroup("grind", "Grinding: janitor, order, colours, protection, leaving targets, full storage", "S04,S11,S12,S13,S16,S17,S24,S45,S73,S74,S76,S89"),
             new ScenarioGroup("zone", "Safe zones", "S39,S40,S41,S42,S53,S85"),
             new ScenarioGroup("shields", "DefenseShields (skipped without the mod)", "S58,S59,S60,S61,S62,S63"),
-            new ScenarioGroup("inventory", "Component sources, sorter, empty cargo", "S02,S84,S87,S88"),
+            new ScenarioGroup("inventory", "Component sources, sorter, empty cargo, push targets", "S02,S84,S87,S88,S89"),
             new ScenarioGroup("claims", "Block claims, per-grid limit, BaRs sharing work", "S05,S06,S50,S51,S54,S55,S56,S86"),
             new ScenarioGroup("cluster", "Cluster coordination and the per-grid limit", "S06,S07,S50,S54"),
             new ScenarioGroup("perf", "Load, large grids, ShowArea and budget cost (long)", "S08,S28,S29,S30,S31,S32,S33,S43,S52,S64,S65,S66,S67,S68,S69,S70"),

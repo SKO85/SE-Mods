@@ -415,6 +415,16 @@ namespace SKONanobotBuildAndRepairSystem
         /// Bidirectional with hysteresis: sets true at >=100% capacity, clears at &lt;90%.
         /// Shared by Operations (pre-weld/grind) and Collecting (pre-collect).
         /// </summary>
+        internal const float InventoryFullSetRatio = 0.98f;
+        internal const float InventoryFullClearRatio = 0.9f;
+
+        /// <summary>Inventory-full latch: set from 98% of the welder volume, cleared below 90%.</summary>
+        internal static bool NextInventoryFull(bool wasFull, float currentVolume, float maxVolume)
+        {
+            if (maxVolume <= 0f) return wasFull;
+            return wasFull ? currentVolume >= maxVolume * InventoryFullClearRatio : currentVolume >= maxVolume * InventoryFullSetRatio;
+        }
+
         private void CheckAndUpdateInventoryFull()
         {
             var profilerTs = MethodProfiler.Start();
@@ -444,27 +454,11 @@ namespace SKONanobotBuildAndRepairSystem
                 currentVolume = (float)welderInventory.CurrentVolume;
                 maxVolume = (float)welderInventory.MaxVolume;
 
-                if (!wasFull)
-                {
-                    if (currentVolume >= maxVolume)
-                    {
-                        State.InventoryFull = true;
-                        nowFull = true;
-                    }
-                }
-                else
-                {
-                    // BUG-260526.1: clear the sticky InventoryFull flag once the welder
-                    // has drained (e.g. ServerTryPushInventory moved items into a container).
-                    // Without this, the flag stayed true forever because the only other
-                    // clear path (ServerEmptyTransportInventory) requires an active transport.
-                    // 90% hysteresis avoids flicker when a partial weld nudges it just under max.
-                    if (currentVolume < maxVolume * 0.9f)
-                    {
-                        State.InventoryFull = false;
-                        nowFull = false;
-                    }
-                }
+                // BUG-260526.1: the flag clears once the welder drained below 90% (hysteresis).
+                // BUG-261123.2: set from 98%; ore rarely fills the last bit exactly, so a stuck BaR at ~99%
+                // showed "needs grinding" instead of "Inventory full".
+                nowFull = NextInventoryFull(wasFull, currentVolume, maxVolume);
+                State.InventoryFull = nowFull;
             }
             finally
             {
