@@ -44,6 +44,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-GRIND-004 | GRIND | 2 | Raze queue and mech / dismount per-tick throttles | unit:PerTickBudgetTests | 261006.3 unit |
 | SCN-GRIND-005 | GRIND | 2 | Grind colour grinds painted blocks on the own grid | ingame:S24 | never |
 | SCN-GRIND-006 | GRIND | 2 | Protected grids are not ground (indestructible, immune, damage-handler protection) | unit:GrindDamageVetoTests; ingame:S73, S74 | 261122.25 in game |
+| SCN-GRIND-007 | GRIND | 2 | Ground or removed blocks leave a BaR's grind list instead of being re-checked every tick | unit:DeadGrindEntryTests; ingame:S66; ingame:S67; ingame:S70 | 261123.36 in game |
 | SCN-COLLECT-001 | COLLECT | 2 | Floating objects inside area only, CollectIfIdle, component class priority | manual, ingame:S10, unit | 261023.2 unit |
 | SCN-INV-001 | INV | 2 | Source scan via conveyors, pull cursor rotation, push-targets-full backoff | manual; ingame:S87, S88, S89, S103-S110 | 261123.15 in game |
 | SCN-INV-002 | INV | 2 | Push-immediately flags and inventory-full pause | manual; ingame:S89, S90-S93; unit:InventoryFullLatchTests | 261123.19 in game |

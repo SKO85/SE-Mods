@@ -35,6 +35,7 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByRefused = 0;
             var skippedByOutOfArea = 0;
             var iterationsExamined = 0;
+            var deadRemoved = 0;
             var loopSkipped = false;
             var tsLockAcquire = 0L;
             var tsInLock = 0L;
@@ -138,6 +139,14 @@ namespace SKONanobotBuildAndRepairSystem
                         // existing post-grind enqueue can't reach them.
                         RazeQueueHandler.Enqueue(targetData.Block);
                     }
+                }
+
+                // BUG-261123.3: drop ground / removed entries once instead of re-walking them every tick (one in-place pass,
+                // only when the walk met one; razes are queued, the queue dedups).
+                if (skippedByNullBlock + skippedByClosedFatBlock + skippedByDestroyed > 0)
+                {
+                    deadRemoved = RemoveDeadGrindEntries(State.PossibleGrindTargets);
+                    if (deadRemoved > 0) State.PossibleGrindTargets.RebuildHash();
                 }
 
                 // FEAT-076: mark exhausted when the full iteration found nothing grindable.
@@ -285,13 +294,41 @@ namespace SKONanobotBuildAndRepairSystem
                     var _loopSkipped = loopSkipped;
                     var _skippedByRefused = skippedByRefused;
                     var _skippedByOutOfArea = skippedByOutOfArea;
+                    var _deadRemoved = deadRemoved;
                     MethodProfiler.StopAndLog("ServerTryGrinding", profilerTs, () =>
-                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15};skipRefused={16};droppedOutOfArea={17}",
+                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15};skipRefused={16};droppedOutOfArea={17};deadRemoved={18}",
                             _Welder.EntityId, _grinding, _needGrinding, _transporting, _targetCount,
                             State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none",
-                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped, _skippedByRefused, _skippedByOutOfArea));
+                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped, _skippedByRefused, _skippedByOutOfArea, _deadRemoved));
                 }
             }
+        }
+
+        // BUG-261123.3: in-place compaction (List.RemoveAll needs System.Predicate, prohibited in the SE sandbox).
+        internal static int RemoveDeadGrindEntries(List<TargetBlockData> list)
+        {
+            var write = 0;
+            for (var read = 0; read < list.Count; read++)
+            {
+                var entry = list[read];
+                if (IsDeadGrindEntry(entry)) continue;
+                if (write != read) list[write] = entry;
+                write++;
+            }
+            var removed = list.Count - write;
+            if (removed > 0) list.RemoveRange(write, removed);
+            return removed;
+        }
+
+        // BUG-261123.3: a grind entry nothing more can be done with (block gone, or fully dismounted: raze queued).
+        internal static bool IsDeadGrindEntry(TargetBlockData targetData)
+        {
+            var block = targetData != null ? targetData.Block : null;
+            if (block == null || block.CubeGrid == null) return true;
+            if (block.FatBlock != null && block.FatBlock.Closed) return true;
+            if (!block.IsFullyDismounted) return false;
+            RazeQueueHandler.Enqueue(block);
+            return true;
         }
 
         // BUG-261122.15: grids whose grind a damage handler refused (protection plugin / mod), per BaR, main thread.
