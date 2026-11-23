@@ -129,7 +129,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S119_GridSizeTraffic("S120", 1000),
             new S119_GridSizeTraffic("S121", 3000),
             new S119_GridSizeTraffic("S122", 8000),
-            new S119_GridSizeTraffic("S123", 100, 1000, 3000, 8000)
+            new S119_GridSizeTraffic("S123", 100, 1000, 3000, 8000),
+            new S03_ProjectedBuild("S124", ProjectionMode.WeldFunctional),
+            new S03_ProjectedBuild("S125", ProjectionMode.WeldSkeleton)
         };
 
         /// <summary>
@@ -139,7 +141,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         public static readonly ScenarioGroup[] Groups =
         {
             new ScenarioGroup("core", "Repair, damage detection, range, work modes, power, speeds", "S01,S19,S20,S25,S57,S72,S75,S76,S77,S78,S79,S80"),
-            new ScenarioGroup("weld", "Welding: repair, weld options, colours, docked ships, sources", "S01,S02,S03,S18,S21,S22,S23,S26,S27,S34,S35,S36,S37,S38,S42,S44,S46,S72,S84,S86,S87,S88,S111,S112,S114,S115"),
+            new ScenarioGroup("weld", "Welding: repair, weld options, colours, docked ships, sources", "S01,S02,S03,S18,S21,S22,S23,S26,S27,S34,S35,S36,S37,S38,S42,S44,S46,S72,S84,S86,S87,S88,S111,S112,S114,S115,S124,S125"),
             new ScenarioGroup("projection", "Projector building, incl. admin and safe-zone rules", "S03,S27,S42,S46,S85"),
             new ScenarioGroup("subgrids", "Rotors, pistons, hinges, wheels, connectors, ships in flight", "S18,S34,S35,S36,S37,S38,S44,S45,S111,S112"),
             new ScenarioGroup("grind", "Grinding: janitor, order, colours, protection, leaving targets, full storage", "S04,S11,S12,S13,S16,S17,S24,S45,S73,S74,S76,S89,S112"),

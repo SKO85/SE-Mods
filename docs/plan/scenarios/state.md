@@ -32,7 +32,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-BUDGET-010 | BUDGET | 2 | Network sync load stays bounded on a dedicated server (settings / state rate and size) | unit:NetStatsTests; ingame:S116; ingame:S117; ingame:S118; ingame:S119; ingame:S120; ingame:S121; ingame:S122; ingame:S123 | never |
 | SCN-WELD-001 | WELD | 1 | WeldOnly repairs damaged blocks and never grinds | ingame:S01, S26 | never |
 | SCN-WELD-002 | WELD | 2 | Projected block build incl. DLC-missing skip, expiring silent-fail skip, SE 1.211.018 builder-inventory lend | unit:ProjectedBuildComponentTests, ProjectorScanCacheTests, LimitsPreCheckTests; ingame:S03, S27, S42, S46; ingame:S114, S115 (small grid) | 261122.3 unit |
-| SCN-WELD-003 | WELD | 2 | Weld options Full / Functional / Skeleton stop at the right integrity | ingame:S21, S22 | never |
+| SCN-WELD-003 | WELD | 2 | Weld options Full / Functional / Skeleton stop at the right integrity | ingame:S21, S22, S124, S125 (projections) | never |
 | SCN-WELD-004 | WELD | 2 | Ignore-colour blocks are skipped; creative mode needs no components | manual; ingame:S23 | never |
 | SCN-WELD-005 | WELD | 2 | Missing components aggregate over all weld targets | ingame:S02, S84, unit | 261122.32 in game |
 | SCN-WELD-006 | WELD | 2 | Dented full-integrity blocks get a budgeted skeleton reset, once | manual, unit | 261023.3 unit |

@@ -41,7 +41,7 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | Group | What | Scenarios |
 | ----- | ---- | --------- |
 | `@core` | Repair, damage detection, range, work modes, power, speeds | S01, S19, S20, S25, S57, S72, S75-S80 |
-| `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88, S111, S112, S114, S115 |
+| `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88, S111, S112, S114, S115, S124, S125 |
 | `@projection` | Projector building, incl. admin and safe-zone rules | S03, S27, S42, S46, S85 |
 | `@subgrids` | Rotors, pistons, hinges, wheels, connectors, ships in flight | S18, S34-S38, S44, S45, S111, S112 |
 | `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89, S112 |
@@ -220,6 +220,8 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S121 | Traffic / spikes: 10 BaRs welding a 3,000-block grid | BUDGET-010 | ~1 min | never |
 | S122 | Traffic / spikes: 10 BaRs welding an 8,000-block grid | BUDGET-010 | ~1 min | never |
 | S123 | Traffic / spikes: 10 BaRs welding 100 + 1,000 + 3,000 + 8,000-block grids at once | BUDGET-010 | ~1 min | never |
+| S124 | Projection with weld option Functional: placed and welded to functional, not full | WELD-003, WELD-002 | <1 min | never |
+| S125 | Projection with weld option Skeleton: placed, not welded further | WELD-003, WELD-002 | <1 min | never |
 
 ## Scenarios
 
@@ -793,6 +795,15 @@ S119 with an 8,000-block field.
 
 ### S123
 S119 with all four fields at once (stacked 6 m apart: 100, 1,000, 3,000, 8,000 blocks).
+
+### S124
+**Proves** weld option Functional works on projections (S21 covers damaged blocks only). S03's rig and 10-block
+projection with WeldFunctional. **Pass** all 10 placed, each at functional integrity, none at full 5 s after the last
+reached functional, fewer plates used than full welding would. **Records** `atFunctional`, `steelOnRig`, `steelIfFull`.
+
+### S125
+**Proves** weld option Skeleton on projections: all 10 placed, none welded further, SteelPlate conserved (rig +
+construction stockpiles).
 
 ## Building blocks for new scenarios
 
