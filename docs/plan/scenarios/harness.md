@@ -53,6 +53,7 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | `@perf` | Load, large grids, scan cost by grid size, logistics at scale, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S112, S119-S123 |
 | `@companion` | PB API and the companion script | S09, S71, S81-S83 |
 | `@config` | Admin settings (Fixed / Default, limits, checks) | S46-S53 |
+| `@races` | Async / timing: grids deleted, settings flipped, BaRs switched off and on mid-scan | S94-S98, S127-S129 |
 | `@sync` | Network load on servers: settings / state sync rate and size (run on Torch with a client) | S43, S70, S106, S111, S116-S123, S126 |
 | `@priority` | Weld / grind priority lists | S14-S16 |
 | `@collect` | Collecting floating objects | S10 |
@@ -223,6 +224,9 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S124 | Projection with weld option Functional: placed and welded to functional, not full | WELD-003, WELD-002 | <1 min | never |
 | S125 | Projection with weld option Skeleton: placed, not welded further | WELD-003, WELD-002 | <1 min | never |
 | S126 | Sync: 5 BaRs working 10 km from every player send them no state | BUDGET-010 | <1 min | 261123.50 Torch — 20/20 welded, 0 state bytes to the client |
+| S127 | Races: target grids deleted / spawned every 3 s while BaRs scan and weld | BUDGET-011 | ~1 min | never |
+| S128 | Races: SearchMode / WorkMode flipped every 1 s while 10 BaRs weld | BUDGET-011 | ~1 min | never |
+| S129 | Races: 10 BaRs switched off / on every 1.5 s while welding | BUDGET-011 | ~1 min | never |
 
 ## Scenarios
 
@@ -815,6 +819,20 @@ construction stockpiles).
 **Proves** BaR state goes only to players who have the BaR loaded (FEAT-261123.8). 5 BaRs repair 20 damaged blocks
 10 km from the caller (beyond the sync distance). **Pass** all welded; with a remote player (Torch): 0 bytes of state
 sent to players (`stateWireBytes`), `net.state.farSkipped` > 0.
+
+### S127
+**Proves** background scans and welds survive their targets disappearing. 5 BaRs (BoundingBox, 100 m) repair 3 small
+damaged grids (4 blocks); every 3 s for 21 s the oldest grid is deleted and a new one spawned. **Pass** no mod error
+logged (`errorsLogged`, new standard metric), every grid alive at the end fully welded, tick avg <= 1 ms, no block claim
+left 3 s after done, >= 5 grids deleted. **Records** `gridsSpawned`, `gridsDeleted`, `remaining`, `doneS`, `claimsLeft`.
+
+### S128
+S127's checks with 10 BaRs on 60 damaged blocks while SearchMode (Grids / BoundingBox) and WorkMode (WeldBeforeGrind /
+WeldOnly) flip every 1 s for 20 s (cluster rebuilds, rescans, list swaps mid-scan): all 60 welded afterwards.
+
+### S129
+S128's rig with all BaRs switched off / on every 1.5 s for 21 s (claims dropped and retaken, cluster membership
+changing): all 60 welded afterwards, no claim left.
 
 ## Building blocks for new scenarios
 

@@ -155,6 +155,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         // ---------------------------------------------------------------- network (FEAT-261123.7)
 
         public NetStats.Snapshot NetStart;
+
+        /// <summary>Mod errors logged since the run started (Logging.ErrorCount).</summary>
+        public long ErrorsAtStart;
+        public long ErrorsSinceStart { get { return SKONanobotBuildAndRepairSystem.Utils.Logging.ErrorCount - ErrorsAtStart; } }
         private NetStats.Snapshot _netEnd;
 
         /// <summary>Mod messages of one type since the run started: count, payload bytes, wire bytes (fan-out), largest.</summary>

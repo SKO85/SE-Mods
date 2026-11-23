@@ -182,6 +182,7 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         private void Error(string msg)
         {
             if ((LogLevel & Level.Error) == 0) return;
+            CountError();
 
             Write("ERROR: " + msg);
 
@@ -205,9 +206,16 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         /// <summary>
         ///
         /// </summary>
+        // Errors written since load (any thread); the test harness asserts none during race scenarios.
+        private static readonly object _errorLock = new object();
+        private static long _errorCount;
+        public static long ErrorCount { get { lock (_errorLock) { return _errorCount; } } }
+        private static void CountError() { lock (_errorLock) { _errorCount++; } }
+
         public void Write(Level level, string msg, params Object[] args)
         {
             if ((LogLevel & level) == 0) return;
+            if ((level & Level.Error) != 0) CountError();
             Write(string.Format(msg, args));
         }
 

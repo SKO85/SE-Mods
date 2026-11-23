@@ -133,7 +133,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S119_GridSizeTraffic("S123", 100, 1000, 3000, 8000),
             new S03_ProjectedBuild("S124", ProjectionMode.WeldFunctional),
             new S03_ProjectedBuild("S125", ProjectionMode.WeldSkeleton),
-            new S126_FarBars()
+            new S126_FarBars(),
+            new S127_Races("S127", RaceMode.GridChurn),
+            new S127_Races("S128", RaceMode.SettingsFlip),
+            new S127_Races("S129", RaceMode.OnOff)
         };
 
         /// <summary>
@@ -155,6 +158,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new ScenarioGroup("perf", "Load, large grids, scan cost by grid size, ShowArea and budget cost (long)", "S08,S28,S29,S30,S31,S32,S33,S43,S52,S64,S65,S66,S67,S68,S69,S70,S99,S100,S101,S102,S103,S104,S105,S106,S107,S108,S109,S110,S111,S112,S119,S120,S121,S122,S123"),
             new ScenarioGroup("companion", "PB API and the companion script", "S09,S71,S81,S82,S83"),
             new ScenarioGroup("config", "Admin settings (Fixed / Default, limits, checks)", "S46,S47,S48,S49,S50,S51,S52,S53"),
+            new ScenarioGroup("races", "Async / timing: grids deleted, settings flipped, BaRs switched off and on mid-scan", "S94,S95,S96,S97,S98,S127,S128,S129"),
             new ScenarioGroup("sync", "Network load on servers: settings / state sync rate and size (run on Torch with a client)", "S43,S70,S106,S111,S116,S117,S118,S119,S120,S121,S122,S123,S126"),
             new ScenarioGroup("priority", "Weld / grind priority lists", "S14,S15,S16"),
             new ScenarioGroup("collect", "Collecting floating objects", "S10")

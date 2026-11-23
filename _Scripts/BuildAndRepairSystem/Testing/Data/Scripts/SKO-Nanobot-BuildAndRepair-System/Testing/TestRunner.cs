@@ -293,6 +293,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 _ctx.SetRigBarsEnabled(true);
                 _ctx.RunStartTime = TestContext.Now;
                 _ctx.NetStart = NetStats.Take(true); // FEAT-261123.7
+                _ctx.ErrorsAtStart = Logging.ErrorCount;
                 return;
             }
 
@@ -461,6 +462,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             _result.Metric("assignmentsPeak", (long)_ctx.AssignmentsPeak);
             _result.Metric("bgEnqueued", (long)Mod.BackgroundTasksEnqueued);
             _result.Metric("otherBars", (long)_ctx.OtherBarCount());
+            _result.Metric("errorsLogged", _ctx.ErrorsSinceStart);
             // World speed settings: they scale every weld / grind (Torch vs dev PC throughput).
             var world = MyAPIGateway.Session != null ? MyAPIGateway.Session.SessionSettings : null;
             if (world != null)
