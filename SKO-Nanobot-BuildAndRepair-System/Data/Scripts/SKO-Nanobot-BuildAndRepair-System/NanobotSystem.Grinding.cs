@@ -36,6 +36,8 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByOutOfArea = 0;
             var iterationsExamined = 0;
             var deadRemoved = 0;
+            var grindBudgetDeferred = false;
+            var grindProtected = false;
             var loopSkipped = false;
             // FEAT-261123.4: sub-timers for the work outside the target-list lock.
             long tsMark, tsPower = 0L, tsClaim = 0L, tsArea = 0L, tsProtect = 0L, tsSlot = 0L, tsDoGrind = 0L, tsRemoveAll = 0L, tsRelease = 0L, tsRep = 0L;
@@ -215,6 +217,7 @@ namespace SKONanobotBuildAndRepairSystem
             if (tsMark != 0L) tsProtect += Stopwatch.GetTimestamp() - tsMark;
             if (isProtected)
             {
+                grindProtected = true;
                 ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
                 chosenGrindTarget = null;
             }
@@ -227,6 +230,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (tsMark != 0L) tsSlot += Stopwatch.GetTimestamp() - tsMark;
                 if (!gotSlot)
                 {
+                    grindBudgetDeferred = true;
                     // BUG-261023.8: budget deferral, not a failure — keep the claim and report
                     // the block (like BUG-154 for welding) so the current block / grid count
                     // don't flicker and no other BaR takes it between ticks.
@@ -303,6 +307,10 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
+                // FEAT-261123.4: remember why this attempt did nothing.
+                if (!grinding && !transporting)
+                    _lastGrindIdle = Handlers.CycleStats.GrindIdleReason(skippedByRefused, grindProtected, grindBudgetDeferred,
+                        skippedByGridLimit, skippedByAssign, loopSkipped);
                 if (profilerTs != 0L)
                 {
                     var _grinding = grinding;

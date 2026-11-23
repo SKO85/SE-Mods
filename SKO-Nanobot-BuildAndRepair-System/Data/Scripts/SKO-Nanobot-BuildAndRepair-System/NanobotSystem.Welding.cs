@@ -49,6 +49,7 @@ namespace SKONanobotBuildAndRepairSystem
             var droppedOutOfArea = false;
             var lockOnFound = false;
             var weldSkipped = false;
+            var weldBudgetDeferred = false;
             // BUG-122: lock-acquire vs in-lock timers (background scan contention).
             var tsLockAcquire = 0L;
             var tsInLock = 0L;
@@ -381,6 +382,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // and assignment are preserved so the same BaR resumes the same block.
                 if (!Mod.TryClaimWeldSlot())
                 {
+                    weldBudgetDeferred = true;
                     // Treat as "needs welding but couldn't this tick"; propagate the chosen
                     // target back as currentWeldingBlock so the caller's
                     // State.CurrentWeldingBlock = currentWeldingBlock write preserves the
@@ -467,6 +469,10 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
+                // FEAT-261123.4: remember why this attempt did nothing.
+                if (!welding && !transporting)
+                    _lastWeldIdle = Handlers.CycleStats.WeldIdleReason(componentFailures, skippedByRefused, weldBudgetDeferred,
+                        skippedByFailCooldown, skippedByGridLimit, skippedByAssign, weldSkipped);
                 if (profilerTs != 0L)
                 {
                     var _welding = welding;

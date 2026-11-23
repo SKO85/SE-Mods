@@ -353,6 +353,10 @@ namespace SKONanobotBuildAndRepairSystem
         // FEAT-261123.8: players in state range at the last broadcast (main thread); newcomers get a full snapshot.
         internal readonly HashSet<ulong> StateRecipients = new HashSet<ulong>();
 
+        // FEAT-261123.4: why the last weld / grind attempt did nothing (set by ServerTryWelding / ServerTryGrinding).
+        private Handlers.CycleOutcome _lastWeldIdle = Handlers.CycleOutcome.Other;
+        private Handlers.CycleOutcome _lastGrindIdle = Handlers.CycleOutcome.Other;
+
         // BUG-261123.6: one pull looks at 16 sources at most; a weld miss parks the block for the supply group only once
         // this BaR has seen a full round of empty sources since its last pick.
         private int _EmptyPullSourceVisits;

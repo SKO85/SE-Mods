@@ -294,6 +294,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 _ctx.RunStartTime = TestContext.Now;
                 _ctx.NetStart = NetStats.Take(true); // FEAT-261123.7
                 _ctx.ErrorsAtStart = Logging.ErrorCount;
+                _ctx.CyclesAtStart = CycleStats.Snapshot(); // FEAT-261123.4
                 return;
             }
 
@@ -474,6 +475,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             var methods = _current.Scenario.PerfMethods;
             for (int i = 0; i < methods.Count; i++) _ctx.RecordMethodStats(methods[i]);
             _ctx.RecordNetMetrics();
+            _ctx.RecordCycleMetrics();
         }
 
         private static int CountPassed()

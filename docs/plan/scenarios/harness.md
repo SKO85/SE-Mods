@@ -834,6 +834,12 @@ WeldOnly) flip every 1 s for 20 s (cluster rebuilds, rescans, list swaps mid-sca
 S128's rig with all BaRs switched off / on every 1.5 s for 21 s (claims dropped and retaken, cluster membership
 changing): all 60 welded afterwards, no claim left.
 
+## Standard metrics (every scenario)
+`runS`, `tickAvgMs`, `tickPeakMs`, `simMin`, `simAvg`, budget peaks, `errorsLogged` (mod errors during the run),
+`world.welderSpeed / grinderSpeed / dedicated`, `net.*` (traffic, FEAT-261123.7), and `cycles.total` plus
+`cycles.<Outcome>` in % of all ready BaR cycles (FEAT-261123.4): Worked, WaitingDelivery, NoTargets, InventoryFull,
+NoComponents, Refused, BudgetDeferred, FailCooldown, GridLimit, AllClaimed, Protected, Exhausted, Other.
+
 ## Building blocks for new scenarios
 
 - `RigSpec`: `Bars`, `DamagedArmor` (+ `DamagedBuildPercent`, 1 = intact but tracked), `Armor`, `RowWidth`, `Offset`,

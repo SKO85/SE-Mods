@@ -27,7 +27,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-BUDGET-005 | BUDGET | 3 | Failure cooldown: many BaRs do not bounce off one unweldable block | manual | never |
 | SCN-BUDGET-006 | BUDGET | 4 | Large-grid performance envelope (3000+ blocks, 5 BaRs) | ingame:S08, S43; ingame:S99-S112; unit:TargetSortingTests | never |
 | SCN-BUDGET-007 | BUDGET | 3 | Station vs ship standing still vs ship in motion, ShowArea off/on: cost and work | ingame:S28; ingame:S29; ingame:S30; ingame:S31; ingame:S32; ingame:S33; unit:AreaDrawModeTests | 261122.8 in game |
-| SCN-BUDGET-008 | BUDGET | 3 | Many BaRs on target ships of mixed sizes: weld, grind, mixed; large vs small clusters | ingame:S64; ingame:S65; ingame:S66; ingame:S67; ingame:S68; ingame:S69; ingame:S70 | never |
+| SCN-BUDGET-008 | BUDGET | 3 | Many BaRs on target ships of mixed sizes: weld, grind, mixed; large vs small clusters | ingame:S64; ingame:S65; ingame:S66; ingame:S67; ingame:S68; ingame:S69; ingame:S70; unit:CycleStatsTests | never |
 | SCN-BUDGET-009 | BUDGET | 2 | Speed settings (WorkSpeed, multipliers) and throughput floors | ingame:S79; ingame:S80 | 261122.28 in game |
 | SCN-BUDGET-010 | BUDGET | 2 | Network sync load stays bounded on a dedicated server (settings / state rate and size) | unit:NetStatsTests; ingame:S116; ingame:S117; ingame:S118; ingame:S119; ingame:S120; ingame:S121; ingame:S122; ingame:S123; ingame:S126 | 261123.48 Torch |
 | SCN-BUDGET-011 | BUDGET | 2 | Async and timing robustness: background queue, result handover, grids / settings / power changing mid-scan | unit:AsyncHandlingTests; ingame:S127; ingame:S128; ingame:S129 | 261123.51 Torch |

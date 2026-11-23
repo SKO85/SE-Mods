@@ -156,6 +156,25 @@ namespace SKONanobotBuildAndRepairSystem.Testing
 
         public NetStats.Snapshot NetStart;
 
+        /// <summary>FEAT-261123.4: BaR cycle outcomes at run start.</summary>
+        public long[] CyclesAtStart;
+
+        /// <summary>Share of each BaR cycle outcome since the run started: `cycles.total`, `cycles.<outcome>` in %.</summary>
+        public void RecordCycleMetrics()
+        {
+            if (CyclesAtStart == null) return;
+            var now = CycleStats.Snapshot();
+            long total = 0;
+            for (int i = 0; i < now.Length; i++) total += now[i] - CyclesAtStart[i];
+            Metric("cycles.total", total);
+            if (total <= 0) return;
+            for (int i = 0; i < now.Length; i++)
+            {
+                var n = now[i] - CyclesAtStart[i];
+                if (n > 0) Metric("cycles." + ((CycleOutcome)i).ToString(), 100.0 * n / total);
+            }
+        }
+
         /// <summary>Mod errors logged since the run started (Logging.ErrorCount).</summary>
         public long ErrorsAtStart;
         public long ErrorsSinceStart { get { return SKONanobotBuildAndRepairSystem.Utils.Logging.ErrorCount - ErrorsAtStart; } }

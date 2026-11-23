@@ -47,6 +47,10 @@ namespace SKONanobotBuildAndRepairSystem
 
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             var isFullInventoryAndPicking = State.InventoryFull && State.CurrentTransportIsPick;
+            var cycleCounted = false;
+            var cycleNoWork = false;
+            _lastWeldIdle = Handlers.CycleOutcome.Other;
+            _lastGrindIdle = Handlers.CycleOutcome.Other;
 
             if (ready)
             {
@@ -82,6 +86,8 @@ namespace SKONanobotBuildAndRepairSystem
                             isIdleNoWork = false;
                     }
 
+                    cycleCounted = true;
+                    cycleNoWork = isIdleNoWork;
                     if (!isIdleNoWork)
                     {
                     ServerTryPushInventory();
@@ -185,6 +191,19 @@ namespace SKONanobotBuildAndRepairSystem
                 State.MissingComponents.Clear();
                 State.MissingComponents.RebuildHash();
                 AbortMissingComponentsAggregate();
+            }
+
+            // FEAT-261123.4: what this ready cycle ended with.
+            if (cycleCounted)
+            {
+                Handlers.CycleOutcome outcome;
+                if (welding || grinding || collecting) outcome = Handlers.CycleOutcome.Worked;
+                else if (transporting) outcome = Handlers.CycleOutcome.WaitingDelivery;
+                else if (cycleNoWork) outcome = Handlers.CycleOutcome.NoTargets;
+                else if (State.InventoryFull) outcome = Handlers.CycleOutcome.InventoryFull;
+                else if (_lastWeldIdle != Handlers.CycleOutcome.Other) outcome = _lastWeldIdle;
+                else outcome = _lastGrindIdle;
+                Handlers.CycleStats.Record(outcome);
             }
 
             if (!(welding || grinding || collecting || transporting) && _TransportInventory.CurrentVolume > 0)
