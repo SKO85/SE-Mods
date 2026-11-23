@@ -20,22 +20,27 @@ namespace SKONanobotBuildAndRepairSystem.Testing
     }
 
     /// <summary>
-    /// Test harness HUD (TextHudAPI, like the debug HUD): top right the session's tests as a table (state, run, time,
-    /// note), bottom right the running test. Built on the server by TestRunner; drawn directly in single player /
-    /// on a listen server, sent to the calling client on a dedicated server. Testing variant only.
+    /// Test harness HUD (TextHudAPI, default font like the debug HUD): the session table anchored to the top-right
+    /// corner, the running test anchored to the bottom-right corner. The table arrives as lines with tab-separated
+    /// cells; each column is its own text block at a fixed offset (the default font is not monospaced). Built on the
+    /// server by TestRunner; drawn directly in single player / on a listen server, sent to the calling client on a
+    /// dedicated server. Testing variant only.
     /// </summary>
     internal static class TestHud
     {
         public const ushort MsgId = 40150;
-        private const double Scale = 0.55;
-        private const double Padding = 0.012;
-        private static readonly Vector2D ListOrigin = new Vector2D(0.36, 0.98);
-        private static readonly Vector2D CurrentOrigin = new Vector2D(0.36, -0.52);
-        private static readonly Color BgColor = new Color(0, 0, 0, 170);
+        private const double Scale = 0.7;
+        private const double Padding = 0.014;
+        private const double Edge = 0.985;          // screen edge margin (HUD space -1..1)
+        private const int Columns = 5;
+        // Column offsets in HUD units at Scale 0.7: Test, Run, State, Time, Note.
+        private static readonly double[] ColumnX = { 0.0, 0.085, 0.135, 0.225, 0.31 };
+        private static readonly Color BgColor = new Color(0, 0, 0, 175);
 
-        private static HudAPIv2.HUDMessage _list, _current;
+        private static HudAPIv2.HUDMessage[] _cols;
+        private static HudAPIv2.HUDMessage _current;
         private static HudAPIv2.BillBoardHUDMessage _listBg, _currentBg;
-        private static readonly StringBuilder _listText = new StringBuilder();
+        private static readonly StringBuilder[] _colText = new StringBuilder[Columns];
         private static readonly StringBuilder _currentText = new StringBuilder();
         private static bool _handlerRegistered;
         private static bool _shown;
@@ -115,29 +120,34 @@ namespace SKONanobotBuildAndRepairSystem.Testing
 
         private static bool EnsureCreated()
         {
-            if (_list != null) return true;
+            if (_cols != null) return true;
             if (!HudHandler.IsApiReady) return false;
-            _listBg = NewBackground(ListOrigin);
-            _currentBg = NewBackground(CurrentOrigin);
-            _list = NewText(_listText, ListOrigin);
-            _current = NewText(_currentText, CurrentOrigin);
+            _listBg = NewBackground();
+            _currentBg = NewBackground();
+            _cols = new HudAPIv2.HUDMessage[Columns];
+            for (int i = 0; i < Columns; i++)
+            {
+                _colText[i] = new StringBuilder();
+                _cols[i] = NewText(_colText[i]);
+            }
+            _current = NewText(_currentText);
             return true;
         }
 
-        private static HudAPIv2.BillBoardHUDMessage NewBackground(Vector2D origin)
+        private static HudAPIv2.BillBoardHUDMessage NewBackground()
         {
             var bg = new HudAPIv2.BillBoardHUDMessage(
-                Material: MyStringId.GetOrCompute("Square"), Origin: origin, BillBoardColor: BgColor, Scale: 1d,
+                Material: MyStringId.GetOrCompute("Square"), Origin: Vector2D.Zero, BillBoardColor: BgColor, Scale: 1d,
                 Width: 0.01f, Height: 0.01f, HideHud: false, Shadowing: true, Blend: BlendTypeEnum.PostPP);
             bg.Visible = false;
             return bg;
         }
 
-        private static HudAPIv2.HUDMessage NewText(StringBuilder text, Vector2D origin)
+        private static HudAPIv2.HUDMessage NewText(StringBuilder text)
         {
             var msg = new HudAPIv2.HUDMessage(
-                Message: text, Origin: origin, Scale: Scale, HideHud: false, Shadowing: true, ShadowColor: Color.Black,
-                Blend: BlendTypeEnum.PostPP, Font: "monospace");
+                Message: text, Origin: Vector2D.Zero, Scale: Scale, HideHud: false, Shadowing: true, ShadowColor: Color.Black,
+                Blend: BlendTypeEnum.PostPP);
             msg.InitialColor = Color.White;
             msg.Visible = false;
             return msg;
@@ -146,45 +156,100 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public static void Show(string list, string current)
         {
             if (!EnsureCreated()) return;
-            _listText.Clear().Append(list ?? "");
+            FillColumns(list ?? "");
             _currentText.Clear().Append(current ?? "");
-            Fit(_list, _listBg, ListOrigin, _listText.Length > 0);
-            Fit(_current, _currentBg, CurrentOrigin, _currentText.Length > 0);
+            LayoutList();
+            LayoutCurrent();
             _shown = true;
+        }
+
+        /// <summary>Lines with tab-separated cells -> one text block per column (lines without tabs go to column 0).</summary>
+        private static void FillColumns(string list)
+        {
+            for (int c = 0; c < Columns; c++) _colText[c].Clear();
+            var lines = list.Split('\n');
+            for (int l = 0; l < lines.Length; l++)
+            {
+                if (l == lines.Length - 1 && lines[l].Length == 0) break;
+                var cells = lines[l].Split('\t');
+                for (int c = 0; c < Columns; c++)
+                {
+                    if (c < cells.Length) _colText[c].Append(cells[c]);
+                    _colText[c].Append('\n');
+                }
+            }
+        }
+
+        private static void LayoutList()
+        {
+            var visible = _colText[0].Length > 0;
+            for (int c = 0; c < Columns; c++) _cols[c].Visible = visible;
+            _listBg.Visible = visible;
+            if (!visible) return;
+            // Measure: width = widest column end (offset + its text), height = column 0 (it has every line).
+            double width = 0, height = 0;
+            for (int c = 0; c < Columns; c++)
+            {
+                _cols[c].Origin = new Vector2D(0, 0);
+                var size = _cols[c].GetTextLength();
+                var end = ColumnX[c] + Math.Abs(size.X);
+                if (end > width) width = end;
+                if (Math.Abs(size.Y) > height) height = Math.Abs(size.Y);
+            }
+            // Anchor the panel's top-right corner to the screen's top-right corner.
+            var left = Edge - Padding - width;
+            var top = Edge - Padding;
+            for (int c = 0; c < Columns; c++) _cols[c].Origin = new Vector2D(left + ColumnX[c], top);
+            SetBackground(_listBg, left, top, width, height);
+        }
+
+        private static void LayoutCurrent()
+        {
+            var visible = _currentText.Length > 0;
+            _current.Visible = visible;
+            _currentBg.Visible = visible;
+            if (!visible) return;
+            _current.Origin = new Vector2D(0, 0);
+            var size = _current.GetTextLength();
+            var width = Math.Abs(size.X);
+            var height = Math.Abs(size.Y);
+            // Anchor the panel's bottom-right corner to the screen's bottom-right corner.
+            var left = Edge - Padding - width;
+            var top = -Edge + Padding + height;
+            _current.Origin = new Vector2D(left, top);
+            SetBackground(_currentBg, left, top, width, height);
+        }
+
+        private static void SetBackground(HudAPIv2.BillBoardHUDMessage bg, double left, double top, double width, double height)
+        {
+            var w = width + Padding * 2;
+            var h = height + Padding * 2;
+            bg.Origin = new Vector2D(left - Padding + w / 2, top + Padding - h / 2);
+            bg.Width = (float)w;
+            bg.Height = (float)h;
         }
 
         public static void Hide()
         {
             if (!_shown) return;
-            if (_list != null) { _list.Visible = false; _listBg.Visible = false; }
+            if (_cols != null) for (int c = 0; c < Columns; c++) _cols[c].Visible = false;
+            if (_listBg != null) _listBg.Visible = false;
             if (_current != null) { _current.Visible = false; _currentBg.Visible = false; }
             _shown = false;
-        }
-
-        private static void Fit(HudAPIv2.HUDMessage text, HudAPIv2.BillBoardHUDMessage bg, Vector2D origin, bool visible)
-        {
-            text.Visible = visible;
-            bg.Visible = visible;
-            if (!visible) return;
-            var size = text.GetTextLength();
-            var w = Math.Abs(size.X) + Padding * 2;
-            var h = Math.Abs(size.Y) + Padding * 2;
-            bg.Origin = new Vector2D(origin.X - Padding + w / 2, origin.Y + Padding - h / 2);
-            bg.Width = (float)w;
-            bg.Height = (float)h;
         }
 
         private static void Destroy()
         {
             try
             {
-                if (_list != null) { _list.Visible = false; _list.DeleteMessage(); }
+                if (_cols != null) for (int c = 0; c < Columns; c++) { _cols[c].Visible = false; _cols[c].DeleteMessage(); }
                 if (_current != null) { _current.Visible = false; _current.DeleteMessage(); }
                 if (_listBg != null) { _listBg.Visible = false; _listBg.DeleteMessage(); }
                 if (_currentBg != null) { _currentBg.Visible = false; _currentBg.DeleteMessage(); }
             }
             catch { }
-            _list = _current = null;
+            _cols = null;
+            _current = null;
             _listBg = _currentBg = null;
             _shown = false;
         }

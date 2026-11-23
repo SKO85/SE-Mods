@@ -415,11 +415,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             return s.Length <= max ? s : s.Substring(0, max - 1) + "~";
         }
 
+        // Cells are tab-separated; TestHud draws each column as its own text block (default font is not monospaced).
         private static void HudRow(string id, string run, string color, string state, string time, string note)
         {
-            _hudList.Append("<color=white>").Append(Pad(id, 6)).Append(Pad(run, 5))
-                .Append(color).Append(Pad(state, 7))
-                .Append("<color=white>").Append(Pad(time, 8))
+            _hudList.Append("<color=white>").Append(id).Append('\t')
+                .Append("<color=white>").Append(run).Append('\t')
+                .Append(color).Append(state).Append('\t')
+                .Append("<color=white>").Append(time).Append('\t')
                 .Append("<color=180,180,180>").Append(Short(note, 40)).Append('\n');
         }
 
@@ -427,8 +429,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         {
             _hudList.Clear();
             _hudList.Append("<color=130,180,230>NANOBOT TESTS  ").Append(_session).Append('\n');
-            _hudList.Append("<color=160,160,160>").Append(Pad("Test", 6)).Append(Pad("Run", 5)).Append(Pad("State", 7))
-                .Append(Pad("Time", 8)).Append("Note").Append('\n');
+            _hudList.Append("<color=160,160,160>Test\t<color=160,160,160>Run\t<color=160,160,160>State\t<color=160,160,160>Time\t<color=160,160,160>Note\n");
 
             var running = _current.Scenario != null ? 1 : 0;
             var queuedShown = Math.Min(_queue.Count, 3);
