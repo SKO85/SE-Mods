@@ -350,6 +350,9 @@ namespace SKONanobotBuildAndRepairSystem
         // BUG-136: round-robin cursor for the capped source walk.
         private int _NextPullSourceIdx;
 
+        // FEAT-261123.8: players in state range at the last broadcast (main thread); newcomers get a full snapshot.
+        internal readonly HashSet<ulong> StateRecipients = new HashSet<ulong>();
+
         // BUG-261123.6: one pull looks at 16 sources at most; a weld miss parks the block for the supply group only once
         // this BaR has seen a full round of empty sources since its last pick.
         private int _EmptyPullSourceVisits;

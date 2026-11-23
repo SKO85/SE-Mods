@@ -53,7 +53,7 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | `@perf` | Load, large grids, scan cost by grid size, logistics at scale, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S112, S119-S123 |
 | `@companion` | PB API and the companion script | S09, S71, S81-S83 |
 | `@config` | Admin settings (Fixed / Default, limits, checks) | S46-S53 |
-| `@sync` | Network load on servers: settings / state sync rate and size (run on Torch with a client) | S43, S70, S106, S111, S116-S123 |
+| `@sync` | Network load on servers: settings / state sync rate and size (run on Torch with a client) | S43, S70, S106, S111, S116-S123, S126 |
 | `@priority` | Weld / grind priority lists | S14-S16 |
 | `@collect` | Collecting floating objects | S10 |
 
@@ -222,6 +222,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S123 | Traffic / spikes: 10 BaRs welding 100 + 1,000 + 3,000 + 8,000-block grids at once | BUDGET-010 | ~1 min | never |
 | S124 | Projection with weld option Functional: placed and welded to functional, not full | WELD-003, WELD-002 | <1 min | never |
 | S125 | Projection with weld option Skeleton: placed, not welded further | WELD-003, WELD-002 | <1 min | never |
+| S126 | Sync: 5 BaRs working 10 km from every player send them no state | BUDGET-010 | <1 min | never |
 
 ## Scenarios
 
@@ -809,6 +810,11 @@ reached functional, fewer plates used than full welding would. **Records** `atFu
 ### S125
 **Proves** weld option Skeleton on projections: all 10 placed, none welded further, SteelPlate conserved (rig +
 construction stockpiles).
+
+### S126
+**Proves** BaR state goes only to players who have the BaR loaded (FEAT-261123.8). 5 BaRs repair 20 damaged blocks
+10 km from the caller (beyond the sync distance). **Pass** all welded; with a remote player (Torch): 0 bytes of state
+sent to players (`stateWireBytes`), `net.state.farSkipped` > 0.
 
 ## Building blocks for new scenarios
 

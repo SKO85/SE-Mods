@@ -212,6 +212,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             Metric("net.state.perBarPerS", m / (double)bars / secs);
             Metric("net.state.avgBytes", m > 0 ? b / (double)m : 0.0);
             Metric("net.state.maxBytes", (long)mx);
+            var st = NetStats.Index(40104);
+            Metric("net.state.farSkipped", _netEnd.SkippedFar[st] - NetStart.SkippedFar[st]);
             NetSent(40102, out m, out b, out w, out mx);
             Metric("net.settings.msgs", m);
             Metric("net.settings.maxBytes", (long)mx);

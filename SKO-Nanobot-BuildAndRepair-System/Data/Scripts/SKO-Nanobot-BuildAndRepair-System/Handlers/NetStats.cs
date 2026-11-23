@@ -16,6 +16,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static readonly int[] _maxSent = new int[Size];
         private static readonly long[] _recvMsgs = new long[Size];
         private static readonly long[] _recvBytes = new long[Size];
+        private static readonly long[] _skippedFar = new long[Size];
 
         public sealed class Snapshot
         {
@@ -25,6 +26,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             public readonly int[] MaxSent = new int[Size];
             public readonly long[] RecvMsgs = new long[Size];
             public readonly long[] RecvBytes = new long[Size];
+            public readonly long[] SkippedFar = new long[Size];
         }
 
         public static int Index(ushort msgId)
@@ -63,6 +65,14 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             }
         }
 
+        /// <summary>FEAT-261123.8: players left out of a broadcast because they are out of range.</summary>
+        public static void SkippedFar(ushort msgId, int players)
+        {
+            var i = Index(msgId);
+            if (i < 0) return;
+            lock (_lock) { _skippedFar[i] += players; }
+        }
+
         public static void Received(ushort msgId, int bytes)
         {
             var i = Index(msgId);
@@ -88,6 +98,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     s.MaxSent[i] = _maxSent[i];
                     s.RecvMsgs[i] = _recvMsgs[i];
                     s.RecvBytes[i] = _recvBytes[i];
+                    s.SkippedFar[i] = _skippedFar[i];
                     if (resetMax) _maxSent[i] = 0;
                 }
             }
@@ -98,7 +109,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             lock (_lock)
             {
-                for (int i = 0; i < Size; i++) { _sentMsgs[i] = _sentBytes[i] = _wireBytes[i] = _recvMsgs[i] = _recvBytes[i] = 0; _maxSent[i] = 0; }
+                for (int i = 0; i < Size; i++) { _sentMsgs[i] = _sentBytes[i] = _wireBytes[i] = _recvMsgs[i] = _recvBytes[i] = _skippedFar[i] = 0; _maxSent[i] = 0; }
             }
         }
 

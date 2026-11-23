@@ -6,6 +6,7 @@ using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
 using VRage.Game.ModAPI;
+using VRageMath;
 
 namespace SKONanobotBuildAndRepairSystem.Handlers
 {
@@ -444,6 +445,75 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             return MyAPIGateway.Multiplayer.SendMessageToOthers(msgId, bytes, true);
         }
 
+        // FEAT-261123.8: players are refreshed every 2 s; positions are read per send (main thread).
+        private static readonly List<IMyPlayer> _players = new List<IMyPlayer>();
+        private static readonly List<ulong> _stateNewcomers = new List<ulong>();
+        private static TimeSpan _playersRefreshAt = TimeSpan.Zero;
+        private const double StateRangeMargin = 500.0;
+
+        /// <summary>Range in which a player gets BaR state: the world's sync distance (grids beyond it are not loaded on
+        /// that client, so state for them is thrown away) plus a margin.</summary>
+        internal static double StateRange(int syncDistance)
+        {
+            return (syncDistance > 0 ? syncDistance : 3000) + StateRangeMargin;
+        }
+
+        internal static bool InStateRange(Vector3D player, Vector3D bar, double range)
+        {
+            return Vector3D.DistanceSquared(player, bar) <= range * range;
+        }
+
+        /// <summary>
+        /// FEAT-261123.8: block state to players within StateRange of the BaR instead of everyone. A player who comes
+        /// into range gets a full snapshot (they missed the deltas while away).
+        /// </summary>
+        private static bool SendStateToNearby(NanobotSystem system, byte[] bytes)
+        {
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            if (now >= _playersRefreshAt)
+            {
+                _players.Clear();
+                MyAPIGateway.Players.GetPlayers(_players);
+                _playersRefreshAt = now + TimeSpan.FromSeconds(2);
+            }
+            var settings = MyAPIGateway.Session.SessionSettings;
+            var range = StateRange(settings != null ? settings.SyncDistance : 0);
+            var barPos = system.Entity.GetPosition();
+            var myId = MyAPIGateway.Multiplayer.MyId;
+            var recipients = system.StateRecipients;
+            _stateNewcomers.Clear();
+            var sent = 0;
+            var far = 0;
+            var ok = true;
+            for (int i = 0; i < _players.Count; i++)
+            {
+                var p = _players[i];
+                if (p == null || p.IsBot || p.SteamUserId == 0 || p.SteamUserId == myId) continue;
+                if (!InStateRange(p.GetPosition(), barPos, range))
+                {
+                    far++;
+                    recipients.Remove(p.SteamUserId);
+                    continue;
+                }
+                if (!recipients.Contains(p.SteamUserId))
+                {
+                    _stateNewcomers.Add(p.SteamUserId);
+                    continue;
+                }
+                ok = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_STATE_FROM_SERVER, bytes, p.SteamUserId, true) && ok;
+                sent++;
+            }
+            NetStats.Sent(MSGID_BLOCK_STATE_FROM_SERVER, bytes.Length, sent);
+            if (far > 0) NetStats.SkippedFar(MSGID_BLOCK_STATE_FROM_SERVER, far);
+            for (int i = 0; i < _stateNewcomers.Count; i++)
+            {
+                recipients.Add(_stateNewcomers[i]);
+                MsgBlockStateSend(_stateNewcomers[i], system); // full snapshot
+            }
+            _stateNewcomers.Clear();
+            return ok;
+        }
+
         private static bool SendToServer(ushort msgId, byte[] bytes)
         {
             NetStats.Sent(msgId, bytes.Length, 1);
@@ -594,7 +664,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 var res = false;
                 if (steamId == 0)
                 {
-                    res = SendToOthers(MSGID_BLOCK_STATE_FROM_SERVER, bytes);
+                    // FEAT-261123.8: only players who have the BaR loaded (within sync distance).
+                    res = SendStateToNearby(system, bytes);
                 }
                 else
                 {

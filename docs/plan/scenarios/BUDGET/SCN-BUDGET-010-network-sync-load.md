@@ -5,7 +5,7 @@
 ## Preconditions
 - Dedicated server (Torch) with the -Testing mod and an admin client connected (the client receives the traffic).
 ## Steps
-1. `/nanobars test run @sync` (S43, S70, S106, S111, S116-S123), optionally with `detail`.
+1. `/nanobars test run @sync` (S43, S70, S106, S111, S116-S123, S126), optionally with `detail`.
 ## Expected outcome
 - Settings broadcasts at most one per BaR per second, even when scripts / timers change settings faster (S116).
 - State messages at most one per BaR per second; the largest (full target list) <= 64 KB (S117).
@@ -23,6 +23,7 @@ ingame:S120
 ingame:S121
 ingame:S122
 ingame:S123
+ingame:S126
 ## Last verified
 v2.5.7 build 261123.48 2026-11-23 — Torch, 1 client: @sync 20/20 pass; largest state message 2.1 KB, idle 0 state
 sends, settings spam held to 0.89 per BaR per s; 100 working BaRs ~32 KB/s per player (FEAT-261123.7).
