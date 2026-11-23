@@ -1,6 +1,6 @@
 # FEAT-069: Public Mod API for initializing BaR settings from other mods
 
-## Status: Proposed
+## Status: Proposed (after v2.5.7)
 ## Priority: Medium
 ## Version: TBD
 
@@ -93,3 +93,6 @@ Ship a ready-to-copy `BarModApi.cs` in `docs/pages/Build-and-Repair-System/ModAP
 4. **Unknown / invalid input:** `api.Set("NonExistentSetting", "5")` returns `"unknown-setting"`; `api.Set("Range", "notanumber")` returns the validator error from `IntSetting.Set`.
 5. **Client sync:** DS + remote client. After a server-side `SetSetting`, the custom info panel of a placed BaR on the client reflects the new power number within ~1–2 s (validates `BroadcastModSettings` + per-BaR `SettingsChanged()`).
 6. **Unregister:** quit to main menu — no unload exceptions logged.
+## Owner decision (2026-11-23)
+After v2.5.7, as its own release with documentation and an example mod; v2.5.7 stays a fix / performance release.
+
