@@ -28,7 +28,7 @@ The scenario catalogue (`SCN-<AREA>-NNN`, permanent, coverage tracked per file) 
 | REVIEW-261023.1 | Pre-release review of v2.5.6 (mod + companion script) + external PRs #147/#148 (14 findings → BUG-261023.1..14: 2 High, 5 Medium, 7 Low; 3 dismissed with reasons) | 2026-10-23 | v2.5.6 | Done |
 | REVIEW-261122.1 | SE 1.211.018 projection-welding regression — GitHub #149/#150 + PR #151 (8 findings → BUG-261122.1..4: 1 Critical, 1 High, 1 Medium, 1 Low; part 2 of the PR deferred/dismissed with reasons) | 2026-11-22 | v2.5.6 | Done |
 | REVIEW-261122.2 | Test coverage audit: features vs catalogue, unit tests and harness (14 findings to prioritise; companion script / PB API covered since 261122.17) | 2026-11-22 | v2.5.6 | TODO |
-| REVIEW-261123.1 | Performance review from profiler measurements (10 findings -> BUG-261123.3..6, FEAT-261123.1..5; 1 dismissed) | 2026-11-23 | v2.5.7 | TODO |
+| REVIEW-261123.1 | Performance review from profiler measurements (10 findings -> BUG-261123.3..6, FEAT-261123.1..5; 1 dismissed) | 2026-11-23 | v2.5.7 | Done |
 
 ## Bugs
 
@@ -255,7 +255,7 @@ These were identified and fixed on the `fix/v2.5.1` branch — see MEMORY for de
 | FEAT-261123.2 | Medium | v2.5.7+ | mod (see ticket) | Done | REVIEW-261123.1: Keep per-grid scan results until the grid changes — rejected (background-only gain, staleness risk) |
 | FEAT-261123.3 | Low | v2.5.7+ | mod (see ticket) | Done | REVIEW-261123.1: Pull more components per conveyor transfer — on hold: re-measure after BUG-261123.6 — done 261123.54: -40 % conveyor transfers (S64) |
 | FEAT-261123.4 | Medium | v2.5.7+ | mod (see ticket) | Done | REVIEW-261123.1: Profiler markers and measurement gaps — owner: idle reasons + scan split, rest closed |
-| FEAT-261123.5 | Low | v2.5.7+ | mod (see ticket) | TODO | REVIEW-261123.1: Small performance items — owner: DS info + reputation only |
+| FEAT-261123.5 | Low | v2.5.7+ | mod (see ticket) | Done | REVIEW-261123.1: Small performance items — owner: DS info + reputation only — DS terminal info skipped, reputation batched |
 | FEAT-261123.6 | Medium | v2.5.7 | `NanobotSystem.Grinding.cs`, `SyncBlockState`, `CustomInfo`, Localization | Done | Steam: terminal shows "Grinding blocked by a shield / protection mod" when a veto stops grinding |
 | FEAT-261123.7 | Medium | v2.5.7 | `Handlers/NetStats.cs`, `NetworkMessagingHandler`, harness | Done | Network traffic counters per message type + sync-load scenarios S116 / S117 (`@sync`) for Torch |
 | FEAT-261123.8 | Medium | v2.5.7+ | `NetworkMessagingHandler`, `NanobotSystem.Update.cs` (TryTransmitState) | Done | Send BaR state only to players near the BaR (or with its terminal open); far players get it on request — done 261123.50: far BaRs send 0 state bytes (S126 Torch) |

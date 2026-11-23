@@ -31,6 +31,7 @@ nav_order: 0
 ## Servers
 
 - **Less network traffic on servers.** A BaR now only sends its status to players who are near it (within the world's sync distance). Players at another base no longer receive updates for BaRs they can't even see. A working BaR costs each nearby player about 0.5 KB/s; idle BaRs send nothing.
+- Dedicated servers no longer build BaR terminal texts nobody reads, and reputation loss from grinding other factions is applied in small batches instead of on every grind (same total).
 
 ## Docs
 
