@@ -50,6 +50,7 @@ namespace SKONanobotBuildAndRepairSystem
             var lockOnFound = false;
             var weldSkipped = false;
             var weldBudgetDeferred = false;
+            var weldNoPower = false;
             // BUG-122: lock-acquire vs in-lock timers (background scan contention).
             var tsLockAcquire = 0L;
             var tsInLock = 0L;
@@ -65,7 +66,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
 
             var hasRequiredPower = PowerHelper.HasRequiredElectricPower(this);
-            if (!hasRequiredPower) return; //No power -> nothing to do
+            if (!hasRequiredPower) { weldNoPower = true; return; } //No power -> nothing to do
 
             var tsBeforeLock = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
             lock (State.PossibleWeldTargets)
@@ -472,7 +473,8 @@ namespace SKONanobotBuildAndRepairSystem
                 // FEAT-261123.4: remember why this attempt did nothing.
                 if (!welding && !transporting)
                     _lastWeldIdle = Handlers.CycleStats.WeldIdleReason(componentFailures, skippedByRefused, weldBudgetDeferred,
-                        skippedByFailCooldown, skippedByGridLimit, skippedByAssign, weldSkipped);
+                        skippedByFailCooldown, skippedByGridLimit, skippedByAssign, weldSkipped,
+                        weldNoPower, droppedOutOfArea, checkedByWeldable);
                 if (profilerTs != 0L)
                 {
                     var _welding = welding;

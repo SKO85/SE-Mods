@@ -18,6 +18,9 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             Assert.Equal(CycleOutcome.AllClaimed, CycleStats.WeldIdleReason(0, 0, false, 0, 0, 5, true));
             Assert.Equal(CycleOutcome.Exhausted, CycleStats.WeldIdleReason(0, 0, false, 0, 0, 0, true));
             Assert.Equal(CycleOutcome.Other, CycleStats.WeldIdleReason(0, 0, false, 0, 0, 0, false));
+            Assert.Equal(CycleOutcome.NoPower, CycleStats.WeldIdleReason(1, 1, true, 5, 5, 5, true, noPower: true));
+            Assert.Equal(CycleOutcome.OutOfArea, CycleStats.WeldIdleReason(0, 0, false, 0, 0, 0, true, outOfArea: true));
+            Assert.Equal(CycleOutcome.Exhausted, CycleStats.WeldIdleReason(0, 0, false, 0, 0, 0, false, checkedNotWelded: 3));
         }
 
         [Fact]
@@ -30,6 +33,8 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             Assert.Equal(CycleOutcome.AllClaimed, CycleStats.GrindIdleReason(0, false, false, 0, 5, true));
             Assert.Equal(CycleOutcome.Exhausted, CycleStats.GrindIdleReason(0, false, false, 0, 0, true));
             Assert.Equal(CycleOutcome.Other, CycleStats.GrindIdleReason(0, false, false, 0, 0, false));
+            Assert.Equal(CycleOutcome.NoPower, CycleStats.GrindIdleReason(1, true, true, 5, 5, true, noPower: true));
+            Assert.Equal(CycleOutcome.OutOfArea, CycleStats.GrindIdleReason(0, false, false, 0, 0, true, outOfArea: 1));
         }
 
         [Fact]

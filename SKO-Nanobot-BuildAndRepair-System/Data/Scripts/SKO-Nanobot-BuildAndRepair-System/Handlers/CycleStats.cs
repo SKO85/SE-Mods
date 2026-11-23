@@ -14,7 +14,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         GridLimit,           // MaxSystemsPerTargetGrid reached on the listed grids
         AllClaimed,          // listed blocks claimed by other BaRs
         Protected,           // grind target in a shield / safe zone
-        Exhausted,           // nothing grindable / weldable left in the list (exhausted skip)
+        Exhausted,           // nothing grindable / weldable left in the list (exhausted skip, none weldable)
+        NoPower,             // not enough power for the work
+        OutOfArea,           // the chosen target left the working area (dropped)
         Other,
         Count
     }
@@ -45,26 +47,32 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         }
 
         /// <summary>Why a weld attempt that neither welded nor started a delivery did nothing (most specific first).</summary>
-        public static CycleOutcome WeldIdleReason(int componentFailures, int refused, bool budgetDeferred, int failCooldown, int gridLimit, int claimed, bool exhausted)
+        public static CycleOutcome WeldIdleReason(int componentFailures, int refused, bool budgetDeferred, int failCooldown, int gridLimit, int claimed, bool exhausted,
+            bool noPower = false, bool outOfArea = false, int checkedNotWelded = 0)
         {
+            if (noPower) return CycleOutcome.NoPower;
             if (componentFailures > 0) return CycleOutcome.NoComponents;
             if (refused > 0) return CycleOutcome.Refused;
             if (budgetDeferred) return CycleOutcome.BudgetDeferred;
             if (failCooldown > 0) return CycleOutcome.FailCooldown;
             if (gridLimit > 0) return CycleOutcome.GridLimit;
             if (claimed > 0) return CycleOutcome.AllClaimed;
-            if (exhausted) return CycleOutcome.Exhausted;
+            if (outOfArea) return CycleOutcome.OutOfArea;
+            if (exhausted || checkedNotWelded > 0) return CycleOutcome.Exhausted;
             return CycleOutcome.Other;
         }
 
         /// <summary>Why a grind attempt did nothing (most specific first).</summary>
-        public static CycleOutcome GrindIdleReason(int refused, bool protectedTarget, bool budgetDeferred, int gridLimit, int claimed, bool exhausted)
+        public static CycleOutcome GrindIdleReason(int refused, bool protectedTarget, bool budgetDeferred, int gridLimit, int claimed, bool exhausted,
+            bool noPower = false, int outOfArea = 0)
         {
+            if (noPower) return CycleOutcome.NoPower;
             if (refused > 0) return CycleOutcome.Refused;
             if (protectedTarget) return CycleOutcome.Protected;
             if (budgetDeferred) return CycleOutcome.BudgetDeferred;
             if (gridLimit > 0) return CycleOutcome.GridLimit;
             if (claimed > 0) return CycleOutcome.AllClaimed;
+            if (outOfArea > 0) return CycleOutcome.OutOfArea;
             if (exhausted) return CycleOutcome.Exhausted;
             return CycleOutcome.Other;
         }

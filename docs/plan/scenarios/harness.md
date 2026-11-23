@@ -848,7 +848,8 @@ its `tickPeakMs` is the game's compiler, not the mod (mod methods stay < 0.3 ms)
 `runS`, `tickAvgMs`, `tickPeakMs`, `simMin`, `simAvg`, budget peaks, `errorsLogged` (mod errors during the run),
 `world.welderSpeed / grinderSpeed / dedicated`, `net.*` (traffic, FEAT-261123.7), and `cycles.total` plus
 `cycles.<Outcome>` in % of all ready BaR cycles (FEAT-261123.4): Worked, WaitingDelivery, NoTargets, InventoryFull,
-NoComponents, Refused, BudgetDeferred, FailCooldown, GridLimit, AllClaimed, Protected, Exhausted, Other.
+NoComponents, Refused, BudgetDeferred, FailCooldown, GridLimit, AllClaimed, Protected, Exhausted, NoPower, OutOfArea,
+Other.
 
 ## Building blocks for new scenarios
 

@@ -38,6 +38,7 @@ namespace SKONanobotBuildAndRepairSystem
             var deadRemoved = 0;
             var grindBudgetDeferred = false;
             var grindProtected = false;
+            var grindNoPower = false;
             var loopSkipped = false;
             // FEAT-261123.4: sub-timers for the work outside the target-list lock.
             long tsMark, tsPower = 0L, tsClaim = 0L, tsArea = 0L, tsProtect = 0L, tsSlot = 0L, tsDoGrind = 0L, tsRemoveAll = 0L, tsRelease = 0L, tsRep = 0L;
@@ -52,7 +53,7 @@ namespace SKONanobotBuildAndRepairSystem
             tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
             var hasPower = PowerHelper.HasRequiredElectricPower(this);
             if (tsMark != 0L) tsPower += Stopwatch.GetTimestamp() - tsMark;
-            if (!hasPower) return; //No power -> nothing to do
+            if (!hasPower) { grindNoPower = true; return; } //No power -> nothing to do
 
             var tsBeforeLock = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
             lock (State.PossibleGrindTargets)
@@ -310,7 +311,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // FEAT-261123.4: remember why this attempt did nothing.
                 if (!grinding && !transporting)
                     _lastGrindIdle = Handlers.CycleStats.GrindIdleReason(skippedByRefused, grindProtected, grindBudgetDeferred,
-                        skippedByGridLimit, skippedByAssign, loopSkipped);
+                        skippedByGridLimit, skippedByAssign, loopSkipped, grindNoPower, skippedByOutOfArea);
                 if (profilerTs != 0L)
                 {
                     var _grinding = grinding;
