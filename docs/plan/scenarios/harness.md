@@ -224,9 +224,9 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S124 | Projection with weld option Functional: placed and welded to functional, not full | WELD-003, WELD-002 | <1 min | never |
 | S125 | Projection with weld option Skeleton: placed, not welded further | WELD-003, WELD-002 | <1 min | never |
 | S126 | Sync: 5 BaRs working 10 km from every player send them no state | BUDGET-010 | <1 min | 261123.50 Torch — 20/20 welded, 0 state bytes to the client |
-| S127 | Races: target grids deleted / spawned every 3 s while BaRs scan and weld | BUDGET-011 | ~1 min | never |
-| S128 | Races: SearchMode / WorkMode flipped every 1 s while 10 BaRs weld | BUDGET-011 | ~1 min | never |
-| S129 | Races: 10 BaRs switched off / on every 1.5 s while welding | BUDGET-011 | ~1 min | never |
+| S127 | Races: target grids deleted / spawned every 3 s while BaRs scan and weld | BUDGET-011 | ~1 min | 261123.51 Torch — 6 deleted / 9 spawned, done 24.3 s, 0 errors |
+| S128 | Races: SearchMode / WorkMode flipped every 1 s while 10 BaRs weld | BUDGET-011 | ~1 min | 261123.51 Torch — 21 flips, done 21.0 s, 0 errors |
+| S129 | Races: 10 BaRs switched off / on every 1.5 s while welding | BUDGET-011 | ~1 min | 261123.51 Torch — 14 toggles, done 24.7 s, 0 claims left |
 
 ## Scenarios
 

@@ -21,6 +21,7 @@ ingame:S127
 ingame:S128
 ingame:S129
 ## Last verified
-never
+v2.5.7 build 261123.51 2026-11-23 — Torch: @races 9/9 pass, 0 errors logged, 0 claims left; S127 6 grids deleted /
+9 spawned, done at 24.3 s; S128 21 flips, done 21.0 s; S129 14 toggles, done 24.7 s; unit AsyncHandlingTests green.
 ## Related
 BUG-260610.15 (unload drain), BUG-260511.15 (fresh cluster results), FEAT-261122.4
