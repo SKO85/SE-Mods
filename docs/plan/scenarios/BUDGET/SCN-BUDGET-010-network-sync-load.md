@@ -15,6 +15,7 @@
 State sends ~0.37 per BaR per s while working (Torch, S43 / S70, 261123.42); send cost ~0.2 ms avg.
 ## Coverage
 unit:NetStatsTests
+unit:StateRangeTests (range, world-reload cache reset)
 ingame:S116
 ingame:S117
 ingame:S118

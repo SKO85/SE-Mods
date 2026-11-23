@@ -33,5 +33,18 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             Assert.False(InRange(new Vector3D(1000, 0, 3600), bar, 3500));
             Assert.False(InRange(new Vector3D(1000, 0, -10000), bar, 3500));
         }
+
+        [Fact]
+        public void WorldReload_ClearsThePlayerCacheAndRefreshDeadline()
+        {
+            // PR #153 review: a refresh deadline from a world with more play time blocked the refresh in the next one.
+            var at = typeof(NetworkMessagingHandler).GetField("_playersRefreshAt", BindingFlags.NonPublic | BindingFlags.Static);
+            var players = (System.Collections.IList)typeof(NetworkMessagingHandler).GetField("_players", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+            at.SetValue(null, System.TimeSpan.FromHours(5));
+            players.Add(null);
+            M("ResetStateRecipients").Invoke(null, null);
+            Assert.Equal(System.TimeSpan.Zero, (System.TimeSpan)at.GetValue(null));
+            Assert.Equal(0, players.Count);
+        }
     }
 }

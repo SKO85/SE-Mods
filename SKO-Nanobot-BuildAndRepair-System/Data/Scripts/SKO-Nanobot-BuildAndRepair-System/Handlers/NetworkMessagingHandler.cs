@@ -33,6 +33,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             if (_registered || MyAPIGateway.Multiplayer == null || MyAPIGateway.Utilities == null)
                 return;
 
+            ResetStateRecipients();
+
             if (MyAPIGateway.Session.IsServer)
             {
                 MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(MSGID_MOD_DATAREQUEST, ServerMsgDataRequestReceived);
@@ -65,6 +67,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             // with the flag stuck true made the next world's Register() a no-op
             // (same pattern as BUG-260610.27 in DamageHandler/SafeZoneHandler).
             _registered = false;
+            ResetStateRecipients();
 
             if (MyAPIGateway.Multiplayer == null || MyAPIGateway.Utilities == null || MyAPIGateway.Session == null)
                 return;
@@ -450,6 +453,15 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         private static readonly List<ulong> _stateNewcomers = new List<ulong>();
         private static TimeSpan _playersRefreshAt = TimeSpan.Zero;
         private const double StateRangeMargin = 500.0;
+
+        /// <summary>Statics survive a world reload in the same process: drop the old world's players and refresh
+        /// deadline (its play time can be far ahead of the new world's).</summary>
+        internal static void ResetStateRecipients()
+        {
+            _players.Clear();
+            _stateNewcomers.Clear();
+            _playersRefreshAt = TimeSpan.Zero;
+        }
 
         /// <summary>Range in which a player gets BaR state: the world's sync distance (grids beyond it are not loaded on
         /// that client, so state for them is thrown away) plus a margin.</summary>
