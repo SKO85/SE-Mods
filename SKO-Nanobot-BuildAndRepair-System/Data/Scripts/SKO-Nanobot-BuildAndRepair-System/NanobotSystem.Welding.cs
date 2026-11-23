@@ -38,12 +38,19 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByGridLimit = 0;
             var skippedByAssign = 0;
             var skippedByFailCooldown = 0;
+            var skippedByRefused = 0;
             var componentFailures = 0;
+            // BUG-261123.8: grids where the game refused the weld (safe zone / protection), for the terminal.
+            State.WeldBlockedGrids = _weldRefusedGrids.Count > 0 ? CountWeldRefused() : 0;
+            // BUG-261123.1: failure marks are shared only within this BaR's supply (logical grid group).
+            var supplyGroup = _Welder.CubeGrid != null ? (object)_Welder.CubeGrid.GetGridGroup(GridLinkTypeEnum.Logical) : null;
             var totalComponentChecks = 0;
             var lookingForNextChecked = 0;
             var droppedOutOfArea = false;
             var lockOnFound = false;
             var weldSkipped = false;
+            var weldBudgetDeferred = false;
+            var weldNoPower = false;
             // BUG-122: lock-acquire vs in-lock timers (background scan contention).
             var tsLockAcquire = 0L;
             var tsInLock = 0L;
@@ -59,7 +66,7 @@ namespace SKONanobotBuildAndRepairSystem
             {
 
             var hasRequiredPower = PowerHelper.HasRequiredElectricPower(this);
-            if (!hasRequiredPower) return; //No power -> nothing to do
+            if (!hasRequiredPower) { weldNoPower = true; return; } //No power -> nothing to do
 
             var tsBeforeLock = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
             lock (State.PossibleWeldTargets)
@@ -164,10 +171,38 @@ namespace SKONanobotBuildAndRepairSystem
                     // could lock onto a globally starved block and burn a guaranteed
                     // weld-slot claim + pull walk on it next tick.
                     if (!isLockOnBlock
-                        && BlockFailureCooldownHandler.IsOnCooldown(targetData.Block))
+                        && BlockFailureCooldownHandler.IsOnCooldown(targetData.Block, supplyGroup))
                     {
                         skippedByFailCooldown++;
                         needWelding = true;
+                        continue;
+                    }
+
+                    // BUG-261123.8: the game refused welding on this grid lately (safe zone / protection): skip it for a while.
+                    if (_weldRefusedGrids.Count > 0 && targetData.Block != null && targetData.Block.CubeGrid != null
+                        && IsWeldRefused(targetData.Block.CubeGrid.EntityId))
+                    {
+                        if (isLockOnBlock)
+                        {
+                            ReleaseAssignmentIfEnabled(targetData.Block, profilerTs != 0L, ref tsAssignOps);
+                            State.CurrentWeldingBlock = null;
+                            lookingForNext = true;
+                        }
+                        skippedByRefused++;
+                        continue;
+                    }
+
+                    // BUG-261123.8: the game refused welding on this grid lately (safe zone / protection): skip it for a while.
+                    if (_weldRefusedGrids.Count > 0 && targetData.Block != null && targetData.Block.CubeGrid != null
+                        && IsWeldRefused(targetData.Block.CubeGrid.EntityId))
+                    {
+                        if (isLockOnBlock)
+                        {
+                            ReleaseAssignmentIfEnabled(targetData.Block, profilerTs != 0L, ref tsAssignOps);
+                            State.CurrentWeldingBlock = null;
+                            lookingForNext = true;
+                        }
+                        skippedByRefused++;
                         continue;
                     }
 
@@ -348,6 +383,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // and assignment are preserved so the same BaR resumes the same block.
                 if (!Mod.TryClaimWeldSlot())
                 {
+                    weldBudgetDeferred = true;
                     // Treat as "needs welding but couldn't this tick"; propagate the chosen
                     // target back as currentWeldingBlock so the caller's
                     // State.CurrentWeldingBlock = currentWeldingBlock write preserves the
@@ -359,6 +395,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     var weldTs = Stopwatch.GetTimestamp();
 
+                    _PullRoundIncomplete = false;
                     if (!transporting)
                     {
                         transporting = ServerFindMissingComponents(chosenTarget);
@@ -421,8 +458,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                     ReleaseAssignmentIfEnabled(chosenTarget.Block, profilerTs != 0L, ref tsAssignOps);
 
-                    // Park the failed block in the global cooldown so other BaRs skip it.
-                    BlockFailureCooldownHandler.MarkFailed(chosenTarget.Block);
+                    // Park the failed block so BaRs sharing this supply skip it (BUG-261123.1), but only after a full
+                    // round of empty sources: a capped pull that missed has not seen the rest (BUG-261123.6).
+                    if (!_PullRoundIncomplete) BlockFailureCooldownHandler.MarkFailed(chosenTarget.Block, supplyGroup);
 
                     componentFailures++;
                 }
@@ -432,6 +470,11 @@ namespace SKONanobotBuildAndRepairSystem
             }
             finally
             {
+                // FEAT-261123.4: remember why this attempt did nothing.
+                if (!welding && !transporting)
+                    _lastWeldIdle = Handlers.CycleStats.WeldIdleReason(componentFailures, skippedByRefused, weldBudgetDeferred,
+                        skippedByFailCooldown, skippedByGridLimit, skippedByAssign, weldSkipped,
+                        weldNoPower, droppedOutOfArea, checkedByWeldable);
                 if (profilerTs != 0L)
                 {
                     var _welding = welding;
@@ -444,6 +487,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var _checkedByWeldable = checkedByWeldable;
                     var _skippedByIgnore = skippedByIgnore;
                     var _skippedByGridLimit = skippedByGridLimit;
+                    var _skippedByRefused = skippedByRefused;
                     var _skippedByAssign = skippedByAssign;
                     var _skippedByFailCooldown = skippedByFailCooldown;
                     var _componentFailures = componentFailures;
@@ -460,13 +504,13 @@ namespace SKONanobotBuildAndRepairSystem
                     var _priorityMs = tsPriority * 1000.0 / tsFreq;
                     var _droppedOutOfArea = droppedOutOfArea;
                     MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};skipFailCooldown={14};componentFails={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3};assignOpsMs={22:F3};gridLimitMs={23:F3};priorityMs={24:F3};droppedOutOfArea={25}",
+                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};skipFailCooldown={14};componentFails={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3};assignOpsMs={22:F3};gridLimitMs={23:F3};priorityMs={24:F3};droppedOutOfArea={25};skipRefused={26}",
                             _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
                             State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
                             _hadLockOn, _lockOnFound, _lockOnLost,
                             _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _skippedByFailCooldown, _componentFailures,
                             _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount,
-                            _lockAcquireMs, _inLockMs, _assignOpsMs, _gridLimitMs, _priorityMs, _droppedOutOfArea));
+                            _lockAcquireMs, _inLockMs, _assignOpsMs, _gridLimitMs, _priorityMs, _droppedOutOfArea, _skippedByRefused));
                 }
             }
         }
@@ -578,6 +622,15 @@ namespace SKONanobotBuildAndRepairSystem
                     count, key, ProjBuildSkipDuration.TotalMinutes, _Welder != null ? _Welder.OwnerId : 0);
             }
             return count;
+        }
+
+        /// <summary>
+        /// BUG-261122.6: IMyShipWelder.IsWithinWorldLimits tests the welder's builder; it only answers for the identity
+        /// we build as (the owner) when both are the same.
+        /// </summary>
+        internal static bool LimitsPreCheckApplies(long welderBuiltBy, long welderOwnerId)
+        {
+            return welderBuiltBy != 0L && welderBuiltBy == welderOwnerId;
         }
 
         // BUG-261122.2: drop expired skips and publish the skipped count to the terminal (synced state).
@@ -696,7 +749,10 @@ namespace SKONanobotBuildAndRepairSystem
                 if ((CreativeModeActive || (item != null && item.Amount >= 1)) && cubeGridProjected != null && cubeGridProjected.Projector != null)
                 {
                     tsLimitsCheck = Stopwatch.GetTimestamp();
-                    var withinLimits = _Welder.IsWithinWorldLimits(cubeGridProjected.Projector, blockDefinition.BlockPairName, blockDefinition.PCU);
+                    // BUG-261122.6: the pre-check can only test the welder's builder; we build as the owner, whose limits
+                    // the game itself checks in proj.Build (1.211+). Builder != owner: let the game decide.
+                    var limitsPreCheck = LimitsPreCheckApplies(_Welder.SlimBlock != null ? _Welder.SlimBlock.BuiltBy : 0L, _Welder.OwnerId);
+                    var withinLimits = !limitsPreCheck || _Welder.IsWithinWorldLimits(cubeGridProjected.Projector, blockDefinition.BlockPairName, blockDefinition.PCU);
                     tsLimitsCheck = Stopwatch.GetTimestamp() - tsLimitsCheck;
                     if (withinLimits)
                     {
@@ -886,7 +942,9 @@ namespace SKONanobotBuildAndRepairSystem
                                 if (buildAttempted)
                                 {
                                     _projBuildSilentFails++;
-                                    LogProjBuildSilentFail(targetData.Block, cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector, createCompId, welderCreateBefore, silentFailCount);
+                                    // BUG-261122.6: no pre-check ran, so the owner's limits are the likely refusal.
+                                    if (!limitsPreCheck) State.LimitsExceeded = true;
+                                    LogProjBuildSilentFail(targetData.Block, cubeGridProjected.Projector as Sandbox.ModAPI.IMyProjector, createCompId, welderCreateBefore, silentFailCount, !limitsPreCheck);
                                 }
                             }
                         }
@@ -940,9 +998,17 @@ namespace SKONanobotBuildAndRepairSystem
                         if (welding)
                         {
                             appliedWeldAmount = weldAmount;
+                            var integrityBefore = target.Integrity;
                             tsMount = Stopwatch.GetTimestamp();
                             target.IncreaseMountLevel(weldAmount, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, false);
                             tsMount = Stopwatch.GetTimestamp() - tsMount;
+                            // BUG-261123.8: no progress = the game refused (safe zone without Welding while the mod's check
+                            // is off, protection): skip this grid for WeldRefusedSkip instead of retrying every tick.
+                            if (target.Integrity <= integrityBefore && !target.IsFullIntegrity && target.CubeGrid != null)
+                            {
+                                _weldRefusedGrids[target.CubeGrid.EntityId] = Mod.NowPlayTime + WeldRefusedSkip;
+                                welding = false;
+                            }
                         }
                     }
 
@@ -995,9 +1061,9 @@ namespace SKONanobotBuildAndRepairSystem
         /// Once per minute per BaR. BUG-261122.5: Error only when it points at the mod (lend did not land)
         /// or for the first unexplained failure per BaR; later ones (DLC, limits, placement) at Event.
         /// </summary>
-        private void LogProjBuildSilentFail(IMySlimBlock projected, Sandbox.ModAPI.IMyProjector proj, MyDefinitionId compId, MyFixedPoint inBlockInventory, int failsForBlock)
+        private void LogProjBuildSilentFail(IMySlimBlock projected, Sandbox.ModAPI.IMyProjector proj, MyDefinitionId compId, MyFixedPoint inBlockInventory, int failsForBlock, bool ownerLimitsLikely)
         {
-            var reason = !CreativeModeActive && inBlockInventory < 1 ? "builderInventoryEmpty" : "unknown";
+            var reason = !CreativeModeActive && inBlockInventory < 1 ? "builderInventoryEmpty" : ownerLimitsLikely ? "ownerLimitsLikely" : "unknown";
             _projBuildLastFail = reason;
 
             var now = MyAPIGateway.Session.ElapsedPlayTime;
@@ -1160,7 +1226,7 @@ namespace SKONanobotBuildAndRepairSystem
                     State.CurrentTransportIsCollecting = false;
                     State.CurrentTransportTarget = ComputePosition(targetData.Block);
                     State.CurrentTransportStartTime = playTime;
-                    State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.WeldTransportSpeed);
+                    State.CurrentTransportTime = TransportTime(targetData.Distance, Settings.WeldTransportSpeed);
 
                     return true;
                 }
@@ -1223,7 +1289,10 @@ namespace SKONanobotBuildAndRepairSystem
             // Phase 2: single source walk for everything still missing.
             if (_TempPullRemaining.Count > 0 && remainingVolume > 0)
             {
-                picked = PullFromSourcesOnePass(ref remainingVolume) || picked;
+                var pulled = PullFromSourcesOnePass(ref remainingVolume);
+                _EmptyPullSourceVisits = NextEmptyPullVisits(_EmptyPullSourceVisits, pulled, _LastPullVisited);
+                if (!pulled && !picked && !IsPullRoundComplete(_EmptyPullSourceVisits, _LastPullAvailable)) _PullRoundIncomplete = true;
+                picked = pulled || picked;
             }
 
             // BUG-260824.2: no per-target missing report anymore — State.MissingComponents
@@ -1255,6 +1324,28 @@ namespace SKONanobotBuildAndRepairSystem
             public long TsMaxItemsAdd;     // sum of MaxItemsAddable engine ticks
             public long TsTransfer;        // sum of TransferItemFrom engine ticks
             public long MaxSourceTicks;    // longest single TryPullFromSource call
+            public int ExtraPulled;        // FEAT-261123.3: items fetched beyond the current block's need
+        }
+
+        // BUG-261123.8: grids where a weld made no progress (the game refused it), per BaR, main thread.
+        private readonly System.Collections.Generic.Dictionary<long, TimeSpan> _weldRefusedGrids = new System.Collections.Generic.Dictionary<long, TimeSpan>();
+        private static readonly TimeSpan WeldRefusedSkip = TimeSpan.FromSeconds(30);
+
+        private bool IsWeldRefused(long gridId)
+        {
+            TimeSpan until;
+            if (!_weldRefusedGrids.TryGetValue(gridId, out until)) return false;
+            if (Mod.NowPlayTime < until) return true;
+            _weldRefusedGrids.Remove(gridId);
+            return false;
+        }
+
+        private int CountWeldRefused()
+        {
+            var now = Mod.NowPlayTime;
+            var count = 0;
+            foreach (var until in _weldRefusedGrids.Values) if (now < until) count++;
+            return count;
         }
 
         private bool PullFromSourcesOnePass(ref float remainingVolume)
@@ -1262,6 +1353,8 @@ namespace SKONanobotBuildAndRepairSystem
             // BUG-141: separate profile entry from outer ServerFindMissingComponents pullPickMs.
             var profilerTs = MethodProfiler.Start();
             var picked = false;
+            _LastPullVisited = 0;
+            _LastPullAvailable = 0;
             var welderInventory = _Welder.GetInventory(0);
             if (welderInventory == null)
             {
@@ -1285,6 +1378,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var lockAcquiredTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 var lockWaitTicks = lockAcquiredTs != 0L ? lockAcquiredTs - lockAcquireTs : 0L;
                 sourcesAvailable = _PossibleSources.Count;
+                _LastPullAvailable = sourcesAvailable;
                 if (sourcesAvailable == 0)
                 {
                     if (profilerTs != 0L)
@@ -1332,6 +1426,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                     sourcesVisited++;
                     lastSuccessfulHit = true;
+                    _LastPullVisited = sourcesVisited;
                     if (abort || remainingVolume <= 0 || _TempPullRemaining.Count == 0)
                     {
                         if (profilerTs != 0L)
@@ -1376,6 +1471,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (welderFull) { exitReason = "welderFull"; break; }
                 }
+                _LastPullVisited = sourcesVisited;
 
                 if (profilerTs != 0L)
                 {
@@ -1404,10 +1500,11 @@ namespace SKONanobotBuildAndRepairSystem
             var _transferSucceeded = stats.TransferSucceeded;
             var _lastSuccessfulHit = lastSuccessfulHit;
             var _exitReason = exitReason;
+            var _extraPulled = stats.ExtraPulled;
             MethodProfiler.StopAndLog("PullFromSourcesOnePass", profilerTs, () =>
-                string.Format("entityId={0};available={1};visited={2};empty={3};itemsExamined={4};maxItemsAddCalls={5};transferAttempts={6};transferSucceeded={7};lastSuccessfulHit={8};getItemsMs={9:F3};maxItemsAddMs={10:F3};transferMs={11:F3};maxSourceMs={12:F3};lockWaitMs={13:F3};exit={14}",
+                string.Format("entityId={0};available={1};visited={2};empty={3};itemsExamined={4};maxItemsAddCalls={5};transferAttempts={6};transferSucceeded={7};lastSuccessfulHit={8};getItemsMs={9:F3};maxItemsAddMs={10:F3};transferMs={11:F3};maxSourceMs={12:F3};lockWaitMs={13:F3};exit={14};extraPulled={15}",
                     _entityId, _sourcesAvailable, _sourcesVisited, _sourcesEmpty, _itemsExamined, _maxItemsAddCalls, _transferAttempts, _transferSucceeded, _lastSuccessfulHit,
-                    _getItemsMs, _maxItemsAddMs, _transferMs, _maxSourceMs, _lockWaitMs, _exitReason));
+                    _getItemsMs, _maxItemsAddMs, _transferMs, _maxSourceMs, _lockWaitMs, _exitReason, _extraPulled));
         }
 
         /// <summary>
@@ -1465,8 +1562,12 @@ namespace SKONanobotBuildAndRepairSystem
                         || (float)_TransportInventory.MaxVolume - (float)_TransportInventory.CurrentVolume < volume) continue;
                     maxByVolume = 1;
                 }
-                var amountPossible = Math.Min(Math.Min(neededAmount, (int)srcItem.Amount), maxByVolume);
-                if (amountPossible <= 0) continue;
+                var amountForBlock = Math.Min(Math.Min(neededAmount, (int)srcItem.Amount), maxByVolume);
+                if (amountForBlock <= 0) continue;
+                // FEAT-261123.3: from a well-stocked source, fetch for the next blocks too (the extra stays in the BaR's
+                // inventory, where the next blocks pick it without a conveyor transfer and other BaRs can still pull it).
+                var amountPossible = amountForBlock + PullBatchExtra(neededAmount, amountForBlock, (int)srcItem.Amount,
+                    BatchExtraByVolume(welderInventory, volume));
 
                 stats.MaxItemsAddCalls++;
                 tsMark = stats.ProfilerEnabled ? Stopwatch.GetTimestamp() : 0L;
@@ -1485,6 +1586,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (transferred)
                 {
                     stats.TransferSucceeded++;
+                    if (amountMoveable > amountForBlock) stats.ExtraPulled += amountMoveable - amountForBlock;
                     int needed = neededAmount;
                     picked = ServerPickFromWelder(componentId, volume, ref needed, ref remainingVolume) || picked;
                     if (needed > 0) _TempPullRemaining[subtypeName] = needed;
@@ -1500,6 +1602,39 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// Try to pick needed material from own inventory, if successfull material is moved into transport inventory
         /// </summary>
+        // FEAT-261123.3: fetch for up to this many blocks per conveyor transfer (the current one + extras).
+        internal const int PullBatchFactor = 3;
+        // Extra stock is held to this share of the BaR's inventory and only taken while it is below half full.
+        internal const float PullBatchMaxShare = 0.1f;
+
+        /// <summary>
+        /// FEAT-261123.3: extra amount to fetch beyond the current block's need. Only from a well-stocked source (at least
+        /// twice the extra stays behind), capped by volume. With "push components" on (the default) a working BaR uses
+        /// the extra within ~1 s, before the 5 s push interval; leftovers go back in one push.
+        /// </summary>
+        internal static int PullBatchExtra(int needed, int forBlock, int available, int maxExtraByVolume)
+        {
+            if (needed <= 0 || forBlock <= 0 || maxExtraByVolume <= 0) return 0;
+            var extra = needed * (PullBatchFactor - 1);
+            var spare = available - forBlock;
+            if (spare <= 0) return 0;
+            extra = Math.Min(extra, spare / 3); // keep >= 2x the extra in the source
+            extra = Math.Min(extra, maxExtraByVolume);
+            return extra > 0 ? extra : 0;
+        }
+
+        /// <summary>How many extra items of this volume the BaR may hold (PullBatchMaxShare, only while below half full).</summary>
+        internal static int BatchExtraByVolume(float maxVolume, float currentVolume, float itemVolume)
+        {
+            if (itemVolume <= 0f || maxVolume <= 0f || currentVolume >= maxVolume * 0.5f) return 0;
+            return (int)Math.Floor(maxVolume * PullBatchMaxShare / itemVolume);
+        }
+
+        private static int BatchExtraByVolume(IMyInventory inventory, float itemVolume)
+        {
+            return inventory != null ? BatchExtraByVolume((float)inventory.MaxVolume, (float)inventory.CurrentVolume, itemVolume) : 0;
+        }
+
         private bool ServerPickFromWelder(MyDefinitionId componentId, float volume, ref int neededAmount, ref float remainingVolume)
         {
             var profilerTs = MethodProfiler.Start();

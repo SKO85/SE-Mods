@@ -21,6 +21,7 @@
 ## Perf envelope
 n/a
 ## Coverage
+ingame:S124 (projection, Functional), ingame:S125 (projection, Skeleton)
 manual
 ingame:S21
 ingame:S22

@@ -30,6 +30,22 @@
 ## Coverage
 ingame:S08 (code-built 1000-block grid until the BigShip prefab exists)
 ingame:S43
+ingame:S99
+ingame:S100
+ingame:S101
+ingame:S102
+unit:TargetSortingTests
+ingame:S103
+ingame:S104
+ingame:S105
+ingame:S106
+ingame:S107
+ingame:S108
+ingame:S109
+ingame:S110
+ingame:S111
+ingame:S112
+
 ## Last verified
 never
 ## Related

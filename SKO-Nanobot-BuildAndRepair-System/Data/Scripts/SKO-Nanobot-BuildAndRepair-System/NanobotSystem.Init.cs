@@ -212,7 +212,7 @@ namespace SKONanobotBuildAndRepairSystem
             _TransportInventory = new Sandbox.Game.MyInventory((float)welderInventory.MaxVolume / MyAPIGateway.Session.BlocksInventorySizeMultiplier, float.MaxValue, Vector3.MaxValue, MyInventoryFlags.CanSend);
 
             // BUG-018: seed InventoryFull from current welder volume on world reload.
-            if ((float)welderInventory.CurrentVolume >= (float)welderInventory.MaxVolume)
+            if (NextInventoryFull(false, (float)welderInventory.CurrentVolume, (float)welderInventory.MaxVolume))
             {
                 State.InventoryFull = true;
             }

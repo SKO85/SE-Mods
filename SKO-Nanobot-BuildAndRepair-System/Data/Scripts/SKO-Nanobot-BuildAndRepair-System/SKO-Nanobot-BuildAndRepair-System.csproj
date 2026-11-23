@@ -150,6 +150,8 @@
     <Compile Include="Handlers\GridChangeHandler.cs" />
     <Compile Include="Handlers\FriendlyRelationsHandler.cs" />
     <Compile Include="Handlers\GridOwnershipCacheHandler.cs" />
+    <Compile Include="Handlers\CycleStats.cs" />
+    <Compile Include="Handlers\NetStats.cs" />
     <Compile Include="Handlers\NetworkMessagingHandler.cs" />
     <Compile Include="Handlers\RazeQueueHandler.cs" />
     <Compile Include="Handlers\SkeletonResetHandler.cs" />

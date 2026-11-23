@@ -31,6 +31,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public long OwnerId = -1;
         /// <summary>Adds a large projector next to the BaRs (Bars &gt; 0), at (2*Bars, 0, 1).</summary>
         public bool Projector;
+        /// <summary>Small-grid ship instead of the large rig: small BaR (3x3x1) at the origin when Bars > 0, small battery,
+        /// small projector (RigBuilder.SmallProjectorPos) when Projector. No cargo: stock the BaR's own inventory.</summary>
+        public bool SmallGrid;
         /// <summary>Rig battery on/off at spawn (off = the BaRs have no power).</summary>
         public bool BatteryEnabled = true;
         /// <summary>Additional blocks at explicit grid positions (tagged for lookup).</summary>
@@ -148,6 +151,96 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public double SimAvg { get { return _simSamples > 0 ? _simSum / _simSamples : 0.0; } }
         public double TickAvgMs { get { return _tickAvgSamples > 0 ? _tickAvgSum / _tickAvgSamples : 0.0; } }
         public double RunSeconds { get { return (Now - RunStartTime).TotalSeconds; } }
+
+        // ---------------------------------------------------------------- network (FEAT-261123.7)
+
+        public NetStats.Snapshot NetStart;
+
+        /// <summary>FEAT-261123.4: BaR cycle outcomes at run start.</summary>
+        public long[] CyclesAtStart;
+
+        /// <summary>Share of each BaR cycle outcome since the run started: `cycles.total`, `cycles.<outcome>` in %.</summary>
+        public void RecordCycleMetrics()
+        {
+            if (CyclesAtStart == null) return;
+            var now = CycleStats.Snapshot();
+            long total = 0;
+            for (int i = 0; i < now.Length; i++) total += now[i] - CyclesAtStart[i];
+            Metric("cycles.total", total);
+            if (total <= 0) return;
+            for (int i = 0; i < now.Length; i++)
+            {
+                var n = now[i] - CyclesAtStart[i];
+                if (n > 0) Metric("cycles." + ((CycleOutcome)i).ToString(), 100.0 * n / total);
+            }
+        }
+
+        /// <summary>Mod errors logged since the run started (Logging.ErrorCount).</summary>
+        public long ErrorsAtStart;
+        public long ErrorsSinceStart { get { return SKONanobotBuildAndRepairSystem.Utils.Logging.ErrorCount - ErrorsAtStart; } }
+        private NetStats.Snapshot _netEnd;
+
+        /// <summary>Mod messages of one type since the run started: count, payload bytes, wire bytes (fan-out), largest.</summary>
+        public void NetSent(ushort msgId, out long msgs, out long bytes, out long wire, out int maxBytes)
+        {
+            msgs = bytes = wire = 0; maxBytes = 0;
+            var i = NetStats.Index(msgId);
+            if (i < 0 || NetStart == null) return;
+            if (_netEnd == null) _netEnd = NetStats.Take(false);
+            msgs = _netEnd.SentMsgs[i] - NetStart.SentMsgs[i];
+            bytes = _netEnd.SentBytes[i] - NetStart.SentBytes[i];
+            wire = _netEnd.WireBytes[i] - NetStart.WireBytes[i];
+            maxBytes = _netEnd.MaxSent[i];
+        }
+
+        /// <summary>Connected players other than the host (0 in single player).</summary>
+        public int RemotePlayers()
+        {
+            if (MyAPIGateway.Multiplayer == null || !MyAPIGateway.Multiplayer.MultiplayerActive || MyAPIGateway.Players == null) return 0;
+            var n = (int)MyAPIGateway.Players.Count;
+            return MyAPIGateway.Utilities.IsDedicated ? n : n - 1;
+        }
+
+        public void RecordNetMetrics()
+        {
+            if (NetStart == null) return;
+            _netEnd = NetStats.Take(false);
+            var secs = RunSeconds > 0.1 ? RunSeconds : 0.1;
+            var bars = Mod.NanobotSystems.Count > 0 ? Mod.NanobotSystems.Count : 1;
+            long sentMsgs = 0, sentBytes = 0, wire = 0, recvMsgs = 0, recvBytes = 0;
+            int maxBytes = 0, maxIdx = -1;
+            for (int i = 0; i < NetStats.Size; i++)
+            {
+                sentMsgs += _netEnd.SentMsgs[i] - NetStart.SentMsgs[i];
+                sentBytes += _netEnd.SentBytes[i] - NetStart.SentBytes[i];
+                wire += _netEnd.WireBytes[i] - NetStart.WireBytes[i];
+                recvMsgs += _netEnd.RecvMsgs[i] - NetStart.RecvMsgs[i];
+                recvBytes += _netEnd.RecvBytes[i] - NetStart.RecvBytes[i];
+                if (_netEnd.MaxSent[i] > maxBytes) { maxBytes = _netEnd.MaxSent[i]; maxIdx = i; }
+            }
+            Metric("net.players", (long)RemotePlayers());
+            Metric("net.sentMsgs", sentMsgs);
+            Metric("net.sentKB", sentBytes / 1024.0);
+            Metric("net.wireKBps", wire / 1024.0 / secs);
+            Metric("net.recvMsgs", recvMsgs);
+            Metric("net.recvKB", recvBytes / 1024.0);
+            Metric("net.maxMsgBytes", (long)maxBytes);
+            Metric("net.peakKBps", NetPeakKBps);
+            Metric("net.peakMsgsPerS", NetPeakMsgsPerS);
+            Metric("net.peakAtS", NetPeakAtS);
+            Metric("net.maxMsgType", maxIdx >= 0 ? NetStats.Name(NetStats.IdOf(maxIdx)) : "-");
+            long m, b, w; int mx;
+            NetSent(40104, out m, out b, out w, out mx);
+            Metric("net.state.msgs", m);
+            Metric("net.state.perBarPerS", m / (double)bars / secs);
+            Metric("net.state.avgBytes", m > 0 ? b / (double)m : 0.0);
+            Metric("net.state.maxBytes", (long)mx);
+            var st = NetStats.Index(40104);
+            Metric("net.state.farSkipped", _netEnd.SkippedFar[st] - NetStart.SkippedFar[st]);
+            NetSent(40102, out m, out b, out w, out mx);
+            Metric("net.settings.msgs", m);
+            Metric("net.settings.maxBytes", (long)mx);
+        }
         /// <summary>Seconds since Setup/Configure (usable before the measured run starts).</summary>
         public double RunSecondsSinceSetup { get { return (Now - SetupTime).TotalSeconds; } }
 
@@ -452,7 +545,26 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             var w = Mod.WeldBudgetPeakUsed; if (w > WeldBudgetPeak) WeldBudgetPeak = w;
             var g = Mod.GrindBudgetPeakUsed; if (g > GrindBudgetPeak) GrindBudgetPeak = g;
             var a = BlockSystemAssigningHandler.AssignmentCount; if (a > AssignmentsPeak) AssignmentsPeak = a;
+
+            // FEAT-261123.7: traffic per second, for spikes.
+            var now = Now;
+            if (_netSecondStart == TimeSpan.MinValue) { NetStats.Totals(out _netSecondMsgs, out _netSecondWire); _netSecondStart = now; }
+            else if ((now - _netSecondStart).TotalSeconds >= 1.0)
+            {
+                long msgs, wire;
+                NetStats.Totals(out msgs, out wire);
+                var secs = (now - _netSecondStart).TotalSeconds;
+                var kbps = (wire - _netSecondWire) / 1024.0 / secs;
+                var mps = (msgs - _netSecondMsgs) / secs;
+                if (kbps > NetPeakKBps) { NetPeakKBps = kbps; NetPeakAtS = RunSeconds; }
+                if (mps > NetPeakMsgsPerS) NetPeakMsgsPerS = mps;
+                _netSecondMsgs = msgs; _netSecondWire = wire; _netSecondStart = now;
+            }
         }
+
+        private TimeSpan _netSecondStart = TimeSpan.MinValue;
+        private long _netSecondMsgs, _netSecondWire;
+        public double NetPeakKBps, NetPeakMsgsPerS, NetPeakAtS;
 
         // ---------------------------------------------------------------- recording
 
@@ -500,8 +612,27 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             if (avg > maxAvg) Result.Fail(method + ".steadyAvgMs=" + avg.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + ">" + maxAvg.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
+        /// <summary>
+        /// Single-call peak allowance on a dedicated server: Torch shows one-off ~18 ms stalls (GC / host) landing in
+        /// whichever method runs (S08 x3: weld, aggregate, component lookup in turn). Averages stay strict.
+        /// </summary>
+        public static double StallAllowanceMs
+        {
+            get { return MyAPIGateway.Utilities != null && MyAPIGateway.Utilities.IsDedicated ? 25.0 : 0.0; }
+        }
+
+        /// <summary>Peak of the mod tick against a limit (plus the dedicated-server stall allowance).</summary>
+        public void CheckTickPeak(double limitMs, string label = null)
+        {
+            var limit = limitMs + StallAllowanceMs;
+            if (TickPeakMs > limit)
+                Result.Fail((label ?? "tickPeakMs") + "=" + TickPeakMs.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)
+                    + ">" + limit.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
         public void CheckMethodMaxMax(string method, double maxMax)
         {
+            maxMax += StallAllowanceMs;
             MethodProfiler.MethodStatsSnapshot s;
             if (!TryGetMethodStats(method, out s) || s.Calls == 0) return;
             if (s.MaxMs > maxMax) Result.Fail(method + ".maxMs=" + s.MaxMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + ">" + maxMax.ToString(System.Globalization.CultureInfo.InvariantCulture));

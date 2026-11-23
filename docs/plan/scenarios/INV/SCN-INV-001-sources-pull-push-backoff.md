@@ -23,8 +23,22 @@
 ## Perf envelope
 `PullFromSourcesOnePass` maxMs ≤ 3 with 100 sources; `ServerTryPushInventory` steadyAvgMs ≤ 0.5 while full.
 ## Coverage
+unit:PullBatchTests (FEAT-261123.3 batched fetch)
 manual
+ingame:S87
+ingame:S88
+ingame:S89
+ingame:S103
+ingame:S104
+ingame:S105
+ingame:S106
+ingame:S107
+ingame:S108
+ingame:S109
+ingame:S110
+
 ## Last verified
-never
+v2.5.7 build 261123.15 2026-11-23 — in game: S89 (push targets full / freed, no ore lost), S87, S88.
+
 ## Related
 BUG-007, BUG-011, BUG-016, BUG-090, BUG-119, BUG-126, BUG-129, BUG-148, FEAT-006, FEAT-011

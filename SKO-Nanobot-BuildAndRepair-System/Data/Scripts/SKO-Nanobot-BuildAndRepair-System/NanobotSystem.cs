@@ -350,6 +350,48 @@ namespace SKONanobotBuildAndRepairSystem
         // BUG-136: round-robin cursor for the capped source walk.
         private int _NextPullSourceIdx;
 
+        // BUG-261123.9: was int / int (Range 2..99 -> 0 -> transport speed 0 -> TimeSpan overflow on every delivery).
+        internal static float TransportRangeScale(int range)
+        {
+            return Math.Min((float)range / WELDER_RANGE_DEFAULT_IN_M, 4f);
+        }
+
+        // BUG-261123.9: delivery time 2 x distance / speed, safe for a zero speed or bad distance (max 60 s).
+        internal static TimeSpan TransportTime(double distance, float speed)
+        {
+            if (double.IsNaN(distance) || distance <= 0 || float.IsNaN(speed)) return TimeSpan.Zero;
+            var seconds = speed > 0.01f ? 2d * distance / speed : MaxTransportSeconds;
+            return TimeSpan.FromSeconds(seconds < MaxTransportSeconds ? seconds : MaxTransportSeconds);
+        }
+
+        private const double MaxTransportSeconds = 60.0;
+
+        // FEAT-261123.8: players in state range at the last broadcast (main thread); newcomers get a full snapshot.
+        internal readonly HashSet<ulong> StateRecipients = new HashSet<ulong>();
+
+        // FEAT-261123.4: why the last weld / grind attempt did nothing (set by ServerTryWelding / ServerTryGrinding).
+        private Handlers.CycleOutcome _lastWeldIdle = Handlers.CycleOutcome.Other;
+        private Handlers.CycleOutcome _lastGrindIdle = Handlers.CycleOutcome.Other;
+
+        // BUG-261123.6: one pull looks at 16 sources at most; a weld miss parks the block for the supply group only once
+        // this BaR has seen a full round of empty sources since its last pick.
+        private int _EmptyPullSourceVisits;
+        private int _LastPullVisited;
+        private int _LastPullAvailable;
+        private bool _PullRoundIncomplete;
+
+        internal static int NextEmptyPullVisits(int current, bool pulled, int visited)
+        {
+            if (pulled) return 0;
+            var next = current + visited;
+            return next < current ? int.MaxValue : next;
+        }
+
+        internal static bool IsPullRoundComplete(int emptyVisits, int sourcesAvailable)
+        {
+            return emptyVisits >= sourcesAvailable;
+        }
+
         // BUG-260824.2: aggregate missing-components rebuild (cadence marker + reusable buffers).
         private TimeSpan _NextMissingAggregateAt;
         // BUG-261023.1: time-sliced pass state (0 idle, 1 targets, 2 sources).

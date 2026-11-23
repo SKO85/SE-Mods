@@ -19,6 +19,7 @@
 ## Perf envelope
 `RazeQueueHandler.Process` maxMs ≤ 5; `ServerDoGrind` `decreaseMs` ≤ 12 (engine).
 ## Coverage
+ingame:S130 (mechanical derelict: base + rotor head + piston head ground away)
 unit:PerTickBudgetTests
 ## Last verified
 v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)

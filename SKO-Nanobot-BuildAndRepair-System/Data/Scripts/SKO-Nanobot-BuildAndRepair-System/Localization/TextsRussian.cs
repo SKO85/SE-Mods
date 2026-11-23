@@ -103,6 +103,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"Info_InventoryFull",              "Блок инвентаря полон!"},
             {"Info_LimitReached",               "Достигнут предел PCU!"},
             {"Info_ProjectedSkipped",           "Пропущено проецируемых блоков: {0} (повтор автоматически)"},
+            {"Info_GrindBlocked",               "Разборка заблокирована щитом / модом защиты: сеток {0}"},
+            {"Info_WeldBlocked",                "Сварка заблокирована безопасной зоной / защитой: сеток {0}"},
             {"Info_DisabledByRemote",           "Отключено дистанционным управлением!"},
             {"Info_BlocksToBuild",              "Блоки для сборки:"},
             {"Info_BlocksToGrind",              "Блоки для демонтажа:"},

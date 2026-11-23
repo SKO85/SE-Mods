@@ -12,7 +12,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
     /// <summary>/nanobars test list | run &lt;id|all&gt; [xN] | status | abort | clear | origin &lt;x&gt; &lt;y&gt; &lt;z&gt; | origin reset</summary>
     internal static class TestCommand
     {
-        private const string Usage = "Usage: /nanobars test list | run <id|id,id|id-id|all> [xN] [detail] | status | abort | clear | origin <x> <y> <z>|reset";
+        private const string Usage = "Usage: /nanobars test list | groups | run <id|id,id|id-id|@group|all> [xN] [detail] | status | abort | clear | origin <x> <y> <z>|reset";
 
         public static ChatCommandResult Execute(string[] args, ulong senderSteamId)
         {
@@ -22,6 +22,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             switch (args[1].ToLowerInvariant())
             {
                 case "list": return List();
+                case "groups": return Groups();
                 case "run": return Run(args, senderSteamId);
                 case "status": return ChatCommandResult.Success(TestRunner.Status());
                 case "abort":
@@ -43,12 +44,27 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             for (int i = 0; i < ScenarioRegistry.All.Length; i++)
             {
                 var s = ScenarioRegistry.All[i];
+                var groups = ScenarioRegistry.GroupsOf(s.Id);
                 sb.Append("  ").Append(s.Id).Append(" - ").Append(s.Description)
-                  .Append(" (timeout ").Append(s.TimeoutSeconds).AppendLine(" s)");
+                  .Append(" (timeout ").Append(s.TimeoutSeconds).Append(" s")
+                  .Append(groups.Length > 0 ? "; @" + groups.Replace(", ", ", @") : "").AppendLine(")");
             }
             sb.AppendLine();
             sb.AppendLine(Usage);
             return ChatCommandResult.MissionScreen(sb.ToString(), "Nanobot Build and Repair System", "Test scenarios");
+        }
+
+        private static ChatCommandResult Groups()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Groups (run with: /nanobars test run @name, combinable: @zone,@shields,S03):");
+            for (int i = 0; i < ScenarioRegistry.Groups.Length; i++)
+            {
+                var g = ScenarioRegistry.Groups[i];
+                sb.Append("  @").Append(g.Name).Append(" (").Append(g.Ids.Length).Append(") - ").AppendLine(g.Description)
+                  .Append("      ").AppendLine(string.Join(", ", g.Ids));
+            }
+            return ChatCommandResult.MissionScreen(sb.ToString(), "Nanobot Build and Repair System", "Test groups");
         }
 
         private static ChatCommandResult Run(string[] args, ulong senderSteamId)
@@ -87,7 +103,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         }
 
         /// <summary>
-        /// "S03", "S03,S20,S27", "S28-S33" or mixed ("S01-S05,S17"); ranges follow the registry order.
+        /// "S03", "S03,S20,S27", "S28-S33", "@zone" or mixed ("@zone,S01-S05,S17"); ranges follow the registry order.
         /// Duplicates are dropped, order is the order given.
         /// </summary>
         private static bool Select(string spec, List<ITestScenario> into, out string error)
@@ -98,6 +114,17 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             {
                 var part = parts[p].Trim();
                 if (part.Length == 0) continue;
+                if (part.StartsWith("@"))
+                {
+                    var group = ScenarioRegistry.FindGroup(part);
+                    if (group == null) { error = "Unknown group '" + part + "'. Use 'test groups'."; return false; }
+                    for (int g = 0; g < group.Ids.Length; g++)
+                    {
+                        var member = ScenarioRegistry.Find(group.Ids[g]);
+                        if (member != null && !into.Contains(member)) into.Add(member);
+                    }
+                    continue;
+                }
                 var dash = part.IndexOf('-');
                 if (dash < 0)
                 {

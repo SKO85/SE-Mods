@@ -21,15 +21,21 @@ namespace SKONanobotBuildAndRepairSystem.Utils
         }
 
 
+        // FEAT-261123.5: reused list (main thread callers only) instead of a new one per lookup.
+        private static readonly List<IMyPlayer> _players = new List<IMyPlayer>();
+
         public static IMyPlayer GetPlayer(long identityId)
         {
-            var players = new List<IMyPlayer>();
-            MyAPIGateway.Players.GetPlayers(players);
-            for (var i = 0; i < players.Count; i++)
+            if (MyAPIGateway.Players == null) return null;
+            _players.Clear();
+            MyAPIGateway.Players.GetPlayers(_players);
+            IMyPlayer found = null;
+            for (var i = 0; i < _players.Count; i++)
             {
-                if (players[i].IdentityId == identityId) return players[i];
+                if (_players[i].IdentityId == identityId) { found = _players[i]; break; }
             }
-            return null;
+            _players.Clear();
+            return found;
         }
 
         public static long GetOwner(IMyCubeGrid grid)

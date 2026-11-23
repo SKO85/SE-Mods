@@ -22,6 +22,7 @@
 ## Perf envelope
 `ServerTryCollectingFloatingTargets` maxMs ≤ 3 (engine work outside the list lock, BUG-260610.22).
 ## Coverage
+ingame:S131 (area and class rules), ingame:S132 (collect only when idle)
 manual
 ingame:S10 (5 SteelPlate stacks inside the area, conservation; not the outside/ore/priority steps)
 unit:TransportInventoryMoveTests.MoveItemVerified_RefusedAdd_LeavesTheSourceUntouched

@@ -38,6 +38,7 @@
 ## Perf envelope
 `ServerDoWeld` `buildMs` ≤ 40 per call (engine cost); `resolveMs` ≤ 5; steadyAvgMs ≤ 3.
 ## Coverage
+ingame:S114 (small-grid projection, large BaR), ingame:S115 (small BaR on the small ship) — Steam report 2026-11-23
 unit:ProjectedBuildComponentTests.Lend_MovesOnePieceFromTheTransport_WhenTheBlockInventoryHasNone
 unit:ProjectedBuildComponentTests.Lend_FullBlockInventory_FailsWithoutLosingThePiece
 unit:ProjectedBuildComponentTests.Return_MovesTheUntakenPieceBackToTheTransport
@@ -47,6 +48,7 @@ ingame:S03
 ingame:S27
 ingame:S42
 ingame:S46
+unit:LimitsPreCheckTests
 ## Last verified
 v2.5.6 build 261122.3 2026-11-22 — in game (01_211_018, SP survival): variant E steps 1-3 green (239/239 built, lent+engineTook on every build, no silent fails); D accounting by hand-grind, cold-start timing and DS not yet run. Unit: lend/return, skip expiry, cold-start cache drop
 ## Related

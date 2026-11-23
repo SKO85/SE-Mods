@@ -104,7 +104,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             ctx.CheckMethodMaxMax("ServerDoWeld", 40.0);
             ctx.CheckMethodMaxMax("RebuildMissingComponentsAggregate", 5.0);
             ctx.Check(ctx.TickAvgMs <= 0.5, "tickAvgMs>0.5");
-            ctx.Check(ctx.TickPeakMs <= 15.0, "tickPeakMs>15");
+            ctx.CheckTickPeak(15.0);
             ctx.Check(ctx.SimMin >= 0.8, "simMin<0.8");
 
             var weldCap = Mod.GetEffectiveMaxWeldsPerTick();

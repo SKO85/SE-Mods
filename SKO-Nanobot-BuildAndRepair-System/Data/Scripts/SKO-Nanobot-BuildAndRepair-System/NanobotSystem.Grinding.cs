@@ -35,7 +35,13 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByRefused = 0;
             var skippedByOutOfArea = 0;
             var iterationsExamined = 0;
+            var deadRemoved = 0;
+            var grindBudgetDeferred = false;
+            var grindProtected = false;
+            var grindNoPower = false;
             var loopSkipped = false;
+            // FEAT-261123.4: sub-timers for the work outside the target-list lock.
+            long tsMark, tsPower = 0L, tsClaim = 0L, tsArea = 0L, tsProtect = 0L, tsSlot = 0L, tsDoGrind = 0L, tsRemoveAll = 0L, tsRelease = 0L, tsRep = 0L;
             var tsLockAcquire = 0L;
             var tsInLock = 0L;
             try
@@ -44,7 +50,10 @@ namespace SKONanobotBuildAndRepairSystem
             if (State.InventoryFull)
                 return;
 
-            if (!PowerHelper.HasRequiredElectricPower(this)) return; //No power -> nothing to do
+            tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+            var hasPower = PowerHelper.HasRequiredElectricPower(this);
+            if (tsMark != 0L) tsPower += Stopwatch.GetTimestamp() - tsMark;
+            if (!hasPower) { grindNoPower = true; return; } //No power -> nothing to do
 
             var tsBeforeLock = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
             lock (State.PossibleGrindTargets)
@@ -58,6 +67,9 @@ namespace SKONanobotBuildAndRepairSystem
                 // hash / saturation guards). Without this, exhausted BaRs stay stuck
                 // until the next cluster scan bumps the hash, even though slots free
                 // up continuously as TTL claims drain.
+                // FEAT-261123.6: grids refused by a shield / protection mod, for the terminal (before the exhausted skip).
+                State.GrindBlockedGrids = _grindRefusedGrids.Count > 0 ? CountGrindRefused() : 0;
+
                 var grindExhaustedAge = Mod.NowPlayTime.Subtract(_grindExhaustedAtTime);
                 if (_grindLoopExhausted
                     && State.PossibleGrindTargets.CurrentHash == _grindExhaustedAtHash
@@ -140,6 +152,14 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                 }
 
+                // BUG-261123.3: drop ground / removed entries once instead of re-walking them every tick (one in-place pass,
+                // only when the walk met one; razes are queued, the queue dedups).
+                if (skippedByNullBlock + skippedByClosedFatBlock + skippedByDestroyed > 0)
+                {
+                    deadRemoved = RemoveDeadGrindEntries(State.PossibleGrindTargets);
+                    if (deadRemoved > 0) State.PossibleGrindTargets.RebuildHash();
+                }
+
                 // FEAT-076: mark exhausted when the full iteration found nothing grindable.
                 if (!grinding && !needGrinding)
                 {
@@ -158,6 +178,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // checked IsAssignedToOtherSystem). If another BaR raced in between
                 // the iteration's read and now, AssignToSystem fails and we drop
                 // the target for this cycle — next cycle's picker will try again.
+                tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 if (Mod.Settings.AssignToSystemEnabled
                     && _Welder.IsWorking
                     && _Welder.Enabled
@@ -169,10 +190,14 @@ namespace SKONanobotBuildAndRepairSystem
                         chosenGrindTarget = null;
                     }
                 }
+                if (tsMark != 0L) tsClaim += Stopwatch.GetTimestamp() - tsMark;
             }
             // BUG-261122.16: the area check is scan-time only — a target whose grid moved (ship flying off, ground-off
             // piece flung away) is dropped from this BaR's list instead of being ground from afar.
-            if (chosenGrindTarget != null && !IsTargetInArea(chosenGrindTarget.Block))
+            tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+            var outOfArea = chosenGrindTarget != null && !IsTargetInArea(chosenGrindTarget.Block);
+            if (tsMark != 0L) tsArea += Stopwatch.GetTimestamp() - tsMark;
+            if (outOfArea)
             {
                 ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
                 lock (State.PossibleGrindTargets)
@@ -186,10 +211,14 @@ namespace SKONanobotBuildAndRepairSystem
             // a shield raised or zone enabled around the target mid-operation kept it
             // being ground off the stale list for up to a scan cycle. Both checks are
             // cheap here (DS dictionary lookup; zone verdict cached 15 s per block).
-            if (chosenGrindTarget != null
+            tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+            var isProtected = chosenGrindTarget != null
                 && (IsShieldProtected(chosenGrindTarget.Block)
-                    || SafeZoneHandler.IsProtectedFromGrinding(chosenGrindTarget.Block, _Welder)))
+                    || SafeZoneHandler.IsProtectedFromGrinding(chosenGrindTarget.Block, _Welder));
+            if (tsMark != 0L) tsProtect += Stopwatch.GetTimestamp() - tsMark;
+            if (isProtected)
             {
+                grindProtected = true;
                 ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
                 chosenGrindTarget = null;
             }
@@ -197,8 +226,12 @@ namespace SKONanobotBuildAndRepairSystem
             if (chosenGrindTarget != null)
             {
                 // OPT 3: Global grind budget — cap ServerDoGrind calls per tick (count + time).
-                if (!Mod.TryClaimGrindSlot())
+                tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                var gotSlot = Mod.TryClaimGrindSlot();
+                if (tsMark != 0L) tsSlot += Stopwatch.GetTimestamp() - tsMark;
+                if (!gotSlot)
                 {
+                    grindBudgetDeferred = true;
                     // BUG-261023.8: budget deferral, not a failure — keep the claim and report
                     // the block (like BUG-154 for welding) so the current block / grid count
                     // don't flicker and no other BaR takes it between ticks.
@@ -210,7 +243,9 @@ namespace SKONanobotBuildAndRepairSystem
                     var grindTs = Stopwatch.GetTimestamp();
                     _grindJanitorDone = false;
                     grinding = ServerDoGrind(chosenGrindTarget, out transporting);
-                    Mod.ReportGrindTime((Stopwatch.GetTimestamp() - grindTs) * 1000.0 / Stopwatch.Frequency);
+                    var grindTicks = Stopwatch.GetTimestamp() - grindTs;
+                    Mod.ReportGrindTime(grindTicks * 1000.0 / Stopwatch.Frequency);
+                    if (profilerTs != 0L) tsDoGrind += grindTicks;
 
                     if (grinding)
                     {
@@ -229,7 +264,10 @@ namespace SKONanobotBuildAndRepairSystem
                         var grindBlock = chosenGrindTarget.Block;
                         if (grindBlock != null && grindBlock.IsFullyDismounted)
                         {
-                            RemoveGrindTargetEverywhere(chosenGrindTarget);
+                            // BUG-261123.7: own list only; cluster members drop it on their next walk (BUG-261123.3).
+                            tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
+                            RemoveGrindTarget(chosenGrindTarget);
+                            if (tsMark != 0L) tsRemoveAll += Stopwatch.GetTimestamp() - tsMark;
                         }
                     }
                     else
@@ -238,6 +276,7 @@ namespace SKONanobotBuildAndRepairSystem
                         // threshold is FINISHED, not failed — leaving it listed made the
                         // picker re-claim it and burn a shared grind slot every tick
                         // until the next scan evicted it.
+                        tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                         if (_grindJanitorDone)
                         {
                             RemoveGrindTargetEverywhere(chosenGrindTarget);
@@ -245,12 +284,14 @@ namespace SKONanobotBuildAndRepairSystem
 
                         // Grinding failed — release assignment regardless of reason so other BaRs aren't starved.
                         ReleaseAssignmentIfEnabled(chosenGrindTarget.Block);
+                        if (tsMark != 0L) tsRelease += Stopwatch.GetTimestamp() - tsMark;
                     }
                 }
             }
 
             // Faction reputation when grinding for not owned grids.
             // BUG-260612.34: CubeGrid null-guarded like the same block's check above.
+            tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
             if (Mod.Settings.DecreaseFactionReputationOnGrinding && currentGrindingBlock != null && currentGrindingBlock.CubeGrid != null)
             {
                 if (currentGrindingBlock.OwnerId != Welder.OwnerId && currentGrindingBlock.CubeGrid.EntityId != Welder.CubeGrid.EntityId)
@@ -258,14 +299,19 @@ namespace SKONanobotBuildAndRepairSystem
                     var ownerId = UtilsPlayer.GetOwner(currentGrindingBlock.CubeGrid as MyCubeGrid);
                     if (ownerId > 0 && ownerId != Welder.OwnerId)
                     {
-                        UtilsFaction.DamageReputationWithPlayerFaction(Welder.OwnerId, ownerId);
+                        UtilsFaction.QueueReputationDamage(Welder.OwnerId, ownerId); // FEAT-261123.5: applied in batches
                     }
                 }
             }
+            if (tsMark != 0L) tsRep += Stopwatch.GetTimestamp() - tsMark;
 
             }
             finally
             {
+                // FEAT-261123.4: remember why this attempt did nothing.
+                if (!grinding && !transporting)
+                    _lastGrindIdle = Handlers.CycleStats.GrindIdleReason(skippedByRefused, grindProtected, grindBudgetDeferred,
+                        skippedByGridLimit, skippedByAssign, loopSkipped, grindNoPower, skippedByOutOfArea);
                 if (profilerTs != 0L)
                 {
                     var _grinding = grinding;
@@ -285,13 +331,51 @@ namespace SKONanobotBuildAndRepairSystem
                     var _loopSkipped = loopSkipped;
                     var _skippedByRefused = skippedByRefused;
                     var _skippedByOutOfArea = skippedByOutOfArea;
+                    var _deadRemoved = deadRemoved;
+                    var _powerMs = tsPower * 1000.0 / tsFreq;
+                    var _claimMs = tsClaim * 1000.0 / tsFreq;
+                    var _areaMs = tsArea * 1000.0 / tsFreq;
+                    var _protectMs = tsProtect * 1000.0 / tsFreq;
+                    var _slotMs = tsSlot * 1000.0 / tsFreq;
+                    var _doGrindMs = tsDoGrind * 1000.0 / tsFreq;
+                    var _removeAllMs = tsRemoveAll * 1000.0 / tsFreq;
+                    var _releaseMs = tsRelease * 1000.0 / tsFreq;
+                    var _repMs = tsRep * 1000.0 / tsFreq;
                     MethodProfiler.StopAndLog("ServerTryGrinding", profilerTs, () =>
-                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15};skipRefused={16};droppedOutOfArea={17}",
+                        string.Format("entityId={0};grinding={1};needGrinding={2};transporting={3};targets={4};currentBlock={5};lockAcquireMs={6:F3};inLockMs={7:F3};iterations={8};skipNull={9};skipClosed={10};skipGrid={11};skipAssign={12};skipScript={13};skipDestroyed={14};loopSkipped={15};skipRefused={16};droppedOutOfArea={17};deadRemoved={18};powerMs={19:F3};claimMs={20:F3};areaMs={21:F3};protectMs={22:F3};slotMs={23:F3};doGrindMs={24:F3};removeEverywhereMs={25:F3};releaseMs={26:F3};reputationMs={27:F3}",
                             _Welder.EntityId, _grinding, _needGrinding, _transporting, _targetCount,
                             State.CurrentGrindingBlock != null ? State.CurrentGrindingBlock.BlockDefinition.Id.SubtypeName : "none",
-                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped, _skippedByRefused, _skippedByOutOfArea));
+                            _lockAcquireMs, _inLockMs, _iterationsExamined, _skippedByNullBlock, _skippedByClosedFatBlock, _skippedByGridLimit, _skippedByAssign, _skippedByScript, _skippedByDestroyed, _loopSkipped, _skippedByRefused, _skippedByOutOfArea, _deadRemoved,
+                            _powerMs, _claimMs, _areaMs, _protectMs, _slotMs, _doGrindMs, _removeAllMs, _releaseMs, _repMs));
                 }
             }
+        }
+
+        // BUG-261123.3: in-place compaction (List.RemoveAll needs System.Predicate, prohibited in the SE sandbox).
+        internal static int RemoveDeadGrindEntries(List<TargetBlockData> list)
+        {
+            var write = 0;
+            for (var read = 0; read < list.Count; read++)
+            {
+                var entry = list[read];
+                if (IsDeadGrindEntry(entry)) continue;
+                if (write != read) list[write] = entry;
+                write++;
+            }
+            var removed = list.Count - write;
+            if (removed > 0) list.RemoveRange(write, removed);
+            return removed;
+        }
+
+        // BUG-261123.3: a grind entry nothing more can be done with (block gone, or fully dismounted: raze queued).
+        internal static bool IsDeadGrindEntry(TargetBlockData targetData)
+        {
+            var block = targetData != null ? targetData.Block : null;
+            if (block == null || block.CubeGrid == null) return true;
+            if (block.FatBlock != null && block.FatBlock.Closed) return true;
+            if (!block.IsFullyDismounted) return false;
+            RazeQueueHandler.Enqueue(block);
+            return true;
         }
 
         // BUG-261122.15: grids whose grind a damage handler refused (protection plugin / mod), per BaR, main thread.
@@ -313,6 +397,14 @@ namespace SKONanobotBuildAndRepairSystem
             return false;
         }
 
+        private int CountGrindRefused()
+        {
+            var now = Mod.NowPlayTime;
+            var count = 0;
+            foreach (var until in _grindRefusedGrids.Values) if (now < until) count++;
+            return count;
+        }
+
         private bool IsGrindRefused(long gridId)
         {
             TimeSpan until;
@@ -325,19 +417,12 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// Drops a finished grind target from this BaR's list and, via
         /// BUG-260511.19's removal propagation, from every cluster member's list so
-        /// pickers stop walking it between scans. Used for fully-dismounted blocks
-        /// and (BUG-260612.10) janitor targets that reached their threshold.
+        /// pickers stop walking it between scans. Used for (BUG-260612.10) janitor
+        /// targets that reached their threshold: members cannot tell those are done.
         /// </summary>
         private void RemoveGrindTargetEverywhere(TargetBlockData targetData)
         {
-            lock (State.PossibleGrindTargets)
-            {
-                if (State.PossibleGrindTargets.Remove(targetData))
-                {
-                    // BUG-260610.33: RebuildHash so CurrentCount tracks the removal.
-                    State.PossibleGrindTargets.RebuildHash();
-                }
-            }
+            RemoveGrindTarget(targetData);
 
             var grindBlock = targetData.Block;
             var cluster = AssignedCluster;
@@ -353,6 +438,23 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         other.RemoveGrindTargetByPosition(gid, pos);
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Drops a finished grind target from this BaR's list only. Enough for fully dismounted blocks: other members
+        /// see them as dead and drop them on their next walk (BUG-261123.3), so scanning every member's list per ground
+        /// block (cost grows with cluster size) is not needed (BUG-261123.7).
+        /// </summary>
+        private void RemoveGrindTarget(TargetBlockData targetData)
+        {
+            lock (State.PossibleGrindTargets)
+            {
+                if (State.PossibleGrindTargets.Remove(targetData))
+                {
+                    // BUG-260610.33: RebuildHash so CurrentCount tracks the removal.
+                    State.PossibleGrindTargets.RebuildHash();
                 }
             }
         }
@@ -562,7 +664,7 @@ namespace SKONanobotBuildAndRepairSystem
                     State.CurrentTransportIsCollecting = false;
                     State.CurrentTransportTarget = transportPos;
                     State.CurrentTransportStartTime = playTime;
-                    State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.GrindTransportSpeed);
+                    State.CurrentTransportTime = TransportTime(targetData.Distance, Settings.GrindTransportSpeed);
                     if (tsTransportMark != 0L) tsTransportSet = Stopwatch.GetTimestamp() - tsTransportMark;
                 }
 

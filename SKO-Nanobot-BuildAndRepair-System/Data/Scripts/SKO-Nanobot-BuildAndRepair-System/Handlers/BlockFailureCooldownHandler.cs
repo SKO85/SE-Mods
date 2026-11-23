@@ -43,8 +43,9 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         // byte payload: ConcurrentDictionary requires a value type and one byte
         // is the smallest practical choice. The actual stored value is irrelevant —
         // only key presence matters for the IsOnCooldown check.
-        private static readonly TtlCache<BlockSystemAssigningHandler.BlockKey, byte> Cache =
-            new TtlCache<BlockSystemAssigningHandler.BlockKey, byte>(
+        // Value: the failing BaR's supply group (BUG-261123.1); a mark only applies to BaRs in that group.
+        private static readonly TtlCache<BlockSystemAssigningHandler.BlockKey, object> Cache =
+            new TtlCache<BlockSystemAssigningHandler.BlockKey, object>(
                 TimeSpan.FromSeconds(CooldownSecondsDefault), null, 4, 256);
 
         public static int CooldownCount { get { return Cache.Count; } }
@@ -54,21 +55,25 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             get { return Mod.Settings != null && Mod.Settings.BlockFailureCooldownSeconds > 0; }
         }
 
-        public static bool IsOnCooldown(IMySlimBlock block)
+        /// <summary>
+        /// BUG-261123.1: "no components" only says something about the failing BaR's supply. supplyGroup is the BaR
+        /// grid's logical grid group (shared conveyors); a BaR in another group (separate ship) ignores the mark.
+        /// </summary>
+        public static bool IsOnCooldown(IMySlimBlock block, object supplyGroup)
         {
             if (!IsEnabled) return false;
             if (block == null || block.CubeGrid == null) return false;
-            byte ignored;
+            object markedBy;
             var key = new BlockSystemAssigningHandler.BlockKey(block.CubeGrid.EntityId, block.Position);
-            return Cache.TryGet(key, out ignored);
+            return Cache.TryGet(key, out markedBy) && ReferenceEquals(markedBy, supplyGroup);
         }
 
-        public static void MarkFailed(IMySlimBlock block)
+        public static void MarkFailed(IMySlimBlock block, object supplyGroup)
         {
             if (!IsEnabled) return;
             if (block == null || block.CubeGrid == null) return;
             var key = new BlockSystemAssigningHandler.BlockKey(block.CubeGrid.EntityId, block.Position);
-            Cache.Set(key, (byte)1, TimeSpan.FromSeconds(Mod.Settings.BlockFailureCooldownSeconds));
+            Cache.Set(key, supplyGroup, TimeSpan.FromSeconds(Mod.Settings.BlockFailureCooldownSeconds));
         }
 
         public static void Cleanup()

@@ -24,6 +24,7 @@ ingame:S30
 ingame:S31
 ingame:S32
 ingame:S33
+unit:AreaDrawModeTests
 ## Last verified
 v2.5.6 build 261122.8 2026-11-22 — in game (01_211_018, SP, 5 BaRs): all six green; tick avg 0.010-0.014 ms, sim 1.00,
 scans 9 / cluster rebuilds 30 / entity queries 18 in every state; ShowAreaDraw 0.004 ms per BaR per frame (BUG-261122.8).

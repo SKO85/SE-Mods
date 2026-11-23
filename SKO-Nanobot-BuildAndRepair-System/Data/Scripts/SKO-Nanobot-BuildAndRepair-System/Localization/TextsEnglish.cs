@@ -103,6 +103,8 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"Info_InventoryFull",              "Block inventory is full!"},
             {"Info_LimitReached",               "PCU limit reached!"},
             {"Info_ProjectedSkipped",           "Projected blocks skipped: {0} (retried automatically)"},
+            {"Info_GrindBlocked",               "Grinding blocked by a shield / protection mod on {0} grid(s)"},
+            {"Info_WeldBlocked",                "Welding blocked by a safe zone / protection on {0} grid(s)"},
             {"Info_DisabledByRemote",           "Disabled by remote control!"},
             {"Info_BlocksToBuild",              "Blocks to build:"},
             {"Info_BlocksToGrind",              "Blocks to dismantle:"},

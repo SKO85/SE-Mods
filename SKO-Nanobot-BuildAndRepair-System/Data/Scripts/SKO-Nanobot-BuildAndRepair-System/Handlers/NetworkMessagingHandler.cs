@@ -6,6 +6,7 @@ using SKONanobotBuildAndRepairSystem.Utils;
 using System;
 using System.Collections.Generic;
 using VRage.Game.ModAPI;
+using VRageMath;
 
 namespace SKONanobotBuildAndRepairSystem.Handlers
 {
@@ -31,6 +32,8 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         {
             if (_registered || MyAPIGateway.Multiplayer == null || MyAPIGateway.Utilities == null)
                 return;
+
+            ResetStateRecipients();
 
             if (MyAPIGateway.Session.IsServer)
             {
@@ -64,6 +67,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
             // with the flag stuck true made the next world's Register() a no-op
             // (same pattern as BUG-260610.27 in DamageHandler/SafeZoneHandler).
             _registered = false;
+            ResetStateRecipients();
 
             if (MyAPIGateway.Multiplayer == null || MyAPIGateway.Utilities == null || MyAPIGateway.Session == null)
                 return;
@@ -94,6 +98,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ServerMsgDataRequestReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 // BUG-260610.19: reply to the tamper-proof transport sender, not the
@@ -106,6 +111,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ServerMsgBlockDataRequestReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgBlockDataRequest>(data);
@@ -140,6 +146,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ServerMsgModCommandReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModCommand>(data);
@@ -215,6 +222,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ClientMsgModSettingsReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 // BUG-260610.3: mod messages can be relayed client->client; only the
@@ -237,6 +245,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ClientMsgBlockStateReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 // BUG-260610.3: only the server may push block state.
@@ -264,6 +273,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ClientMsgModCommandResponseReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 // BUG-260610.3: only the server may push command responses
@@ -296,6 +306,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void MsgBlockSettingsReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 // BUG-260610.3: on clients, only accept settings pushed by the server.
@@ -389,7 +400,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Settings = Mod.Settings
                 };
 
-                if (!MyAPIGateway.Multiplayer.SendMessageTo(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true))
+                if (!SendTo(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId))
                 {
                     Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncModSettingsSend failed");
                 }
@@ -413,7 +424,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Settings = Mod.Settings
                 };
 
-                MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                SendToOthers(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "BroadcastModSettings: {0}", ex.Message); }
         }
@@ -423,6 +434,104 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         /// Server-only. Reuses a single player list to avoid per-call allocation.
         /// </summary>
         private static readonly List<IMyPlayer> _adminBroadcastPlayers = new List<IMyPlayer>();
+        // FEAT-261123.7: all sends go through these so NetStats sees every message.
+        private static bool SendTo(ushort msgId, byte[] bytes, ulong steamId)
+        {
+            NetStats.Sent(msgId, bytes.Length, 1);
+            return MyAPIGateway.Multiplayer.SendMessageTo(msgId, bytes, steamId, true);
+        }
+
+        private static bool SendToOthers(ushort msgId, byte[] bytes)
+        {
+            var players = MyAPIGateway.Players != null ? (int)MyAPIGateway.Players.Count : 0;
+            NetStats.Sent(msgId, bytes.Length, MyAPIGateway.Utilities.IsDedicated ? players : players - 1);
+            return MyAPIGateway.Multiplayer.SendMessageToOthers(msgId, bytes, true);
+        }
+
+        // FEAT-261123.8: players are refreshed every 2 s; positions are read per send (main thread).
+        private static readonly List<IMyPlayer> _players = new List<IMyPlayer>();
+        private static readonly List<ulong> _stateNewcomers = new List<ulong>();
+        private static TimeSpan _playersRefreshAt = TimeSpan.Zero;
+        private const double StateRangeMargin = 500.0;
+
+        /// <summary>Statics survive a world reload in the same process: drop the old world's players and refresh
+        /// deadline (its play time can be far ahead of the new world's).</summary>
+        internal static void ResetStateRecipients()
+        {
+            _players.Clear();
+            _stateNewcomers.Clear();
+            _playersRefreshAt = TimeSpan.Zero;
+        }
+
+        /// <summary>Range in which a player gets BaR state: the world's sync distance (grids beyond it are not loaded on
+        /// that client, so state for them is thrown away) plus a margin.</summary>
+        internal static double StateRange(int syncDistance)
+        {
+            return (syncDistance > 0 ? syncDistance : 3000) + StateRangeMargin;
+        }
+
+        internal static bool InStateRange(Vector3D player, Vector3D bar, double range)
+        {
+            return Vector3D.DistanceSquared(player, bar) <= range * range;
+        }
+
+        /// <summary>
+        /// FEAT-261123.8: block state to players within StateRange of the BaR instead of everyone. A player who comes
+        /// into range gets a full snapshot (they missed the deltas while away).
+        /// </summary>
+        private static bool SendStateToNearby(NanobotSystem system, byte[] bytes)
+        {
+            var now = MyAPIGateway.Session.ElapsedPlayTime;
+            if (now >= _playersRefreshAt)
+            {
+                _players.Clear();
+                MyAPIGateway.Players.GetPlayers(_players);
+                _playersRefreshAt = now + TimeSpan.FromSeconds(2);
+            }
+            var settings = MyAPIGateway.Session.SessionSettings;
+            var range = StateRange(settings != null ? settings.SyncDistance : 0);
+            var barPos = system.Entity.GetPosition();
+            var myId = MyAPIGateway.Multiplayer.MyId;
+            var recipients = system.StateRecipients;
+            _stateNewcomers.Clear();
+            var sent = 0;
+            var far = 0;
+            var ok = true;
+            for (int i = 0; i < _players.Count; i++)
+            {
+                var p = _players[i];
+                if (p == null || p.IsBot || p.SteamUserId == 0 || p.SteamUserId == myId) continue;
+                if (!InStateRange(p.GetPosition(), barPos, range))
+                {
+                    far++;
+                    recipients.Remove(p.SteamUserId);
+                    continue;
+                }
+                if (!recipients.Contains(p.SteamUserId))
+                {
+                    _stateNewcomers.Add(p.SteamUserId);
+                    continue;
+                }
+                ok = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_STATE_FROM_SERVER, bytes, p.SteamUserId, true) && ok;
+                sent++;
+            }
+            NetStats.Sent(MSGID_BLOCK_STATE_FROM_SERVER, bytes.Length, sent);
+            if (far > 0) NetStats.SkippedFar(MSGID_BLOCK_STATE_FROM_SERVER, far);
+            for (int i = 0; i < _stateNewcomers.Count; i++)
+            {
+                recipients.Add(_stateNewcomers[i]);
+                MsgBlockStateSend(_stateNewcomers[i], system); // full snapshot
+            }
+            _stateNewcomers.Clear();
+            return ok;
+        }
+
+        private static bool SendToServer(ushort msgId, byte[] bytes)
+        {
+            NetStats.Sent(msgId, bytes.Length, 1);
+            return MyAPIGateway.Multiplayer.SendMessageToServer(msgId, bytes, true);
+        }
+
         private static void SendToAdmins(ushort msgId, byte[] bytes)
         {
             if (!MyAPIGateway.Session.IsServer || MyAPIGateway.Multiplayer == null || !MyAPIGateway.Multiplayer.MultiplayerActive)
@@ -435,7 +544,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 if (player.SteamUserId == 0) continue;
                 if (SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel))
                 {
-                    MyAPIGateway.Multiplayer.SendMessageTo(msgId, bytes, player.SteamUserId, true);
+                    SendTo(msgId, bytes, player.SteamUserId);
                 }
             }
         }
@@ -454,6 +563,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ClientMsgDebugStatsReceived(ushort channelId, byte[] bytes, ulong senderSteamId, bool isSenderServer)
         {
+            NetStats.Received(channelId, bytes != null ? bytes.Length : 0);
             try
             {
                 if (!isSenderServer) return;
@@ -477,6 +587,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ClientMsgProfileSummaryReceived(ushort channelId, byte[] bytes, ulong senderSteamId, bool isSenderServer)
         {
+            NetStats.Received(channelId, bytes != null ? bytes.Length : 0);
             try
             {
                 if (!isSenderServer) return;
@@ -500,7 +611,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 else
                     msgSnd.SteamId = 0;
 
-                MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_MOD_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                SendToServer(MSGID_MOD_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgDataRequestSend: {0}", ex.Message); }
         }
@@ -522,16 +633,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     if (steamId == 0)
                     {
-                        res = MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                        res = SendToOthers(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
                     }
                     else
                     {
-                        res = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true);
+                        res = SendTo(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId);
                     }
                 }
                 else
                 {
-                    res = MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_SETTINGS_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                    res = SendToServer(MSGID_BLOCK_SETTINGS_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
                 }
 
                 if (!res && Logging.Instance.ShouldLog(Logging.Level.Error))
@@ -565,11 +676,12 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 var res = false;
                 if (steamId == 0)
                 {
-                    res = MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_BLOCK_STATE_FROM_SERVER, bytes, true);
+                    // FEAT-261123.8: only players who have the BaR loaded (within sync distance).
+                    res = SendStateToNearby(system, bytes);
                 }
                 else
                 {
-                    res = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_STATE_FROM_SERVER, bytes, steamId, true);
+                    res = SendTo(MSGID_BLOCK_STATE_FROM_SERVER, bytes, steamId);
                 }
 
                 if (!res && Logging.Instance.ShouldLog(Logging.Level.Error))
@@ -614,7 +726,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 msgSnd.EntityId = block.Entity.EntityId;
 
-                MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                SendToServer(MSGID_BLOCK_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgBlockDataRequestSend: {0}", ex.Message); }
         }
@@ -634,7 +746,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 msgSnd.Command = command;
 
-                MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_MOD_COMMAND_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                SendToServer(MSGID_MOD_COMMAND_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgModCommandSend: {0}", ex.Message); }
         }
@@ -652,7 +764,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     ScreenSubtitle = screenSubtitle
                 };
 
-                MyAPIGateway.Multiplayer.SendMessageTo(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(response), steamId, true);
+                SendTo(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(response), steamId);
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SendCommandResponse: {0}", ex.Message); }
         }

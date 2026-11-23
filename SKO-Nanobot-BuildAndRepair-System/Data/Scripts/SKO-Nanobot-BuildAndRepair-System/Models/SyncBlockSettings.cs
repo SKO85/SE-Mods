@@ -778,7 +778,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             MaximumRequiredElectricPowerGrinding = Mod.Settings.Welder.MaximumRequiredElectricPowerGrinding / scale;
 
             var maxMultiplier = Math.Max(Mod.Settings.Welder.WeldingMultiplier, Mod.Settings.Welder.GrindingMultiplier);
-            var rangeScale = Math.Min(Mod.Settings.Range / NanobotSystem.WELDER_RANGE_DEFAULT_IN_M, 4.0f);
+            var rangeScale = NanobotSystem.TransportRangeScale(Mod.Settings.Range);
             var workSpeedFactor = Math.Max(1, Math.Min(10, Mod.Settings.Welder.WorkSpeed));
             TransportSpeed = maxMultiplier * NanobotSystem.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT * rangeScale * workSpeedFactor;
             WeldTransportSpeed = Mod.Settings.Welder.WeldingMultiplier * NanobotSystem.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT * rangeScale * workSpeedFactor;

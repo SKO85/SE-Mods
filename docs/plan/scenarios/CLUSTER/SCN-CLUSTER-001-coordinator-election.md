@@ -22,6 +22,8 @@
 `ScanClusterCoordinator.RebuildClusters` maxMs ≤ 2 with 20 BaRs.
 ## Coverage
 ingame:S07
+unit:ClusterTests
+
 ## Last verified
 never
 ## Related

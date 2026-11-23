@@ -14,8 +14,9 @@ Code: `_Scripts/BuildAndRepairSystem/Testing/Data/Scripts/SKO-Nanobot-BuildAndRe
 - World: empty **survival** world, only the `-Testing` mod, admin creative tools **off** (`test run` refuses creative
   worlds; creative tools skip the game's projector component check).
 - `/nanobars test clear` — delete old results. `/nanobars test list` — show the registry.
-- `/nanobars test run <id|id,id|id-id|all> [xN]` — e.g. `S03`, `S03,S20`, `S28-S33`, `S01-S05 x3`. Ranges follow the
-  `test list` order. A hidden warm-up (`S00`) runs first in every session; each scenario posts a start line in chat.
+- `/nanobars test run <id|id,id|id-id|@group|all> [xN]` — e.g. `S03`, `S03,S20`, `S28-S33`, `@zone`,
+  `@zone,@shields,S03 x2`. Ranges follow the `test list` order. A hidden warm-up (`S00`) runs first in every session;
+  each scenario posts a start line in chat. `/nanobars test groups` lists the groups (see [Groups](#groups)).
 - Spawn safety: at the start of a run, leftover test grids (`NanobotTest-*` and anything attached, e.g. saved by an
   autosave mid-run) are removed; any other grid within 150 m of the origin stops the run with its name (move away or
   use `test origin`) — spawning into a grid makes the physics explode. Parts that split off a test grid while
@@ -29,6 +30,40 @@ Code: `_Scripts/BuildAndRepairSystem/Testing/Data/Scripts/SKO-Nanobot-BuildAndRe
 - Standard metrics on every result line: `runS`, `tickAvgMs`/`tickPeakMs` (mod tick cost), `simMin`/`simAvg`,
   `weldBudgetPeak`, `grindBudgetPeak`, `assignmentsPeak` (claims), `otherBars`, plus `calls/steadyAvgMs/maxMs` for the
   scenario's profiled methods.
+
+### Test HUD
+While a session runs, the player who started it sees a HUD (TextHudAPI, like the debug HUD): **top right** the session
+table (test, run, state PASS / FAIL / SKIP / RUN / queued, time, first failure or skip reason; the last ~24 rows plus a
+done / passed / failed / skipped line), **top left** the running test (id, n / total, description, phase, elapsed /
+max time) or the session result when finished. A new `test run` starts it fresh, `test clear` removes it. On a
+dedicated server the server sends it to the caller (message 40150, not counted in the `net.*` metrics).
+
+## Groups
+
+`/nanobars test run @name` runs a group; groups combine with ids and ranges (`@zone,@shields,S03`). A scenario can be in
+several groups; S00 (warm-up) is in none and runs first anyway. Defined in `ScenarioRegistry.Groups`;
+`ScenarioGroupsTests` fails when a scenario has no group, a group lists an unknown id, or a group is missing here.
+Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; an inventory fix: `@inventory,@weld`.
+
+| Group | What | Scenarios |
+| ----- | ---- | --------- |
+| `@core` | Repair, damage detection, range, work modes, power, speeds | S01, S19, S20, S25, S57, S72, S75-S80 |
+| `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88, S111, S112, S114, S115, S124, S125 |
+| `@projection` | Projector building, incl. admin and safe-zone rules | S03, S27, S42, S46, S85 |
+| `@subgrids` | Rotors, pistons, hinges, wheels, connectors, ships in flight | S18, S34-S38, S44, S45, S111, S112, S130 |
+| `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89, S112, S130, S133, S134 |
+| `@zone` | Safe zones | S39-S42, S53, S85 |
+| `@shields` | DefenseShields (skipped without the mod) | S58-S63 |
+| `@inventory` | Component sources, sorter, empty cargo, push targets, push options, logistics at scale | S02, S84, S87-S93, S103-S110, S113 |
+| `@claims` | Block claims, per-grid limit, BaRs sharing work, takeovers | S05, S06, S50, S51, S54-S56, S86, S94-S98 |
+| `@cluster` | Cluster coordination and the per-grid limit | S06, S07, S50, S54 |
+| `@perf` | Load, large grids, scan cost by grid size, logistics at scale, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S112, S119-S123 |
+| `@companion` | PB API and the companion script | S09, S71, S81-S83 |
+| `@config` | Admin settings (Fixed / Default, limits, checks) | S46-S53 |
+| `@races` | Async / timing: grids deleted, settings flipped, BaRs switched off and on mid-scan | S94-S98, S127-S129 |
+| `@sync` | Network load on servers: settings / state sync rate and size (run on Torch with a client) | S43, S70, S106, S111, S116-S123, S126 |
+| `@priority` | Weld / grind priority lists | S14-S16 |
+| `@collect` | Collecting floating objects | S10, S131, S132 |
 
 ## Reuse or add? — index by area
 
@@ -122,7 +157,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S50 | DisableLimitSystemsPerTargetGrid: limit 2 ignored | CFG-003, CLUSTER-002 | 4 s | 261122.11 |
 | S51 | AssignToSystemEnabled=false: finished without claims | CFG-003, BUDGET-001 | 4 s | 261122.11 |
 | S52 | MaxWeldsPerTick=1: never more than one weld per tick | CFG-003, BUDGET-002 | 1 s | 261122.11 |
-| S53 | SafeZoneCheckEnabled=false: BaR ignores a no-welding zone | CFG-003, ZONE-001 | 2 s | 261122.11 |
+| S53 | SafeZoneCheckEnabled=false: BaR ignores a no-welding zone | CFG-003, ZONE-001 | 2 s | 261123.50 Torch — refused: 1 weld call / 20 s, "Welding blocked" shown |
 | S54 | Per-grid limit lowered 4 → 2 while working: surplus released | CLUSTER-002 | 35 s | 261122.12 |
 | S55 | Blocks claimed while welded, none left claimed afterwards | BUDGET-001 | 7 s | 261122.13 |
 | S56 | Welding BaR switched off: claim released, other BaR finishes | BUDGET-001 | 22 s | 261122.13 |
@@ -153,8 +188,57 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S81 | Companion script, two groups: each queues into its own assembler, titles its own LCD | API-002 | ~20 s | 261122.29 — A 100, B 0 |
 | S82 | Companion script, two assemblers: queue = missing, both used, no 0 items, stable 20 s | API-002 | ~35 s | 261122.32 — 100/100, stable |
 | S83 | Companion script, stock in cargo: nothing queued while welding from stock | API-002 | 25 s | 261122.32 — nothing queued |
-| S84 | Sorter-blocked stock stays in the missing list (companion script keeps queuing) | WELD-005 | 20 s | 261122.32 — blocked 500 kept, 200 missing |
+| S84 | Sorter-blocked stock stays in the missing list (companion script keeps queuing) | WELD-005 | 20 s | 261123.10 — blocked stock kept |
 | S85 | Safe zone without Welding, with BuildingProjections: projections placed, not welded further | ZONE-001 | ~20 s | 261122.36 — 10 placed, 0 welded, 750 + 240 + 10 = 1000 |
+| S86 | A starved BaR does not stop a stocked BaR on another ship from repairing its grid | WELD-008 | ~20 s | 261123.7 — 10/10 in 3.4 s (5/10 in 45 s before the fix) |
+| S87 | Source: components only in a docked ship's cargo are used for welding | INV-001 | ~15 s | 261123.10 — 5/5 in 2.5 s, 100 plates from the docked ship |
+| S88 | Source: components only in an assembler's output are used for welding | INV-001 | ~10 s | 261123.10 — 5/5, assembler at (0,0,3) |
+| S89 | Push targets full: BaR pauses without losing ore, resumes once space is freed | INV-001, INV-002 | ~60 s | 261123.15 — full reported, 124155 kg iron kept, done 15 s after freeing |
+| S90 | Push immediately off: nothing leaves the BaR's inventory | INV-002 | 45 s | 261123.19 — nothing pushed in 45 s |
+| S91 | Push ingots/ore immediately: only ore leaves the BaR | INV-002 | ≤75 s | 261123.19 — ore pushed at 21.9 s |
+| S92 | Push components immediately: only components leave the BaR | INV-002 | ≤75 s | 261123.19 — plates pushed at 34.3 s |
+| S93 | Push items immediately: only other items (tools) leave the BaR | INV-002 | ≤75 s | 261123.19 — tool pushed at 34.2 s |
+| S94 | Claims: 2 BaRs finish each block they start (never more half-welded blocks than BaRs) | BUDGET-001 | ~30 s | 261123.19 — peak 2 half-welded, done 7.2 s |
+| S95 | Claims: 2 BaRs finish each block they grind (never more half-ground blocks than BaRs) | BUDGET-001 | ~30 s | 261123.19 — peak 2 half-ground, done 14.8 s |
+| S96 | Claims: BaR destroyed mid-weld, claim freed at once, other BaR finishes | BUDGET-001 | ~30 s | 261123.19 — claim freed 0.5 s, finished 11.0 s |
+| S97 | Claims: BaR loses power mid-weld, claim expires, BaR on another ship finishes | BUDGET-001 | ~40 s | 261123.19 — claim expired 8.2 s, B finished 19.2 s |
+| S98 | Claims: BaR switched off mid-grind, claim expires, other BaR finishes grinding | BUDGET-001 | ~40 s | 261123.19 — claim expired 7.7 s, B finished 31.7 s |
+| S99 | Scan cost: 1 BaR scanning a 1000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 1.4 ms, GetBlocks 0.05 ms, tick 0.015 ms |
+| S100 | Scan cost: 1 BaR scanning a 2000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 2.5 ms, GetBlocks 0.08 ms |
+| S101 | Scan cost: 1 BaR scanning a 5000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 6.0 ms, GetBlocks 0.28 ms |
+| S102 | Scan cost: 1 BaR scanning a 10000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 11.5 ms, GetBlocks 0.47 ms, tick 0.08 ms |
+| S103 | Logistics: 10 BaRs, ~50 containers, plates spread thin, ships around | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S104 | Logistics: 20 BaRs, ~100 containers, plates spread thin, ships around | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S105 | Logistics: 50 BaRs, ~250 containers, plates spread thin, ships around | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S106 | Logistics: 100 BaRs, ~500 containers, plates spread thin, ships around | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S107 | Logistics, busy base: 10 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S108 | Logistics, busy base: 20 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S109 | Logistics, busy base: 50 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S110 | Logistics, busy base: 100 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S111 | Moving arm: 1 BaR on piston + rotor welds a ring of grids via the conveyors, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | 261123.32 — 48/48 in 27.4 s, 960 plates via conveyors, sim 1.0 |
+| S112 | Moving arm: 3 BaRs on piston + rotor weld and grind a ring of grids, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | 261123.32 — 24 welded + 24 ground in 14.4 s, sim 1.0 |
+| S113 | Probe: ore / ingot / component fit and transport -> BaR move (MaxItemsAddable) | INV-002 | <1 min | 261123.40 — all fit / moved, incl. 99 % full BaR (422 kg ore, 52 plates) |
+| S114 | Small-grid projection on a small ship built by a large BaR 12 m away | WELD-002 | <1 min | 261123.42 — 10/10 built + welded in 2.9 s, plates exact |
+| S115 | Small-grid projection built by a small BaR on the same small ship | WELD-002 | <1 min | 261123.42 — 10/10 built + welded in 3.4 s, plates exact |
+| S116 | Sync: 20 BaRs, settings toggled every 0.5 s (settings broadcast rate) | BUDGET-010 | <1 min | never |
+| S117 | Sync: one BaR with a 512-entry target list (state message size / rate) | BUDGET-010 | <1 min | never |
+| S118 | Sync: 50 idle BaRs, nothing to do (idle traffic) | BUDGET-010 | <1 min | never |
+| S119 | Traffic / spikes: 10 BaRs welding a 100-block grid | BUDGET-010 | ~1 min | never |
+| S120 | Traffic / spikes: 10 BaRs welding a 1,000-block grid | BUDGET-010 | ~1 min | never |
+| S121 | Traffic / spikes: 10 BaRs welding a 3,000-block grid | BUDGET-010 | ~1 min | never |
+| S122 | Traffic / spikes: 10 BaRs welding an 8,000-block grid | BUDGET-010 | ~1 min | never |
+| S123 | Traffic / spikes: 10 BaRs welding 100 + 1,000 + 3,000 + 8,000-block grids at once | BUDGET-010 | ~1 min | never |
+| S124 | Projection with weld option Functional: placed and welded to functional, not full | WELD-003, WELD-002 | <1 min | never |
+| S125 | Projection with weld option Skeleton: placed, not welded further | WELD-003, WELD-002 | <1 min | never |
+| S126 | Sync: 5 BaRs working 10 km from every player send them no state | BUDGET-010 | <1 min | 261123.50 Torch — 20/20 welded, 0 state bytes to the client |
+| S127 | Races: target grids deleted / spawned every 3 s while BaRs scan and weld | BUDGET-011 | ~1 min | 261123.51 Torch — 6 deleted / 9 spawned, done 24.3 s, 0 errors |
+| S128 | Races: SearchMode / WorkMode flipped every 1 s while 10 BaRs weld | BUDGET-011 | ~1 min | 261123.51 Torch — 21 flips, done 21.0 s, 0 errors |
+| S129 | Races: 10 BaRs switched off / on every 1.5 s while welding | BUDGET-011 | ~1 min | 261123.51 Torch — 14 toggles, done 24.7 s, 0 claims left |
+| S130 | Mechanical derelict: base grid, rotor head and piston head all ground away | GRIND-004 | ~1 min | 261123.65 — base + both heads ground away |
+| S131 | Collect: only stacks inside the area and of enabled classes (ore off, 70 m out ignored) | COLLECT-001 | <1 min | 261123.68 — inside collected; outside 2/2 and ore 3/3 left |
+| S132 | Collect only when idle: nothing collected while welding, everything after | COLLECT-001 | <1 min | 261123.68 — weld done 4.2 s, first collect 5.0 s |
+| S133 | Janitor DisableOnly: functional blocks ground until disabled, not removed; armor untouched | GRIND-002 | <1 min | 261123.68 — 0.44/0.79/0.79 vs 0.48/0.87, none removed, armor untouched |
+| S134 | Janitor HackOnly: functional blocks ground until hackable, not removed; armor untouched | GRIND-002 | <1 min | 261123.68 — none removed, armor untouched |
 
 ## Scenarios
 
@@ -377,7 +461,11 @@ grid at the same time (sampled from their current blocks), grid finished.
 `MaxWeldsPerTick=1`, 5 BaRs, 20 blocks. **Pass** finished, `weldBudgetPeak` ≤ 1.
 
 ### S53
-`SafeZoneCheckEnabled=false` under a no-welding zone: the BaR ignores the zone (state says allowed) and welds.
+`SafeZoneCheckEnabled=false` under a no-welding zone: the BaR ignores the zone (state says allowed) and tries to weld
+(`weldCalls > 0`). Whether the weld lands is the game's rule: single player with admin / creative rights welds all 5;
+on a dedicated server the game refuses inside the zone (Torch 261123.42: 745 calls, 0 welded) — both pass, partial fails.
+20 s window. When refused (DS), the BaR must stop retrying (<= 5 weld calls, BUG-261123.8) and show "Welding
+blocked". **Records** `welded`, `weldCalls`, `gameRefusedInZone`, `dedicated`, `weldBlockedShown`.
 
 ### S54
 **Proves** lowering the per-grid limit at runtime (BUG-261006.1). **Setup** 4 BaRs around an 80-block grid, limit 4,
@@ -436,7 +524,8 @@ welding has no shield check.
 **Measures / proves** load: 2 rigs x 10 BaRs (large clusters) on own damaged ships of 25 / 150 / 600 blocks (dynamic,
 in a row along X), WeldBeforeGrind, BoundingBox 200 m, 1000 SteelPlate per container, 75 s or until done.
 **Pass** every ship got welding, >= 75 % of BaRs worked, tick avg <= 2 ms / peak <= 50 ms, sim >= 0.5, and the speed
-floor (blocks per second; S64 42, S65 43, S66 27, S67 26 — ~70 % of the 2026-11-22 baseline).
+floor (blocks per second; S64 42, S65 43, S66 24, S67 24 — ~70 % of the dev-PC baseline). MaxSystemsPerTargetGrid is
+set to 20: its default is 10 in multiplayer, so on Torch half the BaRs were held back (35 % idle cycles, 41 vs 60 welds/s).
 **Records** `bars`, `rigs`, `clusters`, `barsWorked(Pct)`, `activePeak`, `weldedS/M/L`, `weldedPerSecond`, weld / grind /
 scan / cluster method stats, and (BUG-261122.14) `busyPct`, `transportPct`, `avgTargetDistM`, `avgListSize`,
 `sharedBlockSamples`. `test run S64-S67 detail` keeps per-call profiler logs.
@@ -540,6 +629,261 @@ stock stays put, SteelPlate is reported missing (the companion script keeps queu
 construction stockpiles, plus the mounted creation plates = stock: the build may stockpile the BaR's ready components).
 Run with admin creative tools and "ignore safe zones" off (creative tools build instantly; the bypass welds). Counterparts: S39 (no welding, real blocks), S42 (no building projections).
 
+### S86
+**Proves** BUG-261123.1: ship A (BaR, 10 damaged blocks, empty cargo) and ship B 25 m away (BaR in Fly mode,
+500 SteelPlate, no damage), not connected. **Pass** B repairs all of A's blocks within 45 s. **Records** `firstWeldS`,
+`doneS`, ship A's BaR state (expected MissingComponents).
+
+### S87
+**Proves** components are pulled from a ship docked by connector (S38 docking; ship cargo at ship cell (0,0,1)) when
+the rig's own cargo is empty. **Layout check** the ship cargo is conveyor-connected to the BaR. **Pass** all 5 damaged
+rig blocks welded within 40 s and SteelPlate taken from the ship cargo.
+
+### S88
+**Proves** an assembler's output inventory is a source: 500 SteelPlate only in a switched-off assembler's output.
+The large assembler has conveyor ports on some faces only, so three candidates are placed (rig cells (2,0,0), (0,0,3),
+(1,0,3)); the first connected to the BaR is stocked (`sourceCandidate`). **Layout check** (none connected = fail) and
+**Pass** as S87.
+
+### S89
+**Proves** the push-targets-full path. Rig: BaR (GrindOnly, janitor NoOwnership, PushIngotOreImmediately), every rig
+container filled with stone (volume-based fill, 3 passes). Three single-container derelicts 25 m away (no armor next to
+them, so nothing splits off), each full of iron ore. Records `worldMaxFloatingObjects`, `barMaxVolume`, iron per
+location at the end and at the first loss. **Pass** the BaR reports a full
+inventory while nothing can be pushed (first 30 s), resumes after two rig containers are emptied at 30 s and grinds the
+container within 120 s; iron ore (derelict + rig + BaR + transport) is never below the starting amount.
+
+### S90
+**Proves** the three "push immediately" options, one variant each (S90 none, S91 ingots/ore, S92 components, S93 other
+items). The idle BaR holds 200 kg iron ore, 50 SteelPlate and 1 hand welder (`WelderItem`); the rig cargo is empty.
+**Pass** only the class whose option is on leaves the BaR (into the rig cargo; up to 75 s, `pushedAtS`; S90 watches
+45 s), the others stay, and every class is conserved (BaR + cargo = start). An idle BaR refreshes its push targets with
+its slower idle scan and backs off 15 s after a push that found no target, so a fresh idle BaR can take ~45 s to push.
+Diagnostics: `barFlags`, engine `*CanTransfer` / `*CanAdd` for BaR -> rig container.
+
+### S91
+Variant of S90: `PushIngotOreImmediately` only.
+
+### S92
+Variant of S90: `PushComponentImmediately` only.
+
+### S93
+Variant of S90: `PushItemsImmediately` only.
+
+### S94
+**Proves** BaRs finish what they start: 2 BaRs (BoundingBox, WeldOnly), 10 damaged blocks, WorkSpeed 10,
+WeldingMultiplier 0.1. Sampled every 0.5 s: blocks welded a bit but not finished (`inProgressPeak`). **Pass** never
+more than 2 (one per BaR) and all finished within 120 s.
+
+### S95
+Grinding counterpart of S94: 2 BaRs grind a 10-block derelict (janitor NoOwnership, GrindingMultiplier 0.1).
+**Pass** never more than 2 blocks partly ground at once, all gone within 120 s.
+
+### S96
+**Proves** a destroyed BaR frees its claims at once (`Close` -> `ReleaseAllForSystem`): A welds X alone (B off,
+WorkSpeed 1, WeldingMultiplier 0.1); as soon as X gained integrity, A's block is razed and B switched on.
+**Pass** A held the claim, the claim is gone within 3 s, B finishes X. **Records** `releaseSeconds`, `takeoverSeconds`,
+`finishSeconds`.
+
+### S97
+**Proves** an unpowered BaR's claim expires: A on its own rig welds X; B on a second rig 25 m away (own battery,
+stocked). Mid-weld A's battery is switched off and B on. **Pass** A's claim released within TTL + 3 s, B finishes X.
+
+### S98
+Grinding counterpart of S56: A grinds a derelict block X alone; mid-grind A is switched off and B on. **Pass** A's
+claim released within TTL + 3 s, B finishes grinding X.
+
+### S99
+**Records** scan cost by grid size: one BaR (BoundingBox, area 200 m, WeldOnly) next to a static grid of 1,000 blocks
+(20 damaged, welded slowly so the BaR keeps scanning; the rest intact armor, rows of 100). 45 s. Per-method cost of
+the game lookups (`SharedEntityCache.GetEntitiesInBox` = grids in the area, `SharedGridBlockCache.GetBlocks*` = all
+blocks of a grid) and the mod's scan steps (`AsyncClusterScan`, `AsyncAddBlocksOfBox`, `PreSortClusterCandidates`,
+`ApplyClusterResultToSelf`). **Pass** main-thread tick avg <= 1 ms and sim speed >= 0.8 (the scan runs on a
+background thread; its cost is recorded, compare across S99-S102).
+
+### S100
+S99 with a 2,000-block grid.
+
+### S101
+S99 with a 5,000-block grid.
+
+### S102
+S99 with a 10,000-block grid.
+
+### S103
+**Proves / records** component logistics at scale. Station: N = 10 BaRs in a row (rig cargo ~3 per BaR) plus 2 extra
+containers per BaR behind the back row; SteelPlate spread evenly over every container (the ships' missing plates x 1.2)
+and 10 plates in each BaR's own inventory (BaRs are sources for each other). Static ships with 20 damaged armor
+blocks each (one per 5 BaRs, at least 2) 25 m in front; BaRs BoundingBox, area 100 x 60 x 100 m, WeldOnly, WorkSpeed 3.
+**Pass** all ship blocks welded within max(180 s, 120 s + 3 s per BaR) (10 BaRs 180 s, 50 BaRs 270 s, 100 BaRs 420 s;
+throughput is recorded, not gated — BUG-261123.6); plates conserved (exactly the missing plates left storage); sim speed
+>= 0.8 (10 / 20 BaRs) or >= 0.5 (50 / 100). **Records** `weldedPerSecond`, `platesUsed` vs `platesNeeded`, and the
+cost of `ServerFindMissingComponents`, `PullFromSourcesOnePass`, `ServerEmptyTransportInventory`,
+`ServerTryPushInventory`, `AsyncScanForSources`.
+
+### S104
+S103 with 20 BaRs.
+
+### S105
+S103 with 50 BaRs.
+
+### S106
+S103 with 100 BaRs.
+
+### S107
+S103 on a busy base (10 BaRs): up to 5 plates moved between containers every 1 s (max(2, N/5) moves, like
+assemblers / refineries pulling and pushing), a supply ship that undocks first at 1.5 s, then every 8 s, and redocks
+~4 s later, and a container section behind a sorter that is switched off / on and has its SteelPlate filter flipped
+every 3 s (first at 1 s; the churn starts right away since BUG-261123.6 made these runs ~5 s). All of it is conservation-neutral. **Pass** as S103, plus the churn really happened (`itemMoves`,
+`undocks`, `redocks`, `sorterChanges`). Compare `weldedPerSecond` and the pull / push cost with S103.
+
+### S108
+S107 with 20 BaRs.
+
+### S109
+S107 with 50 BaRs.
+
+### S110
+S107 with 100 BaRs.
+
+### S111
+**Proves** BaRs on a moving arm, supplied through the conveyors. Static base: conveyor junction with a piston on top,
+4 containers beside it (500 SteelPlate each), battery. Built at run time (directions from the geometry, not the heads'
+own Up; the partly built heads "Add Top Part" makes in survival are completed first): advanced rotor (a regular rotor
+does not pass conveyors) on the piston head, a spacer junction and then the conveyor-junction hub on the rotor head
+(keeps the turning BaRs clear of the rotor), BaR(s) with their front face (the
+model's main conveyor port, dummy at z = -2.36) against the hub, pointing outward. Components travel
+containers -> junction -> piston -> advanced rotor -> spacer -> hub -> BaR. The piston reverses every 6 s (0.5 m/s), the
+rotor turns at 1 RPM for 5 s, then 2 RPM, ShowArea toggles every 4 s. Ring of 8 small static grids (6 damaged armor each) 15 m out, 8 m up;
+WorkSpeed 3 so the BaRs work ~20-30 s on the moving arm; BaR area 60 m (whole ring from any arm angle).
+**Layout checks** heads attached, BaRs working and conveyor-connected to the base containers. **Pass** all ring blocks
+welded within 180 s, plates left the base containers, sim >= 0.8, tick avg <= 1 ms. **Records** per-step cost incl.
+`ShowAreaDraw`, `pistonReversals`, `showAreaToggles`, `basePlatesUsed`.
+
+### S112
+S111 with 3 BaRs on the hub and a mixed ring: every second grid is an unowned derelict (6 intact armor, janitor
+NoOwnership) to grind. **Pass** additionally: all derelict blocks gone.
+
+### S113
+**Probes** BUG-261123.5: does `MaxItemsAddable` (the `CanItemsBeAdded` search the mod uses for transport -> BaR, push
+and pull) refuse ore or ingots? Per item class (iron ore, iron ingot, steel plate), on an empty cargo and the empty BaR:
+`CanItemsBeAdded` with the type read from a real inventory item and with `MyItemType.Make*`, `MaxItemsAddable`, then
+moves 100 units from the BaR's transport into the BaR exactly like the mod. Then the S89 case: BaR filled with stone
+to ~99 %, the transport offering 3x what fits: the fit must match free volume / item volume and move fully. One tick. **Pass** each class
+fits fully and moves fully. **Records** every probe value (`ore.bar.maxAddableReal`, `ore.transport.moved`, ...).
+
+### S114
+**Proves** small-grid projections are built (Steam report "will not build small grid projections"). A static small-grid
+ship (`RigSpec.SmallGrid`: small battery, armor, small projector) projects 10 small armor blocks next to the projector;
+a large BaR on the rig 12 m away (BoundingBox, AllowBuild, 50 SteelPlate in the rig cargo) builds them. **Pass** all 10
+built on the expected cells and welded, plates charged exactly once. **Records** projector total / remaining /
+buildable, the BaR's weld targets, skipped projected blocks and the limits flag.
+
+### S115
+**Proves** the same with a small BaR (3x3x1) on the small ship itself (Grids mode, 50 SteelPlate in its own inventory).
+
+### S116
+**Proves** settings changes made by scripts / timers do not flood clients. 20 BaRs (Grids, WeldOnly, WorkSpeed 1,
+damaged armor on the rig) get ShowArea toggled every 0.5 s for 20 s. **Pass** tick avg <= 1 ms; with a remote player
+connected (Torch): settings broadcasts <= 1 per BaR per second (+2 s slack) and > 0. **Records** `toggles`,
+`settingsPerBarPerS`, `statePerBarPerS` and the standard `net.*` metrics. Single player: traffic checks skipped.
+
+### S117
+**Proves** a BaR with a full target list does not send oversized or too frequent state messages. One BaR
+(BoundingBox, 60 m area) above a 1,500-block damaged armor field (target list capped at 512). **Pass** tick avg <= 1 ms;
+with a remote player: largest state message <= 64 KB, state sends <= 1 per BaR per second. **Records** `stateMaxKB`,
+`barWeldTargets`, `net.*`.
+
+### S118
+**Proves** an idle base costs (almost) no traffic. 50 BaRs, nothing to weld or grind; counting starts 10 s after they
+switch on, then 30 s. **Pass** tick avg <= 1 ms; with a remote player: <= 0.1 state sends per BaR per second and no
+settings broadcasts.
+
+### S119
+**Measures** CPU and network spikes by target grid size. 10 BaRs (BoundingBox, 100 m area, WeldOnly, WorkSpeed 3,
+3,000 SteelPlate) above a damaged armor field of 100 blocks (rows of 40, 6 m below), 40 s. **Pass** (loose, data first)
+sim >= 0.5, tick avg <= 2 ms, something welded; with a remote player the largest state message <= 64 KB. **Records**
+`targetBlocks`, `welded`, `weldedPerSecond`, `weldTargetsListedTotal / Max`, tick / sim, `net.*` incl. `net.peakKBps`,
+`net.peakMsgsPerS`, `net.peakAtS`.
+
+### S120
+S119 with a 1,000-block field.
+
+### S121
+S119 with a 3,000-block field.
+
+### S122
+S119 with an 8,000-block field.
+
+### S123
+S119 with all four fields at once (stacked 6 m apart: 100, 1,000, 3,000, 8,000 blocks).
+
+### S124
+**Proves** weld option Functional works on projections (S21 covers damaged blocks only). S03's rig and 10-block
+projection with WeldFunctional. **Pass** all 10 placed, each at functional integrity, none at full 5 s after the last
+reached functional, fewer plates used than full welding would. **Records** `atFunctional`, `steelOnRig`, `steelIfFull`.
+
+### S125
+**Proves** weld option Skeleton on projections: all 10 placed, none welded further, SteelPlate conserved (rig +
+construction stockpiles).
+
+### S126
+**Proves** BaR state goes only to players who have the BaR loaded (FEAT-261123.8). 5 BaRs repair 20 damaged blocks
+10 km from the caller (beyond the sync distance). **Pass** all welded; with a remote player (Torch): 0 bytes of state
+sent to players (`stateWireBytes`), `net.state.farSkipped` > 0.
+
+### S127
+**Proves** background scans and welds survive their targets disappearing. 5 BaRs (BoundingBox, 100 m) repair 3 small
+damaged grids (4 blocks); every 3 s for 21 s the oldest grid is deleted and a new one spawned. **Pass** no mod error
+logged (`errorsLogged`, new standard metric), every grid alive at the end fully welded, tick avg <= 1 ms, no block claim
+left 3 s after done, >= 5 grids deleted. **Records** `gridsSpawned`, `gridsDeleted`, `remaining`, `doneS`, `claimsLeft`.
+
+### S128
+S127's checks with 10 BaRs on 60 damaged blocks while SearchMode (Grids / BoundingBox) and WorkMode (WeldBeforeGrind /
+WeldOnly) flip every 1 s for 20 s (cluster rebuilds, rescans, list swaps mid-scan): all 60 welded afterwards.
+
+### S129
+S128's rig with all BaRs switched off / on every 1.5 s for 21 s (claims dropped and retaken, cluster membership
+changing): all 60 welded afterwards, no claim left.
+
+### S130
+**Proves** mechanical derelicts are ground completely. An unowned grid (4 armor) with a rotor and a piston; their heads
+(added with the game's "add top part" actions) carry 2 unowned armor blocks each. One BaR (GrindOnly, BoundingBox 80 m,
+janitor NoOwnership, WorkSpeed 5). **Pass** base grid and both head grids gone within 150 s (heads come loose when their
+base block is ground and must be found as separate grids; one mechanical block per tick; raze queue drains), own rig
+intact, no mod errors. **Records** `gridsLeft`, `headGrids`, `doneS`.
+
+### S131
+**Proves** the collect rules. One BaR (BoundingBox, area 60 m) with the ore class switched off (terminal / PB path):
+3 SteelPlate stacks inside the area, 2 SteelPlate stacks 70 m out, 3 iron ore stacks inside. **Pass** the 3 plate
+stacks inside collected; 10 s later the outside and ore stacks are all still there. **Records** `insideLeft`,
+`outsideLeft`, `oreLeft`, `doneS`.
+
+### S132
+**Proves** "collect only when idle": 6 damaged armor blocks to weld (WorkSpeed 2) and 3 plate stacks inside. **Pass**
+no stack collected before welding is done (0.5 s slack), all collected after. **Records** `weldDoneS`, `firstCollectS`.
+
+### S133
+**Proves** janitor DisableOnly. Unowned derelict: 4 armor, a battery, 2 small containers; one BaR (GrindOnly,
+BoundingBox, janitor NoOwnership, WorkSpeed 3). **Pass** once nothing changed for 5 s: every functional block at or
+below its CriticalIntegrityRatio and still there, all armor at full integrity. **Records** `ratiosVsThreshold`,
+`functionalRemoved`, `armorDamaged`.
+
+### S134
+S133 with HackOnly: functional blocks down to the OwnershipIntegrityRatio (falls back to critical), not removed.
+
+## Standard metrics (every scenario)
+Single-call peak checks (`tickPeakMs` limits, `CheckMethodMaxMax`) get +25 ms on a dedicated server: Torch shows
+one-off ~18 ms stalls (GC / host) that land in whichever method runs; averages stay strict.
+A run fails when the mod logs an error during it (`errorsLogged` > 0), unless the scenario sets `AllowsModErrors`
+(found BUG-261123.9). S71 recompiles the companion script on purpose: its ~300 ms compile lands in the harness tick, so
+its `tickPeakMs` is the game's compiler, not the mod (mod methods stay < 0.3 ms).
+`runS`, `tickAvgMs`, `tickPeakMs`, `simMin`, `simAvg`, budget peaks, `errorsLogged` (mod errors during the run),
+`world.welderSpeed / grinderSpeed / dedicated`, `net.*` (traffic, FEAT-261123.7), and `cycles.total` plus
+`cycles.<Outcome>` in % of all ready BaR cycles (FEAT-261123.4): Worked, WaitingDelivery, NoTargets, InventoryFull,
+NoComponents, Refused, BudgetDeferred, FailCooldown, GridLimit, AllClaimed, Protected, Exhausted, NoPower, OutOfArea,
+Other.
+
 ## Building blocks for new scenarios
 
 - `RigSpec`: `Bars`, `DamagedArmor` (+ `DamagedBuildPercent`, 1 = intact but tracked), `Armor`, `RowWidth`, `Offset`,
@@ -564,7 +908,8 @@ Run with admin creative tools and "ignore safe zones" off (creative tools build 
 ## Adding a scenario
 
 1. Pick the next free id; implement it under `Testing/Scenarios/` (C# 6, ModAPI whitelist — no reflection/threads).
-2. Register it in `ScenarioRegistry.All` (the order is the `test list` / range order).
+2. Register it in `ScenarioRegistry.All` (the order is the `test list` / range order) and add it to at least one
+   group in `ScenarioRegistry.Groups` and the [Groups](#groups) table.
 3. Add `ingame:Sxx` to the `## Coverage` of the `SCN-` entry it checks (new entry if none fits) and the
    `scenarios/state.md` row.
 4. Add it to this page: summary row + `### Sxx` section (`CatalogueConsistencyTests` fails otherwise).

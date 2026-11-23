@@ -34,6 +34,8 @@ unit:PriorityLockTests.ClientMessage_CannotChangeLockedLists
 ingame:S14
 ingame:S15
 ingame:S16
+unit:TargetSortingTests
+
 ## Last verified
 v2.5.6 build 261023.4 2026-10-23 — unit (lock + write-through logic; in-game steps not yet run)
 ## Related

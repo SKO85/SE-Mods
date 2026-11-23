@@ -47,6 +47,10 @@ namespace SKONanobotBuildAndRepairSystem
 
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             var isFullInventoryAndPicking = State.InventoryFull && State.CurrentTransportIsPick;
+            var cycleCounted = false;
+            var cycleNoWork = false;
+            _lastWeldIdle = Handlers.CycleOutcome.Other;
+            _lastGrindIdle = Handlers.CycleOutcome.Other;
 
             if (ready)
             {
@@ -82,6 +86,8 @@ namespace SKONanobotBuildAndRepairSystem
                             isIdleNoWork = false;
                     }
 
+                    cycleCounted = true;
+                    cycleNoWork = isIdleNoWork;
                     if (!isIdleNoWork)
                     {
                     ServerTryPushInventory();
@@ -185,6 +191,19 @@ namespace SKONanobotBuildAndRepairSystem
                 State.MissingComponents.Clear();
                 State.MissingComponents.RebuildHash();
                 AbortMissingComponentsAggregate();
+            }
+
+            // FEAT-261123.4: what this ready cycle ended with.
+            if (cycleCounted)
+            {
+                Handlers.CycleOutcome outcome;
+                if (welding || grinding || collecting) outcome = Handlers.CycleOutcome.Worked;
+                else if (transporting) outcome = Handlers.CycleOutcome.WaitingDelivery;
+                else if (cycleNoWork) outcome = Handlers.CycleOutcome.NoTargets;
+                else if (State.InventoryFull) outcome = Handlers.CycleOutcome.InventoryFull;
+                else if (_lastWeldIdle != Handlers.CycleOutcome.Other) outcome = _lastWeldIdle;
+                else outcome = _lastGrindIdle;
+                Handlers.CycleStats.Record(outcome);
             }
 
             if (!(welding || grinding || collecting || transporting) && _TransportInventory.CurrentVolume > 0)
@@ -415,6 +434,16 @@ namespace SKONanobotBuildAndRepairSystem
         /// Bidirectional with hysteresis: sets true at >=100% capacity, clears at &lt;90%.
         /// Shared by Operations (pre-weld/grind) and Collecting (pre-collect).
         /// </summary>
+        internal const float InventoryFullSetRatio = 0.98f;
+        internal const float InventoryFullClearRatio = 0.9f;
+
+        /// <summary>Inventory-full latch: set from 98% of the welder volume, cleared below 90%.</summary>
+        internal static bool NextInventoryFull(bool wasFull, float currentVolume, float maxVolume)
+        {
+            if (maxVolume <= 0f) return wasFull;
+            return wasFull ? currentVolume >= maxVolume * InventoryFullClearRatio : currentVolume >= maxVolume * InventoryFullSetRatio;
+        }
+
         private void CheckAndUpdateInventoryFull()
         {
             var profilerTs = MethodProfiler.Start();
@@ -444,27 +473,11 @@ namespace SKONanobotBuildAndRepairSystem
                 currentVolume = (float)welderInventory.CurrentVolume;
                 maxVolume = (float)welderInventory.MaxVolume;
 
-                if (!wasFull)
-                {
-                    if (currentVolume >= maxVolume)
-                    {
-                        State.InventoryFull = true;
-                        nowFull = true;
-                    }
-                }
-                else
-                {
-                    // BUG-260526.1: clear the sticky InventoryFull flag once the welder
-                    // has drained (e.g. ServerTryPushInventory moved items into a container).
-                    // Without this, the flag stayed true forever because the only other
-                    // clear path (ServerEmptyTransportInventory) requires an active transport.
-                    // 90% hysteresis avoids flicker when a partial weld nudges it just under max.
-                    if (currentVolume < maxVolume * 0.9f)
-                    {
-                        State.InventoryFull = false;
-                        nowFull = false;
-                    }
-                }
+                // BUG-260526.1: the flag clears once the welder drained below 90% (hysteresis).
+                // BUG-261123.2: set from 98%; ore rarely fills the last bit exactly, so a stuck BaR at ~99%
+                // showed "needs grinding" instead of "Inventory full".
+                nowFull = NextInventoryFull(wasFull, currentVolume, maxVolume);
+                State.InventoryFull = nowFull;
             }
             finally
             {
@@ -604,6 +617,8 @@ namespace SKONanobotBuildAndRepairSystem
             hash = hash * 31 + (State.InventoryFull ? 1 : 0);
             hash = hash * 31 + (State.LimitsExceeded ? 1 : 0);
             hash = hash * 31 + State.ProjectedBlocksSkipped; // BUG-261122.2
+            hash = hash * 31 + State.GrindBlockedGrids; // FEAT-261123.6
+            hash = hash * 31 + State.WeldBlockedGrids; // BUG-261123.8
             hash = hash * 31 + State.PossibleWeldTargets.CurrentHash;
             hash = hash * 31 + State.PossibleGrindTargets.CurrentHash;
             hash = hash * 31 + State.PossibleFloatingTargets.CurrentHash;

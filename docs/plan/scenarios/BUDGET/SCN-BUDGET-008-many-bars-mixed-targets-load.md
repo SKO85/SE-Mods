@@ -17,6 +17,7 @@
 ## Perf envelope
 harness metrics; thresholds above are sanity bounds, tighten from the first green runs.
 ## Coverage
+unit:CycleStatsTests (FEAT-261123.4 cycle outcomes: `cycles.*` metrics on every run)
 ingame:S64
 ingame:S65
 ingame:S66

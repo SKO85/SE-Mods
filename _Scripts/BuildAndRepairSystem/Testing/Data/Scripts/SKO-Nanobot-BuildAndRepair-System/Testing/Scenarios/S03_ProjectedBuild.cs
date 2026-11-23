@@ -11,7 +11,7 @@ using VRageMath;
 namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
 {
     /// <summary>Build = normal; the others must build nothing.</summary>
-    internal enum ProjectionMode { Build, AllowBuildOff, ZoneForbids, AdminForbids, ZoneForbidsWelding }
+    internal enum ProjectionMode { Build, AllowBuildOff, ZoneForbids, AdminForbids, ZoneForbidsWelding, WeldFunctional, WeldSkeleton }
 
     /// <summary>
     /// SCN-WELD-002 / SCN-ZONE-001 / SCN-CFG-003: the rig's projector shows 10 armor blocks on top of the rig (two layers over the
@@ -20,6 +20,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
     /// 25 per block (no free and no double creation component). S27: AllowBuild off; S42: a safe zone
     /// without BuildingProjections over the rig; S46: admin AllowBuildFixed with AllowBuildDefault=false — nothing built.
     /// S85 (BUG-261122.19): a safe zone without Welding but with BuildingProjections — all placed, none welded further.
+    /// S124 / S125 (SCN-WELD-003): weld option Functional / Skeleton on a projection — all 10 placed; Functional welds
+    /// each to functional integrity and stops below full, Skeleton places them and welds nothing further.
     /// New blocks are counted wherever they appear (alignment-independent); their positions are logged.
     /// </summary>
     internal sealed class S03_ProjectedBuild : TestScenarioBase
@@ -49,8 +51,18 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             _mode = mode;
         }
 
-        private bool Expect { get { return _mode == ProjectionMode.Build || _mode == ProjectionMode.ZoneForbidsWelding; } }
-        private bool PlaceOnly { get { return _mode == ProjectionMode.ZoneForbidsWelding; } }
+        private bool Expect { get { return _mode == ProjectionMode.Build || _mode == ProjectionMode.ZoneForbidsWelding || _mode == ProjectionMode.WeldFunctional || _mode == ProjectionMode.WeldSkeleton; } }
+        private bool PlaceOnly { get { return _mode == ProjectionMode.ZoneForbidsWelding || _mode == ProjectionMode.WeldSkeleton; } }
+        private const double FunctionalSettle = 5.0;
+        private double _functionalAt = -1;
+
+        private int CountAtFunctional(List<IMySlimBlock> blocks)
+        {
+            var n = 0;
+            for (int i = 0; i < blocks.Count; i++)
+                if (blocks[i] != null && blocks[i].Integrity >= SKONanobotBuildAndRepairSystem.Extensions.SlimBlockExtensions.GetRequiredIntegrity(blocks[i], AutoWeldOptions.WeldFunctional)) n++;
+            return n;
+        }
 
         public override string Id { get { return _id; } }
         public override string Description
@@ -62,6 +74,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                     case ProjectionMode.AllowBuildOff: return "Projector with 'build projected' off: nothing is built";
                     case ProjectionMode.ZoneForbids: return "Projector in a safe zone without BuildingProjections: nothing is built";
                     case ProjectionMode.AdminForbids: return "Admin AllowBuildFixed (default off): projections are not built even when enabled";
+                    case ProjectionMode.WeldFunctional: return "Weld option Functional on a projection: 10 blocks placed and welded to functional, not full";
+                    case ProjectionMode.WeldSkeleton: return "Weld option Skeleton on a projection: 10 blocks placed, not welded further";
                     case ProjectionMode.ZoneForbidsWelding: return "Safe zone without Welding, with BuildingProjections: projections placed, not welded further";
                     default: return "Projector: 10 projected blocks built from an empty block inventory, components charged exactly once";
                 }
@@ -72,6 +86,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         public override void Setup(TestContext ctx)
         {
             _blueprintSet = false;
+            _functionalAt = -1;
             _before.Clear();
             _lastNew = 0;
             _lastChangeAt = 0;
@@ -98,7 +113,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             {
                 s.SearchMode = SearchModes.Grids;
                 s.WorkMode = WorkModes.WeldBeforeGrind;
-                s.WeldOptions = AutoWeldOptions.WeldFull;
+                s.WeldOptions = _mode == ProjectionMode.WeldFunctional ? AutoWeldOptions.WeldFunctional
+                    : _mode == ProjectionMode.WeldSkeleton ? AutoWeldOptions.WeldSkeleton
+                    : AutoWeldOptions.WeldFull;
                 // AdminForbids tries to switch it on: CheckLimits (via SettingsChanged) must force it off.
                 s.Flags = _mode == ProjectionMode.AllowBuildOff
                     ? s.Flags & ~SyncBlockSettings.Settings.AllowBuild
@@ -183,6 +200,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         {
             if (!Expect) return ctx.RunSeconds >= 20.0;
             var created = NewBlocks();
+            if (_mode == ProjectionMode.WeldFunctional)
+            {
+                // All placed and at functional, then a few more seconds to catch welding on to full.
+                if (_functionalAt < 0 && created.Count == Cells.Length && CountAtFunctional(created) == created.Count) _functionalAt = ctx.RunSeconds;
+                if (_functionalAt >= 0) return ctx.RunSeconds >= _functionalAt + FunctionalSettle;
+                return ctx.RunSeconds >= 60.0 || (created.Count > 0 && ctx.RunSeconds - _lastChangeAt >= StallSeconds && ctx.RunSeconds >= 30.0);
+            }
             if (PlaceOnly) return created.Count == Cells.Length || (created.Count > 0 && ctx.RunSeconds - _lastChangeAt >= StallSeconds) || ctx.RunSeconds >= 40.0;
             if (created.Count == Cells.Length && ctx.CountFullIntegrity(created) == created.Count) return true;
             // Stalled: something was built, nothing new for a while and all of it welded.
@@ -221,6 +245,19 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             }
 
             ctx.Check(created.Count == Cells.Length, "built=" + created.Count + "/" + Cells.Length);
+            if (_mode == ProjectionMode.WeldFunctional)
+            {
+                var atFunctional = CountAtFunctional(created);
+                var plates = ctx.CountComponentOnRig(_rig, "SteelPlate");
+                var perFull = ScenarioUtil.ComponentsPerBlock("MyObjectBuilder_CubeBlock", "LargeBlockArmorBlock", "SteelPlate");
+                ctx.Metric("atFunctional", (long)atFunctional);
+                ctx.Metric("steelOnRig", plates);
+                ctx.Metric("steelIfFull", (long)(Stock - created.Count * perFull));
+                ctx.Check(atFunctional == created.Count, "at functional integrity=" + atFunctional + "/" + created.Count);
+                ctx.Check(welded == 0, "functional mode welded " + welded + " projected block(s) to full integrity");
+                ctx.Check(plates > Stock - created.Count * perFull, "functional mode used as many plates as full welding (" + plates + " left)");
+                return;
+            }
             if (PlaceOnly)
             {
                 // Placed, not welded further. The build may move the BaR's ready components into the new block's
@@ -231,7 +268,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 for (int i = 0; i < created.Count; i++) stockpiled += created[i].GetConstructionStockpileItemAmount(plateId);
                 ctx.Metric("steelOnRig", steelLeft);
                 ctx.Metric("steelInStockpiles", (long)stockpiled);
-                ctx.Check(welded == 0, "welded=" + welded + " inside a no-welding safe zone");
+                ctx.Check(welded == 0, "welded=" + welded + (_mode == ProjectionMode.WeldSkeleton ? " in skeleton mode" : " inside a no-welding safe zone"));
                 var sum = steelLeft + stockpiled;
                 ctx.Check(Math.Abs(sum - Stock) < 0.5 || Math.Abs(sum + created.Count - Stock) < 0.5,
                     "SteelPlate not conserved: rig " + steelLeft + " + stockpiles " + stockpiled + " (+" + created.Count + " mounted) vs stock " + Stock);
@@ -251,7 +288,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 (diff > 0 ? " (blocks got components for free)" : " (components charged twice)"));
 
             ctx.CheckMethodMaxMax("ServerDoWeld", 40.0);
-            ctx.Check(ctx.TickPeakMs <= 15.0, "tickPeakMs>15");
+            ctx.CheckTickPeak(15.0);
         }
     }
 }

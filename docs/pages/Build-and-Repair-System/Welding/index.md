@@ -95,7 +95,7 @@ The reservation is released when the BaR finishes the block, when it abandons th
 | `AssignToSystemEnabled` | `true` | Master switch. Set to `false` to disable assignment server-wide. |
 | `AssignmentTtlSeconds` | `8` | How long a reservation is held. Lower = faster recycling. Range 2–30. |
 
-The assignment system runs alongside `MaxSystemsPerTargetGrid`, the per-grid cap that limits how many BaRs may target the *same grid* at once. Both are server-wide knobs; see the [Configuration File](../Config/general-settings#system-limits) page for the full picture.
+The assignment system runs alongside `MaxSystemsPerTargetGrid`, the per-grid cap that limits how many BaRs may target the *same grid* at once — by default **10 in multiplayer** (hosted or dedicated) and **20 in single player**; more BaRs than that around one big ship wait or work on other grids (`/nanobars config set MaxSystemsPerTargetGrid <n>` to change it). Both are server-wide knobs; see the [Configuration File](../Config/general-settings#system-limits) page for the full picture.
 
 ---
 

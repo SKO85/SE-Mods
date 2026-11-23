@@ -27,7 +27,15 @@ unit:TtlCacheTests.CleanupExpired_KeepsEntriesRefreshedWhileItRuns
 ingame:S51
 ingame:S55
 ingame:S56
+unit:BlockAssignmentTests
+ingame:S94
+ingame:S95
+ingame:S96
+ingame:S97
+ingame:S98
+
 ## Last verified
-v2.5.6 build 261006.3 2026-10-23 — unit (logic only; in-game steps not yet run)
+v2.5.7 build 261123.19 2026-11-23 — in game: S94-S98 (no half-done trail, destroyed / unpowered / stopped BaR taken over); unit BlockAssignmentTests green.
+
 ## Related
 BUG-005, BUG-028, BUG-029, BUG-048, BUG-054, BUG-003 / BUG-260522.3 (TtlCache cleanup), FEAT-260910.2/.3, BUG-261023.11

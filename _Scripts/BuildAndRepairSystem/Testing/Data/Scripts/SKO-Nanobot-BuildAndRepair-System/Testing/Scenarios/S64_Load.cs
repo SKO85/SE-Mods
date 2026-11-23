@@ -58,7 +58,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         private readonly double _minPerSecond;
 
         /// <param name="minPerSecond">Speed floor (welded or ground blocks per second), 0 = none: ~70 % of the
-        /// 2026-11-22 baseline on the dev PC, so a throughput regression (like BUG-261122.14) fails.</param>
+        /// dev-PC baseline, so a throughput regression (like BUG-261122.14) fails.</param>
         public S64_Load(string id, string label, LoadWork work, int rigs, int barsPerRig, double minPerSecond = 0)
         {
             _minPerSecond = minPerSecond;
@@ -107,6 +107,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             {
                 s.Welder.WorkSpeed = 10;
                 s.Welder.AllowedGrindJanitorRelations |= AutoGrindRelation.NoOwnership;
+                // Same limit everywhere: the default is 10 in multiplayer, 20 in single player (Torch S64 had half the BaRs
+                // held back by it, 35 % idle cycles).
+                s.MaxSystemsPerTargetGrid = 20;
             });
 
             for (int i = 0; i < 3; i++)
@@ -277,7 +280,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 ctx.Check(rate >= _minPerSecond, (HasWeld ? "welded" : "ground") + " " + rate.ToString("F1") + "/s below the floor of " + _minPerSecond.ToString("F0") + "/s");
             }
             ctx.Check(ctx.TickAvgMs <= 2.0, "tickAvgMs>2");
-            ctx.Check(ctx.TickPeakMs <= 50.0, "tickPeakMs>50");
+            ctx.CheckTickPeak(50.0);
         }
     }
 }

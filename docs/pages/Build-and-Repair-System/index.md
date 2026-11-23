@@ -81,7 +81,7 @@ Full support for the [Defence Shields](https://steamcommunity.com/workshop/filed
 - Power is no longer drained when welding a projected block is not possible.
 - Block settings now persist correctly after a server restart or relog.
 - Projected blocks that cannot be built due to missing DLC are detected and skipped.
-- Multiplayer network updates reduced for better performance in large sessions.
+- Multiplayer network updates reduced for better performance in large sessions; since v2.5.7 a BaR only sends its status to players near it (within the sync distance).
 
 ---
 

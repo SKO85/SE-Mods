@@ -94,7 +94,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             ctx.Metric("welded", (long)welded);
             ctx.Check(welded == _target.Targets.Count, "welded=" + welded + "/" + _target.Targets.Count + " (limit deadlock?)");
 
-            ctx.Check(ctx.TickPeakMs <= 10.0, "tickPeakMs>10");
+            ctx.CheckTickPeak(10.0);
         }
     }
 }

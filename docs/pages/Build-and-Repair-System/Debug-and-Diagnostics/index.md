@@ -52,6 +52,9 @@ Even with `DebugMode` off, the BaR's terminal custom info panel surfaces several
 - **Missing components** — when the BaR cannot weld a block, the missing component list is shown so you know what to bring.
 - **Idle reason** — when the BaR is not working, a short text reason ("safe zone blocks welding," "all push targets full," "no targets in range," etc.).
 - **Next target scan: Xs** — when the BaR is idle, a countdown to the next scan cycle. Helps distinguish "between scans" from "genuinely out of work."
+- **Grinding blocked by a shield / protection mod on N grid(s)** *(v2.5.7)* — a shield or a protection mod / plugin refused the grind; the BaR skips that grid for 30 seconds, then tries again.
+- **Welding blocked by a safe zone / protection on N grid(s)** *(v2.5.7)* — the game refused the weld (for example a safe zone without welding on a server); the BaR skips that grid for 30 seconds instead of trying over and over.
+- **Inventory full** — the BaR can't fit the next load (set from 98 % full); it pauses until it can push items away.
 
 Turning `DebugMode` on adds the cluster, source / push-target, and scan-timing fields on top of these basics.
 

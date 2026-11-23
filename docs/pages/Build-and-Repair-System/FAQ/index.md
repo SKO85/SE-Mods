@@ -124,6 +124,13 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
 </details>
 
 <details>
+<summary>The direction arrows (Front, Back, …) on the block are missing. Why?</summary>
+<div>
+<p>The arrows are part of the detailed block model. Set <strong>Model Quality</strong> to <em>High</em> or better in the game's graphics settings and they come back.</p>
+</div>
+</details>
+
+<details>
 <summary>The mod shows an initialisation error in the control panel info panel.</summary>
 <div>
 <p>This usually means the mod was not fully downloaded on the server — a known issue with Steam on dedicated servers where mods are sometimes only partially downloaded. The server then starts with an incomplete mod, which causes errors.</p>
@@ -148,6 +155,13 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
 ---
 
 ## Block Seems Stuck
+
+<details>
+<summary>Since the Warfare 3 update (game version 1.211) my BaRs build only part of a projection, or none of it. What's wrong?</summary>
+<div>
+<p>The game update changed how projected blocks are built, which broke projection building in older versions of the mod: BaRs stood idle next to buildable projected blocks, but finished any block you started by hand. <strong>Update to v2.5.6 or newer</strong>, which works with the new game version. Also update the companion script if you use it.</p>
+</div>
+</details>
 
 <details>
 <summary>The Build and Repair block is not doing anything. What should I check?</summary>
@@ -186,6 +200,14 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
 ---
 
 ## Performance
+
+<details>
+<summary>I have 20 BaRs around my big ship, but only 10 of them work on it. Why?</summary>
+<div>
+<p>In multiplayer (hosted or dedicated server) at most <strong>10</strong> BaRs work on the same grid at the same time; in single player it is 20. The others wait or work on other grids. This spreads the work and keeps the server load in check.</p>
+<p>Server admins can change it: <code>/nanobars config set MaxSystemsPerTargetGrid 20</code> (then <code>/nanobars config save</code> to keep it). More BaRs per grid repair one big ship faster, at a bit more server load.</p>
+</div>
+</details>
 
 <details>
 <summary>I have many Build and Repair blocks and my server sim speed is dropping. What can I do?</summary>
@@ -241,6 +263,13 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
 </details>
 
 <details>
+<summary>Can the BaR only repair damage, without building projections or grinding?</summary>
+<div>
+<p>Yes. Set the <strong>Work Mode</strong> to <em>Weld only</em> and untick <strong>Build Projections</strong>. The BaR then only repairs damaged blocks (and finishes block frames you place yourself). Server admins can enforce this for everyone in <code>ModSettings.xml</code>: <code>AllowedWorkModes</code> = <code>WeldOnly</code>, and <code>AllowBuildFixed</code> = <code>true</code> with <code>AllowBuildDefault</code> = <code>false</code>. See <a href="../Config/welder-settings/">Welder Settings</a>.</p>
+</div>
+</details>
+
+<details>
 <summary>I switched from the old "Weld to functional only" checkbox. Where did it go?</summary>
 <div>
 It has been replaced with the <strong>Weld mode</strong> dropdown in the terminal. If your block previously had "Weld to functional only" checked, it will automatically appear as <strong>Weld to functional</strong> in the new dropdown. No action is needed — your saved settings are preserved.
@@ -269,6 +298,14 @@ It has been replaced with the <strong>Weld mode</strong> dropdown in the termina
 </details>
 
 <details>
+<summary>My BaRs build a projection while I'm around, but stop when I log off or fly away. Why?</summary>
+<div>
+<p>That's the game, not the BaR. To save performance, Space Engineers switches a projection off when no player is near the projector's grid. The projected blocks are simply gone until someone comes back, so the BaR has nothing to build. The BaR itself keeps running and still repairs damaged blocks.</p>
+<p>As soon as a player is back in range, the projection reappears and the BaR picks it up again within a few seconds. To keep a big build going, stay near it (or leave a character nearby on servers that allow that).</p>
+</div>
+</details>
+
+<details>
 <summary>My BaR is not welding the wreck (or unconnected ship) sitting next to it. Why?</summary>
 <div>
 <p>The BaR's <strong>Search Mode</strong> defaults to <strong>Walk</strong>, which only sees grids that are part of the same logical group as the BaR — i.e. connected via connectors, pistons, rotors, or mergers. Anything sitting in space near the BaR but not actually attached to it is invisible in Walk mode.</p>
@@ -279,6 +316,18 @@ It has been replaced with the <strong>Weld mode</strong> dropdown in the termina
 ---
 
 ## Welding & Grinding Issues
+
+<details>
+<summary>The info panel says "Grinding blocked" or "Welding blocked". What does that mean?</summary>
+<div>
+<p>Since v2.5.7 the BaR tells you when something else refuses its work:</p>
+<ul>
+  <li><strong>Grinding blocked by a shield / protection mod on N grid(s)</strong> — a shield (DefenseShields) or a protection mod / plugin stopped the grind, just like it would stop a hand grinder. The BaR skips that grid for 30 seconds and then tries again.</li>
+  <li><strong>Welding blocked by a safe zone / protection on N grid(s)</strong> — the game refused the weld (for example a safe zone without welding on a server, or a protection plugin). The BaR skips that grid for 30 seconds instead of trying over and over.</li>
+</ul>
+<p>Nothing is wrong with the BaR. Lower the shield, change the safe zone or ask your server admin about the protection, and it carries on by itself.</p>
+</div>
+</details>
 
 <details>
 <summary>The block is grinding my own grid. What is wrong?</summary>
@@ -300,6 +349,25 @@ It has been replaced with the <strong>Weld mode</strong> dropdown in the termina
   <li>Check for <strong>obstructions</strong> — a wheel or misaligned component is a common culprit. Remove the obstruction, let the system weld the rest, then weld the blocked component manually or via the system afterwards.</li>
   <li>If you are using a plugin such as <strong>Multi-Grid-Projector</strong>, try disabling it and testing again. Plugins that patch game API calls can affect welding behaviour in unexpected ways.</li>
 </ul>
+</div>
+</details>
+
+<details>
+<summary>My BaRs stopped welding certain kinds of blocks (armor, lights, connectors, antennas…) but weld everything else. Why?</summary>
+<div>
+<p>When whole <em>types</em> of blocks are skipped, it's almost always one of these:</p>
+<ul>
+  <li><strong>The block type is unticked in the BaR's weld priority list.</strong> An unticked class is never welded. Note that the classes are broad: <em>Armor</em> also covers piston tops and other simple blocks, <em>Communication</em> covers antennas. Open the BaR's terminal, check the weld priority list, or press <strong>Reset All Settings</strong> to turn everything back on. BaRs pasted from a blueprint keep the settings they were saved with.</li>
+  <li><strong>You hit a block or PCU limit.</strong> The BaR's info panel then says the limit is reached, and new blocks of that type can't be built at all, by hand or by BaR. Free up blocks or raise the limit in the world settings.</li>
+  <li><strong>A server plugin blocks it</strong> (see the build limiter question above).</li>
+</ul>
+</div>
+</details>
+
+<details>
+<summary>Why are several blocks half-built instead of one finished?</summary>
+<div>
+<p>With several BaRs working, each one claims its own block so they don't get in each other's way, and each pulls the components for its block. When your stock runs out, you'll see a few partly built blocks instead of one finished one. They're completed as soon as components arrive (for example from your assemblers).</p>
 </div>
 </details>
 
@@ -432,6 +500,13 @@ Set <code>DecreaseFactionReputationOnGrinding</code> to <code>false</code> in <c
 </details>
 
 <details>
+<summary>I turned off the safe zone check, but my BaRs still don't weld in a no-weld safe zone on the server. Why?</summary>
+<div>
+<p>Turning off <code>SafeZoneCheckEnabled</code> only stops the <em>mod</em> from checking safe zones. On a server the game itself still refuses welding inside a zone that doesn't allow it, so the weld has no effect. The BaR notices this, shows <strong>Welding blocked by a safe zone / protection</strong> and skips that grid for a while. To weld there, allow welding in the safe zone settings.</p>
+</div>
+</details>
+
+<details>
 <summary>The system is welding or grinding a protected grid. How do I stop it?</summary>
 <div>
 If you are using the <strong>ALE PCU Transferrer</strong> plugin for Torch, use the <code>!protect</code> command on the grid. The system will detect the protection flags and skip it entirely. Use <code>!unprotect</code> to make the grid accessible again.
@@ -447,6 +522,20 @@ If you are using the <strong>ALE PCU Transferrer</strong> plugin for Torch, use 
 <div>
 <p>The priority lists control which block types the system targets first. Each block class (e.g. Armor, Thrusters, Reactors) can be enabled or disabled and reordered using the <strong>Up</strong> and <strong>Down</strong> buttons in the terminal. The system processes enabled classes from top to bottom.</p>
 <p>Use the <strong>Enable All</strong> and <strong>Disable All</strong> buttons to quickly toggle every entry at once.</p>
+</div>
+</details>
+
+<details>
+<summary>What does the ignore colour (build colour) do?</summary>
+<div>
+<p>Blocks painted in the <strong>ignore colour</strong> are left alone: damaged ones aren't repaired and projected ones are only placed, not welded up. Use it for parts you want to finish by hand. It's the opposite of the <strong>grind colour</strong>: blocks painted in that colour are the ones that get ground.</p>
+</div>
+</details>
+
+<details>
+<summary>Can I stop the BaR from collecting stone (or ore, ingots)?</summary>
+<div>
+<p>Yes. Untick the class (Stone, Gravel, Ore, Ingot, …) in the BaR's <strong>collect priority list</strong>, or switch collecting off entirely. A finer per-item exclusion list doesn't exist yet.</p>
 </div>
 </details>
 
@@ -485,11 +574,25 @@ Open the block's terminal and click <strong>Reset All Settings</strong>. This re
 <p>The companion script runs on a Programmable Block and handles automatic assembler queuing and multi-display status output for one or more Build and Repair System groups. It can show current weld/grind targets, missing components, and transport status on LCD panels or cockpit screens.</p>
 <p><strong>Setup:</strong></p>
 <ol>
-  <li>Place a Programmable Block on your grid.</li>
-  <li>Open the script from the Steam Workshop link above and paste it into the Programmable Block editor.</li>
-  <li>Edit the <code>BuildAndRepairSystemQueuingGroups</code> array at the top of the script to match your block and assembler names or group names.</li>
-  <li>Compile and run the script. It updates automatically on every 100-tick cycle.</li>
+  <li>Subscribe to the script on the Steam Workshop (link above).</li>
+  <li>Place a Programmable Block on your grid, open its terminal, click <strong>Edit</strong> and then <strong>Browse Scripts</strong>, and load the script from the Workshop list. (Can't subscribe? Copy the code from <code>SKO-Nanobot-BuildAndRepair-System-Script/Script.cs</code> in this repository and paste it into the editor.)</li>
+  <li>Put your BaRs in a block group called <code>BuildAndRepairGroup1</code> and your assemblers in a group called <code>AssemblerGroup1</code> (or change the names at the top of the script). Don't add the Programmable Block itself to these groups.</li>
+  <li>For a status screen, name an LCD <code>BuildAndRepairGroup1StatusPanel</code>.</li>
+  <li>Check and run the script. It updates automatically every 100 ticks.</li>
 </ol>
+</div>
+</details>
+
+<details>
+<summary>The companion script runs but doesn't queue anything in my assemblers. What should I check?</summary>
+<div>
+<ul>
+  <li>Are the block groups named exactly as in the script (default <code>BuildAndRepairGroup1</code> and <code>AssemblerGroup1</code>, case matters)?</li>
+  <li>Are the assemblers set to <strong>Assembly</strong> (not Disassembly), and on the same or a connected grid?</li>
+  <li>Does the BaR actually miss something? If the parts are already in your cargo, nothing is queued; that's intended.</li>
+  <li>Give it a few seconds, then recompile the script (or reload the world) after changing groups.</li>
+  <li>Use the latest mod <em>and</em> script together (v2.5.6 or newer); older versions could queue wrong amounts or 0.</li>
+</ul>
 </div>
 </details>
 
