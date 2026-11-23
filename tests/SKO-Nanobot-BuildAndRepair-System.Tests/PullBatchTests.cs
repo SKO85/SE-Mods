@@ -4,13 +4,13 @@ using Xunit;
 namespace SKONanobotBuildAndRepairSystem.Tests
 {
     // SCN-INV-001 — FEAT-261123.3: a conveyor transfer fetches for up to 3 blocks, only from a well-stocked source,
-    // never when components are pushed away immediately, held to 10 % of the BaR's inventory while it is below half full.
+    // held to 10 % of the BaR's inventory while it is below half full.
     public class PullBatchTests
     {
-        private static int Extra(int needed, int forBlock, int available, int maxByVolume, bool push)
+        private static int Extra(int needed, int forBlock, int available, int maxByVolume)
         {
             return (int)typeof(NanobotSystem).GetMethod("PullBatchExtra", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)
-                .Invoke(null, new object[] { needed, forBlock, available, maxByVolume, push });
+                .Invoke(null, new object[] { needed, forBlock, available, maxByVolume });
         }
 
         private static int ByVolume(float max, float current, float item)
@@ -23,28 +23,22 @@ namespace SKONanobotBuildAndRepairSystem.Tests
         public void WellStockedSource_FetchesForTwoMoreBlocks()
         {
             // 20 plates per armor block, 500 in the container.
-            Assert.Equal(40, Extra(20, 20, 500, 1000, false));
+            Assert.Equal(40, Extra(20, 20, 500, 1000));
         }
 
         [Fact]
         public void ThinSource_KeepsTwiceTheExtraBehind()
         {
-            Assert.Equal(10, Extra(20, 20, 50, 1000, false)); // spare 30 -> extra 10, 20 left
-            Assert.Equal(0, Extra(20, 20, 22, 1000, false));  // spare 2 -> nothing extra
-            Assert.Equal(0, Extra(20, 16, 16, 1000, false));  // source can't even cover the block
-        }
-
-        [Fact]
-        public void PushComponentsImmediately_DisablesTheExtra()
-        {
-            Assert.Equal(0, Extra(20, 20, 500, 1000, true));
+            Assert.Equal(10, Extra(20, 20, 50, 1000)); // spare 30 -> extra 10, 20 left
+            Assert.Equal(0, Extra(20, 20, 22, 1000));  // spare 2 -> nothing extra
+            Assert.Equal(0, Extra(20, 16, 16, 1000));  // source can't even cover the block
         }
 
         [Fact]
         public void Extra_IsCappedByVolume()
         {
-            Assert.Equal(7, Extra(20, 20, 500, 7, false));
-            Assert.Equal(0, Extra(20, 20, 500, 0, false));
+            Assert.Equal(7, Extra(20, 20, 500, 7));
+            Assert.Equal(0, Extra(20, 20, 500, 0));
         }
 
         [Fact]

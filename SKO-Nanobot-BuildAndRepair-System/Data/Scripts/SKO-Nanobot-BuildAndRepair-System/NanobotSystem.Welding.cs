@@ -1559,7 +1559,7 @@ namespace SKONanobotBuildAndRepairSystem
                 // FEAT-261123.3: from a well-stocked source, fetch for the next blocks too (the extra stays in the BaR's
                 // inventory, where the next blocks pick it without a conveyor transfer and other BaRs can still pull it).
                 var amountPossible = amountForBlock + PullBatchExtra(neededAmount, amountForBlock, (int)srcItem.Amount,
-                    BatchExtraByVolume(welderInventory, volume), (Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0);
+                    BatchExtraByVolume(welderInventory, volume));
 
                 stats.MaxItemsAddCalls++;
                 tsMark = stats.ProfilerEnabled ? Stopwatch.GetTimestamp() : 0L;
@@ -1601,11 +1601,12 @@ namespace SKONanobotBuildAndRepairSystem
 
         /// <summary>
         /// FEAT-261123.3: extra amount to fetch beyond the current block's need. Only from a well-stocked source (at least
-        /// twice the extra stays behind), never when the BaR pushes components away immediately, capped by volume.
+        /// twice the extra stays behind), capped by volume. With "push components" on (the default) a working BaR uses
+        /// the extra within ~1 s, before the 5 s push interval; leftovers go back in one push.
         /// </summary>
-        internal static int PullBatchExtra(int needed, int forBlock, int available, int maxExtraByVolume, bool pushComponentsImmediately)
+        internal static int PullBatchExtra(int needed, int forBlock, int available, int maxExtraByVolume)
         {
-            if (pushComponentsImmediately || needed <= 0 || forBlock <= 0 || maxExtraByVolume <= 0) return 0;
+            if (needed <= 0 || forBlock <= 0 || maxExtraByVolume <= 0) return 0;
             var extra = needed * (PullBatchFactor - 1);
             var spare = available - forBlock;
             if (spare <= 0) return 0;
