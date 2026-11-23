@@ -137,7 +137,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S127_Races("S127", RaceMode.GridChurn),
             new S127_Races("S128", RaceMode.SettingsFlip),
             new S127_Races("S129", RaceMode.OnOff),
-            new S130_MechanicalDerelict()
+            new S130_MechanicalDerelict(),
+            new S131_CollectRules("S131", CollectRuleMode.AreaAndClass),
+            new S131_CollectRules("S132", CollectRuleMode.CollectIfIdle)
         };
 
         /// <summary>
@@ -162,7 +164,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new ScenarioGroup("races", "Async / timing: grids deleted, settings flipped, BaRs switched off and on mid-scan", "S94,S95,S96,S97,S98,S127,S128,S129"),
             new ScenarioGroup("sync", "Network load on servers: settings / state sync rate and size (run on Torch with a client)", "S43,S70,S106,S111,S116,S117,S118,S119,S120,S121,S122,S123,S126"),
             new ScenarioGroup("priority", "Weld / grind priority lists", "S14,S15,S16"),
-            new ScenarioGroup("collect", "Collecting floating objects", "S10")
+            new ScenarioGroup("collect", "Collecting floating objects", "S10,S131,S132")
         };
 
         public static ITestScenario Find(string id)

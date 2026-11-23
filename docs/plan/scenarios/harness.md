@@ -63,7 +63,7 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | `@races` | Async / timing: grids deleted, settings flipped, BaRs switched off and on mid-scan | S94-S98, S127-S129 |
 | `@sync` | Network load on servers: settings / state sync rate and size (run on Torch with a client) | S43, S70, S106, S111, S116-S123, S126 |
 | `@priority` | Weld / grind priority lists | S14-S16 |
-| `@collect` | Collecting floating objects | S10 |
+| `@collect` | Collecting floating objects | S10, S131, S132 |
 
 ## Reuse or add? — index by area
 
@@ -235,6 +235,8 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S128 | Races: SearchMode / WorkMode flipped every 1 s while 10 BaRs weld | BUDGET-011 | ~1 min | 261123.51 Torch — 21 flips, done 21.0 s, 0 errors |
 | S129 | Races: 10 BaRs switched off / on every 1.5 s while welding | BUDGET-011 | ~1 min | 261123.51 Torch — 14 toggles, done 24.7 s, 0 claims left |
 | S130 | Mechanical derelict: base grid, rotor head and piston head all ground away | GRIND-004 | ~1 min | 261123.65 — base + both heads ground away |
+| S131 | Collect: only stacks inside the area and of enabled classes (ore off, 70 m out ignored) | COLLECT-001 | <1 min | never |
+| S132 | Collect only when idle: nothing collected while welding, everything after | COLLECT-001 | <1 min | never |
 
 ## Scenarios
 
@@ -848,6 +850,16 @@ changing): all 60 welded afterwards, no claim left.
 janitor NoOwnership, WorkSpeed 5). **Pass** base grid and both head grids gone within 150 s (heads come loose when their
 base block is ground and must be found as separate grids; one mechanical block per tick; raze queue drains), own rig
 intact, no mod errors. **Records** `gridsLeft`, `headGrids`, `doneS`.
+
+### S131
+**Proves** the collect rules. One BaR (BoundingBox, area 60 m) with the ore class switched off (terminal / PB path):
+3 SteelPlate stacks inside the area, 2 SteelPlate stacks 70 m out, 3 iron ore stacks inside. **Pass** the 3 plate
+stacks inside collected; 10 s later the outside and ore stacks are all still there. **Records** `insideLeft`,
+`outsideLeft`, `oreLeft`, `doneS`.
+
+### S132
+**Proves** "collect only when idle": 6 damaged armor blocks to weld (WorkSpeed 2) and 3 plate stacks inside. **Pass**
+no stack collected before welding is done (0.5 s slack), all collected after. **Records** `weldDoneS`, `firstCollectS`.
 
 ## Standard metrics (every scenario)
 Single-call peak checks (`tickPeakMs` limits, `CheckMethodMaxMax`) get +25 ms on a dedicated server: Torch shows
