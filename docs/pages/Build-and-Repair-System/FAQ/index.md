@@ -124,6 +124,13 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
 </details>
 
 <details>
+<summary>The direction arrows (Front, Back, …) on the block are missing. Why?</summary>
+<div>
+<p>The arrows are part of the detailed block model. Set <strong>Model Quality</strong> to <em>High</em> or better in the game's graphics settings and they come back.</p>
+</div>
+</details>
+
+<details>
 <summary>The mod shows an initialisation error in the control panel info panel.</summary>
 <div>
 <p>This usually means the mod was not fully downloaded on the server — a known issue with Steam on dedicated servers where mods are sometimes only partially downloaded. The server then starts with an incomplete mod, which causes errors.</p>
@@ -244,6 +251,13 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
   <li>Once all blocks are placed, switch to <strong>Weld to full</strong> or <strong>Weld to functional</strong> to weld them up.</li>
 </ol>
 <p>This two-step approach is much faster than welding each block to completion before placing the next one.</p>
+</div>
+</details>
+
+<details>
+<summary>Can the BaR only repair damage, without building projections or grinding?</summary>
+<div>
+<p>Yes. Set the <strong>Work Mode</strong> to <em>Weld only</em> and untick <strong>Build Projections</strong>. The BaR then only repairs damaged blocks (and finishes block frames you place yourself). Server admins can enforce this for everyone in <code>ModSettings.xml</code>: <code>AllowedWorkModes</code> = <code>WeldOnly</code>, and <code>AllowBuildFixed</code> = <code>true</code> with <code>AllowBuildDefault</code> = <code>false</code>. See <a href="../Config/welder-settings/">Welder Settings</a>.</p>
 </div>
 </details>
 
@@ -481,6 +495,20 @@ If you are using the <strong>ALE PCU Transferrer</strong> plugin for Torch, use 
 <div>
 <p>The priority lists control which block types the system targets first. Each block class (e.g. Armor, Thrusters, Reactors) can be enabled or disabled and reordered using the <strong>Up</strong> and <strong>Down</strong> buttons in the terminal. The system processes enabled classes from top to bottom.</p>
 <p>Use the <strong>Enable All</strong> and <strong>Disable All</strong> buttons to quickly toggle every entry at once.</p>
+</div>
+</details>
+
+<details>
+<summary>What does the ignore colour (build colour) do?</summary>
+<div>
+<p>Blocks painted in the <strong>ignore colour</strong> are left alone: damaged ones aren't repaired and projected ones are only placed, not welded up. Use it for parts you want to finish by hand. It's the opposite of the <strong>grind colour</strong>: blocks painted in that colour are the ones that get ground.</p>
+</div>
+</details>
+
+<details>
+<summary>Can I stop the BaR from collecting stone (or ore, ingots)?</summary>
+<div>
+<p>Yes. Untick the class (Stone, Gravel, Ore, Ingot, …) in the BaR's <strong>collect priority list</strong>, or switch collecting off entirely. A finer per-item exclusion list doesn't exist yet.</p>
 </div>
 </details>
 

@@ -25,7 +25,7 @@ nav_order: 0
 ## Docs
 
 - New FAQ entry: why BaRs stop building a projection when you log off or fly away (the game hides projections when no player is near).
-- New FAQ entries from Discord questions: projections after the Warfare 3 update, BaRs skipping whole block types, half-built blocks with several BaRs, and companion script setup / "nothing gets queued".
+- New FAQ entries from Discord questions: projections after the Warfare 3 update, BaRs skipping whole block types, half-built blocks with several BaRs, and companion script setup / "nothing gets queued". Plus: missing direction arrows, repair-only BaRs, the ignore colour, and not collecting stone.
 
 ---
 
