@@ -265,7 +265,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
                 }
 
                 // Apply dynamic default for MaxSystemsPerTargetGrid based on game type.
-                // 0 = no explicit value set → use 30 for local, 15 for multiplayer.
+                // 0 = no explicit value set → 20 in single player, 10 in multiplayer.
                 if (settings.MaxSystemsPerTargetGrid <= 0)
                 {
                     settings.MaxSystemsPerTargetGrid = MyAPIGateway.Multiplayer.MultiplayerActive ? 10 : 20;
