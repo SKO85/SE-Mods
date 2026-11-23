@@ -27,6 +27,14 @@ manual
 ingame:S87
 ingame:S88
 ingame:S89
+ingame:S103
+ingame:S104
+ingame:S105
+ingame:S106
+ingame:S107
+ingame:S108
+ingame:S109
+ingame:S110
 
 ## Last verified
 v2.5.7 build 261123.15 2026-11-23 — in game: S89 (push targets full / freed, no ore lost), S87, S88.

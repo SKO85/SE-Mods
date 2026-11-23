@@ -25,7 +25,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-BUDGET-003 | BUDGET | 1 | Ms budget caps work even when count budget remains | unit:PerTickBudgetTests.MsCapWins_WhenCountBudgetRemains | 261006.3 unit |
 | SCN-BUDGET-004 | BUDGET | 3 | Auto stagger groups 1/2/3 by enabled BaR count | unit:ModResolverTests.AutoStaggerGroups_Thresholds; unit:StaggerGroupsTests | 261006.3 unit |
 | SCN-BUDGET-005 | BUDGET | 3 | Failure cooldown: many BaRs do not bounce off one unweldable block | manual | never |
-| SCN-BUDGET-006 | BUDGET | 4 | Large-grid performance envelope (3000+ blocks, 5 BaRs) | ingame:S08, S43; ingame:S99-S102; unit:TargetSortingTests | never |
+| SCN-BUDGET-006 | BUDGET | 4 | Large-grid performance envelope (3000+ blocks, 5 BaRs) | ingame:S08, S43; ingame:S99-S110; unit:TargetSortingTests | never |
 | SCN-BUDGET-007 | BUDGET | 3 | Station vs ship standing still vs ship in motion, ShowArea off/on: cost and work | ingame:S28; ingame:S29; ingame:S30; ingame:S31; ingame:S32; ingame:S33; unit:AreaDrawModeTests | 261122.8 in game |
 | SCN-BUDGET-008 | BUDGET | 3 | Many BaRs on target ships of mixed sizes: weld, grind, mixed; large vs small clusters | ingame:S64; ingame:S65; ingame:S66; ingame:S67; ingame:S68; ingame:S69; ingame:S70 | never |
 | SCN-BUDGET-009 | BUDGET | 2 | Speed settings (WorkSpeed, multipliers) and throughput floors | ingame:S79; ingame:S80 | 261122.28 in game |
@@ -44,7 +44,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-GRIND-005 | GRIND | 2 | Grind colour grinds painted blocks on the own grid | ingame:S24 | never |
 | SCN-GRIND-006 | GRIND | 2 | Protected grids are not ground (indestructible, immune, damage-handler protection) | unit:GrindDamageVetoTests; ingame:S73, S74 | 261122.25 in game |
 | SCN-COLLECT-001 | COLLECT | 2 | Floating objects inside area only, CollectIfIdle, component class priority | manual, ingame:S10, unit | 261023.2 unit |
-| SCN-INV-001 | INV | 2 | Source scan via conveyors, pull cursor rotation, push-targets-full backoff | manual; ingame:S87, S88, S89 | 261123.15 in game |
+| SCN-INV-001 | INV | 2 | Source scan via conveyors, pull cursor rotation, push-targets-full backoff | manual; ingame:S87, S88, S89, S103-S110 | 261123.15 in game |
 | SCN-INV-002 | INV | 2 | Push-immediately flags and inventory-full pause | manual; ingame:S89, S90-S93; unit:InventoryFullLatchTests | 261123.19 in game |
 | SCN-PRIO-001 | PRIO | 2 | Priority list enable / disable / reorder reflected in target order; reset | manual, unit; ingame:S14, S15, S16; unit:TargetSortingTests | 261023.4 unit |
 | SCN-CLUSTER-001 | CLUSTER | 3 | Coordinator election and shared scan results for co-located BaRs | ingame:S07; unit:ClusterTests | never |

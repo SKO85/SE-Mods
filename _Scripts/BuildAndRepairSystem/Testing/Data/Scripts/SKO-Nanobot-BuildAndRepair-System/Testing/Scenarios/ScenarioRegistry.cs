@@ -108,7 +108,15 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S99_ScanCost("S99", 1000),
             new S99_ScanCost("S100", 2000),
             new S99_ScanCost("S101", 5000),
-            new S99_ScanCost("S102", 10000)
+            new S99_ScanCost("S102", 10000),
+            new S103_ComponentLogistics("S103", 10),
+            new S103_ComponentLogistics("S104", 20),
+            new S103_ComponentLogistics("S105", 50),
+            new S103_ComponentLogistics("S106", 100),
+            new S103_ComponentLogistics("S107", 10, true),
+            new S103_ComponentLogistics("S108", 20, true),
+            new S103_ComponentLogistics("S109", 50, true),
+            new S103_ComponentLogistics("S110", 100, true)
         };
 
         /// <summary>
@@ -124,10 +132,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new ScenarioGroup("grind", "Grinding: janitor, order, colours, protection, leaving targets, full storage", "S04,S11,S12,S13,S16,S17,S24,S45,S73,S74,S76,S89"),
             new ScenarioGroup("zone", "Safe zones", "S39,S40,S41,S42,S53,S85"),
             new ScenarioGroup("shields", "DefenseShields (skipped without the mod)", "S58,S59,S60,S61,S62,S63"),
-            new ScenarioGroup("inventory", "Component sources, sorter, empty cargo, push targets, push options", "S02,S84,S87,S88,S89,S90,S91,S92,S93"),
+            new ScenarioGroup("inventory", "Component sources, sorter, empty cargo, push targets, push options, logistics at scale", "S02,S84,S87,S88,S89,S90,S91,S92,S93,S103,S104,S105,S106,S107,S108,S109,S110"),
             new ScenarioGroup("claims", "Block claims, per-grid limit, BaRs sharing work, takeovers", "S05,S06,S50,S51,S54,S55,S56,S86,S94,S95,S96,S97,S98"),
             new ScenarioGroup("cluster", "Cluster coordination and the per-grid limit", "S06,S07,S50,S54"),
-            new ScenarioGroup("perf", "Load, large grids, scan cost by grid size, ShowArea and budget cost (long)", "S08,S28,S29,S30,S31,S32,S33,S43,S52,S64,S65,S66,S67,S68,S69,S70,S99,S100,S101,S102"),
+            new ScenarioGroup("perf", "Load, large grids, scan cost by grid size, ShowArea and budget cost (long)", "S08,S28,S29,S30,S31,S32,S33,S43,S52,S64,S65,S66,S67,S68,S69,S70,S99,S100,S101,S102,S103,S104,S105,S106,S107,S108,S109,S110"),
             new ScenarioGroup("companion", "PB API and the companion script", "S09,S71,S81,S82,S83"),
             new ScenarioGroup("config", "Admin settings (Fixed / Default, limits, checks)", "S46,S47,S48,S49,S50,S51,S52,S53"),
             new ScenarioGroup("priority", "Weld / grind priority lists", "S14,S15,S16"),

@@ -47,10 +47,10 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89 |
 | `@zone` | Safe zones | S39-S42, S53, S85 |
 | `@shields` | DefenseShields (skipped without the mod) | S58-S63 |
-| `@inventory` | Component sources, sorter, empty cargo, push targets, push options | S02, S84, S87-S93 |
+| `@inventory` | Component sources, sorter, empty cargo, push targets, push options, logistics at scale | S02, S84, S87-S93, S103-S110 |
 | `@claims` | Block claims, per-grid limit, BaRs sharing work, takeovers | S05, S06, S50, S51, S54-S56, S86, S94-S98 |
 | `@cluster` | Cluster coordination and the per-grid limit | S06, S07, S50, S54 |
-| `@perf` | Load, large grids, scan cost by grid size, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S102 |
+| `@perf` | Load, large grids, scan cost by grid size, logistics at scale, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S110 |
 | `@companion` | PB API and the companion script | S09, S71, S81-S83 |
 | `@config` | Admin settings (Fixed / Default, limits, checks) | S46-S53 |
 | `@priority` | Weld / grind priority lists | S14-S16 |
@@ -194,10 +194,18 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S96 | Claims: BaR destroyed mid-weld, claim freed at once, other BaR finishes | BUDGET-001 | ~30 s | 261123.19 — claim freed 0.5 s, finished 11.0 s |
 | S97 | Claims: BaR loses power mid-weld, claim expires, BaR on another ship finishes | BUDGET-001 | ~40 s | 261123.19 — claim expired 8.2 s, B finished 19.2 s |
 | S98 | Claims: BaR switched off mid-grind, claim expires, other BaR finishes grinding | BUDGET-001 | ~40 s | 261123.19 — claim expired 7.7 s, B finished 31.7 s |
-| S99 | Scan cost: 1 BaR scanning a 1000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | not yet |
-| S100 | Scan cost: 1 BaR scanning a 2000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | not yet |
-| S101 | Scan cost: 1 BaR scanning a 5000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | not yet |
-| S102 | Scan cost: 1 BaR scanning a 10000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | not yet |
+| S99 | Scan cost: 1 BaR scanning a 1000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 1.4 ms, GetBlocks 0.05 ms, tick 0.015 ms |
+| S100 | Scan cost: 1 BaR scanning a 2000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 2.5 ms, GetBlocks 0.08 ms |
+| S101 | Scan cost: 1 BaR scanning a 5000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 6.0 ms, GetBlocks 0.28 ms |
+| S102 | Scan cost: 1 BaR scanning a 10000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 11.5 ms, GetBlocks 0.47 ms, tick 0.08 ms |
+| S103 | Logistics: 10 BaRs, ~50 containers, plates spread thin, ships around | INV-001, BUDGET-006 | <=3 min | not yet |
+| S104 | Logistics: 20 BaRs, ~100 containers, plates spread thin, ships around | INV-001, BUDGET-006 | <=3 min | not yet |
+| S105 | Logistics: 50 BaRs, ~250 containers, plates spread thin, ships around | INV-001, BUDGET-006 | <=3 min | not yet |
+| S106 | Logistics: 100 BaRs, ~500 containers, plates spread thin, ships around | INV-001, BUDGET-006 | <=3 min | not yet |
+| S107 | Logistics, busy base: 10 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
+| S108 | Logistics, busy base: 20 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
+| S109 | Logistics, busy base: 50 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
+| S110 | Logistics, busy base: 100 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
 
 ## Scenarios
 
@@ -663,6 +671,41 @@ S99 with a 5,000-block grid.
 
 ### S102
 S99 with a 10,000-block grid.
+
+### S103
+**Proves / records** component logistics at scale. Station: N = 10 BaRs in a row (rig cargo ~3 per BaR) plus 2 extra
+containers per BaR behind the back row; SteelPlate spread evenly over every container (the ships' missing plates x 1.2)
+and 10 plates in each BaR's own inventory (BaRs are sources for each other). Static ships with 20 damaged armor
+blocks each (one per 5 BaRs, at least 2) 25 m in front; BaRs BoundingBox, area 100 x 60 x 100 m, WeldOnly.
+**Pass** all ship blocks welded within 180 s; plates conserved (exactly the missing plates left storage); sim speed
+>= 0.8 (10 / 20 BaRs) or >= 0.5 (50 / 100). **Records** `weldedPerSecond`, `platesUsed` vs `platesNeeded`, and the
+cost of `ServerFindMissingComponents`, `PullFromSourcesOnePass`, `ServerEmptyTransportInventory`,
+`ServerTryPushInventory`, `AsyncScanForSources`.
+
+### S104
+S103 with 20 BaRs.
+
+### S105
+S103 with 50 BaRs.
+
+### S106
+S103 with 100 BaRs.
+
+### S107
+S103 on a busy base (10 BaRs): plate stacks of 5 moved between containers every 2 s (max(2, N/5) moves, like
+assemblers / refineries), a supply ship with a container docked by connector (S38 docking) that undocks every 10 s
+and redocks ~4 s later, and a container section behind a sorter that is switched off / on and has its SteelPlate filter
+flipped every 15 s. All of it is conservation-neutral. **Pass** as S103, plus the churn really happened (`itemMoves`,
+`undocks`, `redocks`, `sorterChanges`). Compare `weldedPerSecond` and the pull / push cost with S103.
+
+### S108
+S107 with 20 BaRs.
+
+### S109
+S107 with 50 BaRs.
+
+### S110
+S107 with 100 BaRs.
 
 ## Building blocks for new scenarios
 

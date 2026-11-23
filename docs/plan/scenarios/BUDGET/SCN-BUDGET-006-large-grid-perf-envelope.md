@@ -35,6 +35,14 @@ ingame:S100
 ingame:S101
 ingame:S102
 unit:TargetSortingTests
+ingame:S103
+ingame:S104
+ingame:S105
+ingame:S106
+ingame:S107
+ingame:S108
+ingame:S109
+ingame:S110
 
 ## Last verified
 never
