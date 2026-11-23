@@ -599,6 +599,7 @@ namespace SKONanobotBuildAndRepairSystem
             hash = hash * 31 + (State.LimitsExceeded ? 1 : 0);
             hash = hash * 31 + State.ProjectedBlocksSkipped; // BUG-261122.2
             hash = hash * 31 + State.GrindBlockedGrids; // FEAT-261123.6
+            hash = hash * 31 + State.WeldBlockedGrids; // BUG-261123.8
             hash = hash * 31 + State.PossibleWeldTargets.CurrentHash;
             hash = hash * 31 + State.PossibleGrindTargets.CurrentHash;
             hash = hash * 31 + State.PossibleFloatingTargets.CurrentHash;

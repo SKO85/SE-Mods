@@ -94,8 +94,12 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
 
         public override void Sample(TestContext ctx)
         {
+            if (_rig != null && _rig.Bars.Count > 0 && _rig.Bars[0] != null && _rig.Bars[0].State.WeldBlockedGrids > _maxWeldBlocked)
+                _maxWeldBlocked = _rig.Bars[0].State.WeldBlockedGrids;
             if (_start < 0) _start = ctx.IntegritySum(_derelict != null ? _derelict.Targets : _rig.Targets);
         }
+
+        private int _maxWeldBlocked;
 
         public override bool IsComplete(TestContext ctx)
         {
@@ -135,6 +139,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                     ctx.Metric("weldCalls", weldCalls);
                     ctx.Metric("gameRefusedInZone", weldedCd == 0 && weldCalls > 0);
                     ctx.Metric("dedicated", Sandbox.ModAPI.MyAPIGateway.Utilities.IsDedicated);
+                    ctx.Metric("weldBlockedShown", (long)_maxWeldBlocked);
+                    // BUG-261123.8: refused welds are not retried every tick (one try per 30 s per grid, plus slack).
+                    if (weldedCd == 0 && weldCalls > 0)
+                    {
+                        ctx.Check(weldCalls <= 5, "the BaR retried a refused weld " + weldCalls + " times in " + Window + " s (expected <= 5)");
+                        ctx.Check(_maxWeldBlocked >= 1, "the BaR never reported 'Welding blocked by a safe zone / protection'");
+                    }
                     ctx.Check(bar == null || bar.State.SafeZoneAllowsWelding, "BaR state says the zone forbids welding although the check is off");
                     ctx.Check(weldCalls > 0, "the BaR never tried to weld inside the zone (the mod still applies the zone)");
                     ctx.Check(weldedCd == _rig.Targets.Count || weldedCd == 0, "welded=" + weldedCd + "/" + _rig.Targets.Count + " (partly)");

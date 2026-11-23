@@ -28,6 +28,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private bool _LimitsExceeded;
         private int _ProjectedBlocksSkipped;
         private int _GrindBlockedGrids;
+        private int _WeldBlockedGrids;
         private bool _SafeZoneAllowsWelding;
         private bool _SafeZoneAllowsBuildingProjections;
         private bool _SafeZoneAllowsGrinding;
@@ -433,6 +434,21 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
         }
 
+        // BUG-261123.8: grids where the game refused this BaR's welds (terminal info).
+        [ProtoMember(26)]
+        public int WeldBlockedGrids
+        {
+            get { return _WeldBlockedGrids; }
+            set
+            {
+                if (value != _WeldBlockedGrids)
+                {
+                    _WeldBlockedGrids = value;
+                    Changed = true;
+                }
+            }
+        }
+
         public TargetBlockDataHashList PossibleWeldTargets { get; private set; }
 
         [ProtoMember(30)]
@@ -677,6 +693,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _LimitsExceeded = newState.LimitsExceeded;
             _ProjectedBlocksSkipped = newState.ProjectedBlocksSkipped;
             _GrindBlockedGrids = newState.GrindBlockedGrids;
+            _WeldBlockedGrids = newState.WeldBlockedGrids;
             _CurrentTransportStartTime = MyAPIGateway.Session.ElapsedPlayTime - (newState.LastTransmitted - newState.CurrentTransportStartTime);
             _CurrentTransportTime = newState.CurrentTransportTime;
 

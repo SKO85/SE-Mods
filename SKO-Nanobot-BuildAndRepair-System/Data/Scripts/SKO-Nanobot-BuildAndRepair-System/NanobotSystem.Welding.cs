@@ -38,7 +38,10 @@ namespace SKONanobotBuildAndRepairSystem
             var skippedByGridLimit = 0;
             var skippedByAssign = 0;
             var skippedByFailCooldown = 0;
+            var skippedByRefused = 0;
             var componentFailures = 0;
+            // BUG-261123.8: grids where the game refused the weld (safe zone / protection), for the terminal.
+            State.WeldBlockedGrids = _weldRefusedGrids.Count > 0 ? CountWeldRefused() : 0;
             // BUG-261123.1: failure marks are shared only within this BaR's supply (logical grid group).
             var supplyGroup = _Welder.CubeGrid != null ? (object)_Welder.CubeGrid.GetGridGroup(GridLinkTypeEnum.Logical) : null;
             var totalComponentChecks = 0;
@@ -170,6 +173,34 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         skippedByFailCooldown++;
                         needWelding = true;
+                        continue;
+                    }
+
+                    // BUG-261123.8: the game refused welding on this grid lately (safe zone / protection): skip it for a while.
+                    if (_weldRefusedGrids.Count > 0 && targetData.Block != null && targetData.Block.CubeGrid != null
+                        && IsWeldRefused(targetData.Block.CubeGrid.EntityId))
+                    {
+                        if (isLockOnBlock)
+                        {
+                            ReleaseAssignmentIfEnabled(targetData.Block, profilerTs != 0L, ref tsAssignOps);
+                            State.CurrentWeldingBlock = null;
+                            lookingForNext = true;
+                        }
+                        skippedByRefused++;
+                        continue;
+                    }
+
+                    // BUG-261123.8: the game refused welding on this grid lately (safe zone / protection): skip it for a while.
+                    if (_weldRefusedGrids.Count > 0 && targetData.Block != null && targetData.Block.CubeGrid != null
+                        && IsWeldRefused(targetData.Block.CubeGrid.EntityId))
+                    {
+                        if (isLockOnBlock)
+                        {
+                            ReleaseAssignmentIfEnabled(targetData.Block, profilerTs != 0L, ref tsAssignOps);
+                            State.CurrentWeldingBlock = null;
+                            lookingForNext = true;
+                        }
+                        skippedByRefused++;
                         continue;
                     }
 
@@ -448,6 +479,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var _checkedByWeldable = checkedByWeldable;
                     var _skippedByIgnore = skippedByIgnore;
                     var _skippedByGridLimit = skippedByGridLimit;
+                    var _skippedByRefused = skippedByRefused;
                     var _skippedByAssign = skippedByAssign;
                     var _skippedByFailCooldown = skippedByFailCooldown;
                     var _componentFailures = componentFailures;
@@ -464,13 +496,13 @@ namespace SKONanobotBuildAndRepairSystem
                     var _priorityMs = tsPriority * 1000.0 / tsFreq;
                     var _droppedOutOfArea = droppedOutOfArea;
                     MethodProfiler.StopAndLog("ServerTryWelding", profilerTs, () =>
-                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};skipFailCooldown={14};componentFails={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3};assignOpsMs={22:F3};gridLimitMs={23:F3};priorityMs={24:F3};droppedOutOfArea={25}",
+                        string.Format("entityId={0};welding={1};needWelding={2};transporting={3};targets={4};currentBlock={5};hadLockOn={6};lockOnFound={7};lockOnLost={8};skipLock={9};weldChecked={10};skipIgnore={11};skipGrid={12};skipAssign={13};skipFailCooldown={14};componentFails={15};compChecks={16};nextCap={17};exhaustedSkip={18};saturatedGrids={19};lockAcquireMs={20:F3};inLockMs={21:F3};assignOpsMs={22:F3};gridLimitMs={23:F3};priorityMs={24:F3};droppedOutOfArea={25};skipRefused={26}",
                             _Welder.EntityId, _welding, _needWelding, _transporting, _targetCount,
                             State.CurrentWeldingBlock != null ? State.CurrentWeldingBlock.BlockDefinition.Id.SubtypeName : "none",
                             _hadLockOn, _lockOnFound, _lockOnLost,
                             _skippedByLockOn, _checkedByWeldable, _skippedByIgnore, _skippedByGridLimit, _skippedByAssign, _skippedByFailCooldown, _componentFailures,
                             _totalComponentChecks, _lookingForNextChecked, _weldSkipped, _saturatedGridCount,
-                            _lockAcquireMs, _inLockMs, _assignOpsMs, _gridLimitMs, _priorityMs, _droppedOutOfArea));
+                            _lockAcquireMs, _inLockMs, _assignOpsMs, _gridLimitMs, _priorityMs, _droppedOutOfArea, _skippedByRefused));
                 }
             }
         }
@@ -958,9 +990,17 @@ namespace SKONanobotBuildAndRepairSystem
                         if (welding)
                         {
                             appliedWeldAmount = weldAmount;
+                            var integrityBefore = target.Integrity;
                             tsMount = Stopwatch.GetTimestamp();
                             target.IncreaseMountLevel(weldAmount, _Welder.OwnerId, welderInventory, MyAPIGateway.Session.WelderSpeedMultiplier * Mod.Settings.Welder.WeldingMultiplier * WELDER_MAX_REPAIR_BONE_MOVEMENT_SPEED, false);
                             tsMount = Stopwatch.GetTimestamp() - tsMount;
+                            // BUG-261123.8: no progress = the game refused (safe zone without Welding while the mod's check
+                            // is off, protection): skip this grid for WeldRefusedSkip instead of retrying every tick.
+                            if (target.Integrity <= integrityBefore && !target.IsFullIntegrity && target.CubeGrid != null)
+                            {
+                                _weldRefusedGrids[target.CubeGrid.EntityId] = Mod.NowPlayTime + WeldRefusedSkip;
+                                welding = false;
+                            }
                         }
                     }
 
@@ -1276,6 +1316,27 @@ namespace SKONanobotBuildAndRepairSystem
             public long TsMaxItemsAdd;     // sum of MaxItemsAddable engine ticks
             public long TsTransfer;        // sum of TransferItemFrom engine ticks
             public long MaxSourceTicks;    // longest single TryPullFromSource call
+        }
+
+        // BUG-261123.8: grids where a weld made no progress (the game refused it), per BaR, main thread.
+        private readonly System.Collections.Generic.Dictionary<long, TimeSpan> _weldRefusedGrids = new System.Collections.Generic.Dictionary<long, TimeSpan>();
+        private static readonly TimeSpan WeldRefusedSkip = TimeSpan.FromSeconds(30);
+
+        private bool IsWeldRefused(long gridId)
+        {
+            TimeSpan until;
+            if (!_weldRefusedGrids.TryGetValue(gridId, out until)) return false;
+            if (Mod.NowPlayTime < until) return true;
+            _weldRefusedGrids.Remove(gridId);
+            return false;
+        }
+
+        private int CountWeldRefused()
+        {
+            var now = Mod.NowPlayTime;
+            var count = 0;
+            foreach (var until in _weldRefusedGrids.Values) if (now < until) count++;
+            return count;
         }
 
         private bool PullFromSourcesOnePass(ref float remainingVolume)

@@ -447,7 +447,8 @@ grid at the same time (sampled from their current blocks), grid finished.
 `SafeZoneCheckEnabled=false` under a no-welding zone: the BaR ignores the zone (state says allowed) and tries to weld
 (`weldCalls > 0`). Whether the weld lands is the game's rule: single player with admin / creative rights welds all 5;
 on a dedicated server the game refuses inside the zone (Torch 261123.42: 745 calls, 0 welded) — both pass, partial fails.
-20 s window. **Records** `welded`, `weldCalls`, `gameRefusedInZone`, `dedicated`.
+20 s window. When refused (DS), the BaR must stop retrying (<= 5 weld calls, BUG-261123.8) and show "Welding
+blocked". **Records** `welded`, `weldCalls`, `gameRefusedInZone`, `dedicated`, `weldBlockedShown`.
 
 ### S54
 **Proves** lowering the per-grid limit at runtime (BUG-261006.1). **Setup** 4 BaRs around an 80-block grid, limit 4,

@@ -105,6 +105,7 @@
         public static readonly MyStringId Info_LimitReached;
         public static readonly MyStringId Info_ProjectedSkipped;
         public static readonly MyStringId Info_GrindBlocked;
+        public static readonly MyStringId Info_WeldBlocked;
 
         public static readonly MyStringId Info_BlocksToBuild;
 
@@ -230,6 +231,7 @@
             Info_LimitReached = LocalizationHelper.GetStringId(texts, "Info_LimitReached");
             Info_ProjectedSkipped = LocalizationHelper.GetStringId(texts, "Info_ProjectedSkipped");
             Info_GrindBlocked = LocalizationHelper.GetStringId(texts, "Info_GrindBlocked");
+            Info_WeldBlocked = LocalizationHelper.GetStringId(texts, "Info_WeldBlocked");
             Info_BlocksToBuild = LocalizationHelper.GetStringId(texts, "Info_BlocksToBuild");
             Info_BlocksToGrind = LocalizationHelper.GetStringId(texts, "Info_BlocksToGrind");
             Info_ItemsToCollect = LocalizationHelper.GetStringId(texts, "Info_ItemsToCollect");

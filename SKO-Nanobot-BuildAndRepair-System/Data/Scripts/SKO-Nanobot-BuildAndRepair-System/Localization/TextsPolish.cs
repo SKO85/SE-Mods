@@ -104,6 +104,7 @@ namespace SKONanobotBuildAndRepairSystem.Localization
             {"Info_LimitReached",               "Osiągnięto limit PCU!"},
             {"Info_ProjectedSkipped",           "Pominięte bloki projekcji: {0} (ponowna próba automatycznie)"},
             {"Info_GrindBlocked",               "Szlifowanie zablokowane przez osłonę / mod ochrony: {0} siatek"},
+            {"Info_WeldBlocked",                "Spawanie zablokowane przez strefę bezpieczeństwa / ochronę: {0} siatek"},
             {"Info_DisabledByRemote",           "Wyłączone przez zdalne sterowanie!"},
             {"Info_BlocksToBuild",              "Bloki do zbudowania:"},
             {"Info_BlocksToGrind",              "Bloki do rozbiórki:"},
