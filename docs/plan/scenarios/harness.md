@@ -235,10 +235,10 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S128 | Races: SearchMode / WorkMode flipped every 1 s while 10 BaRs weld | BUDGET-011 | ~1 min | 261123.51 Torch — 21 flips, done 21.0 s, 0 errors |
 | S129 | Races: 10 BaRs switched off / on every 1.5 s while welding | BUDGET-011 | ~1 min | 261123.51 Torch — 14 toggles, done 24.7 s, 0 claims left |
 | S130 | Mechanical derelict: base grid, rotor head and piston head all ground away | GRIND-004 | ~1 min | 261123.65 — base + both heads ground away |
-| S131 | Collect: only stacks inside the area and of enabled classes (ore off, 70 m out ignored) | COLLECT-001 | <1 min | never |
-| S132 | Collect only when idle: nothing collected while welding, everything after | COLLECT-001 | <1 min | never |
-| S133 | Janitor DisableOnly: functional blocks ground until disabled, not removed; armor untouched | GRIND-002 | <1 min | never |
-| S134 | Janitor HackOnly: functional blocks ground until hackable, not removed; armor untouched | GRIND-002 | <1 min | never |
+| S131 | Collect: only stacks inside the area and of enabled classes (ore off, 70 m out ignored) | COLLECT-001 | <1 min | 261123.68 — inside collected; outside 2/2 and ore 3/3 left |
+| S132 | Collect only when idle: nothing collected while welding, everything after | COLLECT-001 | <1 min | 261123.68 — weld done 4.2 s, first collect 5.0 s |
+| S133 | Janitor DisableOnly: functional blocks ground until disabled, not removed; armor untouched | GRIND-002 | <1 min | 261123.68 — 0.44/0.79/0.79 vs 0.48/0.87, none removed, armor untouched |
+| S134 | Janitor HackOnly: functional blocks ground until hackable, not removed; armor untouched | GRIND-002 | <1 min | 261123.68 — none removed, armor untouched |
 
 ## Scenarios
 

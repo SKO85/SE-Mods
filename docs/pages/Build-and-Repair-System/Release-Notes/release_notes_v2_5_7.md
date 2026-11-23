@@ -8,7 +8,7 @@ nav_order: 0
 
 # Release Notes – v2.5.7
 
-- Status: **In development**
+- Status: **Released** — November 2026
 - Notes: Performance and polish after v2.5.6. Big BaR setups no longer stall when components are spread out, servers send much less network traffic, BaRs tell you when a shield, safe zone or protection blocks them, and a range setting below 100 m no longer fills the log with errors.
 
 ---
