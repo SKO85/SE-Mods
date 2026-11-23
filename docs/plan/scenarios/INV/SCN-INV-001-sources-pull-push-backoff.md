@@ -24,7 +24,10 @@
 `PullFromSourcesOnePass` maxMs ≤ 3 with 100 sources; `ServerTryPushInventory` steadyAvgMs ≤ 0.5 while full.
 ## Coverage
 manual
+ingame:S87
+ingame:S88
 ## Last verified
-never
+v2.5.7 build 261123.10 2026-11-23 — in game: S87 (docked ship cargo), S88 (assembler output).
+
 ## Related
 BUG-007, BUG-011, BUG-016, BUG-090, BUG-119, BUG-126, BUG-129, BUG-148, FEAT-006, FEAT-011

@@ -92,7 +92,32 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S81_CompanionGroups("S83", CompanionGroupsMode.StockInCargo),
             new S84_SorterBlockedStock(),
             new S03_ProjectedBuild("S85", ProjectionMode.ZoneForbidsWelding),
-            new S86_StarvedNeighbour()
+            new S86_StarvedNeighbour(),
+            new S87_Sources("S87", SourceKind.DockedShipCargo),
+            new S87_Sources("S88", SourceKind.AssemblerOutput)
+        };
+
+        /// <summary>
+        /// Named sets for `test run @name` (a scenario can be in several). S00 (warm-up) runs first in every session and
+        /// is in none. Every other scenario must be in at least one group (ScenarioGroupsTests); keep harness.md in sync.
+        /// </summary>
+        public static readonly ScenarioGroup[] Groups =
+        {
+            new ScenarioGroup("core", "Repair, damage detection, range, work modes, power, speeds", "S01,S19,S20,S25,S57,S72,S75,S76,S77,S78,S79,S80"),
+            new ScenarioGroup("weld", "Welding: repair, weld options, colours, docked ships, sources", "S01,S02,S03,S18,S21,S22,S23,S26,S27,S34,S35,S36,S37,S38,S42,S44,S46,S72,S84,S86,S87,S88"),
+            new ScenarioGroup("projection", "Projector building, incl. admin and safe-zone rules", "S03,S27,S42,S46,S85"),
+            new ScenarioGroup("subgrids", "Rotors, pistons, hinges, wheels, connectors, ships in flight", "S18,S34,S35,S36,S37,S38,S44,S45"),
+            new ScenarioGroup("grind", "Grinding: janitor, order, colours, protection, leaving targets", "S04,S11,S12,S13,S16,S17,S24,S45,S73,S74,S76"),
+            new ScenarioGroup("zone", "Safe zones", "S39,S40,S41,S42,S53,S85"),
+            new ScenarioGroup("shields", "DefenseShields (skipped without the mod)", "S58,S59,S60,S61,S62,S63"),
+            new ScenarioGroup("inventory", "Component sources, sorter, empty cargo", "S02,S84,S87,S88"),
+            new ScenarioGroup("claims", "Block claims, per-grid limit, BaRs sharing work", "S05,S06,S50,S51,S54,S55,S56,S86"),
+            new ScenarioGroup("cluster", "Cluster coordination and the per-grid limit", "S06,S07,S50,S54"),
+            new ScenarioGroup("perf", "Load, large grids, ShowArea and budget cost (long)", "S08,S28,S29,S30,S31,S32,S33,S43,S52,S64,S65,S66,S67,S68,S69,S70"),
+            new ScenarioGroup("companion", "PB API and the companion script", "S09,S71,S81,S82,S83"),
+            new ScenarioGroup("config", "Admin settings (Fixed / Default, limits, checks)", "S46,S47,S48,S49,S50,S51,S52,S53"),
+            new ScenarioGroup("priority", "Weld / grind priority lists", "S14,S15,S16"),
+            new ScenarioGroup("collect", "Collecting floating objects", "S10")
         };
 
         public static ITestScenario Find(string id)
@@ -102,6 +127,43 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 if (string.Equals(All[i].Id, id, StringComparison.OrdinalIgnoreCase)) return All[i];
             }
             return null;
+        }
+
+        /// <summary>"weld" or "@weld"; null when unknown.</summary>
+        public static ScenarioGroup FindGroup(string name)
+        {
+            if (name == null) return null;
+            if (name.StartsWith("@")) name = name.Substring(1);
+            for (int i = 0; i < Groups.Length; i++)
+            {
+                if (string.Equals(Groups[i].Name, name, StringComparison.OrdinalIgnoreCase)) return Groups[i];
+            }
+            return null;
+        }
+
+        /// <summary>Comma-separated group names of a scenario ("" when none).</summary>
+        public static string GroupsOf(string id)
+        {
+            var result = "";
+            for (int i = 0; i < Groups.Length; i++)
+            {
+                if (Array.IndexOf(Groups[i].Ids, id) >= 0) result += (result.Length > 0 ? ", " : "") + Groups[i].Name;
+            }
+            return result;
+        }
+    }
+
+    internal sealed class ScenarioGroup
+    {
+        public readonly string Name;
+        public readonly string Description;
+        public readonly string[] Ids;
+
+        public ScenarioGroup(string name, string description, string ids)
+        {
+            Name = name;
+            Description = description;
+            Ids = ids.Split(',');
         }
     }
 }

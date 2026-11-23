@@ -14,8 +14,9 @@ Code: `_Scripts/BuildAndRepairSystem/Testing/Data/Scripts/SKO-Nanobot-BuildAndRe
 - World: empty **survival** world, only the `-Testing` mod, admin creative tools **off** (`test run` refuses creative
   worlds; creative tools skip the game's projector component check).
 - `/nanobars test clear` — delete old results. `/nanobars test list` — show the registry.
-- `/nanobars test run <id|id,id|id-id|all> [xN]` — e.g. `S03`, `S03,S20`, `S28-S33`, `S01-S05 x3`. Ranges follow the
-  `test list` order. A hidden warm-up (`S00`) runs first in every session; each scenario posts a start line in chat.
+- `/nanobars test run <id|id,id|id-id|@group|all> [xN]` — e.g. `S03`, `S03,S20`, `S28-S33`, `@zone`,
+  `@zone,@shields,S03 x2`. Ranges follow the `test list` order. A hidden warm-up (`S00`) runs first in every session;
+  each scenario posts a start line in chat. `/nanobars test groups` lists the groups (see [Groups](#groups)).
 - Spawn safety: at the start of a run, leftover test grids (`NanobotTest-*` and anything attached, e.g. saved by an
   autosave mid-run) are removed; any other grid within 150 m of the origin stops the run with its name (move away or
   use `test origin`) — spawning into a grid makes the physics explode. Parts that split off a test grid while
@@ -29,6 +30,31 @@ Code: `_Scripts/BuildAndRepairSystem/Testing/Data/Scripts/SKO-Nanobot-BuildAndRe
 - Standard metrics on every result line: `runS`, `tickAvgMs`/`tickPeakMs` (mod tick cost), `simMin`/`simAvg`,
   `weldBudgetPeak`, `grindBudgetPeak`, `assignmentsPeak` (claims), `otherBars`, plus `calls/steadyAvgMs/maxMs` for the
   scenario's profiled methods.
+
+## Groups
+
+`/nanobars test run @name` runs a group; groups combine with ids and ranges (`@zone,@shields,S03`). A scenario can be in
+several groups; S00 (warm-up) is in none and runs first anyway. Defined in `ScenarioRegistry.Groups`;
+`ScenarioGroupsTests` fails when a scenario has no group, a group lists an unknown id, or a group is missing here.
+Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; an inventory fix: `@inventory,@weld`.
+
+| Group | What | Scenarios |
+| ----- | ---- | --------- |
+| `@core` | Repair, damage detection, range, work modes, power, speeds | S01, S19, S20, S25, S57, S72, S75-S80 |
+| `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88 |
+| `@projection` | Projector building, incl. admin and safe-zone rules | S03, S27, S42, S46, S85 |
+| `@subgrids` | Rotors, pistons, hinges, wheels, connectors, ships in flight | S18, S34-S38, S44, S45 |
+| `@grind` | Grinding: janitor, order, colours, protection, leaving targets | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76 |
+| `@zone` | Safe zones | S39-S42, S53, S85 |
+| `@shields` | DefenseShields (skipped without the mod) | S58-S63 |
+| `@inventory` | Component sources, sorter, empty cargo | S02, S84, S87, S88 |
+| `@claims` | Block claims, per-grid limit, BaRs sharing work | S05, S06, S50, S51, S54-S56, S86 |
+| `@cluster` | Cluster coordination and the per-grid limit | S06, S07, S50, S54 |
+| `@perf` | Load, large grids, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70 |
+| `@companion` | PB API and the companion script | S09, S71, S81-S83 |
+| `@config` | Admin settings (Fixed / Default, limits, checks) | S46-S53 |
+| `@priority` | Weld / grind priority lists | S14-S16 |
+| `@collect` | Collecting floating objects | S10 |
 
 ## Reuse or add? — index by area
 
@@ -153,9 +179,11 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S81 | Companion script, two groups: each queues into its own assembler, titles its own LCD | API-002 | ~20 s | 261122.29 — A 100, B 0 |
 | S82 | Companion script, two assemblers: queue = missing, both used, no 0 items, stable 20 s | API-002 | ~35 s | 261122.32 — 100/100, stable |
 | S83 | Companion script, stock in cargo: nothing queued while welding from stock | API-002 | 25 s | 261122.32 — nothing queued |
-| S84 | Sorter-blocked stock stays in the missing list (companion script keeps queuing) | WELD-005 | 20 s | 261122.32 — blocked 500 kept, 200 missing |
+| S84 | Sorter-blocked stock stays in the missing list (companion script keeps queuing) | WELD-005 | 20 s | 261123.10 — blocked stock kept |
 | S85 | Safe zone without Welding, with BuildingProjections: projections placed, not welded further | ZONE-001 | ~20 s | 261122.36 — 10 placed, 0 welded, 750 + 240 + 10 = 1000 |
 | S86 | A starved BaR does not stop a stocked BaR on another ship from repairing its grid | WELD-008 | ~20 s | 261123.7 — 10/10 in 3.4 s (5/10 in 45 s before the fix) |
+| S87 | Source: components only in a docked ship's cargo are used for welding | INV-001 | ~15 s | 261123.10 — 5/5 in 2.5 s, 100 plates from the docked ship |
+| S88 | Source: components only in an assembler's output are used for welding | INV-001 | ~10 s | 261123.10 — 5/5, assembler at (0,0,3) |
 
 ## Scenarios
 
@@ -546,6 +574,17 @@ Run with admin creative tools and "ignore safe zones" off (creative tools build 
 500 SteelPlate, no damage), not connected. **Pass** B repairs all of A's blocks within 45 s. **Records** `firstWeldS`,
 `doneS`, ship A's BaR state (expected MissingComponents).
 
+### S87
+**Proves** components are pulled from a ship docked by connector (S38 docking; ship cargo at ship cell (0,0,1)) when
+the rig's own cargo is empty. **Layout check** the ship cargo is conveyor-connected to the BaR. **Pass** all 5 damaged
+rig blocks welded within 40 s and SteelPlate taken from the ship cargo.
+
+### S88
+**Proves** an assembler's output inventory is a source: 500 SteelPlate only in a switched-off assembler's output.
+The large assembler has conveyor ports on some faces only, so three candidates are placed (rig cells (2,0,0), (0,0,3),
+(1,0,3)); the first connected to the BaR is stocked (`sourceCandidate`). **Layout check** (none connected = fail) and
+**Pass** as S87.
+
 ## Building blocks for new scenarios
 
 - `RigSpec`: `Bars`, `DamagedArmor` (+ `DamagedBuildPercent`, 1 = intact but tracked), `Armor`, `RowWidth`, `Offset`,
@@ -570,7 +609,8 @@ Run with admin creative tools and "ignore safe zones" off (creative tools build 
 ## Adding a scenario
 
 1. Pick the next free id; implement it under `Testing/Scenarios/` (C# 6, ModAPI whitelist — no reflection/threads).
-2. Register it in `ScenarioRegistry.All` (the order is the `test list` / range order).
+2. Register it in `ScenarioRegistry.All` (the order is the `test list` / range order) and add it to at least one
+   group in `ScenarioRegistry.Groups` and the [Groups](#groups) table.
 3. Add `ingame:Sxx` to the `## Coverage` of the `SCN-` entry it checks (new entry if none fits) and the
    `scenarios/state.md` row.
 4. Add it to this page: summary row + `### Sxx` section (`CatalogueConsistencyTests` fails otherwise).
