@@ -256,8 +256,9 @@ namespace SKONanobotBuildAndRepairSystem
                         var grindBlock = chosenGrindTarget.Block;
                         if (grindBlock != null && grindBlock.IsFullyDismounted)
                         {
+                            // BUG-261123.7: own list only; cluster members drop it on their next walk (BUG-261123.3).
                             tsMark = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
-                            RemoveGrindTargetEverywhere(chosenGrindTarget);
+                            RemoveGrindTarget(chosenGrindTarget);
                             if (tsMark != 0L) tsRemoveAll += Stopwatch.GetTimestamp() - tsMark;
                         }
                     }
@@ -396,19 +397,12 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// Drops a finished grind target from this BaR's list and, via
         /// BUG-260511.19's removal propagation, from every cluster member's list so
-        /// pickers stop walking it between scans. Used for fully-dismounted blocks
-        /// and (BUG-260612.10) janitor targets that reached their threshold.
+        /// pickers stop walking it between scans. Used for (BUG-260612.10) janitor
+        /// targets that reached their threshold: members cannot tell those are done.
         /// </summary>
         private void RemoveGrindTargetEverywhere(TargetBlockData targetData)
         {
-            lock (State.PossibleGrindTargets)
-            {
-                if (State.PossibleGrindTargets.Remove(targetData))
-                {
-                    // BUG-260610.33: RebuildHash so CurrentCount tracks the removal.
-                    State.PossibleGrindTargets.RebuildHash();
-                }
-            }
+            RemoveGrindTarget(targetData);
 
             var grindBlock = targetData.Block;
             var cluster = AssignedCluster;
@@ -424,6 +418,23 @@ namespace SKONanobotBuildAndRepairSystem
                     {
                         other.RemoveGrindTargetByPosition(gid, pos);
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Drops a finished grind target from this BaR's list only. Enough for fully dismounted blocks: other members
+        /// see them as dead and drop them on their next walk (BUG-261123.3), so scanning every member's list per ground
+        /// block (cost grows with cluster size) is not needed (BUG-261123.7).
+        /// </summary>
+        private void RemoveGrindTarget(TargetBlockData targetData)
+        {
+            lock (State.PossibleGrindTargets)
+            {
+                if (State.PossibleGrindTargets.Remove(targetData))
+                {
+                    // BUG-260610.33: RebuildHash so CurrentCount tracks the removal.
+                    State.PossibleGrindTargets.RebuildHash();
                 }
             }
         }
