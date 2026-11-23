@@ -13,7 +13,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
 {
     /// <summary>
     /// SCN-WELD-007 / SCN-BUDGET-006: BaRs on a moving arm. Static base: stocked containers, battery, piston; on the piston
-    /// head a rotor, on the rotor head a hub container with BaRs around it (backs = conveyor port against the hub), so
+    /// head an advanced rotor (passes conveyors), on its head a conveyor-junction hub with BaRs around it (front-face
+    /// conveyor port against the hub), base containers beside a junction under the piston, so
     /// components travel base -> piston -> rotor -> hub -> BaR. The piston extends / retracts every 6 s, the rotor turns
     /// (2 RPM), ShowArea toggles every 4 s. A ring of 8 small static grids 15 m out: S111 one BaR welding damaged grids;
     /// S112 three BaRs, half the ring damaged own grids, half unowned derelicts to grind.
@@ -96,13 +97,16 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             _reversals = _areaToggles = 0;
             ctx.SetModSettings(s =>
             {
-                s.Welder.WorkSpeed = 10;
+                // WorkSpeed 3, 6 blocks per ring grid: ~20-30 s of work on the moving arm (at 10 / 3 blocks it was 3-5 s).
+                s.Welder.WorkSpeed = 3;
                 s.Welder.AllowedGrindJanitorRelations |= AutoGrindRelation.NoOwnership;
             });
 
             var spec = new RigSpec { Name = _id, Bars = 0 };
-            for (int x = 0; x < 4; x++) spec.Extra.Add(new RigBlock { Kind = RigBlockKind.Cargo, Position = new Vector3I(x, 0, 0), Tag = "basecargo" });
-            spec.Extra.Add(new RigBlock { Kind = RigBlockKind.Battery, Position = new Vector3I(4, 0, 0), Tag = "battery" });
+            // Conveyor junction (ports on all sides) under the piston; containers beside it along X (proven links).
+            spec.Extra.Add(new RigBlock { Kind = RigBlockKind.Conveyor, Position = new Vector3I(0, 0, 0), Tag = "junction" });
+            for (int x = 1; x <= 4; x++) spec.Extra.Add(new RigBlock { Kind = RigBlockKind.Cargo, Position = new Vector3I(x, 0, 0), Tag = "basecargo" });
+            spec.Extra.Add(new RigBlock { Kind = RigBlockKind.Battery, Position = new Vector3I(5, 0, 0), Tag = "battery" });
             spec.Extra.Add(new RigBlock { Kind = RigBlockKind.Piston, Position = new Vector3I(0, 1, 0), Tag = "piston" });
             _base = ctx.SpawnRig(spec);
 
@@ -113,8 +117,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 var offset = new Vector3D(System.Math.Cos(angle) * Radius, 8.0, System.Math.Sin(angle) * Radius);
                 var derelict = _grind && (k % 2) == 1;
                 var rig = derelict
-                    ? new RigSpec { Name = _id + "-ring" + k, Bars = 0, Armor = 3, OwnerId = 0, Offset = offset }
-                    : new RigSpec { Name = _id + "-ring" + k, Bars = 0, DamagedArmor = 3, Offset = offset };
+                    ? new RigSpec { Name = _id + "-ring" + k, Bars = 0, Armor = 6, OwnerId = 0, Offset = offset }
+                    : new RigSpec { Name = _id + "-ring" + k, Bars = 0, DamagedArmor = 6, Offset = offset };
                 _ring.Add(ctx.SpawnRig(rig));
             }
         }
@@ -135,6 +139,42 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             ob.BuiltBy = ctx.OwnerId;
             ob.ColorMaskHSV = new SerializableVector3(0f, -1f, 0f);
             return grid.AddBlock(ob, false);
+        }
+
+        /// <summary>
+        /// "Add Top Part" makes a partly built head in survival. Finish it like a welder would: its missing components
+        /// into the construction stockpile, then weld to full integrity (no player inventory involved).
+        /// </summary>
+        private static void CompleteBlock(TestContext ctx, IMySlimBlock block)
+        {
+            if (block == null || block.IsFullIntegrity) return;
+            var missing = new Dictionary<string, int>();
+            block.GetMissingComponents(missing);
+            var temp = new Sandbox.Game.MyInventory(float.MaxValue, float.MaxValue, Vector3.MaxValue, MyInventoryFlags.CanSend);
+            foreach (var kv in missing)
+                temp.AddItems((MyFixedPoint)kv.Value, new MyObjectBuilder_Component { SubtypeName = kv.Key });
+            block.MoveItemsToConstructionStockpile(temp);
+            for (int i = 0; i < 200 && !block.IsFullIntegrity; i++)
+                block.IncreaseMountLevel(10f, ctx.OwnerId, temp, 1f, false);
+        }
+
+        /// <summary>Direction (in the grid's own axes) closest to the world vector from -> to.</summary>
+        private static Base6Directions.Direction LocalDirection(IMyCubeGrid grid, Vector3D from, Vector3D to)
+        {
+            var local = Vector3D.TransformNormal(to - from, MatrixD.Transpose(grid.WorldMatrix));
+            return Base6Directions.GetClosestDirection((Vector3)local);
+        }
+
+        /// <summary>Any direction perpendicular to d.</summary>
+        private static Base6Directions.Direction Perpendicular(Base6Directions.Direction d)
+        {
+            var axis = Base6Directions.GetAxis(d);
+            return axis == Base6Directions.Axis.UpDown ? Base6Directions.Direction.Forward : Base6Directions.Direction.Up;
+        }
+
+        private static Vector3I Cross(Vector3I a, Vector3I b)
+        {
+            return new Vector3I(a.Y * b.Z - a.Z * b.Y, a.Z * b.X - a.X * b.Z, a.X * b.Y - a.Y * b.X);
         }
 
         private static Sandbox.ModAPI.Interfaces.ITerminalAction Action(IMyTerminalBlock block, string id)
@@ -178,10 +218,15 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                     _pistonTop = _piston.TopGrid;
                     ctx.TrackSpawned(_pistonTop);
                     var head = _piston.Top;
-                    var up = Base6Directions.GetIntVector(head.Orientation.Up);
-                    var statorOb = MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_MotorStator>("LargeStator");
+                    CompleteBlock(ctx, head.SlimBlock);
+                    if (!head.SlimBlock.IsFullIntegrity) return Fail(ctx, "could not complete the piston head (integrity " + head.SlimBlock.Integrity + "/" + head.SlimBlock.MaxIntegrity + ")");
+                    // "Away from the base" from the geometry: a head's own Up can point back at its base.
+                    var away = LocalDirection(_pistonTop, _piston.GetPosition(), _pistonTop.GridIntegerToWorld(head.Position));
+                    // Advanced rotor: only it passes conveyors (a regular rotor does not). 1x2x1 along "away".
+                    var statorOb = MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_MotorAdvancedStator>("LargeAdvancedStator");
                     statorOb.Enabled = true;
-                    var stator = AddBlock(ctx, _pistonTop, statorOb, head.Position + up, head.Orientation.Forward, head.Orientation.Up);
+                    var awayVec = Base6Directions.GetIntVector(away);
+                    var stator = AddBlock(ctx, _pistonTop, statorOb, Vector3I.Min(head.Position + awayVec, head.Position + awayVec * 2), Perpendicular(away), away);
                     _rotor = stator != null ? stator.FatBlock as Sandbox.ModAPI.IMyMotorStator : null;
                     if (_rotor == null) return Fail(ctx, "could not place the rotor on the piston head");
                     var addTop = Action(_rotor, "AddRotorTopPart");
@@ -195,21 +240,28 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                     _rotorTop = _rotor.TopGrid;
                     ctx.TrackSpawned(_rotorTop);
                     var rtop = _rotor.Top;
-                    var o = rtop.Orientation;
-                    var rup = Base6Directions.GetIntVector(o.Up);
-                    var hubPos = rtop.Position + rup;
-                    var hub = AddBlock(ctx, _rotorTop, MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_CargoContainer>("LargeBlockSmallContainer"), hubPos, o.Forward, o.Up);
-                    if (hub == null) return Fail(ctx, "could not place the hub container");
-                    // BaRs around the hub, facing away from it (back = conveyor port against the hub).
-                    var sides = new[] { Base6Directions.GetLeft(o.Up, o.Forward), Base6Directions.GetFlippedDirection(Base6Directions.GetLeft(o.Up, o.Forward)), o.Forward };
-                    for (int i = 0; i < _bars && i < sides.Length; i++)
+                    CompleteBlock(ctx, rtop.SlimBlock);
+                    if (!rtop.SlimBlock.IsFullIntegrity) return Fail(ctx, "could not complete the rotor head (integrity " + rtop.SlimBlock.Integrity + "/" + rtop.SlimBlock.MaxIntegrity + ")");
+                    var rAway = LocalDirection(_rotorTop, _rotor.GetPosition(), _rotorTop.GridIntegerToWorld(rtop.Position));
+                    var u = Base6Directions.GetIntVector(rAway);
+                    // Spacer junction between rotor head and hub: keeps the turning BaRs one block clear of the rotor.
+                    var spacer = AddBlock(ctx, _rotorTop, MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_Conveyor>("LargeBlockConveyor"), rtop.Position + u, Perpendicular(rAway), rAway);
+                    if (spacer == null) return Fail(ctx, "could not place the spacer above the rotor head");
+                    var hubPos = rtop.Position + u * 2;
+                    var hub = AddBlock(ctx, _rotorTop, MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_Conveyor>("LargeBlockConveyor"), hubPos, Perpendicular(rAway), rAway);
+                    if (hub == null) return Fail(ctx, "could not place the hub conveyor junction");
+                    // BaR model: main (large) conveyor port on its FRONT face (dummy at z = -2.36), small ones on the sides
+                    // of the front cell (the left one recessed). Front face against the hub, BaR pointing outward.
+                    var perp = Base6Directions.GetIntVector(Perpendicular(rAway));
+                    var sideVecs = new[] { perp, Cross(u, perp), -perp };
+                    for (int i = 0; i < _bars && i < sideVecs.Length; i++)
                     {
-                        var dir = Base6Directions.GetIntVector(sides[i]);
+                        var side = sideVecs[i];
                         var barOb = MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_ShipWelder>("SELtdLargeNanobotBuildAndRepairSystem");
                         barOb.Enabled = false; // switched on when the run starts
-                        // 1x1x2 along its forward: the two cells are hub + dir and hub + 2 dir.
-                        var min = Vector3I.Min(hubPos + dir, hubPos + dir * 2);
-                        var bar = AddBlock(ctx, _rotorTop, barOb, min, sides[i], o.Up);
+                        var front = hubPos + side;
+                        var back = hubPos + side * 2;
+                        var bar = AddBlock(ctx, _rotorTop, barOb, Vector3I.Min(front, back), Base6Directions.GetDirection(-side), rAway);
                         if (bar == null || bar.FatBlock == null) return Fail(ctx, "could not place BaR " + i + " on the rotor head");
                         _barIds.Add(bar.FatBlock.EntityId);
                     }
@@ -221,8 +273,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                     for (int i = 0; i < _barIds.Count; i++)
                     {
                         NanobotSystem system;
-                        if (!Mod.NanobotSystems.TryGetValue(_barIds[i], out system) || system == null || !system.State.Ready)
-                            return since - _stageAt > 20 ? Fail(ctx, "BaR systems on the arm did not start") : false;
+                        // Registered by the mod is enough: "ready" needs the BaR switched on, which happens when the run starts.
+                        if (!Mod.NanobotSystems.TryGetValue(_barIds[i], out system) || system == null)
+                            return since - _stageAt > 20 ? Fail(ctx, "the mod did not pick up the BaRs on the arm") : false;
                         _arm.Add(system);
                     }
                     if (!_configured)
@@ -235,7 +288,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                                 s.WeldOptions = AutoWeldOptions.WeldFull;
                                 s.UseGrindJanitorOn = AutoGrindRelation.NoOwnership;
                                 s.GrindJanitorOptions = 0;
-                                s.AreaSize = new Vector3(40f, 40f, 40f);
+                                s.AreaSize = new Vector3(60f, 60f, 60f); // ring 15 m out + 6-block rows: covered from any arm angle
                             });
                         _configured = true;
                     }
@@ -278,12 +331,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             if (!_started)
             {
                 for (int i = 0; i < _arm.Count; i++) _arm[i].Welder.Enabled = true;
-                if (_rotor != null) _rotor.TargetVelocityRPM = 2f;
+                if (_rotor != null) _rotor.TargetVelocityRPM = 1f; // gentle start, 2 RPM after 5 s
                 if (_piston != null) _piston.Velocity = 0.5f;
                 _nextFlip = now + 6;
                 _nextToggle = now + 4;
                 _started = true;
             }
+            if (_rotor != null && now >= 5 && _rotor.TargetVelocityRPM < 2f) _rotor.TargetVelocityRPM = 2f;
             if (_piston != null && now >= _nextFlip)
             {
                 _piston.Velocity = -_piston.Velocity;
@@ -324,6 +378,11 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 var inv = _arm[i].Welder != null ? _arm[i].Welder.GetInventory(0) : null;
                 if (inv != null && baseInv != null && inv.IsConnectedTo(baseInv)) connected++;
             }
+            ctx.Metric("pistonHeadAttached", _piston != null && _piston.IsAttached);
+            ctx.Metric("rotorHeadAttached", _rotor != null && _rotor.IsAttached);
+            var powered = 0;
+            for (int i = 0; i < _arm.Count; i++) if (_arm[i].Welder != null && _arm[i].Welder.IsWorking) powered++;
+            ctx.Metric("armBarsWorking", (long)powered);
             ctx.Metric("armBars", (long)_arm.Count);
             ctx.Metric("armBarsConnectedToBase", (long)connected);
             ctx.Metric("weldTargets", (long)_weldTargets.Count);
@@ -335,6 +394,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             ctx.Metric("pistonReversals", (long)_reversals);
             ctx.Metric("showAreaToggles", (long)_areaToggles);
             ctx.Check(_arm.Count == _bars, "layout: " + _arm.Count + "/" + _bars + " BaRs on the arm");
+            ctx.Check(powered == _arm.Count, "layout: only " + powered + "/" + _arm.Count + " arm BaRs are working (power through piston / rotor?)");
             ctx.Check(connected == _arm.Count, "layout: only " + connected + "/" + _arm.Count + " arm BaRs are conveyor-connected to the base (piston / rotor / hub path)");
             ctx.Check(welded == _weldTargets.Count, "welded " + welded + "/" + _weldTargets.Count + " in " + Window + " s");
             if (_grind) ctx.Check(grindLeft == 0, grindLeft + " derelict blocks left");

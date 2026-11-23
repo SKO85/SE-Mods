@@ -206,8 +206,8 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S108 | Logistics, busy base: 20 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
 | S109 | Logistics, busy base: 50 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
 | S110 | Logistics, busy base: 100 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
-| S111 | Moving arm: 1 BaR on piston + rotor welds a ring of grids via the conveyors, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | not yet |
-| S112 | Moving arm: 3 BaRs on piston + rotor weld and grind a ring of grids, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | not yet |
+| S111 | Moving arm: 1 BaR on piston + rotor welds a ring of grids via the conveyors, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | 261123.32 — 48/48 in 27.4 s, 960 plates via conveyors, sim 1.0 |
+| S112 | Moving arm: 3 BaRs on piston + rotor weld and grind a ring of grids, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | 261123.32 — 24 welded + 24 ground in 14.4 s, sim 1.0 |
 
 ## Scenarios
 
@@ -710,16 +710,21 @@ S107 with 50 BaRs.
 S107 with 100 BaRs.
 
 ### S111
-**Proves** BaRs on a moving arm, supplied through the conveyors. Static base: 4 containers (500 SteelPlate each),
-battery, piston. Built at run time: rotor on the piston head, hub container on the rotor head, BaR(s) around the hub with
-their backs against it, so components travel base -> piston -> rotor -> hub -> BaR. The piston reverses every 6 s
-(0.5 m/s), the rotor turns at 2 RPM, ShowArea toggles on the arm BaRs every 4 s. Ring of 8 small static grids
-(3 damaged armor each) 15 m out, 8 m up. **Layout checks** every arm BaR is conveyor-connected to the base containers.
-**Pass** all ring blocks welded within 180 s, plates left the base containers, sim >= 0.8, tick avg <= 1 ms.
-**Records** per-step cost incl. `ShowAreaDraw`, `pistonReversals`, `showAreaToggles`, `basePlatesUsed`.
+**Proves** BaRs on a moving arm, supplied through the conveyors. Static base: conveyor junction with a piston on top,
+4 containers beside it (500 SteelPlate each), battery. Built at run time (directions from the geometry, not the heads'
+own Up; the partly built heads "Add Top Part" makes in survival are completed first): advanced rotor (a regular rotor
+does not pass conveyors) on the piston head, a spacer junction and then the conveyor-junction hub on the rotor head
+(keeps the turning BaRs clear of the rotor), BaR(s) with their front face (the
+model's main conveyor port, dummy at z = -2.36) against the hub, pointing outward. Components travel
+containers -> junction -> piston -> advanced rotor -> spacer -> hub -> BaR. The piston reverses every 6 s (0.5 m/s), the
+rotor turns at 1 RPM for 5 s, then 2 RPM, ShowArea toggles every 4 s. Ring of 8 small static grids (6 damaged armor each) 15 m out, 8 m up;
+WorkSpeed 3 so the BaRs work ~20-30 s on the moving arm; BaR area 60 m (whole ring from any arm angle).
+**Layout checks** heads attached, BaRs working and conveyor-connected to the base containers. **Pass** all ring blocks
+welded within 180 s, plates left the base containers, sim >= 0.8, tick avg <= 1 ms. **Records** per-step cost incl.
+`ShowAreaDraw`, `pistonReversals`, `showAreaToggles`, `basePlatesUsed`.
 
 ### S112
-S111 with 3 BaRs on the hub and a mixed ring: every second grid is an unowned derelict (intact armor, janitor
+S111 with 3 BaRs on the hub and a mixed ring: every second grid is an unowned derelict (6 intact armor, janitor
 NoOwnership) to grind. **Pass** additionally: all derelict blocks gone.
 
 ## Building blocks for new scenarios
