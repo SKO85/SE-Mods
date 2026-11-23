@@ -20,6 +20,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-CFG-003 | CFG | 2 | Admin restrictions and switches in ModSettings win over block settings | ingame:S46, S47, S48, S49, S50, S51, S52, S53; unit:BlockSettingsLimitsTests | never |
 | SCN-CHAT-001 | CHAT | 1 | /nanobars config set/get round trip and bounds rejection | unit:ConfigCommandTests.SetGetRoundTrip_AndBoundsRejection | 261006.3 unit |
 | SCN-CHAT-002 | CHAT | 4 | Dedicated server: admin command forwarding and response routing | manual | never |
+| SCN-CHAT-003 | CHAT | 2 | systems enable / disable (all, --grid, --owner) and sim act on exactly the matching BaRs | unit:SystemsCommandTests | 261123.63 unit |
 | SCN-BUDGET-001 | BUDGET | 1 | Block assignment TTL: a claimed block is released to another BaR | unit:TtlCacheTests; ingame:S05, S51, S55, S56; unit:BlockAssignmentTests; ingame:S94-S98 | 261123.19 in game |
 | SCN-BUDGET-002 | BUDGET | 1 | Per-tick weld/grind count budget refuses beyond cap, resets next frame | unit:PerTickBudgetTests; ingame:S52 | 261006.3 unit |
 | SCN-BUDGET-003 | BUDGET | 1 | Ms budget caps work even when count budget remains | unit:PerTickBudgetTests.MsCapWins_WhenCountBudgetRemains | 261006.3 unit |
