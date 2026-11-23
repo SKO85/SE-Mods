@@ -27,7 +27,7 @@ The scenario catalogue (`SCN-<AREA>-NNN`, permanent, coverage tracked per file) 
 | REVIEW-260511.1 | Major issue audit — safe-zone fail-open, swallowed exceptions, friendly-relations scaling, admin checks (5 findings, all triaged) | 2026-05-11 | v2.5.4 | Done |
 | REVIEW-261023.1 | Pre-release review of v2.5.6 (mod + companion script) + external PRs #147/#148 (14 findings → BUG-261023.1..14: 2 High, 5 Medium, 7 Low; 3 dismissed with reasons) | 2026-10-23 | v2.5.6 | Done |
 | REVIEW-261122.1 | SE 1.211.018 projection-welding regression — GitHub #149/#150 + PR #151 (8 findings → BUG-261122.1..4: 1 Critical, 1 High, 1 Medium, 1 Low; part 2 of the PR deferred/dismissed with reasons) | 2026-11-22 | v2.5.6 | Done |
-| REVIEW-261122.2 | Test coverage audit: features vs catalogue, unit tests and harness (14 findings to prioritise; companion script / PB API covered since 261122.17) | 2026-11-22 | v2.5.6 | TODO |
+| REVIEW-261122.2 | Test coverage audit: features vs catalogue, unit tests and harness (14 findings to prioritise; companion script / PB API covered since 261122.17) | 2026-11-22 | v2.5.6 | Done |
 | REVIEW-261123.1 | Performance review from profiler measurements (10 findings -> BUG-261123.3..6, FEAT-261123.1..5; 1 dismissed) | 2026-11-23 | v2.5.7 | Done |
 
 ## Bugs
