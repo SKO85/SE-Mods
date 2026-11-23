@@ -70,11 +70,11 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S58_Shields("S61", ShieldMode.CheckOnMidGrind),
             new S58_Shields("S62", ShieldMode.OwnShieldWeld),
             new S58_Shields("S63", ShieldMode.FriendlyShieldWeld),
-            // Floors ~60 % of the dev-PC baseline: Torch (261123.42) ran 41.4 / 42.5 / 26.9 / 28.3 per s, just under 70 %.
-            new S64_Load("S64", "large clusters", LoadWork.Weld, 2, 10, 36),
-            new S64_Load("S65", "small clusters", LoadWork.Weld, 10, 2, 37),
-            new S64_Load("S66", "large clusters", LoadWork.Grind, 2, 10, 23),
-            new S64_Load("S67", "small clusters", LoadWork.Grind, 10, 2, 22),
+            // Floors ~70 % of the dev-PC baseline; MaxSystemsPerTargetGrid set to 20 so single player and servers compare.
+            new S64_Load("S64", "large clusters", LoadWork.Weld, 2, 10, 42),
+            new S64_Load("S65", "small clusters", LoadWork.Weld, 10, 2, 43),
+            new S64_Load("S66", "large clusters", LoadWork.Grind, 2, 10, 24),
+            new S64_Load("S67", "small clusters", LoadWork.Grind, 10, 2, 24),
             new S64_Load("S68", "large clusters", LoadWork.Mixed, 2, 10),
             new S64_Load("S69", "small clusters", LoadWork.Mixed, 10, 2),
             new S64_Load("S70", "stress", LoadWork.Mixed, 4, 10),

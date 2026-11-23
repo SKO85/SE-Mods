@@ -512,8 +512,8 @@ welding has no shield check.
 **Measures / proves** load: 2 rigs x 10 BaRs (large clusters) on own damaged ships of 25 / 150 / 600 blocks (dynamic,
 in a row along X), WeldBeforeGrind, BoundingBox 200 m, 1000 SteelPlate per container, 75 s or until done.
 **Pass** every ship got welding, >= 75 % of BaRs worked, tick avg <= 2 ms / peak <= 50 ms, sim >= 0.5, and the speed
-floor (blocks per second; S64 36, S65 37, S66 23, S67 22 — ~60 % of the 2026-11-22 baseline; Torch 261123.42 ran
-41.4 / 42.5 / 26.9 / 28.3, ~69 % of the dev PC, see `world.*` metrics).
+floor (blocks per second; S64 42, S65 43, S66 24, S67 24 — ~70 % of the dev-PC baseline). MaxSystemsPerTargetGrid is
+set to 20: its default is 10 in multiplayer, so on Torch half the BaRs were held back (35 % idle cycles, 41 vs 60 welds/s).
 **Records** `bars`, `rigs`, `clusters`, `barsWorked(Pct)`, `activePeak`, `weldedS/M/L`, `weldedPerSecond`, weld / grind /
 scan / cluster method stats, and (BUG-261122.14) `busyPct`, `transportPct`, `avgTargetDistM`, `avgListSize`,
 `sharedBlockSamples`. `test run S64-S67 detail` keeps per-call profiler logs.
