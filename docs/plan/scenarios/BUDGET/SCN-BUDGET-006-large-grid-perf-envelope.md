@@ -43,6 +43,8 @@ ingame:S107
 ingame:S108
 ingame:S109
 ingame:S110
+ingame:S111
+ingame:S112
 
 ## Last verified
 never

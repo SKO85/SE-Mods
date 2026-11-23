@@ -20,6 +20,9 @@ ingame:S36
 ingame:S37
 ingame:S38
 ingame:S44
+ingame:S111
+ingame:S112
+
 ## Last verified
 never
 ## Related

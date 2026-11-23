@@ -41,16 +41,16 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | Group | What | Scenarios |
 | ----- | ---- | --------- |
 | `@core` | Repair, damage detection, range, work modes, power, speeds | S01, S19, S20, S25, S57, S72, S75-S80 |
-| `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88 |
+| `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88, S111, S112 |
 | `@projection` | Projector building, incl. admin and safe-zone rules | S03, S27, S42, S46, S85 |
-| `@subgrids` | Rotors, pistons, hinges, wheels, connectors, ships in flight | S18, S34-S38, S44, S45 |
-| `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89 |
+| `@subgrids` | Rotors, pistons, hinges, wheels, connectors, ships in flight | S18, S34-S38, S44, S45, S111, S112 |
+| `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89, S112 |
 | `@zone` | Safe zones | S39-S42, S53, S85 |
 | `@shields` | DefenseShields (skipped without the mod) | S58-S63 |
 | `@inventory` | Component sources, sorter, empty cargo, push targets, push options, logistics at scale | S02, S84, S87-S93, S103-S110 |
 | `@claims` | Block claims, per-grid limit, BaRs sharing work, takeovers | S05, S06, S50, S51, S54-S56, S86, S94-S98 |
 | `@cluster` | Cluster coordination and the per-grid limit | S06, S07, S50, S54 |
-| `@perf` | Load, large grids, scan cost by grid size, logistics at scale, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S110 |
+| `@perf` | Load, large grids, scan cost by grid size, logistics at scale, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S112 |
 | `@companion` | PB API and the companion script | S09, S71, S81-S83 |
 | `@config` | Admin settings (Fixed / Default, limits, checks) | S46-S53 |
 | `@priority` | Weld / grind priority lists | S14-S16 |
@@ -206,6 +206,8 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S108 | Logistics, busy base: 20 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
 | S109 | Logistics, busy base: 50 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
 | S110 | Logistics, busy base: 100 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
+| S111 | Moving arm: 1 BaR on piston + rotor welds a ring of grids via the conveyors, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | not yet |
+| S112 | Moving arm: 3 BaRs on piston + rotor weld and grind a ring of grids, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | not yet |
 
 ## Scenarios
 
@@ -676,7 +678,7 @@ S99 with a 10,000-block grid.
 **Proves / records** component logistics at scale. Station: N = 10 BaRs in a row (rig cargo ~3 per BaR) plus 2 extra
 containers per BaR behind the back row; SteelPlate spread evenly over every container (the ships' missing plates x 1.2)
 and 10 plates in each BaR's own inventory (BaRs are sources for each other). Static ships with 20 damaged armor
-blocks each (one per 5 BaRs, at least 2) 25 m in front; BaRs BoundingBox, area 100 x 60 x 100 m, WeldOnly.
+blocks each (one per 5 BaRs, at least 2) 25 m in front; BaRs BoundingBox, area 100 x 60 x 100 m, WeldOnly, WorkSpeed 3.
 **Pass** all ship blocks welded within 180 s; plates conserved (exactly the missing plates left storage); sim speed
 >= 0.8 (10 / 20 BaRs) or >= 0.5 (50 / 100). **Records** `weldedPerSecond`, `platesUsed` vs `platesNeeded`, and the
 cost of `ServerFindMissingComponents`, `PullFromSourcesOnePass`, `ServerEmptyTransportInventory`,
@@ -693,9 +695,9 @@ S103 with 100 BaRs.
 
 ### S107
 S103 on a busy base (10 BaRs): plate stacks of 5 moved between containers every 2 s (max(2, N/5) moves, like
-assemblers / refineries), a supply ship with a container docked by connector (S38 docking) that undocks every 10 s
-and redocks ~4 s later, and a container section behind a sorter that is switched off / on and has its SteelPlate filter
-flipped every 15 s. All of it is conservation-neutral. **Pass** as S103, plus the churn really happened (`itemMoves`,
+assemblers / refineries), a supply ship with a container docked by connector (S38 docking) that undocks every 8 s
+(first at 4 s) and redocks ~4 s later, and a container section behind a sorter that is switched off / on and has its
+SteelPlate filter flipped every 6 s. All of it is conservation-neutral. **Pass** as S103, plus the churn really happened (`itemMoves`,
 `undocks`, `redocks`, `sorterChanges`). Compare `weldedPerSecond` and the pull / push cost with S103.
 
 ### S108
@@ -706,6 +708,19 @@ S107 with 50 BaRs.
 
 ### S110
 S107 with 100 BaRs.
+
+### S111
+**Proves** BaRs on a moving arm, supplied through the conveyors. Static base: 4 containers (500 SteelPlate each),
+battery, piston. Built at run time: rotor on the piston head, hub container on the rotor head, BaR(s) around the hub with
+their backs against it, so components travel base -> piston -> rotor -> hub -> BaR. The piston reverses every 6 s
+(0.5 m/s), the rotor turns at 2 RPM, ShowArea toggles on the arm BaRs every 4 s. Ring of 8 small static grids
+(3 damaged armor each) 15 m out, 8 m up. **Layout checks** every arm BaR is conveyor-connected to the base containers.
+**Pass** all ring blocks welded within 180 s, plates left the base containers, sim >= 0.8, tick avg <= 1 ms.
+**Records** per-step cost incl. `ShowAreaDraw`, `pistonReversals`, `showAreaToggles`, `basePlatesUsed`.
+
+### S112
+S111 with 3 BaRs on the hub and a mixed ring: every second grid is an unowned derelict (intact armor, janitor
+NoOwnership) to grind. **Pass** additionally: all derelict blocks gone.
 
 ## Building blocks for new scenarios
 
