@@ -202,6 +202,14 @@ Yes. The mod includes built-in checks for the Shields mod. When a target is prot
 ## Performance
 
 <details>
+<summary>I have 20 BaRs around my big ship, but only 10 of them work on it. Why?</summary>
+<div>
+<p>In multiplayer (hosted or dedicated server) at most <strong>10</strong> BaRs work on the same grid at the same time; in single player it is 20. The others wait or work on other grids. This spreads the work and keeps the server load in check.</p>
+<p>Server admins can change it: <code>/nanobars config set MaxSystemsPerTargetGrid 20</code> (then <code>/nanobars config save</code> to keep it). More BaRs per grid repair one big ship faster, at a bit more server load.</p>
+</div>
+</details>
+
+<details>
 <summary>I have many Build and Repair blocks and my server sim speed is dropping. What can I do?</summary>
 <div>
 <p>Version 2.5.0 includes major performance improvements for servers running many systems. If you are on an older version, update first.</p>
@@ -308,6 +316,18 @@ It has been replaced with the <strong>Weld mode</strong> dropdown in the termina
 ---
 
 ## Welding & Grinding Issues
+
+<details>
+<summary>The info panel says "Grinding blocked" or "Welding blocked". What does that mean?</summary>
+<div>
+<p>Since v2.5.7 the BaR tells you when something else refuses its work:</p>
+<ul>
+  <li><strong>Grinding blocked by a shield / protection mod on N grid(s)</strong> — a shield (DefenseShields) or a protection mod / plugin stopped the grind, just like it would stop a hand grinder. The BaR skips that grid for 30 seconds and then tries again.</li>
+  <li><strong>Welding blocked by a safe zone / protection on N grid(s)</strong> — the game refused the weld (for example a safe zone without welding on a server, or a protection plugin). The BaR skips that grid for 30 seconds instead of trying over and over.</li>
+</ul>
+<p>Nothing is wrong with the BaR. Lower the shield, change the safe zone or ask your server admin about the protection, and it carries on by itself.</p>
+</div>
+</details>
 
 <details>
 <summary>The block is grinding my own grid. What is wrong?</summary>
@@ -476,6 +496,13 @@ Set <code>DecreaseFactionReputationOnGrinding</code> to <code>false</code> in <c
 <div>
 <p>When a grid straddles a Safe Zone boundary, Build and Repair blocks inside the zone have different permissions than those outside. The system automatically creates separate work groups for blocks inside and outside the Safe Zone, so each group has a coordinator that matches its permissions.</p>
 <p>If all your blocks are inside a Safe Zone that blocks welding or grinding, they will be idle — this is correct behaviour. Move blocks outside the zone or adjust the Safe Zone settings to allow the operations you need.</p>
+</div>
+</details>
+
+<details>
+<summary>I turned off the safe zone check, but my BaRs still don't weld in a no-weld safe zone on the server. Why?</summary>
+<div>
+<p>Turning off <code>SafeZoneCheckEnabled</code> only stops the <em>mod</em> from checking safe zones. On a server the game itself still refuses welding inside a zone that doesn't allow it, so the weld has no effect. The BaR notices this, shows <strong>Welding blocked by a safe zone / protection</strong> and skips that grid for a while. To weld there, allow welding in the safe zone settings.</p>
 </div>
 </details>
 
