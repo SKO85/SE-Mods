@@ -24,6 +24,7 @@ ingame:S121
 ingame:S122
 ingame:S123
 ## Last verified
-never
+v2.5.7 build 261123.48 2026-11-23 — Torch, 1 client: @sync 20/20 pass; largest state message 2.1 KB, idle 0 state
+sends, settings spam held to 0.89 per BaR per s; 100 working BaRs ~32 KB/s per player (FEAT-261123.7).
 ## Related
 FEAT-261123.7, BUG-261123.4 (closed: sync rate measured)
