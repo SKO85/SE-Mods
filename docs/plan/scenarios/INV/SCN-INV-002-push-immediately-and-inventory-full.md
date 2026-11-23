@@ -24,6 +24,7 @@
 ## Perf envelope
 `CheckAndUpdateInventoryFull` steadyAvgMs ≤ 0.1; `ServerEmptyTransportInventory` maxMs ≤ 2.
 ## Coverage
+ingame:S113 (MaxItemsAddable probe per item class, BUG-261123.5)
 manual
 ingame:S89
 unit:InventoryFullLatchTests

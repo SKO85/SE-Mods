@@ -47,7 +47,7 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89, S112 |
 | `@zone` | Safe zones | S39-S42, S53, S85 |
 | `@shields` | DefenseShields (skipped without the mod) | S58-S63 |
-| `@inventory` | Component sources, sorter, empty cargo, push targets, push options, logistics at scale | S02, S84, S87-S93, S103-S110 |
+| `@inventory` | Component sources, sorter, empty cargo, push targets, push options, logistics at scale | S02, S84, S87-S93, S103-S110, S113 |
 | `@claims` | Block claims, per-grid limit, BaRs sharing work, takeovers | S05, S06, S50, S51, S54-S56, S86, S94-S98 |
 | `@cluster` | Cluster coordination and the per-grid limit | S06, S07, S50, S54 |
 | `@perf` | Load, large grids, scan cost by grid size, logistics at scale, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S112 |
@@ -208,6 +208,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S110 | Logistics, busy base: 100 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | 3-7 min | not yet |
 | S111 | Moving arm: 1 BaR on piston + rotor welds a ring of grids via the conveyors, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | 261123.32 — 48/48 in 27.4 s, 960 plates via conveyors, sim 1.0 |
 | S112 | Moving arm: 3 BaRs on piston + rotor weld and grind a ring of grids, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | 261123.32 — 24 welded + 24 ground in 14.4 s, sim 1.0 |
+| S113 | Probe: ore / ingot / component fit and transport -> BaR move (MaxItemsAddable) | INV-002 | <1 min | 261123.40 — all fit / moved, incl. 99 % full BaR (422 kg ore, 52 plates) |
 
 ## Scenarios
 
@@ -727,6 +728,14 @@ welded within 180 s, plates left the base containers, sim >= 0.8, tick avg <= 1 
 ### S112
 S111 with 3 BaRs on the hub and a mixed ring: every second grid is an unowned derelict (6 intact armor, janitor
 NoOwnership) to grind. **Pass** additionally: all derelict blocks gone.
+
+### S113
+**Probes** BUG-261123.5: does `MaxItemsAddable` (the `CanItemsBeAdded` search the mod uses for transport -> BaR, push
+and pull) refuse ore or ingots? Per item class (iron ore, iron ingot, steel plate), on an empty cargo and the empty BaR:
+`CanItemsBeAdded` with the type read from a real inventory item and with `MyItemType.Make*`, `MaxItemsAddable`, then
+moves 100 units from the BaR's transport into the BaR exactly like the mod. Then the S89 case: BaR filled with stone
+to ~99 %, the transport offering 3x what fits: the fit must match free volume / item volume and move fully. One tick. **Pass** each class
+fits fully and moves fully. **Records** every probe value (`ore.bar.maxAddableReal`, `ore.transport.moved`, ...).
 
 ## Building blocks for new scenarios
 

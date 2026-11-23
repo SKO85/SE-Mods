@@ -118,7 +118,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S103_ComponentLogistics("S109", 50, true),
             new S103_ComponentLogistics("S110", 100, true),
             new S111_MovingArm("S111", 1, false),
-            new S111_MovingArm("S112", 3, true)
+            new S111_MovingArm("S112", 3, true),
+            new S113_ItemFitProbe()
         };
 
         /// <summary>
@@ -134,7 +135,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new ScenarioGroup("grind", "Grinding: janitor, order, colours, protection, leaving targets, full storage", "S04,S11,S12,S13,S16,S17,S24,S45,S73,S74,S76,S89,S112"),
             new ScenarioGroup("zone", "Safe zones", "S39,S40,S41,S42,S53,S85"),
             new ScenarioGroup("shields", "DefenseShields (skipped without the mod)", "S58,S59,S60,S61,S62,S63"),
-            new ScenarioGroup("inventory", "Component sources, sorter, empty cargo, push targets, push options, logistics at scale", "S02,S84,S87,S88,S89,S90,S91,S92,S93,S103,S104,S105,S106,S107,S108,S109,S110"),
+            new ScenarioGroup("inventory", "Component sources, sorter, empty cargo, push targets, push options, logistics at scale", "S02,S84,S87,S88,S89,S90,S91,S92,S93,S103,S104,S105,S106,S107,S108,S109,S110,S113"),
             new ScenarioGroup("claims", "Block claims, per-grid limit, BaRs sharing work, takeovers", "S05,S06,S50,S51,S54,S55,S56,S86,S94,S95,S96,S97,S98"),
             new ScenarioGroup("cluster", "Cluster coordination and the per-grid limit", "S06,S07,S50,S54"),
             new ScenarioGroup("perf", "Load, large grids, scan cost by grid size, ShowArea and budget cost (long)", "S08,S28,S29,S30,S31,S32,S33,S43,S52,S64,S65,S66,S67,S68,S69,S70,S99,S100,S101,S102,S103,S104,S105,S106,S107,S108,S109,S110,S111,S112"),
