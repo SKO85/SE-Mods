@@ -30,11 +30,13 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             ModItem = ModContext != null ? ModContext.ModItem : default(MyObjectBuilder_Checkpoint.ModItem);
             Mod.TestTick = TestRunner.Tick;
             Mod.TestCommand = TestCommand.Execute;
+            TestHud.Register();
         }
 
         protected override void UnloadData()
         {
             try { TestRunner.Abort(); } catch { }
+            try { TestHud.Unregister(); } catch { }
             Mod.TestTick = null;
             Mod.TestCommand = null;
         }

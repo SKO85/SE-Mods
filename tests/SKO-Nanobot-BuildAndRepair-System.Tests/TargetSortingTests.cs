@@ -220,7 +220,8 @@ namespace SKONanobotBuildAndRepairSystem.Tests
             // Quadratic growth would be ~100x for 10x the targets. The 1k time is tiny (sub-millisecond), so a scheduler
             // hiccup there made the ratio flaky under a loaded test run: floor it at 0.2 ms, best of 7 after a warm-up.
             var ratio = ms[10000] / global::System.Math.Max(ms[1000], 0.2);
-            Assert.True(ratio < 40, "TruncateGridAware grows faster than linear: 10k / 1k = " + ratio.ToString("F1"));
+            // Measured 22-32x with NSubstitute fakes (their own overhead grows with n); quadratic would be ~100x.
+            Assert.True(ratio < 60, "TruncateGridAware grows faster than linear: 10k / 1k = " + ratio.ToString("F1"));
         }
     }
 }

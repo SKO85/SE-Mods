@@ -54,6 +54,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         private static bool _profilerStarted;
         private static bool _runStarting; // first Run frame: reset stats, switch the rig BaRs on
         private static int _sessionTotal; // queued runs this session, for the "n/total" start line
+        private static int _hudNextFrame; // test HUD refresh (~2 per second)
+        private static TimeSpan _scenarioStartTime;
         private static readonly ITestScenario WarmUp = new S00_WarmUp();
 
         public static Vector3D? OriginOverride;
@@ -98,6 +100,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             _sessionTotal = _queue.Count;
 
             OpenLog();
+            PublishHud();
             return string.Format(CultureInfo.InvariantCulture,
                 "{6}Queued {0} scenario run(s), session {1}. Origin {2:F0},{3:F0},{4:F0}. Results in {5}{1}.log",
                 _queue.Count, _session, origin.X, origin.Y, origin.Z, LogPrefix,
@@ -199,6 +202,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                     case Phase.Teardown: TickTeardown(); break;
                     case Phase.Report: TickReport(); break;
                 }
+                if (IsBusy && TestContext.Frame >= _hudNextFrame) PublishHud();
             }
             catch (Exception ex)
             {
@@ -218,6 +222,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 return;
             }
             _current = _queue.Dequeue();
+            _scenarioStartTime = TestContext.Now;
             _result = new TestResult(_current.Scenario.Id, _current.Run);
             _ctx = new TestContext(_result, _steamId, _ownerId, _origin, _current.Scenario.PerfMethods);
             _runStarting = false;
@@ -374,6 +379,126 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                     _session, CountPassed(), CountFailed(), CountSkipped()));
             }
             ForceIdle();
+            PublishHud();
+        }
+
+        // ---------------------------------------------------------------- test HUD
+
+        private const int HudMaxRows = 24;
+        private static readonly StringBuilder _hudList = new StringBuilder();
+        private static readonly StringBuilder _hudCurrent = new StringBuilder();
+
+        private static void PublishHud()
+        {
+            _hudNextFrame = TestContext.Frame + 30;
+            try
+            {
+                BuildHudList();
+                BuildHudCurrent();
+                TestHud.Publish(_steamId, _hudList.ToString(), _hudCurrent.ToString());
+            }
+            catch (Exception ex)
+            {
+                Logging.Instance.Write(Logging.Level.Error, "NanobotTest: HUD update failed: {0}", ex.Message);
+            }
+        }
+
+        private static string Pad(string s, int width)
+        {
+            if (s == null) s = "";
+            return s.Length >= width ? s.Substring(0, width) : s + new string(' ', width - s.Length);
+        }
+
+        private static string Short(string s, int max)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Length <= max ? s : s.Substring(0, max - 1) + "~";
+        }
+
+        private static void HudRow(string id, string run, string color, string state, string time, string note)
+        {
+            _hudList.Append("<color=white>").Append(Pad(id, 6)).Append(Pad(run, 5))
+                .Append(color).Append(Pad(state, 7))
+                .Append("<color=white>").Append(Pad(time, 8))
+                .Append("<color=180,180,180>").Append(Short(note, 40)).Append('\n');
+        }
+
+        private static void BuildHudList()
+        {
+            _hudList.Clear();
+            _hudList.Append("<color=130,180,230>NANOBOT TESTS  ").Append(_session).Append('\n');
+            _hudList.Append("<color=160,160,160>").Append(Pad("Test", 6)).Append(Pad("Run", 5)).Append(Pad("State", 7))
+                .Append(Pad("Time", 8)).Append("Note").Append('\n');
+
+            var running = _current.Scenario != null ? 1 : 0;
+            var queuedShown = Math.Min(_queue.Count, 3);
+            var finishedRoom = Math.Max(1, HudMaxRows - running - queuedShown);
+            var firstFinished = Math.Max(0, _sessionResults.Count - finishedRoom);
+            if (firstFinished > 0)
+                _hudList.Append("<color=160,160,160>... ").Append(firstFinished).Append(" earlier").Append('\n');
+            for (int i = firstFinished; i < _sessionResults.Count; i++)
+            {
+                var r = _sessionResults[i];
+                string color, state, note;
+                if (r.SkipReason != null) { color = "<color=160,160,160>"; state = "SKIP"; note = r.SkipReason; }
+                else if (r.Passed) { color = "<color=120,230,120>"; state = "PASS"; note = ""; }
+                else { color = "<color=255,110,110>"; state = "FAIL"; note = r.Failures.Count > 0 ? r.Failures[0] : ""; }
+                HudRow(r.Id, r.Run.ToString(CultureInfo.InvariantCulture), color, state,
+                    r.DurationSeconds.ToString("F1", CultureInfo.InvariantCulture) + "s", note);
+            }
+            if (running > 0)
+            {
+                var elapsed = (TestContext.Now - _scenarioStartTime).TotalSeconds;
+                HudRow(_current.Scenario.Id, _current.Run.ToString(CultureInfo.InvariantCulture), "<color=255,220,100>", "RUN",
+                    elapsed.ToString("F0", CultureInfo.InvariantCulture) + "s", _phase.ToString());
+            }
+            var shown = 0;
+            foreach (var q in _queue)
+            {
+                if (shown++ >= queuedShown) break;
+                HudRow(q.Scenario.Id, q.Run.ToString(CultureInfo.InvariantCulture), "<color=150,150,150>", "queued", "", "");
+            }
+            if (_queue.Count > queuedShown)
+                _hudList.Append("<color=150,150,150>... ").Append(_queue.Count - queuedShown).Append(" more queued").Append('\n');
+
+            _hudList.Append("<color=white>")
+                .Append(_sessionResults.Count).Append('/').Append(_sessionTotal).Append(" done   ")
+                .Append("<color=120,230,120>").Append(CountPassed()).Append(" passed  ")
+                .Append("<color=255,110,110>").Append(CountFailed()).Append(" failed  ")
+                .Append("<color=160,160,160>").Append(CountSkipped()).Append(" skipped");
+        }
+
+        private static void BuildHudCurrent()
+        {
+            _hudCurrent.Clear();
+            if (_current.Scenario == null)
+            {
+                if (_queue.Count == 0 && _sessionResults.Count > 0)
+                    _hudCurrent.Append("<color=130,180,230>Session finished").Append('\n')
+                        .Append("<color=white>").Append(CountPassed()).Append(" passed, ")
+                        .Append(CountFailed()).Append(" failed, ").Append(CountSkipped()).Append(" skipped");
+                return;
+            }
+            var s = _current.Scenario;
+            _hudCurrent.Append("<color=255,220,100>Running ").Append(s.Id)
+                .Append("<color=white>  (").Append(_sessionResults.Count + 1).Append('/').Append(_sessionTotal).Append(')');
+            if (_current.Runs > 1) _hudCurrent.Append("  run ").Append(_current.Run).Append('/').Append(_current.Runs);
+            _hudCurrent.Append('\n');
+            // Description, wrapped.
+            var words = (s.Description ?? "").Split(' ');
+            var line = 0;
+            _hudCurrent.Append("<color=200,200,200>");
+            foreach (var w in words)
+            {
+                if (line > 0 && line + w.Length + 1 > 46) { _hudCurrent.Append('\n'); line = 0; }
+                if (line > 0) { _hudCurrent.Append(' '); line++; }
+                _hudCurrent.Append(w);
+                line += w.Length;
+            }
+            _hudCurrent.Append('\n');
+            var elapsed = (TestContext.Now - _scenarioStartTime).TotalSeconds;
+            _hudCurrent.Append("<color=white>Phase ").Append(_phase).Append("   ")
+                .Append(elapsed.ToString("F0", CultureInfo.InvariantCulture)).Append(" s / max ").Append(s.TimeoutSeconds).Append(" s");
         }
 
         // ---------------------------------------------------------------- helpers
@@ -560,6 +685,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public static string ClearResults()
         {
             if (IsBusy) return "A test session is running; abort it first.";
+            TestHud.PublishClear(_steamId);
             if (MethodProfiler.IsRunning) return "A profiling session is active; stop it first (/nanobars profile stop).";
             if (MyAPIGateway.Utilities == null) return "Storage not available.";
 
