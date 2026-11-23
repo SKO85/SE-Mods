@@ -15,6 +15,7 @@
 ## Perf envelope
 Engine calls saved (hit / miss counts), not measured in ms here.
 ## Coverage
+unit:WeldScanClassifyTests (FEAT-261123.1 one-pass repair state, same results as NeedRepair)
 unit:CacheTests
 ## Last verified
 v2.5.7 build 261123.19 2026-11-23 — unit green.

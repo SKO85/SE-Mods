@@ -54,7 +54,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-CLUSTER-001 | CLUSTER | 3 | Coordinator election and shared scan results for co-located BaRs | ingame:S07; unit:ClusterTests | never |
 | SCN-CLUSTER-002 | CLUSTER | 3 | MaxSystemsPerTargetGrid saturation (strictly greater-than) and secondary task | unit:GridSaturationTrackerTests; ingame:S06, S50, S54 | 261006.3 unit |
 | SCN-CLUSTER-003 | CLUSTER | 3 | Fair-share target truncation across grids | unit:TargetSortingTests | 261123.19 unit |
-| SCN-CLUSTER-004 | CLUSTER | 2 | Scan caches return the right data and expire | unit:CacheTests | 261123.19 unit |
+| SCN-CLUSTER-004 | CLUSTER | 2 | Scan caches return the right data and expire | unit:CacheTests; unit:WeldScanClassifyTests | 261123.19 unit |
 | SCN-ZONE-001 | ZONE | 3 | Safe zones and DefenseShields block weld / grind / build; characters protected | manual; unit:ShieldProtectionTests; ingame:S39, S40, S41, S42, S53, S58-S63, S85 | 261122.36 in game |
 | SCN-FX-001 | FX | 1 | Weld / grind particle and sound effects at block position, distance-culled | manual | never |
 | SCN-TERM-001 | TERM | 2 | Terminal controls, actions and sliders reflect fixed vs default mod settings | manual, unit | 261023.6 unit |

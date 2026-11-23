@@ -278,7 +278,8 @@ namespace SKONanobotBuildAndRepairSystem
                 return false;
             }
 
-            var colorMask = block.GetColorMask();
+            // FEAT-261123.1: the colour is only needed when a colour option is on.
+            var colorMask = (useIgnoreColor || useGrindColor) ? block.GetColorMask() : Vector3.Zero;
             IMyProjector projector;
             if (block.IsProjected(out projector))
             {
@@ -311,10 +312,13 @@ namespace SKONanobotBuildAndRepairSystem
                 if (!State.SafeZoneAllowsWelding)
                     return false;
 
-                // BUG-112: NeedRepair first short-circuits for full-integrity blocks
-                // before the more expensive IsRelationAllowed4Welding engine call.
-                // BUG-260610.5: allowMutate=false — background thread, pure read only.
-                if (block.NeedRepair(Settings.WeldOptions, false) &&
+                // FEAT-261123.1: one pass over integrity / deformation (was NeedRepair, then the same reads again for
+                // the dented-only branch). Same rules as NeedRepair(allowMutate: false): background thread, pure read.
+                bool needRepair, dentedOnly;
+                ClassifyForWeldScan(block, Settings.WeldOptions, out needRepair, out dentedOnly);
+
+                // BUG-112: integrity first, before the more expensive IsRelationAllowed4Welding engine call.
+                if (needRepair &&
                    (!useIgnoreColor || !IsColorNearlyEquals(ignoreColor, colorMask)) && (!useGrindColor || !IsColorNearlyEquals(grindColor, colorMask)) &&
                    BlockWeldPriority.GetEnabled(block) &&
                    IsRelationAllowed4Welding(block))
@@ -329,10 +333,7 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
                 }
-                else if (Settings.WeldOptions != AutoWeldOptions.WeldSkeleton
-                    && !block.IsDestroyed
-                    && block.Integrity >= block.GetRequiredIntegrity(Settings.WeldOptions)
-                    && block.MaxDeformation > SlimBlockExtensions.MinDeformation
+                else if (dentedOnly
                     && (!useIgnoreColor || !IsColorNearlyEquals(ignoreColor, colorMask)) && (!useGrindColor || !IsColorNearlyEquals(grindColor, colorMask))
                     && BlockWeldPriority.GetEnabled(block)
                     && IsRelationAllowed4Welding(block))
@@ -352,6 +353,33 @@ namespace SKONanobotBuildAndRepairSystem
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// FEAT-261123.1: one read of a real block's repair state for the scan. needRepair: below the weld option's
+        /// integrity, or full but dented with a working bone check (HasDeformation). dentedOnly: full integrity with the
+        /// engine's latched MaxDeformation (queued for a skeleton reset, never a weld target). Same rules as
+        /// SlimBlockExtensions.NeedRepair(allowMutate: false) plus the former dented-only condition.
+        /// </summary>
+        internal static void ClassifyForWeldScan(IMySlimBlock block, AutoWeldOptions weldOptions, out bool needRepair, out bool dentedOnly)
+        {
+            needRepair = false;
+            dentedOnly = false;
+            if (block == null || block.IsDestroyed) return;
+            var fat = block.FatBlock;
+            if (fat != null && (fat.Closed || fat.MarkedForClose)) return;
+            if (weldOptions == AutoWeldOptions.WeldSkeleton) return;
+            if (block.Integrity < block.GetRequiredIntegrity(weldOptions))
+            {
+                needRepair = true;
+                return;
+            }
+            if (block.MaxDeformation > SlimBlockExtensions.MinDeformation)
+            {
+                dentedOnly = true;
+                return;
+            }
+            needRepair = block.HasDeformation;
         }
 
         /// <summary>
@@ -378,6 +406,10 @@ namespace SKONanobotBuildAndRepairSystem
             {
                 return false;
             }
+
+            // FEAT-261123.1: DisableOnly / HackOnly only ever take functional blocks — skip armor before the relation lookup.
+            if (autoGrind && ((autoGrindOptions & (AutoGrindOptions.DisableOnly | AutoGrindOptions.HackOnly)) != 0) && block.FatBlock == null)
+                autoGrind = false;
 
             if (autoGrind)
             {
