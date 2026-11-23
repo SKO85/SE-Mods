@@ -94,6 +94,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ServerMsgDataRequestReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 // BUG-260610.19: reply to the tamper-proof transport sender, not the
@@ -106,6 +107,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ServerMsgBlockDataRequestReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgBlockDataRequest>(data);
@@ -140,6 +142,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ServerMsgModCommandReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 var msgRcv = MyAPIGateway.Utilities.SerializeFromBinary<MsgModCommand>(data);
@@ -215,6 +218,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ClientMsgModSettingsReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 // BUG-260610.3: mod messages can be relayed client->client; only the
@@ -237,6 +241,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ClientMsgBlockStateReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 // BUG-260610.3: only the server may push block state.
@@ -264,6 +269,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ClientMsgModCommandResponseReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 // BUG-260610.3: only the server may push command responses
@@ -296,6 +302,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void MsgBlockSettingsReceived(ushort id, byte[] data, ulong sender, bool fromServer)
         {
+            NetStats.Received(id, data != null ? data.Length : 0);
             try
             {
                 // BUG-260610.3: on clients, only accept settings pushed by the server.
@@ -389,7 +396,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Settings = Mod.Settings
                 };
 
-                if (!MyAPIGateway.Multiplayer.SendMessageTo(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true))
+                if (!SendTo(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId))
                 {
                     Logging.Instance.Write(Logging.Level.Error, "BuildAndRepairSystemMod: SyncModSettingsSend failed");
                 }
@@ -413,7 +420,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     Settings = Mod.Settings
                 };
 
-                MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                SendToOthers(MSGID_MOD_SETTINGS, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "BroadcastModSettings: {0}", ex.Message); }
         }
@@ -423,6 +430,26 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
         /// Server-only. Reuses a single player list to avoid per-call allocation.
         /// </summary>
         private static readonly List<IMyPlayer> _adminBroadcastPlayers = new List<IMyPlayer>();
+        // FEAT-261123.7: all sends go through these so NetStats sees every message.
+        private static bool SendTo(ushort msgId, byte[] bytes, ulong steamId)
+        {
+            NetStats.Sent(msgId, bytes.Length, 1);
+            return MyAPIGateway.Multiplayer.SendMessageTo(msgId, bytes, steamId, true);
+        }
+
+        private static bool SendToOthers(ushort msgId, byte[] bytes)
+        {
+            var players = MyAPIGateway.Players != null ? (int)MyAPIGateway.Players.Count : 0;
+            NetStats.Sent(msgId, bytes.Length, MyAPIGateway.Utilities.IsDedicated ? players : players - 1);
+            return MyAPIGateway.Multiplayer.SendMessageToOthers(msgId, bytes, true);
+        }
+
+        private static bool SendToServer(ushort msgId, byte[] bytes)
+        {
+            NetStats.Sent(msgId, bytes.Length, 1);
+            return MyAPIGateway.Multiplayer.SendMessageToServer(msgId, bytes, true);
+        }
+
         private static void SendToAdmins(ushort msgId, byte[] bytes)
         {
             if (!MyAPIGateway.Session.IsServer || MyAPIGateway.Multiplayer == null || !MyAPIGateway.Multiplayer.MultiplayerActive)
@@ -435,7 +462,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 if (player.SteamUserId == 0) continue;
                 if (SKONanobotBuildAndRepairSystem.Utils.UtilsPlayer.IsAdminLevel(player.PromoteLevel))
                 {
-                    MyAPIGateway.Multiplayer.SendMessageTo(msgId, bytes, player.SteamUserId, true);
+                    SendTo(msgId, bytes, player.SteamUserId);
                 }
             }
         }
@@ -454,6 +481,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ClientMsgDebugStatsReceived(ushort channelId, byte[] bytes, ulong senderSteamId, bool isSenderServer)
         {
+            NetStats.Received(channelId, bytes != null ? bytes.Length : 0);
             try
             {
                 if (!isSenderServer) return;
@@ -477,6 +505,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
         private static void ClientMsgProfileSummaryReceived(ushort channelId, byte[] bytes, ulong senderSteamId, bool isSenderServer)
         {
+            NetStats.Received(channelId, bytes != null ? bytes.Length : 0);
             try
             {
                 if (!isSenderServer) return;
@@ -500,7 +529,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 else
                     msgSnd.SteamId = 0;
 
-                MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_MOD_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                SendToServer(MSGID_MOD_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgDataRequestSend: {0}", ex.Message); }
         }
@@ -522,16 +551,16 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 {
                     if (steamId == 0)
                     {
-                        res = MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                        res = SendToOthers(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
                     }
                     else
                     {
-                        res = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId, true);
+                        res = SendTo(MSGID_BLOCK_SETTINGS_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), steamId);
                     }
                 }
                 else
                 {
-                    res = MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_SETTINGS_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                    res = SendToServer(MSGID_BLOCK_SETTINGS_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
                 }
 
                 if (!res && Logging.Instance.ShouldLog(Logging.Level.Error))
@@ -565,11 +594,11 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                 var res = false;
                 if (steamId == 0)
                 {
-                    res = MyAPIGateway.Multiplayer.SendMessageToOthers(MSGID_BLOCK_STATE_FROM_SERVER, bytes, true);
+                    res = SendToOthers(MSGID_BLOCK_STATE_FROM_SERVER, bytes);
                 }
                 else
                 {
-                    res = MyAPIGateway.Multiplayer.SendMessageTo(MSGID_BLOCK_STATE_FROM_SERVER, bytes, steamId, true);
+                    res = SendTo(MSGID_BLOCK_STATE_FROM_SERVER, bytes, steamId);
                 }
 
                 if (!res && Logging.Instance.ShouldLog(Logging.Level.Error))
@@ -614,7 +643,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 msgSnd.EntityId = block.Entity.EntityId;
 
-                MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_BLOCK_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                SendToServer(MSGID_BLOCK_DATAREQUEST, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgBlockDataRequestSend: {0}", ex.Message); }
         }
@@ -634,7 +663,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
 
                 msgSnd.Command = command;
 
-                MyAPIGateway.Multiplayer.SendMessageToServer(MSGID_MOD_COMMAND_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd), true);
+                SendToServer(MSGID_MOD_COMMAND_FROM_CLIENT, MyAPIGateway.Utilities.SerializeToBinary(msgSnd));
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "MsgModCommandSend: {0}", ex.Message); }
         }
@@ -652,7 +681,7 @@ namespace SKONanobotBuildAndRepairSystem.Handlers
                     ScreenSubtitle = screenSubtitle
                 };
 
-                MyAPIGateway.Multiplayer.SendMessageTo(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(response), steamId, true);
+                SendTo(MSGID_MOD_COMMAND_RESPONSE_FROM_SERVER, MyAPIGateway.Utilities.SerializeToBinary(response), steamId);
             }
             catch (Exception ex) { Logging.Instance.Write(Logging.Level.Error, "SendCommandResponse: {0}", ex.Message); }
         }

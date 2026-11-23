@@ -121,7 +121,15 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S111_MovingArm("S112", 3, true),
             new S113_ItemFitProbe(),
             new S114_SmallGridProjection("S114", false),
-            new S114_SmallGridProjection("S115", true)
+            new S114_SmallGridProjection("S115", true),
+            new S116_SyncLoad("S116", SyncLoadMode.SettingsChurn),
+            new S116_SyncLoad("S117", SyncLoadMode.BigTargetList),
+            new S116_SyncLoad("S118", SyncLoadMode.Idle),
+            new S119_GridSizeTraffic("S119", 100),
+            new S119_GridSizeTraffic("S120", 1000),
+            new S119_GridSizeTraffic("S121", 3000),
+            new S119_GridSizeTraffic("S122", 8000),
+            new S119_GridSizeTraffic("S123", 100, 1000, 3000, 8000)
         };
 
         /// <summary>
@@ -140,9 +148,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new ScenarioGroup("inventory", "Component sources, sorter, empty cargo, push targets, push options, logistics at scale", "S02,S84,S87,S88,S89,S90,S91,S92,S93,S103,S104,S105,S106,S107,S108,S109,S110,S113"),
             new ScenarioGroup("claims", "Block claims, per-grid limit, BaRs sharing work, takeovers", "S05,S06,S50,S51,S54,S55,S56,S86,S94,S95,S96,S97,S98"),
             new ScenarioGroup("cluster", "Cluster coordination and the per-grid limit", "S06,S07,S50,S54"),
-            new ScenarioGroup("perf", "Load, large grids, scan cost by grid size, ShowArea and budget cost (long)", "S08,S28,S29,S30,S31,S32,S33,S43,S52,S64,S65,S66,S67,S68,S69,S70,S99,S100,S101,S102,S103,S104,S105,S106,S107,S108,S109,S110,S111,S112"),
+            new ScenarioGroup("perf", "Load, large grids, scan cost by grid size, ShowArea and budget cost (long)", "S08,S28,S29,S30,S31,S32,S33,S43,S52,S64,S65,S66,S67,S68,S69,S70,S99,S100,S101,S102,S103,S104,S105,S106,S107,S108,S109,S110,S111,S112,S119,S120,S121,S122,S123"),
             new ScenarioGroup("companion", "PB API and the companion script", "S09,S71,S81,S82,S83"),
             new ScenarioGroup("config", "Admin settings (Fixed / Default, limits, checks)", "S46,S47,S48,S49,S50,S51,S52,S53"),
+            new ScenarioGroup("sync", "Network load on servers: settings / state sync rate and size (run on Torch with a client)", "S43,S70,S106,S111,S116,S117,S118,S119,S120,S121,S122,S123"),
             new ScenarioGroup("priority", "Weld / grind priority lists", "S14,S15,S16"),
             new ScenarioGroup("collect", "Collecting floating objects", "S10")
         };

@@ -50,9 +50,10 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | `@inventory` | Component sources, sorter, empty cargo, push targets, push options, logistics at scale | S02, S84, S87-S93, S103-S110, S113 |
 | `@claims` | Block claims, per-grid limit, BaRs sharing work, takeovers | S05, S06, S50, S51, S54-S56, S86, S94-S98 |
 | `@cluster` | Cluster coordination and the per-grid limit | S06, S07, S50, S54 |
-| `@perf` | Load, large grids, scan cost by grid size, logistics at scale, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S112 |
+| `@perf` | Load, large grids, scan cost by grid size, logistics at scale, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S112, S119-S123 |
 | `@companion` | PB API and the companion script | S09, S71, S81-S83 |
 | `@config` | Admin settings (Fixed / Default, limits, checks) | S46-S53 |
+| `@sync` | Network load on servers: settings / state sync rate and size (run on Torch with a client) | S43, S70, S106, S111, S116-S123 |
 | `@priority` | Weld / grind priority lists | S14-S16 |
 | `@collect` | Collecting floating objects | S10 |
 
@@ -211,6 +212,14 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S113 | Probe: ore / ingot / component fit and transport -> BaR move (MaxItemsAddable) | INV-002 | <1 min | 261123.40 — all fit / moved, incl. 99 % full BaR (422 kg ore, 52 plates) |
 | S114 | Small-grid projection on a small ship built by a large BaR 12 m away | WELD-002 | <1 min | 261123.42 — 10/10 built + welded in 2.9 s, plates exact |
 | S115 | Small-grid projection built by a small BaR on the same small ship | WELD-002 | <1 min | 261123.42 — 10/10 built + welded in 3.4 s, plates exact |
+| S116 | Sync: 20 BaRs, settings toggled every 0.5 s (settings broadcast rate) | BUDGET-010 | <1 min | never |
+| S117 | Sync: one BaR with a 512-entry target list (state message size / rate) | BUDGET-010 | <1 min | never |
+| S118 | Sync: 50 idle BaRs, nothing to do (idle traffic) | BUDGET-010 | <1 min | never |
+| S119 | Traffic / spikes: 10 BaRs welding a 100-block grid | BUDGET-010 | ~1 min | never |
+| S120 | Traffic / spikes: 10 BaRs welding a 1,000-block grid | BUDGET-010 | ~1 min | never |
+| S121 | Traffic / spikes: 10 BaRs welding a 3,000-block grid | BUDGET-010 | ~1 min | never |
+| S122 | Traffic / spikes: 10 BaRs welding an 8,000-block grid | BUDGET-010 | ~1 min | never |
+| S123 | Traffic / spikes: 10 BaRs welding 100 + 1,000 + 3,000 + 8,000-block grids at once | BUDGET-010 | ~1 min | never |
 
 ## Scenarios
 
@@ -748,6 +757,42 @@ buildable, the BaR's weld targets, skipped projected blocks and the limits flag.
 
 ### S115
 **Proves** the same with a small BaR (3x3x1) on the small ship itself (Grids mode, 50 SteelPlate in its own inventory).
+
+### S116
+**Proves** settings changes made by scripts / timers do not flood clients. 20 BaRs (Grids, WeldOnly, WorkSpeed 1,
+damaged armor on the rig) get ShowArea toggled every 0.5 s for 20 s. **Pass** tick avg <= 1 ms; with a remote player
+connected (Torch): settings broadcasts <= 1 per BaR per second (+2 s slack) and > 0. **Records** `toggles`,
+`settingsPerBarPerS`, `statePerBarPerS` and the standard `net.*` metrics. Single player: traffic checks skipped.
+
+### S117
+**Proves** a BaR with a full target list does not send oversized or too frequent state messages. One BaR
+(BoundingBox, 60 m area) above a 1,500-block damaged armor field (target list capped at 512). **Pass** tick avg <= 1 ms;
+with a remote player: largest state message <= 64 KB, state sends <= 1 per BaR per second. **Records** `stateMaxKB`,
+`barWeldTargets`, `net.*`.
+
+### S118
+**Proves** an idle base costs (almost) no traffic. 50 BaRs, nothing to weld or grind; counting starts 10 s after they
+switch on, then 30 s. **Pass** tick avg <= 1 ms; with a remote player: <= 0.1 state sends per BaR per second and no
+settings broadcasts.
+
+### S119
+**Measures** CPU and network spikes by target grid size. 10 BaRs (BoundingBox, 100 m area, WeldOnly, WorkSpeed 3,
+3,000 SteelPlate) above a damaged armor field of 100 blocks (rows of 40, 6 m below), 40 s. **Pass** (loose, data first)
+sim >= 0.5, tick avg <= 2 ms, something welded; with a remote player the largest state message <= 64 KB. **Records**
+`targetBlocks`, `welded`, `weldedPerSecond`, `weldTargetsListedTotal / Max`, tick / sim, `net.*` incl. `net.peakKBps`,
+`net.peakMsgsPerS`, `net.peakAtS`.
+
+### S120
+S119 with a 1,000-block field.
+
+### S121
+S119 with a 3,000-block field.
+
+### S122
+S119 with an 8,000-block field.
+
+### S123
+S119 with all four fields at once (stacked 6 m apart: 100, 1,000, 3,000, 8,000 blocks).
 
 ## Building blocks for new scenarios
 

@@ -151,6 +151,71 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public double SimAvg { get { return _simSamples > 0 ? _simSum / _simSamples : 0.0; } }
         public double TickAvgMs { get { return _tickAvgSamples > 0 ? _tickAvgSum / _tickAvgSamples : 0.0; } }
         public double RunSeconds { get { return (Now - RunStartTime).TotalSeconds; } }
+
+        // ---------------------------------------------------------------- network (FEAT-261123.7)
+
+        public NetStats.Snapshot NetStart;
+        private NetStats.Snapshot _netEnd;
+
+        /// <summary>Mod messages of one type since the run started: count, payload bytes, wire bytes (fan-out), largest.</summary>
+        public void NetSent(ushort msgId, out long msgs, out long bytes, out long wire, out int maxBytes)
+        {
+            msgs = bytes = wire = 0; maxBytes = 0;
+            var i = NetStats.Index(msgId);
+            if (i < 0 || NetStart == null) return;
+            if (_netEnd == null) _netEnd = NetStats.Take(false);
+            msgs = _netEnd.SentMsgs[i] - NetStart.SentMsgs[i];
+            bytes = _netEnd.SentBytes[i] - NetStart.SentBytes[i];
+            wire = _netEnd.WireBytes[i] - NetStart.WireBytes[i];
+            maxBytes = _netEnd.MaxSent[i];
+        }
+
+        /// <summary>Connected players other than the host (0 in single player).</summary>
+        public int RemotePlayers()
+        {
+            if (MyAPIGateway.Multiplayer == null || !MyAPIGateway.Multiplayer.MultiplayerActive || MyAPIGateway.Players == null) return 0;
+            var n = (int)MyAPIGateway.Players.Count;
+            return MyAPIGateway.Utilities.IsDedicated ? n : n - 1;
+        }
+
+        public void RecordNetMetrics()
+        {
+            if (NetStart == null) return;
+            _netEnd = NetStats.Take(false);
+            var secs = RunSeconds > 0.1 ? RunSeconds : 0.1;
+            var bars = Mod.NanobotSystems.Count > 0 ? Mod.NanobotSystems.Count : 1;
+            long sentMsgs = 0, sentBytes = 0, wire = 0, recvMsgs = 0, recvBytes = 0;
+            int maxBytes = 0, maxIdx = -1;
+            for (int i = 0; i < NetStats.Size; i++)
+            {
+                sentMsgs += _netEnd.SentMsgs[i] - NetStart.SentMsgs[i];
+                sentBytes += _netEnd.SentBytes[i] - NetStart.SentBytes[i];
+                wire += _netEnd.WireBytes[i] - NetStart.WireBytes[i];
+                recvMsgs += _netEnd.RecvMsgs[i] - NetStart.RecvMsgs[i];
+                recvBytes += _netEnd.RecvBytes[i] - NetStart.RecvBytes[i];
+                if (_netEnd.MaxSent[i] > maxBytes) { maxBytes = _netEnd.MaxSent[i]; maxIdx = i; }
+            }
+            Metric("net.players", (long)RemotePlayers());
+            Metric("net.sentMsgs", sentMsgs);
+            Metric("net.sentKB", sentBytes / 1024.0);
+            Metric("net.wireKBps", wire / 1024.0 / secs);
+            Metric("net.recvMsgs", recvMsgs);
+            Metric("net.recvKB", recvBytes / 1024.0);
+            Metric("net.maxMsgBytes", (long)maxBytes);
+            Metric("net.peakKBps", NetPeakKBps);
+            Metric("net.peakMsgsPerS", NetPeakMsgsPerS);
+            Metric("net.peakAtS", NetPeakAtS);
+            Metric("net.maxMsgType", maxIdx >= 0 ? NetStats.Name(NetStats.IdOf(maxIdx)) : "-");
+            long m, b, w; int mx;
+            NetSent(40104, out m, out b, out w, out mx);
+            Metric("net.state.msgs", m);
+            Metric("net.state.perBarPerS", m / (double)bars / secs);
+            Metric("net.state.avgBytes", m > 0 ? b / (double)m : 0.0);
+            Metric("net.state.maxBytes", (long)mx);
+            NetSent(40102, out m, out b, out w, out mx);
+            Metric("net.settings.msgs", m);
+            Metric("net.settings.maxBytes", (long)mx);
+        }
         /// <summary>Seconds since Setup/Configure (usable before the measured run starts).</summary>
         public double RunSecondsSinceSetup { get { return (Now - SetupTime).TotalSeconds; } }
 
@@ -455,7 +520,26 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             var w = Mod.WeldBudgetPeakUsed; if (w > WeldBudgetPeak) WeldBudgetPeak = w;
             var g = Mod.GrindBudgetPeakUsed; if (g > GrindBudgetPeak) GrindBudgetPeak = g;
             var a = BlockSystemAssigningHandler.AssignmentCount; if (a > AssignmentsPeak) AssignmentsPeak = a;
+
+            // FEAT-261123.7: traffic per second, for spikes.
+            var now = Now;
+            if (_netSecondStart == TimeSpan.MinValue) { NetStats.Totals(out _netSecondMsgs, out _netSecondWire); _netSecondStart = now; }
+            else if ((now - _netSecondStart).TotalSeconds >= 1.0)
+            {
+                long msgs, wire;
+                NetStats.Totals(out msgs, out wire);
+                var secs = (now - _netSecondStart).TotalSeconds;
+                var kbps = (wire - _netSecondWire) / 1024.0 / secs;
+                var mps = (msgs - _netSecondMsgs) / secs;
+                if (kbps > NetPeakKBps) { NetPeakKBps = kbps; NetPeakAtS = RunSeconds; }
+                if (mps > NetPeakMsgsPerS) NetPeakMsgsPerS = mps;
+                _netSecondMsgs = msgs; _netSecondWire = wire; _netSecondStart = now;
+            }
         }
+
+        private TimeSpan _netSecondStart = TimeSpan.MinValue;
+        private long _netSecondMsgs, _netSecondWire;
+        public double NetPeakKBps, NetPeakMsgsPerS, NetPeakAtS;
 
         // ---------------------------------------------------------------- recording
 

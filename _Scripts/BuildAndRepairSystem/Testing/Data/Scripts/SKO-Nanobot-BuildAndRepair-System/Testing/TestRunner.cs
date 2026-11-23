@@ -292,6 +292,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
                 Mod.ResetGrindBudgetStats();
                 _ctx.SetRigBarsEnabled(true);
                 _ctx.RunStartTime = TestContext.Now;
+                _ctx.NetStart = NetStats.Take(true); // FEAT-261123.7
                 return;
             }
 
@@ -462,6 +463,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             _result.Metric("otherBars", (long)_ctx.OtherBarCount());
             var methods = _current.Scenario.PerfMethods;
             for (int i = 0; i < methods.Count; i++) _ctx.RecordMethodStats(methods[i]);
+            _ctx.RecordNetMetrics();
         }
 
         private static int CountPassed()
