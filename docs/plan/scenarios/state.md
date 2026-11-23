@@ -48,7 +48,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-GRIND-006 | GRIND | 2 | Protected grids are not ground (indestructible, immune, damage-handler protection) | unit:GrindDamageVetoTests; ingame:S73, S74 | 261122.25 in game |
 | SCN-GRIND-007 | GRIND | 2 | Ground or removed blocks leave a BaR's grind list instead of being re-checked every tick | unit:DeadGrindEntryTests; ingame:S66; ingame:S67; ingame:S70 | 261123.36 in game |
 | SCN-COLLECT-001 | COLLECT | 2 | Floating objects inside area only, CollectIfIdle, component class priority | manual, ingame:S10, unit | 261023.2 unit |
-| SCN-INV-001 | INV | 2 | Source scan via conveyors, pull cursor rotation, push-targets-full backoff | manual; ingame:S87, S88, S89, S103-S110 | 261123.15 in game |
+| SCN-INV-001 | INV | 2 | Source scan via conveyors, pull cursor rotation, push-targets-full backoff | manual; ingame:S87, S88, S89, S103-S110; unit:PullBatchTests | 261123.15 in game |
 | SCN-INV-002 | INV | 2 | Push-immediately flags and inventory-full pause | manual; ingame:S89, S90-S93; unit:InventoryFullLatchTests; ingame:S113 | 261123.19 in game |
 | SCN-PRIO-001 | PRIO | 2 | Priority list enable / disable / reorder reflected in target order; reset | manual, unit; ingame:S14, S15, S16; unit:TargetSortingTests | 261023.4 unit |
 | SCN-CLUSTER-001 | CLUSTER | 3 | Coordinator election and shared scan results for co-located BaRs | ingame:S07; unit:ClusterTests | never |

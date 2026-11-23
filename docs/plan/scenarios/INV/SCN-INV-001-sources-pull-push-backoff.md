@@ -23,6 +23,7 @@
 ## Perf envelope
 `PullFromSourcesOnePass` maxMs ≤ 3 with 100 sources; `ServerTryPushInventory` steadyAvgMs ≤ 0.5 while full.
 ## Coverage
+unit:PullBatchTests (FEAT-261123.3 batched fetch)
 manual
 ingame:S87
 ingame:S88

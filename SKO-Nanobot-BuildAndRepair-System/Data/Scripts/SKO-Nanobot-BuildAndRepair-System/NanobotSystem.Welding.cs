@@ -1316,6 +1316,7 @@ namespace SKONanobotBuildAndRepairSystem
             public long TsMaxItemsAdd;     // sum of MaxItemsAddable engine ticks
             public long TsTransfer;        // sum of TransferItemFrom engine ticks
             public long MaxSourceTicks;    // longest single TryPullFromSource call
+            public int ExtraPulled;        // FEAT-261123.3: items fetched beyond the current block's need
         }
 
         // BUG-261123.8: grids where a weld made no progress (the game refused it), per BaR, main thread.
@@ -1491,10 +1492,11 @@ namespace SKONanobotBuildAndRepairSystem
             var _transferSucceeded = stats.TransferSucceeded;
             var _lastSuccessfulHit = lastSuccessfulHit;
             var _exitReason = exitReason;
+            var _extraPulled = stats.ExtraPulled;
             MethodProfiler.StopAndLog("PullFromSourcesOnePass", profilerTs, () =>
-                string.Format("entityId={0};available={1};visited={2};empty={3};itemsExamined={4};maxItemsAddCalls={5};transferAttempts={6};transferSucceeded={7};lastSuccessfulHit={8};getItemsMs={9:F3};maxItemsAddMs={10:F3};transferMs={11:F3};maxSourceMs={12:F3};lockWaitMs={13:F3};exit={14}",
+                string.Format("entityId={0};available={1};visited={2};empty={3};itemsExamined={4};maxItemsAddCalls={5};transferAttempts={6};transferSucceeded={7};lastSuccessfulHit={8};getItemsMs={9:F3};maxItemsAddMs={10:F3};transferMs={11:F3};maxSourceMs={12:F3};lockWaitMs={13:F3};exit={14};extraPulled={15}",
                     _entityId, _sourcesAvailable, _sourcesVisited, _sourcesEmpty, _itemsExamined, _maxItemsAddCalls, _transferAttempts, _transferSucceeded, _lastSuccessfulHit,
-                    _getItemsMs, _maxItemsAddMs, _transferMs, _maxSourceMs, _lockWaitMs, _exitReason));
+                    _getItemsMs, _maxItemsAddMs, _transferMs, _maxSourceMs, _lockWaitMs, _exitReason, _extraPulled));
         }
 
         /// <summary>
@@ -1552,8 +1554,12 @@ namespace SKONanobotBuildAndRepairSystem
                         || (float)_TransportInventory.MaxVolume - (float)_TransportInventory.CurrentVolume < volume) continue;
                     maxByVolume = 1;
                 }
-                var amountPossible = Math.Min(Math.Min(neededAmount, (int)srcItem.Amount), maxByVolume);
-                if (amountPossible <= 0) continue;
+                var amountForBlock = Math.Min(Math.Min(neededAmount, (int)srcItem.Amount), maxByVolume);
+                if (amountForBlock <= 0) continue;
+                // FEAT-261123.3: from a well-stocked source, fetch for the next blocks too (the extra stays in the BaR's
+                // inventory, where the next blocks pick it without a conveyor transfer and other BaRs can still pull it).
+                var amountPossible = amountForBlock + PullBatchExtra(neededAmount, amountForBlock, (int)srcItem.Amount,
+                    BatchExtraByVolume(welderInventory, volume), (Settings.Flags & SyncBlockSettings.Settings.PushComponentImmediately) != 0);
 
                 stats.MaxItemsAddCalls++;
                 tsMark = stats.ProfilerEnabled ? Stopwatch.GetTimestamp() : 0L;
@@ -1572,6 +1578,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (transferred)
                 {
                     stats.TransferSucceeded++;
+                    if (amountMoveable > amountForBlock) stats.ExtraPulled += amountMoveable - amountForBlock;
                     int needed = neededAmount;
                     picked = ServerPickFromWelder(componentId, volume, ref needed, ref remainingVolume) || picked;
                     if (needed > 0) _TempPullRemaining[subtypeName] = needed;
@@ -1587,6 +1594,38 @@ namespace SKONanobotBuildAndRepairSystem
         /// <summary>
         /// Try to pick needed material from own inventory, if successfull material is moved into transport inventory
         /// </summary>
+        // FEAT-261123.3: fetch for up to this many blocks per conveyor transfer (the current one + extras).
+        internal const int PullBatchFactor = 3;
+        // Extra stock is held to this share of the BaR's inventory and only taken while it is below half full.
+        internal const float PullBatchMaxShare = 0.1f;
+
+        /// <summary>
+        /// FEAT-261123.3: extra amount to fetch beyond the current block's need. Only from a well-stocked source (at least
+        /// twice the extra stays behind), never when the BaR pushes components away immediately, capped by volume.
+        /// </summary>
+        internal static int PullBatchExtra(int needed, int forBlock, int available, int maxExtraByVolume, bool pushComponentsImmediately)
+        {
+            if (pushComponentsImmediately || needed <= 0 || forBlock <= 0 || maxExtraByVolume <= 0) return 0;
+            var extra = needed * (PullBatchFactor - 1);
+            var spare = available - forBlock;
+            if (spare <= 0) return 0;
+            extra = Math.Min(extra, spare / 3); // keep >= 2x the extra in the source
+            extra = Math.Min(extra, maxExtraByVolume);
+            return extra > 0 ? extra : 0;
+        }
+
+        /// <summary>How many extra items of this volume the BaR may hold (PullBatchMaxShare, only while below half full).</summary>
+        internal static int BatchExtraByVolume(float maxVolume, float currentVolume, float itemVolume)
+        {
+            if (itemVolume <= 0f || maxVolume <= 0f || currentVolume >= maxVolume * 0.5f) return 0;
+            return (int)Math.Floor(maxVolume * PullBatchMaxShare / itemVolume);
+        }
+
+        private static int BatchExtraByVolume(IMyInventory inventory, float itemVolume)
+        {
+            return inventory != null ? BatchExtraByVolume((float)inventory.MaxVolume, (float)inventory.CurrentVolume, itemVolume) : 0;
+        }
+
         private bool ServerPickFromWelder(MyDefinitionId componentId, float volume, ref int neededAmount, ref float remainingVolume)
         {
             var profilerTs = MethodProfiler.Start();
