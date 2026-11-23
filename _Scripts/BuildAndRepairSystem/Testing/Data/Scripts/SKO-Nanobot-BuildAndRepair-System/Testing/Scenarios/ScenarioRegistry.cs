@@ -136,7 +136,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S126_FarBars(),
             new S127_Races("S127", RaceMode.GridChurn),
             new S127_Races("S128", RaceMode.SettingsFlip),
-            new S127_Races("S129", RaceMode.OnOff)
+            new S127_Races("S129", RaceMode.OnOff),
+            new S130_MechanicalDerelict()
         };
 
         /// <summary>
@@ -148,8 +149,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new ScenarioGroup("core", "Repair, damage detection, range, work modes, power, speeds", "S01,S19,S20,S25,S57,S72,S75,S76,S77,S78,S79,S80"),
             new ScenarioGroup("weld", "Welding: repair, weld options, colours, docked ships, sources", "S01,S02,S03,S18,S21,S22,S23,S26,S27,S34,S35,S36,S37,S38,S42,S44,S46,S72,S84,S86,S87,S88,S111,S112,S114,S115,S124,S125"),
             new ScenarioGroup("projection", "Projector building, incl. admin and safe-zone rules", "S03,S27,S42,S46,S85"),
-            new ScenarioGroup("subgrids", "Rotors, pistons, hinges, wheels, connectors, ships in flight", "S18,S34,S35,S36,S37,S38,S44,S45,S111,S112"),
-            new ScenarioGroup("grind", "Grinding: janitor, order, colours, protection, leaving targets, full storage", "S04,S11,S12,S13,S16,S17,S24,S45,S73,S74,S76,S89,S112"),
+            new ScenarioGroup("subgrids", "Rotors, pistons, hinges, wheels, connectors, ships in flight", "S18,S34,S35,S36,S37,S38,S44,S45,S111,S112,S130"),
+            new ScenarioGroup("grind", "Grinding: janitor, order, colours, protection, leaving targets, full storage", "S04,S11,S12,S13,S16,S17,S24,S45,S73,S74,S76,S89,S112,S130"),
             new ScenarioGroup("zone", "Safe zones", "S39,S40,S41,S42,S53,S85"),
             new ScenarioGroup("shields", "DefenseShields (skipped without the mod)", "S58,S59,S60,S61,S62,S63"),
             new ScenarioGroup("inventory", "Component sources, sorter, empty cargo, push targets, push options, logistics at scale", "S02,S84,S87,S88,S89,S90,S91,S92,S93,S103,S104,S105,S106,S107,S108,S109,S110,S113"),

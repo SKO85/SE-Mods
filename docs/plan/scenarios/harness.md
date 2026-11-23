@@ -50,8 +50,8 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | `@core` | Repair, damage detection, range, work modes, power, speeds | S01, S19, S20, S25, S57, S72, S75-S80 |
 | `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88, S111, S112, S114, S115, S124, S125 |
 | `@projection` | Projector building, incl. admin and safe-zone rules | S03, S27, S42, S46, S85 |
-| `@subgrids` | Rotors, pistons, hinges, wheels, connectors, ships in flight | S18, S34-S38, S44, S45, S111, S112 |
-| `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89, S112 |
+| `@subgrids` | Rotors, pistons, hinges, wheels, connectors, ships in flight | S18, S34-S38, S44, S45, S111, S112, S130 |
+| `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89, S112, S130 |
 | `@zone` | Safe zones | S39-S42, S53, S85 |
 | `@shields` | DefenseShields (skipped without the mod) | S58-S63 |
 | `@inventory` | Component sources, sorter, empty cargo, push targets, push options, logistics at scale | S02, S84, S87-S93, S103-S110, S113 |
@@ -234,6 +234,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S127 | Races: target grids deleted / spawned every 3 s while BaRs scan and weld | BUDGET-011 | ~1 min | 261123.51 Torch — 6 deleted / 9 spawned, done 24.3 s, 0 errors |
 | S128 | Races: SearchMode / WorkMode flipped every 1 s while 10 BaRs weld | BUDGET-011 | ~1 min | 261123.51 Torch — 21 flips, done 21.0 s, 0 errors |
 | S129 | Races: 10 BaRs switched off / on every 1.5 s while welding | BUDGET-011 | ~1 min | 261123.51 Torch — 14 toggles, done 24.7 s, 0 claims left |
+| S130 | Mechanical derelict: base grid, rotor head and piston head all ground away | GRIND-004 | ~1 min | never |
 
 ## Scenarios
 
@@ -840,6 +841,13 @@ WeldOnly) flip every 1 s for 20 s (cluster rebuilds, rescans, list swaps mid-sca
 ### S129
 S128's rig with all BaRs switched off / on every 1.5 s for 21 s (claims dropped and retaken, cluster membership
 changing): all 60 welded afterwards, no claim left.
+
+### S130
+**Proves** mechanical derelicts are ground completely. An unowned grid (4 armor) with a rotor and a piston; their heads
+(added with the game's "add top part" actions) carry 2 unowned armor blocks each. One BaR (GrindOnly, BoundingBox 80 m,
+janitor NoOwnership, WorkSpeed 5). **Pass** base grid and both head grids gone within 150 s (heads come loose when their
+base block is ground and must be found as separate grids; one mechanical block per tick; raze queue drains), own rig
+intact, no mod errors. **Records** `gridsLeft`, `headGrids`, `doneS`.
 
 ## Standard metrics (every scenario)
 A run fails when the mod logs an error during it (`errorsLogged` > 0), unless the scenario sets `AllowsModErrors`
