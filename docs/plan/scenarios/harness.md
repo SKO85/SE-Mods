@@ -41,7 +41,7 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | Group | What | Scenarios |
 | ----- | ---- | --------- |
 | `@core` | Repair, damage detection, range, work modes, power, speeds | S01, S19, S20, S25, S57, S72, S75-S80 |
-| `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88, S111, S112 |
+| `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88, S111, S112, S114, S115 |
 | `@projection` | Projector building, incl. admin and safe-zone rules | S03, S27, S42, S46, S85 |
 | `@subgrids` | Rotors, pistons, hinges, wheels, connectors, ships in flight | S18, S34-S38, S44, S45, S111, S112 |
 | `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89, S112 |
@@ -209,6 +209,8 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S111 | Moving arm: 1 BaR on piston + rotor welds a ring of grids via the conveyors, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | 261123.32 — 48/48 in 27.4 s, 960 plates via conveyors, sim 1.0 |
 | S112 | Moving arm: 3 BaRs on piston + rotor weld and grind a ring of grids, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | 261123.32 — 24 welded + 24 ground in 14.4 s, sim 1.0 |
 | S113 | Probe: ore / ingot / component fit and transport -> BaR move (MaxItemsAddable) | INV-002 | <1 min | 261123.40 — all fit / moved, incl. 99 % full BaR (422 kg ore, 52 plates) |
+| S114 | Small-grid projection on a small ship built by a large BaR 12 m away | WELD-002 | <1 min | 261123.42 — 10/10 built + welded in 2.9 s, plates exact |
+| S115 | Small-grid projection built by a small BaR on the same small ship | WELD-002 | <1 min | 261123.42 — 10/10 built + welded in 3.4 s, plates exact |
 
 ## Scenarios
 
@@ -736,6 +738,16 @@ and pull) refuse ore or ingots? Per item class (iron ore, iron ingot, steel plat
 moves 100 units from the BaR's transport into the BaR exactly like the mod. Then the S89 case: BaR filled with stone
 to ~99 %, the transport offering 3x what fits: the fit must match free volume / item volume and move fully. One tick. **Pass** each class
 fits fully and moves fully. **Records** every probe value (`ore.bar.maxAddableReal`, `ore.transport.moved`, ...).
+
+### S114
+**Proves** small-grid projections are built (Steam report "will not build small grid projections"). A static small-grid
+ship (`RigSpec.SmallGrid`: small battery, armor, small projector) projects 10 small armor blocks next to the projector;
+a large BaR on the rig 12 m away (BoundingBox, AllowBuild, 50 SteelPlate in the rig cargo) builds them. **Pass** all 10
+built on the expected cells and welded, plates charged exactly once. **Records** projector total / remaining /
+buildable, the BaR's weld targets, skipped projected blocks and the limits flag.
+
+### S115
+**Proves** the same with a small BaR (3x3x1) on the small ship itself (Grids mode, 50 SteelPlate in its own inventory).
 
 ## Building blocks for new scenarios
 

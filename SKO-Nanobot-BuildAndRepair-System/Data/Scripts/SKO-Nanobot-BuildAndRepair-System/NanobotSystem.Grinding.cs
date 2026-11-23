@@ -64,6 +64,9 @@ namespace SKONanobotBuildAndRepairSystem
                 // hash / saturation guards). Without this, exhausted BaRs stay stuck
                 // until the next cluster scan bumps the hash, even though slots free
                 // up continuously as TTL claims drain.
+                // FEAT-261123.6: grids refused by a shield / protection mod, for the terminal (before the exhausted skip).
+                State.GrindBlockedGrids = _grindRefusedGrids.Count > 0 ? CountGrindRefused() : 0;
+
                 var grindExhaustedAge = Mod.NowPlayTime.Subtract(_grindExhaustedAtTime);
                 if (_grindLoopExhausted
                     && State.PossibleGrindTargets.CurrentHash == _grindExhaustedAtHash
@@ -383,6 +386,14 @@ namespace SKONanobotBuildAndRepairSystem
             if (info.Amount > 0f) return true;
             if (target.CubeGrid != null) _grindRefusedGrids[target.CubeGrid.EntityId] = Mod.NowPlayTime + GrindRefusedSkip;
             return false;
+        }
+
+        private int CountGrindRefused()
+        {
+            var now = Mod.NowPlayTime;
+            var count = 0;
+            foreach (var until in _grindRefusedGrids.Values) if (now < until) count++;
+            return count;
         }
 
         private bool IsGrindRefused(long gridId)

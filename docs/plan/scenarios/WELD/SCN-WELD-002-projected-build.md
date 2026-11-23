@@ -38,6 +38,7 @@
 ## Perf envelope
 `ServerDoWeld` `buildMs` ≤ 40 per call (engine cost); `resolveMs` ≤ 5; steadyAvgMs ≤ 3.
 ## Coverage
+ingame:S114 (small-grid projection, large BaR), ingame:S115 (small BaR on the small ship) — Steam report 2026-11-23
 unit:ProjectedBuildComponentTests.Lend_MovesOnePieceFromTheTransport_WhenTheBlockInventoryHasNone
 unit:ProjectedBuildComponentTests.Lend_FullBlockInventory_FailsWithoutLosingThePiece
 unit:ProjectedBuildComponentTests.Return_MovesTheUntakenPieceBackToTheTransport

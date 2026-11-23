@@ -31,6 +31,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         public long OwnerId = -1;
         /// <summary>Adds a large projector next to the BaRs (Bars &gt; 0), at (2*Bars, 0, 1).</summary>
         public bool Projector;
+        /// <summary>Small-grid ship instead of the large rig: small BaR (3x3x1) at the origin when Bars > 0, small battery,
+        /// small projector (RigBuilder.SmallProjectorPos) when Projector. No cargo: stock the BaR's own inventory.</summary>
+        public bool SmallGrid;
         /// <summary>Rig battery on/off at spawn (off = the BaRs have no power).</summary>
         public bool BatteryEnabled = true;
         /// <summary>Additional blocks at explicit grid positions (tagged for lookup).</summary>

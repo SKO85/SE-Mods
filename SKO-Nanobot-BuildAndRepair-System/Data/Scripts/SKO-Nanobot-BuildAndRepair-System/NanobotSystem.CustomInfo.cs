@@ -267,6 +267,7 @@ namespace SKONanobotBuildAndRepairSystem
                 if (State.InventoryFull) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_InventoryFull}[/color]{Environment.NewLine + Environment.NewLine}");
                 if (State.LimitsExceeded) customInfo.Append($"[color=#FFFFFF00]{Texts.Info_LimitReached}[/color]{Environment.NewLine + Environment.NewLine}");
                 // BUG-261122.2: projected blocks on the (expiring) skip list after failed builds.
+                if (State.GrindBlockedGrids > 0) customInfo.Append($"[color=#FFFFFF00]{string.Format(Texts.Info_GrindBlocked.String, State.GrindBlockedGrids)}[/color]{Environment.NewLine + Environment.NewLine}");
                 if (State.ProjectedBlocksSkipped > 0) customInfo.Append($"[color=#FFFFFF00]{string.Format(Texts.Info_ProjectedSkipped.String, State.ProjectedBlocksSkipped)}[/color]{Environment.NewLine + Environment.NewLine}");
 
                 var cnt = 0;

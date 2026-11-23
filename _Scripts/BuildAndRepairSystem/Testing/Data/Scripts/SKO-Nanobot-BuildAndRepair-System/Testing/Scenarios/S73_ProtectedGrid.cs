@@ -29,6 +29,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         internal static readonly HashSet<long> ProtectedGrids = new HashSet<long>();
         private static bool _handlerRegistered;
         private static int _refusedHits;
+        private int _maxBlockedShown;
 
         private readonly string _id;
         private readonly ProtectionMode _mode;
@@ -68,6 +69,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         {
             _integrityStart = -1;
             _refusedHits = 0;
+            _maxBlockedShown = 0;
             ProtectedGrids.Clear();
             if (_mode == ProtectionMode.DamageHandler && !_handlerRegistered)
             {
@@ -105,6 +107,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         public override void Sample(TestContext ctx)
         {
             if (_integrityStart < 0) _integrityStart = ctx.IntegritySum(_target.Targets);
+            // FEAT-261123.6: the BaR tells the player why it does not grind.
+            for (int i = 0; i < _bar.Bars.Count; i++)
+                if (_bar.Bars[i] != null && _bar.Bars[i].State.GrindBlockedGrids > _maxBlockedShown) _maxBlockedShown = _bar.Bars[i].State.GrindBlockedGrids;
         }
 
         public override bool IsComplete(TestContext ctx)
@@ -122,13 +127,17 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             ctx.Metric("left", (long)left);
             ctx.Metric("grindCalls", grindCalls);
             ctx.Metric("handlerRefusals", (long)_refusedHits);
+            ctx.Metric("grindBlockedShown", (long)_maxBlockedShown);
 
             ctx.Check(left == _target.Targets.Count && integrity >= _integrityStart - 0.01,
                 "protected grid was ground: " + (_target.Targets.Count - left) + " blocks gone, integrity " + _integrityStart + " -> " + integrity);
             if (_mode == ProtectionMode.Indestructible)
                 ctx.Check(grindCalls == 0, "indestructible grid still reached ServerDoGrind " + grindCalls + " times (scan should drop it)");
             else
+            {
+                ctx.Check(_maxBlockedShown >= 1, "the BaR never reported 'Grinding blocked by a shield / protection mod' (GrindBlockedGrids)");
                 ctx.Check(grindCalls <= MaxGrindCallsWhenRefused, "refused grid retried " + grindCalls + " times in " + Window + " s (expected <= " + MaxGrindCallsWhenRefused + ")");
+            }
         }
 
         public override void Teardown(TestContext ctx)

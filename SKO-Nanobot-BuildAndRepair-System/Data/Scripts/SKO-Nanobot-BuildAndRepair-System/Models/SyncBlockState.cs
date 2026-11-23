@@ -27,6 +27,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
         private bool _InventoryFull;
         private bool _LimitsExceeded;
         private int _ProjectedBlocksSkipped;
+        private int _GrindBlockedGrids;
         private bool _SafeZoneAllowsWelding;
         private bool _SafeZoneAllowsBuildingProjections;
         private bool _SafeZoneAllowsGrinding;
@@ -417,6 +418,21 @@ namespace SKONanobotBuildAndRepairSystem.Models
             }
         }
 
+        // FEAT-261123.6: grids a shield / protection mod refused to let this BaR grind (terminal info).
+        [ProtoMember(25)]
+        public int GrindBlockedGrids
+        {
+            get { return _GrindBlockedGrids; }
+            set
+            {
+                if (value != _GrindBlockedGrids)
+                {
+                    _GrindBlockedGrids = value;
+                    Changed = true;
+                }
+            }
+        }
+
         public TargetBlockDataHashList PossibleWeldTargets { get; private set; }
 
         [ProtoMember(30)]
@@ -660,6 +676,7 @@ namespace SKONanobotBuildAndRepairSystem.Models
             _InventoryFull = newState.InventoryFull;
             _LimitsExceeded = newState.LimitsExceeded;
             _ProjectedBlocksSkipped = newState.ProjectedBlocksSkipped;
+            _GrindBlockedGrids = newState.GrindBlockedGrids;
             _CurrentTransportStartTime = MyAPIGateway.Session.ElapsedPlayTime - (newState.LastTransmitted - newState.CurrentTransportStartTime);
             _CurrentTransportTime = newState.CurrentTransportTime;
 

@@ -24,8 +24,50 @@ namespace SKONanobotBuildAndRepairSystem.Testing
         private const string ConveyorSubtype = "LargeBlockConveyor";
         private const string StatorSubtype = "LargeStator";
 
+        public static readonly Vector3I SmallProjectorPos = new Vector3I(6, 0, 0);
+
+        /// <summary>Static small-grid ship: small BaR (3x3x1) at the origin, small battery, small projector.</summary>
+        private static MyObjectBuilder_CubeGrid BuildSmall(RigSpec spec, Vector3D position, long ownerId, TestRig rig)
+        {
+            var grid = MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_CubeGrid>();
+            grid.GridSizeEnum = MyCubeSize.Small;
+            grid.IsStatic = true;
+            grid.CreatePhysics = true;
+            grid.DestructibleBlocks = true;
+            grid.PersistentFlags = MyPersistentEntityFlags2.InScene | MyPersistentEntityFlags2.CastShadows;
+            grid.PositionAndOrientation = new MyPositionAndOrientation(position, spec.Forward, Vector3.Up);
+            grid.DisplayName = "NanobotTest-" + spec.Name;
+            grid.CubeBlocks = new List<MyObjectBuilder_CubeBlock>();
+            var used = new HashSet<Vector3I>();
+            if (spec.Bars > 0)
+            {
+                var bar = Create<MyObjectBuilder_ShipWelder>("SELtdSmallNanobotBuildAndRepairSystem", Vector3I.Zero, ownerId);
+                bar.Enabled = false; // switched on by the runner when the measured run starts
+                Add(grid, used, bar, 3, 3, 1);
+                rig.BarPositions.Add(Vector3I.Zero);
+            }
+            var battery = Create<MyObjectBuilder_BatteryBlock>("SmallBlockSmallBatteryBlock", new Vector3I(4, 0, 0), ownerId);
+            battery.Enabled = spec.BatteryEnabled;
+            battery.CurrentStoredPower = 0.05f;
+            battery.MaxStoredPower = 0.05f;
+            Add(grid, used, battery, 1, 1, 1);
+            rig.BatteryPosition = new Vector3I(4, 0, 0);
+            // Armor bridge so the ship is one piece (BaR 0..2, battery 4, projector 6).
+            Add(grid, used, Create<MyObjectBuilder_CubeBlock>("SmallBlockArmorBlock", new Vector3I(3, 0, 0), ownerId), 1, 1, 1);
+            Add(grid, used, Create<MyObjectBuilder_CubeBlock>("SmallBlockArmorBlock", new Vector3I(5, 0, 0), ownerId), 1, 1, 1);
+            if (spec.Projector)
+            {
+                var projector = Create<MyObjectBuilder_Projector>("SmallProjector", SmallProjectorPos, ownerId);
+                projector.Enabled = true;
+                Add(grid, used, projector, 1, 1, 1);
+                rig.ProjectorPosition = SmallProjectorPos;
+            }
+            return grid;
+        }
+
         public static MyObjectBuilder_CubeGrid Build(RigSpec spec, Vector3D position, long ownerId, TestRig rig)
         {
+            if (spec.SmallGrid) return BuildSmall(spec, position, ownerId, rig);
             var grid = MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_CubeGrid>();
             grid.GridSizeEnum = MyCubeSize.Large;
             grid.IsStatic = !spec.Dynamic;
