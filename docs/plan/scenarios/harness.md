@@ -47,10 +47,10 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89 |
 | `@zone` | Safe zones | S39-S42, S53, S85 |
 | `@shields` | DefenseShields (skipped without the mod) | S58-S63 |
-| `@inventory` | Component sources, sorter, empty cargo, push targets | S02, S84, S87-S89 |
-| `@claims` | Block claims, per-grid limit, BaRs sharing work | S05, S06, S50, S51, S54-S56, S86 |
+| `@inventory` | Component sources, sorter, empty cargo, push targets, push options | S02, S84, S87-S93 |
+| `@claims` | Block claims, per-grid limit, BaRs sharing work, takeovers | S05, S06, S50, S51, S54-S56, S86, S94-S98 |
 | `@cluster` | Cluster coordination and the per-grid limit | S06, S07, S50, S54 |
-| `@perf` | Load, large grids, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70 |
+| `@perf` | Load, large grids, scan cost by grid size, ShowArea and budget cost (long) | S08, S28-S33, S43, S52, S64-S70, S99-S102 |
 | `@companion` | PB API and the companion script | S09, S71, S81-S83 |
 | `@config` | Admin settings (Fixed / Default, limits, checks) | S46-S53 |
 | `@priority` | Weld / grind priority lists | S14-S16 |
@@ -185,6 +185,19 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S87 | Source: components only in a docked ship's cargo are used for welding | INV-001 | ~15 s | 261123.10 — 5/5 in 2.5 s, 100 plates from the docked ship |
 | S88 | Source: components only in an assembler's output are used for welding | INV-001 | ~10 s | 261123.10 — 5/5, assembler at (0,0,3) |
 | S89 | Push targets full: BaR pauses without losing ore, resumes once space is freed | INV-001, INV-002 | ~60 s | 261123.15 — full reported, 124155 kg iron kept, done 15 s after freeing |
+| S90 | Push immediately off: nothing leaves the BaR's inventory | INV-002 | 45 s | 261123.19 — nothing pushed in 45 s |
+| S91 | Push ingots/ore immediately: only ore leaves the BaR | INV-002 | ≤75 s | 261123.19 — ore pushed at 21.9 s |
+| S92 | Push components immediately: only components leave the BaR | INV-002 | ≤75 s | 261123.19 — plates pushed at 34.3 s |
+| S93 | Push items immediately: only other items (tools) leave the BaR | INV-002 | ≤75 s | 261123.19 — tool pushed at 34.2 s |
+| S94 | Claims: 2 BaRs finish each block they start (never more half-welded blocks than BaRs) | BUDGET-001 | ~30 s | 261123.19 — peak 2 half-welded, done 7.2 s |
+| S95 | Claims: 2 BaRs finish each block they grind (never more half-ground blocks than BaRs) | BUDGET-001 | ~30 s | 261123.19 — peak 2 half-ground, done 14.8 s |
+| S96 | Claims: BaR destroyed mid-weld, claim freed at once, other BaR finishes | BUDGET-001 | ~30 s | 261123.19 — claim freed 0.5 s, finished 11.0 s |
+| S97 | Claims: BaR loses power mid-weld, claim expires, BaR on another ship finishes | BUDGET-001 | ~40 s | 261123.19 — claim expired 8.2 s, B finished 19.2 s |
+| S98 | Claims: BaR switched off mid-grind, claim expires, other BaR finishes grinding | BUDGET-001 | ~40 s | 261123.19 — claim expired 7.7 s, B finished 31.7 s |
+| S99 | Scan cost: 1 BaR scanning a 1000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | not yet |
+| S100 | Scan cost: 1 BaR scanning a 2000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | not yet |
+| S101 | Scan cost: 1 BaR scanning a 5000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | not yet |
+| S102 | Scan cost: 1 BaR scanning a 10000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | not yet |
 
 ## Scenarios
 
@@ -593,6 +606,63 @@ them, so nothing splits off), each full of iron ore. Records `worldMaxFloatingOb
 location at the end and at the first loss. **Pass** the BaR reports a full
 inventory while nothing can be pushed (first 30 s), resumes after two rig containers are emptied at 30 s and grinds the
 container within 120 s; iron ore (derelict + rig + BaR + transport) is never below the starting amount.
+
+### S90
+**Proves** the three "push immediately" options, one variant each (S90 none, S91 ingots/ore, S92 components, S93 other
+items). The idle BaR holds 200 kg iron ore, 50 SteelPlate and 1 hand welder (`WelderItem`); the rig cargo is empty.
+**Pass** only the class whose option is on leaves the BaR (into the rig cargo; up to 75 s, `pushedAtS`; S90 watches
+45 s), the others stay, and every class is conserved (BaR + cargo = start). An idle BaR refreshes its push targets with
+its slower idle scan and backs off 15 s after a push that found no target, so a fresh idle BaR can take ~45 s to push.
+Diagnostics: `barFlags`, engine `*CanTransfer` / `*CanAdd` for BaR -> rig container.
+
+### S91
+Variant of S90: `PushIngotOreImmediately` only.
+
+### S92
+Variant of S90: `PushComponentImmediately` only.
+
+### S93
+Variant of S90: `PushItemsImmediately` only.
+
+### S94
+**Proves** BaRs finish what they start: 2 BaRs (BoundingBox, WeldOnly), 10 damaged blocks, WorkSpeed 10,
+WeldingMultiplier 0.1. Sampled every 0.5 s: blocks welded a bit but not finished (`inProgressPeak`). **Pass** never
+more than 2 (one per BaR) and all finished within 120 s.
+
+### S95
+Grinding counterpart of S94: 2 BaRs grind a 10-block derelict (janitor NoOwnership, GrindingMultiplier 0.1).
+**Pass** never more than 2 blocks partly ground at once, all gone within 120 s.
+
+### S96
+**Proves** a destroyed BaR frees its claims at once (`Close` -> `ReleaseAllForSystem`): A welds X alone (B off,
+WorkSpeed 1, WeldingMultiplier 0.1); as soon as X gained integrity, A's block is razed and B switched on.
+**Pass** A held the claim, the claim is gone within 3 s, B finishes X. **Records** `releaseSeconds`, `takeoverSeconds`,
+`finishSeconds`.
+
+### S97
+**Proves** an unpowered BaR's claim expires: A on its own rig welds X; B on a second rig 25 m away (own battery,
+stocked). Mid-weld A's battery is switched off and B on. **Pass** A's claim released within TTL + 3 s, B finishes X.
+
+### S98
+Grinding counterpart of S56: A grinds a derelict block X alone; mid-grind A is switched off and B on. **Pass** A's
+claim released within TTL + 3 s, B finishes grinding X.
+
+### S99
+**Records** scan cost by grid size: one BaR (BoundingBox, area 200 m, WeldOnly) next to a static grid of 1,000 blocks
+(20 damaged, welded slowly so the BaR keeps scanning; the rest intact armor, rows of 100). 45 s. Per-method cost of
+the game lookups (`SharedEntityCache.GetEntitiesInBox` = grids in the area, `SharedGridBlockCache.GetBlocks*` = all
+blocks of a grid) and the mod's scan steps (`AsyncClusterScan`, `AsyncAddBlocksOfBox`, `PreSortClusterCandidates`,
+`ApplyClusterResultToSelf`). **Pass** main-thread tick avg <= 1 ms and sim speed >= 0.8 (the scan runs on a
+background thread; its cost is recorded, compare across S99-S102).
+
+### S100
+S99 with a 2,000-block grid.
+
+### S101
+S99 with a 5,000-block grid.
+
+### S102
+S99 with a 10,000-block grid.
 
 ## Building blocks for new scenarios
 

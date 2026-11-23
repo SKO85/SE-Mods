@@ -17,7 +17,8 @@
 ## Perf envelope
 `TruncateGridAware` maxMs ≤ 2 for 5000 candidates (pooled buffers, no allocation).
 ## Coverage
-planned: unit:TruncateGridAwareTests.FairShareAcrossGrids (second wave — needs `new NanobotSystem()` off-game)
+unit:TargetSortingTests
+
 ## Last verified
 never
 ## Related

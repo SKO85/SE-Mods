@@ -95,7 +95,20 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new S86_StarvedNeighbour(),
             new S87_Sources("S87", SourceKind.DockedShipCargo),
             new S87_Sources("S88", SourceKind.AssemblerOutput),
-            new S89_PushTargetsFull()
+            new S89_PushTargetsFull(),
+            new S90_PushImmediately("S90", PushFlag.None),
+            new S90_PushImmediately("S91", PushFlag.IngotOre),
+            new S90_PushImmediately("S92", PushFlag.Components),
+            new S90_PushImmediately("S93", PushFlag.Items),
+            new S94_ClaimRobustness("S94", ClaimCase.WeldFocus),
+            new S94_ClaimRobustness("S95", ClaimCase.GrindFocus),
+            new S94_ClaimRobustness("S96", ClaimCase.WelderDestroyed),
+            new S94_ClaimRobustness("S97", ClaimCase.WelderUnpowered),
+            new S94_ClaimRobustness("S98", ClaimCase.GrinderStopped),
+            new S99_ScanCost("S99", 1000),
+            new S99_ScanCost("S100", 2000),
+            new S99_ScanCost("S101", 5000),
+            new S99_ScanCost("S102", 10000)
         };
 
         /// <summary>
@@ -111,10 +124,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             new ScenarioGroup("grind", "Grinding: janitor, order, colours, protection, leaving targets, full storage", "S04,S11,S12,S13,S16,S17,S24,S45,S73,S74,S76,S89"),
             new ScenarioGroup("zone", "Safe zones", "S39,S40,S41,S42,S53,S85"),
             new ScenarioGroup("shields", "DefenseShields (skipped without the mod)", "S58,S59,S60,S61,S62,S63"),
-            new ScenarioGroup("inventory", "Component sources, sorter, empty cargo, push targets", "S02,S84,S87,S88,S89"),
-            new ScenarioGroup("claims", "Block claims, per-grid limit, BaRs sharing work", "S05,S06,S50,S51,S54,S55,S56,S86"),
+            new ScenarioGroup("inventory", "Component sources, sorter, empty cargo, push targets, push options", "S02,S84,S87,S88,S89,S90,S91,S92,S93"),
+            new ScenarioGroup("claims", "Block claims, per-grid limit, BaRs sharing work, takeovers", "S05,S06,S50,S51,S54,S55,S56,S86,S94,S95,S96,S97,S98"),
             new ScenarioGroup("cluster", "Cluster coordination and the per-grid limit", "S06,S07,S50,S54"),
-            new ScenarioGroup("perf", "Load, large grids, ShowArea and budget cost (long)", "S08,S28,S29,S30,S31,S32,S33,S43,S52,S64,S65,S66,S67,S68,S69,S70"),
+            new ScenarioGroup("perf", "Load, large grids, scan cost by grid size, ShowArea and budget cost (long)", "S08,S28,S29,S30,S31,S32,S33,S43,S52,S64,S65,S66,S67,S68,S69,S70,S99,S100,S101,S102"),
             new ScenarioGroup("companion", "PB API and the companion script", "S09,S71,S81,S82,S83"),
             new ScenarioGroup("config", "Admin settings (Fixed / Default, limits, checks)", "S46,S47,S48,S49,S50,S51,S52,S53"),
             new ScenarioGroup("priority", "Weld / grind priority lists", "S14,S15,S16"),

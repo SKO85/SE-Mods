@@ -27,9 +27,13 @@
 manual
 ingame:S89
 unit:InventoryFullLatchTests
+ingame:S90
+ingame:S91
+ingame:S92
+ingame:S93
 
 ## Last verified
-v2.5.7 build 261123.15 2026-11-23 — in game: S89 (push targets full / freed, no ore lost); unit green.
+v2.5.7 build 261123.19 2026-11-23 — in game: S89-S93 (push options, full storage); unit green.
 
 ## Related
 BUG-015, BUG-089, BUG-114, BUG-126, BUG-260526.1, BUG-260612.25/.26, BUG-260824.1, GitHub #141

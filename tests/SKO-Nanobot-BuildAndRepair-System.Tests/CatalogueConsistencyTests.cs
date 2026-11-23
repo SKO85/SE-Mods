@@ -72,10 +72,10 @@ namespace SKONanobotBuildAndRepairSystem.Tests
         public void HarnessDoc_DocumentsEveryRegisteredScenario()
         {
             var doc = File.ReadAllText(Path.Combine(ScenariosDir, "harness.md"));
-            var sections = new HashSet<string>(Regex.Matches(doc, @"^### (S\d{2})\s*$", RegexOptions.Multiline).Cast<Match>().Select(m => m.Groups[1].Value));
+            var sections = new HashSet<string>(Regex.Matches(doc, @"^### (S\d{2,3})\s*$", RegexOptions.Multiline).Cast<Match>().Select(m => m.Groups[1].Value));
             var summary = doc.Substring(doc.IndexOf("## Summary", StringComparison.Ordinal)); // rows must sit in the Summary table
             summary = summary.Substring(0, summary.IndexOf("\n## ", 1, StringComparison.Ordinal));
-            var rows = new HashSet<string>(Regex.Matches(summary, @"^\| (S\d{2}) \|", RegexOptions.Multiline).Cast<Match>().Select(m => m.Groups[1].Value));
+            var rows = new HashSet<string>(Regex.Matches(summary, @"^\| (S\d{2,3}) \|", RegexOptions.Multiline).Cast<Match>().Select(m => m.Groups[1].Value));
             var registered = HarnessScenarioIds();
             registered.Add("S00"); // hidden warm-up, queued by the runner
 
