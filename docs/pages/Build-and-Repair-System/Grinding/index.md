@@ -151,13 +151,13 @@ Grinding respects Safe Zones and Defence Shields:
 - **Safe Zone** — grinding a target inside a Safe Zone is only allowed when the Safe Zone permits it, and even then only for your own, faction, or unowned blocks. Grinding enemy grids inside a zone you do not own is blocked.
 - **Defence Shields** — grids protected by an active shield are skipped. If your *own* shield is active, the janitor will not grind grids outside the shield (preventing shield-abuse). Disable your shield first to grind external targets.
 
-Both checks can be turned off via `SafeZoneCheckEnabled` and `ShieldCheckEnabled` in `ModSettings.xml`.
+Both checks can be turned off via `SafeZoneCheckEnabled` and `ShieldCheckEnabled` in `ModSettings.xml`. Turning the safe zone check off only stops the *mod* from checking; on a server the game itself still refuses welding / grinding where the zone forbids it. Since v2.5.7 the BaR then shows **Welding blocked** / **Grinding blocked** in its info panel and skips that grid for a while.
 
 ---
 
 ## Plugin Protection
 
-Grids protected by server plugins (e.g. the `!protect` command from ALE PCU Transferrer for Torch), and grids the game itself marks indestructible, are detected and skipped. Use `!unprotect` on Torch to make the grid grindable again.
+Grids protected by server plugins (e.g. the `!protect` command from ALE PCU Transferrer for Torch), and grids the game itself marks indestructible, are detected and skipped. Since v2.5.7 the info panel shows **Grinding blocked by a shield / protection mod** when a plugin or mod refuses the grind. Use `!unprotect` on Torch to make the grid grindable again.
 
 ---
 
