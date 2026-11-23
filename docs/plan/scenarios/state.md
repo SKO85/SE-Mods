@@ -15,7 +15,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-CORE-002 | CORE | 2 | BoundingBox search mode: area size/offset clamps and Show Area | manual; ingame:S25; ingame:S75, S76 | never |
 | SCN-CORE-003 | CORE | 2 | No power / power restored / insufficient power | ingame:S19; ingame:S20 | never |
 | SCN-CORE-004 | CORE | 2 | Work-mode order when weld and grind work exist together | ingame:S77; ingame:S78 | 261122.28 in game |
-| SCN-CFG-001 | CFG | 1 | ModSettings.xml out-of-range values are clamped on load | unit:SyncModSettingsTests.ValidateAndClamp_ClampsEveryBoundedField | 261006.3 unit |
+| SCN-CFG-001 | CFG | 1 | ModSettings.xml out-of-range values are clamped on load | unit:SyncModSettingsTests.ValidateAndClamp_ClampsEveryBoundedField; unit:TransportTimeTests | 261006.3 unit |
 | SCN-CFG-002 | CFG | 1 | Legacy settings migrate to version 7; deprecated GrindIfWeldGetStuck folded | unit:SyncModSettingsTests.AdjustSettings_MigratesOldVersion_AndIsIdempotent; unit:BlockSettingsLegacyLoadTests | 261006.3 unit |
 | SCN-CFG-003 | CFG | 2 | Admin restrictions and switches in ModSettings win over block settings | ingame:S46, S47, S48, S49, S50, S51, S52, S53; unit:BlockSettingsLimitsTests | never |
 | SCN-CHAT-001 | CHAT | 1 | /nanobars config set/get round trip and bounds rejection | unit:ConfigCommandTests.SetGetRoundTrip_AndBoundsRejection | 261006.3 unit |

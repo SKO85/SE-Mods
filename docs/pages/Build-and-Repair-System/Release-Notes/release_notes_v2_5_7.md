@@ -28,6 +28,8 @@ nav_order: 0
 - When a **shield or protection mod** stops a BaR from grinding a grid, its terminal now says so ("Grinding blocked by a shield / protection mod") instead of the BaR just quietly skipping it.
 - A BaR whose inventory is practically full (it can't fit the next load of ore) now says **Inventory full** instead of looking idle.
 
+- Servers that set the BaR **Range below 100 m** no longer get an error in the log (and possibly an error popup) on every weld or grind. Ranges above 100 m now also scale the nanobot speed smoothly (150 m is really 1.5x, not 1x).
+
 ## Servers
 
 - **Less network traffic on servers.** A BaR now only sends its status to players who are near it (within the world's sync distance). Players at another base no longer receive updates for BaRs they can't even see. A working BaR costs each nearby player about 0.5 KB/s; idle BaRs send nothing.

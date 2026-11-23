@@ -146,7 +146,7 @@ namespace SKONanobotBuildAndRepairSystem
                 State.CurrentTransportIsCollecting = true;
                 State.CurrentTransportTarget = ComputePosition(collectingFirstTarget.Entity);
                 State.CurrentTransportStartTime = playTime;
-                State.CurrentTransportTime = TimeSpan.FromSeconds(2d * collectingFirstTarget.Distance / Settings.TransportSpeed);
+                State.CurrentTransportTime = TransportTime(collectingFirstTarget.Distance, Settings.TransportSpeed);
 
                 ServerEmptyTransportInventory(true);
                 transporting = true;

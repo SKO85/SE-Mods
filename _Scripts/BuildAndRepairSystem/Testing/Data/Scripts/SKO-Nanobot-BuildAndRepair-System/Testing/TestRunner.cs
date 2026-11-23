@@ -338,6 +338,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             {
                 _result.Fail("assert threw: " + ex.Message);
             }
+            // Any mod error during the run fails it (found BUG-261123.9); scenarios that expect errors opt out.
+            var baseScenario = _current.Scenario as TestScenarioBase;
+            if (_ctx.ErrorsSinceStart > 0 && (baseScenario == null || !baseScenario.AllowsModErrors))
+                _result.Fail(_ctx.ErrorsSinceStart + " mod error(s) logged during the run (see NanobotBuildAndRepairSystem.log)");
             EnterPhase(Phase.Teardown);
         }
 

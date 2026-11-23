@@ -663,7 +663,7 @@ namespace SKONanobotBuildAndRepairSystem
                     State.CurrentTransportIsCollecting = false;
                     State.CurrentTransportTarget = transportPos;
                     State.CurrentTransportStartTime = playTime;
-                    State.CurrentTransportTime = TimeSpan.FromSeconds(2d * targetData.Distance / Settings.GrindTransportSpeed);
+                    State.CurrentTransportTime = TransportTime(targetData.Distance, Settings.GrindTransportSpeed);
                     if (tsTransportMark != 0L) tsTransportSet = Stopwatch.GetTimestamp() - tsTransportMark;
                 }
 

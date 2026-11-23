@@ -27,6 +27,8 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
         public abstract string Description { get; }
         public virtual int TimeoutSeconds { get { return 120; } }
         public virtual int ReadyTimeoutSeconds { get { return 60; } }
+        /// <summary>True when the scenario expects the mod to log errors (otherwise any logged error fails the run).</summary>
+        public virtual bool AllowsModErrors { get { return false; } }
         public virtual IList<string> PerfMethods { get { return DefaultPerfMethods; } }
 
         public virtual string SkipReason(TestContext ctx) { return null; }

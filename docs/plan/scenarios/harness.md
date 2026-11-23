@@ -842,6 +842,9 @@ S128's rig with all BaRs switched off / on every 1.5 s for 21 s (claims dropped 
 changing): all 60 welded afterwards, no claim left.
 
 ## Standard metrics (every scenario)
+A run fails when the mod logs an error during it (`errorsLogged` > 0), unless the scenario sets `AllowsModErrors`
+(found BUG-261123.9). S71 recompiles the companion script on purpose: its ~300 ms compile lands in the harness tick, so
+its `tickPeakMs` is the game's compiler, not the mod (mod methods stay < 0.3 ms).
 `runS`, `tickAvgMs`, `tickPeakMs`, `simMin`, `simAvg`, budget peaks, `errorsLogged` (mod errors during the run),
 `world.welderSpeed / grinderSpeed / dedicated`, `net.*` (traffic, FEAT-261123.7), and `cycles.total` plus
 `cycles.<Outcome>` in % of all ready BaR cycles (FEAT-261123.4): Worked, WaitingDelivery, NoTargets, InventoryFull,
