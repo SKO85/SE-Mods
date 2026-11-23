@@ -31,6 +31,13 @@ Code: `_Scripts/BuildAndRepairSystem/Testing/Data/Scripts/SKO-Nanobot-BuildAndRe
   `weldBudgetPeak`, `grindBudgetPeak`, `assignmentsPeak` (claims), `otherBars`, plus `calls/steadyAvgMs/maxMs` for the
   scenario's profiled methods.
 
+### Test HUD
+While a session runs, the player who started it sees a HUD (TextHudAPI, like the debug HUD): **top right** the session
+table (test, run, state PASS / FAIL / SKIP / RUN / queued, time, first failure or skip reason; the last ~24 rows plus a
+done / passed / failed / skipped line), **bottom right** the running test (id, n / total, description, phase, elapsed /
+max time) or the session result when finished. A new `test run` starts it fresh, `test clear` removes it. On a
+dedicated server the server sends it to the caller (message 40150, not counted in the `net.*` metrics).
+
 ## Groups
 
 `/nanobars test run @name` runs a group; groups combine with ids and ranges (`@zone,@shields,S03`). A scenario can be in
