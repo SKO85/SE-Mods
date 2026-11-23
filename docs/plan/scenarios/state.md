@@ -60,7 +60,7 @@ CORE 3 · WELD 7 · GRIND 5 · COLLECT 2 · INV 3 · PRIO 2 · CLUSTER 4 · BUDG
 | SCN-TERM-001 | TERM | 2 | Terminal controls, actions and sliders reflect fixed vs default mod settings | manual, unit | 261023.6 unit |
 | SCN-API-001 | API | 3 | PB scripting API incl. ScriptControlled and ScriptControllFixed lockdown | manual, unit:CompanionScriptContractTests; ingame:S09 | 261122.18 in game |
 | SCN-API-002 | API | 3 | Companion script: groups, assembler queuing, displays, tags, Custom Data, arguments | unit:CompanionScriptBehaviourTests; ingame:S71, S81, S82, S83 | 261122.29 in game |
-| SCN-NET-001 | NET | 4 | Dedicated server: client settings sync and per-sender rate limit | manual; unit:ProtoContractTests.ProtoMemberTags_AreUniquePerType | 261006.3 unit |
+| SCN-NET-001 | NET | 4 | Dedicated server: client settings sync and per-sender rate limit | manual; unit:ProtoContractTests.ProtoMemberTags_AreUniquePerType; unit:SettingsReceiveTests | 261123.58 unit |
 | SCN-LOC-001 | LOC | 1 | Terminal labels render in EN / DE / PL / RU and DisableLocalization | manual; unit:LocalizationTests.Translation_HasExactlyTheEnglishKeys | 261006.3 unit |
 
 ## Coverage summary

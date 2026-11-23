@@ -26,6 +26,8 @@
 ## Perf envelope
 `MsgBlockStateSend` steadyAvgMs ≤ 0.3; `TryTransmitState` skip path ≤ 0.05 ms.
 ## Coverage
+unit:SettingsReceiveTests (access check: owner / admin / no access / unknown sender; forger rejected before the
+rate limit; 500 ms per (block, sender); two senders both applied; client ignores non-server settings)
 manual
 unit:ProtoContractTests.ProtoMemberTags_AreUniquePerType
 ## Last verified
