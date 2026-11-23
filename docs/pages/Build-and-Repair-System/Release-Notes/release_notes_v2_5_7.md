@@ -27,6 +27,10 @@ nav_order: 0
 - When a **shield or protection mod** stops a BaR from grinding a grid, its terminal now says so ("Grinding blocked by a shield / protection mod") instead of the BaR just quietly skipping it.
 - A BaR whose inventory is practically full (it can't fit the next load of ore) now says **Inventory full** instead of looking idle.
 
+## Servers
+
+- **Less network traffic on servers.** A BaR now only sends its status to players who are near it (within the world's sync distance). Players at another base no longer receive updates for BaRs they can't even see. A working BaR costs each nearby player about 0.5 KB/s; idle BaRs send nothing.
+
 ## Docs
 
 - New FAQ entry: why BaRs stop building a projection when you log off or fly away (the game hides projections when no player is near).

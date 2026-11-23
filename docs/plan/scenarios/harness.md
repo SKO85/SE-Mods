@@ -149,7 +149,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S50 | DisableLimitSystemsPerTargetGrid: limit 2 ignored | CFG-003, CLUSTER-002 | 4 s | 261122.11 |
 | S51 | AssignToSystemEnabled=false: finished without claims | CFG-003, BUDGET-001 | 4 s | 261122.11 |
 | S52 | MaxWeldsPerTick=1: never more than one weld per tick | CFG-003, BUDGET-002 | 1 s | 261122.11 |
-| S53 | SafeZoneCheckEnabled=false: BaR ignores a no-welding zone | CFG-003, ZONE-001 | 2 s | 261122.11 |
+| S53 | SafeZoneCheckEnabled=false: BaR ignores a no-welding zone | CFG-003, ZONE-001 | 2 s | 261123.50 Torch — refused: 1 weld call / 20 s, "Welding blocked" shown |
 | S54 | Per-grid limit lowered 4 → 2 while working: surplus released | CLUSTER-002 | 35 s | 261122.12 |
 | S55 | Blocks claimed while welded, none left claimed afterwards | BUDGET-001 | 7 s | 261122.13 |
 | S56 | Welding BaR switched off: claim released, other BaR finishes | BUDGET-001 | 22 s | 261122.13 |
@@ -222,7 +222,7 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S123 | Traffic / spikes: 10 BaRs welding 100 + 1,000 + 3,000 + 8,000-block grids at once | BUDGET-010 | ~1 min | never |
 | S124 | Projection with weld option Functional: placed and welded to functional, not full | WELD-003, WELD-002 | <1 min | never |
 | S125 | Projection with weld option Skeleton: placed, not welded further | WELD-003, WELD-002 | <1 min | never |
-| S126 | Sync: 5 BaRs working 10 km from every player send them no state | BUDGET-010 | <1 min | never |
+| S126 | Sync: 5 BaRs working 10 km from every player send them no state | BUDGET-010 | <1 min | 261123.50 Torch — 20/20 welded, 0 state bytes to the client |
 
 ## Scenarios
 
