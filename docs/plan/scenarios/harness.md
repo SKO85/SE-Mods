@@ -850,6 +850,8 @@ base block is ground and must be found as separate grids; one mechanical block p
 intact, no mod errors. **Records** `gridsLeft`, `headGrids`, `doneS`.
 
 ## Standard metrics (every scenario)
+Single-call peak checks (`tickPeakMs` limits, `CheckMethodMaxMax`) get +25 ms on a dedicated server: Torch shows
+one-off ~18 ms stalls (GC / host) that land in whichever method runs; averages stay strict.
 A run fails when the mod logs an error during it (`errorsLogged` > 0), unless the scenario sets `AllowsModErrors`
 (found BUG-261123.9). S71 recompiles the companion script on purpose: its ~300 ms compile lands in the harness tick, so
 its `tickPeakMs` is the game's compiler, not the mod (mod methods stay < 0.3 ms).

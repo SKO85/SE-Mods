@@ -280,7 +280,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 ctx.Check(rate >= _minPerSecond, (HasWeld ? "welded" : "ground") + " " + rate.ToString("F1") + "/s below the floor of " + _minPerSecond.ToString("F0") + "/s");
             }
             ctx.Check(ctx.TickAvgMs <= 2.0, "tickAvgMs>2");
-            ctx.Check(ctx.TickPeakMs <= 50.0, "tickPeakMs>50");
+            ctx.CheckTickPeak(50.0);
         }
     }
 }

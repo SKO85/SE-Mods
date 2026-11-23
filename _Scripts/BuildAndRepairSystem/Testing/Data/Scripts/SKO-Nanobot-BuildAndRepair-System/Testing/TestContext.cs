@@ -612,8 +612,27 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             if (avg > maxAvg) Result.Fail(method + ".steadyAvgMs=" + avg.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + ">" + maxAvg.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
+        /// <summary>
+        /// Single-call peak allowance on a dedicated server: Torch shows one-off ~18 ms stalls (GC / host) landing in
+        /// whichever method runs (S08 x3: weld, aggregate, component lookup in turn). Averages stay strict.
+        /// </summary>
+        public static double StallAllowanceMs
+        {
+            get { return MyAPIGateway.Utilities != null && MyAPIGateway.Utilities.IsDedicated ? 25.0 : 0.0; }
+        }
+
+        /// <summary>Peak of the mod tick against a limit (plus the dedicated-server stall allowance).</summary>
+        public void CheckTickPeak(double limitMs, string label = null)
+        {
+            var limit = limitMs + StallAllowanceMs;
+            if (TickPeakMs > limit)
+                Result.Fail((label ?? "tickPeakMs") + "=" + TickPeakMs.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)
+                    + ">" + limit.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
         public void CheckMethodMaxMax(string method, double maxMax)
         {
+            maxMax += StallAllowanceMs;
             MethodProfiler.MethodStatsSnapshot s;
             if (!TryGetMethodStats(method, out s) || s.Calls == 0) return;
             if (s.MaxMs > maxMax) Result.Fail(method + ".maxMs=" + s.MaxMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + ">" + maxMax.ToString(System.Globalization.CultureInfo.InvariantCulture));

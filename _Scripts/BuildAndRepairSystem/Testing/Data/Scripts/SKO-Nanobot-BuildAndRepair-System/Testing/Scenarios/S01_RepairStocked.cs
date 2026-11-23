@@ -43,7 +43,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             ctx.CheckMethodAvgMax("ServerDoWeld", 2.0);
             ctx.CheckMethodMaxMax("ServerDoWeld", 30.0);
             ctx.CheckMethodMaxMax("ServerTryWelding", 10.0);
-            ctx.Check(ctx.TickPeakMs <= 10.0, "tickPeakMs>10");
+            ctx.CheckTickPeak(10.0);
             ctx.Check(ctx.SimMin >= 0.9, "simMin<0.9");
         }
     }

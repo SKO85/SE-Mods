@@ -288,7 +288,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                 (diff > 0 ? " (blocks got components for free)" : " (components charged twice)"));
 
             ctx.CheckMethodMaxMax("ServerDoWeld", 40.0);
-            ctx.Check(ctx.TickPeakMs <= 15.0, "tickPeakMs>15");
+            ctx.CheckTickPeak(15.0);
         }
     }
 }

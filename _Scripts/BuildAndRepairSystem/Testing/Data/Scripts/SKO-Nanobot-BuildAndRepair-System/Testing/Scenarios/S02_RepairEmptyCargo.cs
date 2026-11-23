@@ -59,7 +59,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
 
             ctx.CheckMethodMaxMax("ServerTryWelding", 5.0);
             ctx.CheckMethodMaxMax("RebuildMissingComponentsAggregate", 2.0);
-            ctx.Check(ctx.TickPeakMs <= 5.0, "tickPeakMs>5 while starved");
+            ctx.CheckTickPeak(5.0, "tickPeakMs while starved");
         }
     }
 }
