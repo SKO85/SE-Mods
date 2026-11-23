@@ -253,7 +253,7 @@ These were identified and fixed on the `fix/v2.5.1` branch — see MEMORY for de
 | FEAT-261122.4 | Medium | v2.5.7 | `tests/`, harness `Testing/Scenarios` (S77+), docs/plan/scenarios | Done | Test coverage plan for v2.5.7: 30 prioritised unit / harness items (inventory sources and push, GrindBeforeWeld, cluster re-election, network receive path, chat commands, collecting, power, perf thresholds) from REVIEW-261122.2 and the 2026-11-22 follow-ups — closed by owner 2026-11-23 |
 | FEAT-261123.1 | High | v2.5.7+ | mod (see ticket) | TODO | REVIEW-261123.1: Cheaper per-block scan checks — owner: safe parts approved for v2.5.7 |
 | FEAT-261123.2 | Medium | v2.5.7+ | mod (see ticket) | Done | REVIEW-261123.1: Keep per-grid scan results until the grid changes — rejected (background-only gain, staleness risk) |
-| FEAT-261123.3 | Low | v2.5.7+ | mod (see ticket) | TODO | REVIEW-261123.1: Pull more components per conveyor transfer — on hold: re-measure after BUG-261123.6 |
+| FEAT-261123.3 | Low | v2.5.7+ | mod (see ticket) | Done | REVIEW-261123.1: Pull more components per conveyor transfer — on hold: re-measure after BUG-261123.6 — done 261123.54: -40 % conveyor transfers (S64) |
 | FEAT-261123.4 | Medium | v2.5.7+ | mod (see ticket) | TODO | REVIEW-261123.1: Profiler markers and measurement gaps — owner: idle reasons + scan split, rest closed |
 | FEAT-261123.5 | Low | v2.5.7+ | mod (see ticket) | TODO | REVIEW-261123.1: Small performance items — owner: DS info + reputation only |
 | FEAT-261123.6 | Medium | v2.5.7 | `NanobotSystem.Grinding.cs`, `SyncBlockState`, `CustomInfo`, Localization | Done | Steam: terminal shows "Grinding blocked by a shield / protection mod" when a veto stops grinding |

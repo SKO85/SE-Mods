@@ -21,6 +21,7 @@ nav_order: 0
 
 - **BaRs on different ships help each other again.** A BaR that ran out of components used to make every other BaR skip its damaged blocks for a while, so a well-stocked BaR on another ship would barely repair it. Now only BaRs sharing the same supply (docked or connected) skip those blocks.
 - **Big BaR setups no longer stall when components are spread over many containers.** BaRs used to give up on blocks too early when the first containers they looked in were empty, then sat idle for a while, getting slower as the base's stock spread out. Now they keep looking through the rest first. In our test with 50 BaRs and 300 containers a job that took four minutes now finishes in ten seconds.
+- BaRs fetch components for the next couple of blocks in one go when a container has plenty, so repairing uses **about 40 % fewer conveyor transfers** (less load on big bases). Containers that are running low are left alone.
 - A BaR that was handed over to another player no longer refuses to build projections because of the **original builder's** block or PCU limits. The game now decides by the limits of the BaR's owner, who also pays for the blocks, and the terminal says so when those limits are reached.
 
 - A BaR no longer keeps "welding" a block the game won't let it weld (for example in a safe zone on a server): it skips that grid for a while and its terminal says **Welding blocked by a safe zone / protection**.
