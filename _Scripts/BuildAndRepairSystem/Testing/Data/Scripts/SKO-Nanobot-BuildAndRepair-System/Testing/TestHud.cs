@@ -21,7 +21,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing
 
     /// <summary>
     /// Test harness HUD (TextHudAPI, default font like the debug HUD): the session table anchored to the top-right
-    /// corner, the running test anchored to the bottom-right corner. The table arrives as lines with tab-separated
+    /// corner, the running test anchored to the top-left corner. The table arrives as lines with tab-separated
     /// cells; each column is its own text block at a fixed offset (the default font is not monospaced). Built on the
     /// server by TestRunner; drawn directly in single player / on a listen server, sent to the calling client on a
     /// dedicated server. Testing variant only.
@@ -213,9 +213,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             var size = _current.GetTextLength();
             var width = Math.Abs(size.X);
             var height = Math.Abs(size.Y);
-            // Anchor the panel's bottom-right corner to the screen's bottom-right corner.
-            var left = Edge - Padding - width;
-            var top = -Edge + Padding + height;
+            // Anchor the panel's top-left corner to the screen's top-left corner.
+            var left = -Edge + Padding;
+            var top = Edge - Padding;
             _current.Origin = new Vector2D(left, top);
             SetBackground(_currentBg, left, top, width, height);
         }
