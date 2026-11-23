@@ -254,7 +254,7 @@ These were identified and fixed on the `fix/v2.5.1` branch — see MEMORY for de
 | FEAT-261123.1 | High | v2.5.7+ | mod (see ticket) | TODO | REVIEW-261123.1: Cheaper per-block scan checks — owner: safe parts approved for v2.5.7 |
 | FEAT-261123.2 | Medium | v2.5.7+ | mod (see ticket) | Done | REVIEW-261123.1: Keep per-grid scan results until the grid changes — rejected (background-only gain, staleness risk) |
 | FEAT-261123.3 | Low | v2.5.7+ | mod (see ticket) | Done | REVIEW-261123.1: Pull more components per conveyor transfer — on hold: re-measure after BUG-261123.6 — done 261123.54: -40 % conveyor transfers (S64) |
-| FEAT-261123.4 | Medium | v2.5.7+ | mod (see ticket) | TODO | REVIEW-261123.1: Profiler markers and measurement gaps — owner: idle reasons + scan split, rest closed |
+| FEAT-261123.4 | Medium | v2.5.7+ | mod (see ticket) | Done | REVIEW-261123.1: Profiler markers and measurement gaps — owner: idle reasons + scan split, rest closed |
 | FEAT-261123.5 | Low | v2.5.7+ | mod (see ticket) | TODO | REVIEW-261123.1: Small performance items — owner: DS info + reputation only |
 | FEAT-261123.6 | Medium | v2.5.7 | `NanobotSystem.Grinding.cs`, `SyncBlockState`, `CustomInfo`, Localization | Done | Steam: terminal shows "Grinding blocked by a shield / protection mod" when a veto stops grinding |
 | FEAT-261123.7 | Medium | v2.5.7 | `Handlers/NetStats.cs`, `NetworkMessagingHandler`, harness | Done | Network traffic counters per message type + sync-load scenarios S116 / S117 (`@sync`) for Torch |

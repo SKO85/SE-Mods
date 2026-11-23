@@ -34,11 +34,18 @@ namespace SKONanobotBuildAndRepairSystem
         /// Checks if the given slim block is a target (weld or grind). Supports skipping range checks
         /// and variable max target counts for cluster scanning.
         /// </summary>
+        // FEAT-261123.4: per-block scan split (profiling only; this BaR's scan thread). Cumulative; callers take deltas.
+        private bool _scanSplitOn;
+        private long _scanTicksWeld, _scanTicksGrind, _scanBlocks;
+
         private void AsyncAddBlockIfTarget(ref MyOrientedBoundingBoxD areaBox, bool useIgnoreColor, ref uint ignoreColor, bool useGrindColor, ref uint grindColor, AutoGrindRelation autoGrindRelation, AutoGrindOptions autoGrindOptions, IMySlimBlock block, List<ClusterTargetCandidate> clusterWeldTargets, List<ClusterTargetCandidate> clusterGrindTargets, int maxWeld, int maxGrind, bool skipRangeCheck)
         {
             try
             {
                 var added = false;
+                var split = _scanSplitOn;
+                long ts = split ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+                if (split) _scanBlocks++;
 
                 if (clusterGrindTargets != null && (useGrindColor || autoGrindRelation != 0))
                 {
@@ -50,6 +57,12 @@ namespace SKONanobotBuildAndRepairSystem
                         }
                     }
                 }
+                if (split)
+                {
+                    var now = System.Diagnostics.Stopwatch.GetTimestamp();
+                    _scanTicksGrind += now - ts;
+                    ts = now;
+                }
 
                 if (clusterWeldTargets != null && !added)
                 {
@@ -58,6 +71,7 @@ namespace SKONanobotBuildAndRepairSystem
                         AsyncAddBlockIfWeldTarget(ref areaBox, useIgnoreColor, ref ignoreColor, useGrindColor, ref grindColor, block, clusterWeldTargets, maxWeld, skipRangeCheck);
                     }
                 }
+                if (split) _scanTicksWeld += System.Diagnostics.Stopwatch.GetTimestamp() - ts;
             }
             catch (Exception ex)
             {
@@ -786,6 +800,12 @@ namespace SKONanobotBuildAndRepairSystem
 
             var newBlocks = GetBlocksFromCache(cubeGrid);
 
+            // FEAT-261123.4: per-block split (deltas include subgrids reached through mechanical connections).
+            _scanSplitOn = profilerTs != 0L;
+            var splitWeld0 = _scanTicksWeld;
+            var splitGrind0 = _scanTicksGrind;
+            var splitBlocks0 = _scanBlocks;
+
             foreach (var slimBlock in newBlocks)
             {
                 if (ShouldStopScan(clusterWeldTargets, clusterGrindTargets, null, maxWeld, maxGrind, 0)) break;
@@ -915,13 +935,18 @@ namespace SKONanobotBuildAndRepairSystem
                 var _weldAddedHere = weldAfter - weldBefore;
                 var _grindAddedHere = grindAfter - grindBefore;
                 var _rescanAfterDamage = rescanAfterDamage;
+                var freqMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                var _weldCheckMs = (_scanTicksWeld - splitWeld0) * freqMs;
+                var _grindCheckMs = (_scanTicksGrind - splitGrind0) * freqMs;
+                var _checked = _scanBlocks - splitBlocks0;
+                var _usPerBlock = _checked > 0 ? (_weldCheckMs + _grindCheckMs) * 1000.0 / _checked : 0.0;
                 MethodProfiler.StopAndLog("AsyncAddBlocksOfGrid", profilerTs, () =>
-                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};weldAdded={5};grindAdded={6};weldCapSkip={7};grindCapSkip={8};skipRange={9};clusterMembers={10};rescanAfterDamage={11}",
+                    string.Format("entityId={0};gridId={1};blocks={2};weldTargets={3};grindTargets={4};weldAdded={5};grindAdded={6};weldCapSkip={7};grindCapSkip={8};skipRange={9};clusterMembers={10};rescanAfterDamage={11};blocksChecked={12};weldCheckMs={13:F3};grindCheckMs={14:F3};usPerBlock={15:F3}",
                         _Welder.EntityId, _gridEid, newBlocks.Count,
                         clusterWeldTargets != null ? clusterWeldTargets.Count : -1,
                         clusterGrindTargets != null ? clusterGrindTargets.Count : -1,
                         _weldAddedHere, _grindAddedHere, _weldCapSkipped, _grindCapSkipped,
-                        blockSkipRange, _clusterMembers, _rescanAfterDamage));
+                        blockSkipRange, _clusterMembers, _rescanAfterDamage, _checked, _weldCheckMs, _grindCheckMs, _usPerBlock));
 
                 // Report per-grid scan cost for profile summary.
                 var gridMs = (double)(endTs - profilerTs) / System.Diagnostics.Stopwatch.Frequency * 1000.0;
