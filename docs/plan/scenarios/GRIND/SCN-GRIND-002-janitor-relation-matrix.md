@@ -23,6 +23,7 @@
 ## Perf envelope
 `ServerDoGrind` `friendlyMs` ≤ 0.1 per call (relation lookup cached).
 ## Coverage
+ingame:S133 (DisableOnly), ingame:S134 (HackOnly)
 unit:ReputationBatchTests (FEAT-261123.5 batched reputation)
 manual
 ingame:S17

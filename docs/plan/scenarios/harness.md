@@ -51,7 +51,7 @@ Pick the groups of the area you changed, e.g. a zone fix: `@zone,@projection`; a
 | `@weld` | Welding: repair, weld options, colours, docked ships, sources | S01-S03, S18, S21-S23, S26, S27, S34-S38, S42, S44, S46, S72, S84, S86-S88, S111, S112, S114, S115, S124, S125 |
 | `@projection` | Projector building, incl. admin and safe-zone rules | S03, S27, S42, S46, S85 |
 | `@subgrids` | Rotors, pistons, hinges, wheels, connectors, ships in flight | S18, S34-S38, S44, S45, S111, S112, S130 |
-| `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89, S112, S130 |
+| `@grind` | Grinding: janitor, order, colours, protection, leaving targets, full storage | S04, S11-S13, S16, S17, S24, S45, S73, S74, S76, S89, S112, S130, S133, S134 |
 | `@zone` | Safe zones | S39-S42, S53, S85 |
 | `@shields` | DefenseShields (skipped without the mod) | S58-S63 |
 | `@inventory` | Component sources, sorter, empty cargo, push targets, push options, logistics at scale | S02, S84, S87-S93, S103-S110, S113 |
@@ -237,6 +237,8 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S130 | Mechanical derelict: base grid, rotor head and piston head all ground away | GRIND-004 | ~1 min | 261123.65 — base + both heads ground away |
 | S131 | Collect: only stacks inside the area and of enabled classes (ore off, 70 m out ignored) | COLLECT-001 | <1 min | never |
 | S132 | Collect only when idle: nothing collected while welding, everything after | COLLECT-001 | <1 min | never |
+| S133 | Janitor DisableOnly: functional blocks ground until disabled, not removed; armor untouched | GRIND-002 | <1 min | never |
+| S134 | Janitor HackOnly: functional blocks ground until hackable, not removed; armor untouched | GRIND-002 | <1 min | never |
 
 ## Scenarios
 
@@ -860,6 +862,15 @@ stacks inside collected; 10 s later the outside and ore stacks are all still the
 ### S132
 **Proves** "collect only when idle": 6 damaged armor blocks to weld (WorkSpeed 2) and 3 plate stacks inside. **Pass**
 no stack collected before welding is done (0.5 s slack), all collected after. **Records** `weldDoneS`, `firstCollectS`.
+
+### S133
+**Proves** janitor DisableOnly. Unowned derelict: 4 armor, a battery, 2 small containers; one BaR (GrindOnly,
+BoundingBox, janitor NoOwnership, WorkSpeed 3). **Pass** once nothing changed for 5 s: every functional block at or
+below its CriticalIntegrityRatio and still there, all armor at full integrity. **Records** `ratiosVsThreshold`,
+`functionalRemoved`, `armorDamaged`.
+
+### S134
+S133 with HackOnly: functional blocks down to the OwnershipIntegrityRatio (falls back to critical), not removed.
 
 ## Standard metrics (every scenario)
 Single-call peak checks (`tickPeakMs` limits, `CheckMethodMaxMax`) get +25 ms on a dedicated server: Torch shows
