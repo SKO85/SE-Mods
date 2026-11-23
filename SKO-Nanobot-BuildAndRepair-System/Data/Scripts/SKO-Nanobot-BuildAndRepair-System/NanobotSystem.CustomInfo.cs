@@ -18,6 +18,9 @@ namespace SKONanobotBuildAndRepairSystem
     {
         private void UpdateCustomInfo(bool changed)
         {
+            // FEAT-261123.5: the terminal text is built locally by each client from the synced state; a dedicated
+            // server has no terminal to show it.
+            if (MyAPIGateway.Utilities.IsDedicated) return;
             _UpdateCustomInfoNeeded |= changed;
             var playTime = MyAPIGateway.Session.ElapsedPlayTime;
             if (_UpdateCustomInfoNeeded && (playTime.Subtract(_UpdateCustomInfoLast).TotalSeconds >= 2))

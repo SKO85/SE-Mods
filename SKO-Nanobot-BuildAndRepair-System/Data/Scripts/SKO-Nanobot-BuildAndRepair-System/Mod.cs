@@ -569,6 +569,9 @@
             // BUG-260610.15: re-arm the background queue for the next session.
             try { BackgroundTaskQueue.Reset(); } catch { }
 
+            // FEAT-261123.5: drop queued reputation hits of the old world.
+            try { Utils.UtilsFaction.Reset(); } catch { }
+
             // Close the profiler to release any open log files.
             try { MethodProfiler.Close(); } catch { }
 
@@ -640,6 +643,9 @@
 
                         // BUG-130: shared friendly-damage map cleanup (internally throttled).
                         CleanupFriendlyDamage();
+
+                        // FEAT-261123.5: batched faction reputation from grinding (every 2 s).
+                        Utils.UtilsFaction.Flush(now);
 
                         // BUG-261122.10: grid damage stamps (internally throttled).
                         GridChangeHandler.Cleanup(now);

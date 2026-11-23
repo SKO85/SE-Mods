@@ -298,7 +298,7 @@ namespace SKONanobotBuildAndRepairSystem
                     var ownerId = UtilsPlayer.GetOwner(currentGrindingBlock.CubeGrid as MyCubeGrid);
                     if (ownerId > 0 && ownerId != Welder.OwnerId)
                     {
-                        UtilsFaction.DamageReputationWithPlayerFaction(Welder.OwnerId, ownerId);
+                        UtilsFaction.QueueReputationDamage(Welder.OwnerId, ownerId); // FEAT-261123.5: applied in batches
                     }
                 }
             }
