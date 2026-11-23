@@ -361,6 +361,7 @@ namespace SKONanobotBuildAndRepairSystem
                 {
                     var weldTs = Stopwatch.GetTimestamp();
 
+                    _PullRoundIncomplete = false;
                     if (!transporting)
                     {
                         transporting = ServerFindMissingComponents(chosenTarget);
@@ -423,8 +424,9 @@ namespace SKONanobotBuildAndRepairSystem
 
                     ReleaseAssignmentIfEnabled(chosenTarget.Block, profilerTs != 0L, ref tsAssignOps);
 
-                    // Park the failed block so BaRs sharing this supply skip it (BUG-261123.1).
-                    BlockFailureCooldownHandler.MarkFailed(chosenTarget.Block, supplyGroup);
+                    // Park the failed block so BaRs sharing this supply skip it (BUG-261123.1), but only after a full
+                    // round of empty sources: a capped pull that missed has not seen the rest (BUG-261123.6).
+                    if (!_PullRoundIncomplete) BlockFailureCooldownHandler.MarkFailed(chosenTarget.Block, supplyGroup);
 
                     componentFailures++;
                 }
@@ -1239,7 +1241,10 @@ namespace SKONanobotBuildAndRepairSystem
             // Phase 2: single source walk for everything still missing.
             if (_TempPullRemaining.Count > 0 && remainingVolume > 0)
             {
-                picked = PullFromSourcesOnePass(ref remainingVolume) || picked;
+                var pulled = PullFromSourcesOnePass(ref remainingVolume);
+                _EmptyPullSourceVisits = NextEmptyPullVisits(_EmptyPullSourceVisits, pulled, _LastPullVisited);
+                if (!pulled && !picked && !IsPullRoundComplete(_EmptyPullSourceVisits, _LastPullAvailable)) _PullRoundIncomplete = true;
+                picked = pulled || picked;
             }
 
             // BUG-260824.2: no per-target missing report anymore — State.MissingComponents
@@ -1278,6 +1283,8 @@ namespace SKONanobotBuildAndRepairSystem
             // BUG-141: separate profile entry from outer ServerFindMissingComponents pullPickMs.
             var profilerTs = MethodProfiler.Start();
             var picked = false;
+            _LastPullVisited = 0;
+            _LastPullAvailable = 0;
             var welderInventory = _Welder.GetInventory(0);
             if (welderInventory == null)
             {
@@ -1301,6 +1308,7 @@ namespace SKONanobotBuildAndRepairSystem
                 var lockAcquiredTs = profilerTs != 0L ? Stopwatch.GetTimestamp() : 0L;
                 var lockWaitTicks = lockAcquiredTs != 0L ? lockAcquiredTs - lockAcquireTs : 0L;
                 sourcesAvailable = _PossibleSources.Count;
+                _LastPullAvailable = sourcesAvailable;
                 if (sourcesAvailable == 0)
                 {
                     if (profilerTs != 0L)
@@ -1348,6 +1356,7 @@ namespace SKONanobotBuildAndRepairSystem
                     }
                     sourcesVisited++;
                     lastSuccessfulHit = true;
+                    _LastPullVisited = sourcesVisited;
                     if (abort || remainingVolume <= 0 || _TempPullRemaining.Count == 0)
                     {
                         if (profilerTs != 0L)
@@ -1392,6 +1401,7 @@ namespace SKONanobotBuildAndRepairSystem
 
                     if (welderFull) { exitReason = "welderFull"; break; }
                 }
+                _LastPullVisited = sourcesVisited;
 
                 if (profilerTs != 0L)
                 {

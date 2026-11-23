@@ -350,6 +350,25 @@ namespace SKONanobotBuildAndRepairSystem
         // BUG-136: round-robin cursor for the capped source walk.
         private int _NextPullSourceIdx;
 
+        // BUG-261123.6: one pull looks at 16 sources at most; a weld miss parks the block for the supply group only once
+        // this BaR has seen a full round of empty sources since its last pick.
+        private int _EmptyPullSourceVisits;
+        private int _LastPullVisited;
+        private int _LastPullAvailable;
+        private bool _PullRoundIncomplete;
+
+        internal static int NextEmptyPullVisits(int current, bool pulled, int visited)
+        {
+            if (pulled) return 0;
+            var next = current + visited;
+            return next < current ? int.MaxValue : next;
+        }
+
+        internal static bool IsPullRoundComplete(int emptyVisits, int sourcesAvailable)
+        {
+            return emptyVisits >= sourcesAvailable;
+        }
+
         // BUG-260824.2: aggregate missing-components rebuild (cadence marker + reusable buffers).
         private TimeSpan _NextMissingAggregateAt;
         // BUG-261023.1: time-sliced pass state (0 idle, 1 targets, 2 sources).

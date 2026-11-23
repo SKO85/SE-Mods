@@ -450,4 +450,4 @@ These were identified and fixed on the `fix/v2.5.1` branch — see MEMORY for de
 | BUG-261123.3 | Medium | v2.5.7 | `NanobotSystem.Grinding.cs:74-141` | TODO | REVIEW-261123.1: Grind loop re-walks already-ground entries every tick; saturation check counts them as live |
 | BUG-261123.4 | Low | v2.5.7 | `NanobotSystem.Welding.cs:140-295` | TODO | REVIEW-261123.1: Weld loop handles finished entries expensively and changes the state hash every walk |
 | BUG-261123.5 | Medium | v2.5.7 | `Utils/UtilsInventory.cs:104` (MaxItemsAddable binary search) | TODO | REVIEW-261123.1: MaxItemsAddable relies on CanItemsBeAdded, which refused ore in game (transport may stall) |
-| BUG-261123.6 | Medium | v2.5.7 | to investigate (weld budgets | TODO | REVIEW-261123.1: More BaRs weld slower in the logistics test; a busy base halves throughput |
+| BUG-261123.6 | Medium | v2.5.7 | `NanobotSystem.Welding.cs` (pull / failure park) | Done | A capped pull (16 of N sources) that missed parked the block 15 s for the whole supply group: BaR groups stalled with components spread thin — park only after a full empty round — fixed 261123.34, S105 248 s -> 10.3 s (0.81 -> 19.4 welds/s) |
