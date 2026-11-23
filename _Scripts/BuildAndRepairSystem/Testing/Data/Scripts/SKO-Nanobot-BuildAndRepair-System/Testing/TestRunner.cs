@@ -461,6 +461,14 @@ namespace SKONanobotBuildAndRepairSystem.Testing
             _result.Metric("assignmentsPeak", (long)_ctx.AssignmentsPeak);
             _result.Metric("bgEnqueued", (long)Mod.BackgroundTasksEnqueued);
             _result.Metric("otherBars", (long)_ctx.OtherBarCount());
+            // World speed settings: they scale every weld / grind (Torch vs dev PC throughput).
+            var world = MyAPIGateway.Session != null ? MyAPIGateway.Session.SessionSettings : null;
+            if (world != null)
+            {
+                _result.Metric("world.welderSpeed", (double)world.WelderSpeedMultiplier);
+                _result.Metric("world.grinderSpeed", (double)world.GrinderSpeedMultiplier);
+                _result.Metric("world.dedicated", MyAPIGateway.Utilities.IsDedicated);
+            }
             var methods = _current.Scenario.PerfMethods;
             for (int i = 0; i < methods.Count; i++) _ctx.RecordMethodStats(methods[i]);
             _ctx.RecordNetMetrics();

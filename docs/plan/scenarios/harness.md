@@ -506,7 +506,8 @@ welding has no shield check.
 **Measures / proves** load: 2 rigs x 10 BaRs (large clusters) on own damaged ships of 25 / 150 / 600 blocks (dynamic,
 in a row along X), WeldBeforeGrind, BoundingBox 200 m, 1000 SteelPlate per container, 75 s or until done.
 **Pass** every ship got welding, >= 75 % of BaRs worked, tick avg <= 2 ms / peak <= 50 ms, sim >= 0.5, and the speed
-floor (blocks per second; S64 42, S65 43, S66 27, S67 26 — ~70 % of the 2026-11-22 baseline).
+floor (blocks per second; S64 36, S65 37, S66 23, S67 22 — ~60 % of the 2026-11-22 baseline; Torch 261123.42 ran
+41.4 / 42.5 / 26.9 / 28.3, ~69 % of the dev PC, see `world.*` metrics).
 **Records** `bars`, `rigs`, `clusters`, `barsWorked(Pct)`, `activePeak`, `weldedS/M/L`, `weldedPerSecond`, weld / grind /
 scan / cluster method stats, and (BUG-261122.14) `busyPct`, `transportPct`, `avgTargetDistM`, `avgListSize`,
 `sharedBlockSamples`. `test run S64-S67 detail` keeps per-call profiler logs.
@@ -712,10 +713,10 @@ S103 with 50 BaRs.
 S103 with 100 BaRs.
 
 ### S107
-S103 on a busy base (10 BaRs): plate stacks of 5 moved between containers every 2 s (max(2, N/5) moves, like
-assemblers / refineries), a supply ship with a container docked by connector (S38 docking) that undocks every 8 s
-(first at 4 s) and redocks ~4 s later, and a container section behind a sorter that is switched off / on and has its
-SteelPlate filter flipped every 6 s. All of it is conservation-neutral. **Pass** as S103, plus the churn really happened (`itemMoves`,
+S103 on a busy base (10 BaRs): up to 5 plates moved between containers every 1 s (max(2, N/5) moves, like
+assemblers / refineries pulling and pushing), a supply ship that undocks first at 1.5 s, then every 8 s, and redocks
+~4 s later, and a container section behind a sorter that is switched off / on and has its SteelPlate filter flipped
+every 3 s (first at 1 s; the churn starts right away since BUG-261123.6 made these runs ~5 s). All of it is conservation-neutral. **Pass** as S103, plus the churn really happened (`itemMoves`,
 `undocks`, `redocks`, `sorterChanges`). Compare `weldedPerSecond` and the pull / push cost with S103.
 
 ### S108

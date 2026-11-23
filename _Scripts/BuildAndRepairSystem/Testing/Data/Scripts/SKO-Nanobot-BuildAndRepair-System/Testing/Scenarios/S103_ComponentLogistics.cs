@@ -19,7 +19,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
     /// per 5 BaRs, at least 2) in front of the station. Pass: all ship blocks welded, plates conserved (exactly the ships'
     /// missing plates left storage), sim speed floor. Records throughput and the pull / push cost.
     /// Busy variants (S107-S110) add a working base: plate stacks moved between containers every 2 s (assemblers,
-    /// refineries, ...), a supply ship that undocks every 8 s (first at 4 s) and redocks ~4 s later, and a sorter-guarded container
+    /// refineries, ...), a supply ship that undocks every 8 s (first at 1.5 s) and redocks ~4 s later, and a sorter-guarded container
     /// section whose sorter is switched off / on and its filter flipped every 6 s. WorkSpeed 3.
     /// </summary>
     internal sealed class S103_ComponentLogistics : TestScenarioBase
@@ -94,9 +94,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             _supply = null;
             _connectRequested = _reported = _undocked = false;
             _moves = _undocks = _redocks = _sorterFlips = _moveCursor = 0;
-            _nextMove = 2;
-            _nextDock = 4;
-            _nextSorter = 6;
+            // Churn starts right away: since BUG-261123.6 the busy runs finish in ~5 s (S107 / S108 on Torch never churned).
+            _nextMove = 0.5;
+            _nextDock = 1.5;
+            _nextSorter = 1.0;
             // WorkSpeed 3: long enough runs to compare (10 BaRs finished 40 blocks in 3 s at WorkSpeed 10).
             ctx.SetModSettings(s => { s.Welder.WorkSpeed = 3; });
 
@@ -239,7 +240,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             var now = ctx.RunSeconds;
             if (now >= _nextMove)
             {
-                _nextMove = now + 2;
+                _nextMove = now + 1;
                 var containers = Containers();
                 var moves = System.Math.Max(2, _bars / 5);
                 for (int m = 0; m < moves && containers.Count > 1; m++)
@@ -248,9 +249,10 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                     var to = containers[(_moveCursor * 7 + 3) % containers.Count];
                     _moveCursor++;
                     if (from == null || to == null || from == to) continue;
-                    if ((double)from.GetItemAmount(Plate) < 5) continue;
-                    from.RemoveItemsOfType((MyFixedPoint)5, new MyObjectBuilder_Component { SubtypeName = "SteelPlate" });
-                    to.AddItems((MyFixedPoint)5, new MyObjectBuilder_Component { SubtypeName = "SteelPlate" });
+                    var amount = System.Math.Min(5.0, System.Math.Floor((double)from.GetItemAmount(Plate)));
+                    if (amount < 1) continue;
+                    from.RemoveItemsOfType((MyFixedPoint)amount, new MyObjectBuilder_Component { SubtypeName = "SteelPlate" });
+                    to.AddItems((MyFixedPoint)amount, new MyObjectBuilder_Component { SubtypeName = "SteelPlate" });
                     _moves++;
                 }
             }
@@ -279,7 +281,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
             }
             if (now >= _nextSorter)
             {
-                _nextSorter = now + 6;
+                _nextSorter = now + 3;
                 var t = _station.Tag("sorter");
                 var sorter = t.Count > 0 && t[0] != null ? t[0].FatBlock as IMyConveyorSorter : null;
                 if (sorter != null)
