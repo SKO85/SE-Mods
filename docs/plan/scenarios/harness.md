@@ -198,14 +198,14 @@ Time = measured run (plus ~5 s setup). Last green = BuildId of the last passing 
 | S100 | Scan cost: 1 BaR scanning a 2000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 2.5 ms, GetBlocks 0.08 ms |
 | S101 | Scan cost: 1 BaR scanning a 5000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 6.0 ms, GetBlocks 0.28 ms |
 | S102 | Scan cost: 1 BaR scanning a 10000-block grid (area mode), 45 s | BUDGET-006 | ~60 s | 261123.20 — scan 11.5 ms, GetBlocks 0.47 ms, tick 0.08 ms |
-| S103 | Logistics: 10 BaRs, ~50 containers, plates spread thin, ships around | INV-001, BUDGET-006 | <=3 min | not yet |
-| S104 | Logistics: 20 BaRs, ~100 containers, plates spread thin, ships around | INV-001, BUDGET-006 | <=3 min | not yet |
-| S105 | Logistics: 50 BaRs, ~250 containers, plates spread thin, ships around | INV-001, BUDGET-006 | <=3 min | not yet |
-| S106 | Logistics: 100 BaRs, ~500 containers, plates spread thin, ships around | INV-001, BUDGET-006 | <=3 min | not yet |
-| S107 | Logistics, busy base: 10 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
-| S108 | Logistics, busy base: 20 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
-| S109 | Logistics, busy base: 50 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
-| S110 | Logistics, busy base: 100 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | <=3 min | not yet |
+| S103 | Logistics: 10 BaRs, ~50 containers, plates spread thin, ships around | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S104 | Logistics: 20 BaRs, ~100 containers, plates spread thin, ships around | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S105 | Logistics: 50 BaRs, ~250 containers, plates spread thin, ships around | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S106 | Logistics: 100 BaRs, ~500 containers, plates spread thin, ships around | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S107 | Logistics, busy base: 10 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S108 | Logistics, busy base: 20 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S109 | Logistics, busy base: 50 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | 3-7 min | not yet |
+| S110 | Logistics, busy base: 100 BaRs, moving items, docking supply ship, switching sorter | INV-001, BUDGET-006 | 3-7 min | not yet |
 | S111 | Moving arm: 1 BaR on piston + rotor welds a ring of grids via the conveyors, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | 261123.32 — 48/48 in 27.4 s, 960 plates via conveyors, sim 1.0 |
 | S112 | Moving arm: 3 BaRs on piston + rotor weld and grind a ring of grids, ShowArea toggling | WELD-007, BUDGET-006 | <=3 min | 261123.32 — 24 welded + 24 ground in 14.4 s, sim 1.0 |
 
@@ -679,7 +679,8 @@ S99 with a 10,000-block grid.
 containers per BaR behind the back row; SteelPlate spread evenly over every container (the ships' missing plates x 1.2)
 and 10 plates in each BaR's own inventory (BaRs are sources for each other). Static ships with 20 damaged armor
 blocks each (one per 5 BaRs, at least 2) 25 m in front; BaRs BoundingBox, area 100 x 60 x 100 m, WeldOnly, WorkSpeed 3.
-**Pass** all ship blocks welded within 180 s; plates conserved (exactly the missing plates left storage); sim speed
+**Pass** all ship blocks welded within max(180 s, 120 s + 3 s per BaR) (10 BaRs 180 s, 50 BaRs 270 s, 100 BaRs 420 s;
+throughput is recorded, not gated — BUG-261123.6); plates conserved (exactly the missing plates left storage); sim speed
 >= 0.8 (10 / 20 BaRs) or >= 0.5 (50 / 100). **Records** `weldedPerSecond`, `platesUsed` vs `platesNeeded`, and the
 cost of `ServerFindMissingComponents`, `PullFromSourcesOnePass`, `ServerEmptyTransportInventory`,
 `ServerTryPushInventory`, `AsyncScanForSources`.

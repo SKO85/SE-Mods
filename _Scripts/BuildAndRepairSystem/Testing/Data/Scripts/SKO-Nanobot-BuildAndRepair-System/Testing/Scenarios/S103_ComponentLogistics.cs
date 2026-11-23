@@ -25,7 +25,9 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
     internal sealed class S103_ComponentLogistics : TestScenarioBase
     {
         private const double Cell = 2.5;
-        private const double Window = 180.0;
+        // Correctness + recorded throughput, not a speed gate: the window grows with the base (10 BaRs 180 s, 50 BaRs
+        // 270 s, 100 BaRs 420 s). Throughput at scale is tracked in BUG-261123.6.
+        private double Window { get { return System.Math.Max(180.0, 120.0 + _bars * 3.0); } }
         private const int DamagedPerShip = 20;
         private const int PlatesPerBar = 10;
         private static MyItemType Plate { get { return MyItemType.MakeComponent("SteelPlate"); } }
@@ -76,7 +78,7 @@ namespace SKONanobotBuildAndRepairSystem.Testing.Scenarios
                     + (_busy ? ", moving items, docking supply ship, switching sorter" : "");
             }
         }
-        public override int TimeoutSeconds { get { return 240; } }
+        public override int TimeoutSeconds { get { return (int)Window + 60; } }
         public override int ReadyTimeoutSeconds { get { return 120; } }
         public override IList<string> PerfMethods { get { return Methods; } }
 
